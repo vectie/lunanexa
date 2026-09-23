@@ -7,8 +7,16 @@ pub async fn initialize_workspace(root : String, model : String) -> Unit {
     root.has_suffix("/") ||
     root.split("/").any(part => part == "." || part == "..") ||
     model.is_empty() ||
-    model.length() > 256 ||
-    !model.all(c => c >= '!' && c <= '~') {
+    model.length() > 128 ||
+    !model.all(c => {
+      (c >= 'a' && c <= 'z') ||
+      (c >= 'A' && c <= 'Z') ||
+      (c >= '0' && c <= '9') ||
+      c == '-' ||
+      c == '_' ||
+      c == '.' ||
+      c == ':'
+    }) {
     raise HostError::InvalidConfiguration
   }
   guard @fs.kind(root, follow_symlink=false) is Directory else {
@@ -29,7 +37,7 @@ pub async fn initialize_workspace(root : String, model : String) -> Unit {
     }
   }
   create_initial_file(
-    root + "/user/default/workflows/LunaNexa Video.json",
+    root + "/user/default/workflows/LunaNexa Video - " + model + ".json",
     root + "/.lunanexa-bootstrap/staged.json",
     starter_workflow(model),
   )
@@ -78,21 +86,64 @@ async fn create_initial_file(
 }
 
 ///|
+fn workflow_widget(name : String, kind : String) -> Json {
+  { "name": name, "type": kind, "widget": { "name": name }, "link": null }
+}
+
+///|
 fn starter_workflow(model : String) -> Json {
   {
     "id": "2c90c86d-9f87-4f65-bafd-c98d55c2f491",
     "revision": 0,
-    "last_node_id": 2,
-    "last_link_id": 1,
+    "last_node_id": 3,
+    "last_link_id": 2,
     "nodes": [
+      {
+        "id": 3,
+        "type": "VLLMOmniDiffusionSampling",
+        "title": "H3 sampling",
+        "pos": [80, 80],
+        "size": [300, 250],
+        "flags": {},
+        "order": 0,
+        "mode": 0,
+        "inputs": [
+          workflow_widget("n", "INT"),
+          workflow_widget("num_inference_steps", "INT"),
+          workflow_widget("guidance_scale", "FLOAT"),
+          workflow_widget("true_cfg_scale", "FLOAT"),
+          workflow_widget("vae_use_slicing", "BOOLEAN"),
+          workflow_widget("vae_use_tiling", "BOOLEAN"),
+          workflow_widget("seed", "INT"),
+        ],
+        "outputs": [
+          {
+            "name": "diffusion sampling params",
+            "type": "SAMPLING_PARAMS",
+            "links": [2],
+          },
+        ],
+        "properties": { "Node name for S&R": "VLLMOmniDiffusionSampling" },
+        "widgets_values": [1, 8, 1.0, 1.0, false, false, -1, "randomize"],
+        "widgets_values_named": {
+          "n": 1,
+          "num_inference_steps": 8,
+          "guidance_scale": 1.0,
+          "true_cfg_scale": 1.0,
+          "vae_use_slicing": false,
+          "vae_use_tiling": false,
+          "seed": -1,
+          "control_after_generate": "randomize",
+        },
+      },
       {
         "id": 1,
         "type": "VLLMOmniGenerateVideo",
         "title": "LunaNexa · Generate video",
-        "pos": [80, 80],
+        "pos": [420, 80],
         "size": [400, 400],
         "flags": {},
-        "order": 0,
+        "order": 1,
         "mode": 0,
         "inputs": [
           { "name": "image", "type": "IMAGE", "shape": 7, "link": null },
@@ -100,7 +151,7 @@ fn starter_workflow(model : String) -> Json {
             "name": "sampling_params",
             "type": "SAMPLING_PARAMS",
             "shape": 7,
-            "link": null,
+            "link": 2,
           },
           { "name": "lora", "type": "REMOTE_LORA", "shape": 7, "link": null },
           {
@@ -109,29 +160,63 @@ fn starter_workflow(model : String) -> Json {
             "shape": 7,
             "link": null,
           },
+          workflow_widget("url", "STRING"),
+          workflow_widget("model", "STRING"),
+          workflow_widget("prompt", "STRING"),
+          workflow_widget("negative_prompt", "STRING"),
+          workflow_widget("width", "INT"),
+          workflow_widget("height", "INT"),
+          workflow_widget("fps", "INT"),
+          workflow_widget("num_frames", "INT"),
+          workflow_widget("generate_sound", "BOOLEAN"),
+          workflow_widget("max_wait_seconds", "INT"),
         ],
         "outputs": [{ "name": "video", "type": "VIDEO", "links": [1] }],
         "properties": { "Node name for S&R": "VLLMOmniGenerateVideo" },
         "widgets_values": [
           "http://127.0.0.1:8189/v1", model, "A calm ocean at sunrise, gentle waves, cinematic lighting.",
-          "", 512, 512, 24, 25,
+          "", 512, 512, 24, 25, false, 900,
         ],
+        "widgets_values_named": {
+          "url": "http://127.0.0.1:8189/v1",
+          "model": model,
+          "prompt": "A calm ocean at sunrise, gentle waves, cinematic lighting.",
+          "negative_prompt": "",
+          "width": 512,
+          "height": 512,
+          "fps": 24,
+          "num_frames": 25,
+          "generate_sound": false,
+          "max_wait_seconds": 900,
+        },
       },
       {
         "id": 2,
         "type": "SaveVideo",
-        "pos": [550, 80],
+        "pos": [860, 80],
         "size": [360, 350],
         "flags": {},
-        "order": 1,
+        "order": 2,
         "mode": 0,
-        "inputs": [{ "name": "video", "type": "VIDEO", "link": 1 }],
-        "outputs": [],
+        "inputs": [
+          { "name": "video", "type": "VIDEO", "link": 1 },
+          workflow_widget("filename_prefix", "STRING"),
+          workflow_widget("format", "COMFY_DYNAMICCOMBO_V3"),
+          workflow_widget("format.codec", "COMFY_DYNAMICCOMBO_V3"),
+          workflow_widget("codec", "COMFY_DYNAMICCOMBO_V3"),
+        ],
+        "outputs": [{ "name": "video", "type": "VIDEO", "links": null }],
         "properties": { "Node name for S&R": "SaveVideo" },
-        "widgets_values": ["video/LunaNexa", "auto", "auto"],
+        "widgets_values": ["video/LunaNexa", "auto", "auto", "auto"],
+        "widgets_values_named": {
+          "filename_prefix": "video/LunaNexa",
+          "format": "auto",
+          "format.codec": "auto",
+          "codec": "auto",
+        },
       },
     ],
-    "links": [[1, 1, 0, 2, 0, "VIDEO"]],
+    "links": [[1, 1, 0, 2, 0, "VIDEO"], [2, 3, 0, 1, 1, "SAMPLING_PARAMS"]],
     "groups": [],
     "config": {},
     "extra": { "ds": { "scale": 0.9, "offset": [0, 0] } },

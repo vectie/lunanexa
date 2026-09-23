@@ -9,6 +9,7 @@ import {
 }
 
 // Values
+pub fn model_service_scope_matches(Operation, Operation) -> Bool
 
 // Errors
 pub(all) suberror DeliveryError {
@@ -39,15 +40,21 @@ pub fn DeliveryKind::to_repr(Self) -> @debug.Repr
 pub struct DeliveryStore {
   persistence : Persistence
   mut operations : Array[Operation]
+  mut model_services : Array[ModelService]
   mutex : @async.Mutex
 }
+pub async fn DeliveryStore::bind_model_service(Self, String, Int64, Int64, reuse_service_id? : String) -> Operation
 pub async fn DeliveryStore::create(Self, Intent, Int64) -> Operation
 pub async fn DeliveryStore::expire_due(Self, Int64) -> Array[Operation]
+pub async fn DeliveryStore::model_service(Self, String) -> ModelService?
+pub async fn DeliveryStore::model_services(Self) -> Array[ModelService]
 pub async fn DeliveryStore::observe(Self, String, Int64, Observation, Int64) -> Operation
+pub async fn DeliveryStore::observe_model_service(Self, String, Int64, Observation, Int64) -> Operation
 pub async fn DeliveryStore::open(String) -> Self
 pub async fn DeliveryStore::open_postgres(@database.PostgresDatabase) -> Self
 pub async fn DeliveryStore::operation(Self, String) -> Operation?
 pub async fn DeliveryStore::operations(Self) -> Array[Operation]
+pub async fn DeliveryStore::release_model_service(Self, String, Int64, Int64) -> Operation
 pub async fn DeliveryStore::retry(Self, String, Int64, Int64) -> Operation
 pub async fn DeliveryStore::stop(Self, String, Int64, Int64) -> Operation
 
@@ -84,6 +91,15 @@ pub fn ModelReplica::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDec
 pub fn ModelReplica::not_equal(Self, Self) -> Bool
 pub fn ModelReplica::to_json(Self) -> Json
 pub fn ModelReplica::to_repr(Self) -> @debug.Repr
+
+pub(all) struct ModelService {
+  runtime : Operation
+  consumer_ids : Array[String]
+} derive(Eq, ToJson, @json.FromJson)
+pub fn ModelService::equal(Self, Self) -> Bool
+pub fn ModelService::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ModelService::not_equal(Self, Self) -> Bool
+pub fn ModelService::to_json(Self) -> Json
 
 pub(all) enum Observation {
   Reserved(reservation_id~ : String, node_ids~ : Array[String])

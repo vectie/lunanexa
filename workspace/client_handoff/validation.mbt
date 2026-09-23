@@ -86,6 +86,7 @@ fn safe_client_url(
 pub fn valid_client_launch_config(
   config : ClientLaunchConfig,
   allowed_http_launch_origins? : Array[String] = [],
+  allowed_http_api_origins? : Array[String] = [],
 ) -> Bool {
   @contracts.valid_identifier(config.client_id) &&
   valid_text(config.display_name, 128) &&
@@ -95,7 +96,12 @@ pub fn valid_client_launch_config(
     true,
     allowed_http_origins=allowed_http_launch_origins,
   ) &&
-  safe_client_url(config.public_api_base_url, false, false) &&
+  safe_client_url(
+    config.public_api_base_url,
+    false,
+    false,
+    allowed_http_origins=allowed_http_api_origins,
+  ) &&
   config.handoff_lifetime_ms >= 30000L &&
   config.handoff_lifetime_ms <= 300000L &&
   config.maximum_requests > 0L &&
@@ -108,11 +114,16 @@ pub fn valid_client_launch_config(
 pub fn valid_client_launch_catalog(
   configs : Array[ClientLaunchConfig],
   allowed_http_launch_origins? : Array[String] = [],
+  allowed_http_api_origins? : Array[String] = [],
 ) -> Bool {
   configs.length() > 0 &&
   configs.length() <= 32 &&
   configs.all(config => {
-    valid_client_launch_config(config, allowed_http_launch_origins~)
+    valid_client_launch_config(
+      config,
+      allowed_http_launch_origins~,
+      allowed_http_api_origins~,
+    )
   }) &&
   configs.all(config => {
     configs.filter(other => other.client_id == config.client_id).length() == 1

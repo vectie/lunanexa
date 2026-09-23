@@ -23,7 +23,7 @@
       "title": "LunaNexa H3 文生视频（5 秒 16:9）",
       "properties": {},
       "widgets_values": [
-        "## LunaNexa H3 文生视频（5 秒 16:9）\n\n跑在 LunaNexa 的**共享 H3 推理服务**上：不下载权重，也不占本机显存。\n\n- **608×352** 是 16:9（608/352 = 1.727，H3 能用的最接近 16:9 的栅格）\n- **124 帧** 是 H3 自己的 5 秒值：`max(5, round(5×24)) + (5 − (120 mod 17)) mod 17 = 120 + 4`。H3 会把帧数吸附到 17 帧栅格，所以 120 会被挪走，**124 才是真正的 5 秒点**\n- 8 步、**生成声音打开**（H3 会连音轨一起生成）\n- **实测：** 去噪 54 秒（7 步，7.76 s/步），**端到端 111 秒**，成片 499,289 字节\n- **`max_wait_seconds` = 900**（15 分钟）\n\n平台 nginx 会注入 bearer token，**不需要 API key**。"
+        "## LunaNexa H3 文生视频（5 秒 16:9）\n\n跑在 LunaNexa 的**专属 H3 推理服务**上：不下载权重，也不占本机显存。\n\n- **608×352** 是 16:9（608/352 = 1.727，H3 能用的最接近 16:9 的栅格）\n- **124 帧** 是 H3 自己的 5 秒值：`max(5, round(5×24)) + (5 − (120 mod 17)) mod 17 = 120 + 4`。H3 会把帧数吸附到 17 帧栅格，所以 120 会被挪走，**124 才是真正的 5 秒点**\n- 8 步、**生成声音打开**（H3 会连音轨一起生成）\n- **实测：** 去噪 54 秒（7 步，7.76 s/步），**端到端 111 秒**，成片 499,289 字节\n- **`max_wait_seconds` = 900**（15 分钟）\n\n本地模型代理按当前交付授权提供访问。示例模板须将模型字段改为当前交付的模型别名；直接打开「LunaNexa Video」默认工作流则已自动配置。"
       ],
       "color": "#432",
       "bgcolor": "#000"
@@ -293,8 +293,8 @@
         "Node name for S&R": "VLLMOmniGenerateVideo"
       },
       "widgets_values": [
-        "http://192.168.2.175:4174/h3/v1",
-        "/models/MiniMax-H3/FL2VA",
+        "http://127.0.0.1:8189/v1",
+        "SELECT_DELIVERY_MODEL_ALIAS",
         "A red vintage motorcycle parked on a wet cobblestone street at dusk, neon sign reflections in the puddles, slow push-in camera move, cinematic, 35mm film.",
         "",
         608,
@@ -305,8 +305,8 @@
         900
       ],
       "widgets_values_named": {
-        "url": "http://192.168.2.175:4174/h3/v1",
-        "model": "/models/MiniMax-H3/FL2VA",
+        "url": "http://127.0.0.1:8189/v1",
+        "model": "SELECT_DELIVERY_MODEL_ALIAS",
         "prompt": "A red vintage motorcycle parked on a wet cobblestone street at dusk, neon sign reflections in the puddles, slow push-in camera move, cinematic, 35mm film.",
         "negative_prompt": "",
         "width": 608,

@@ -13,6 +13,8 @@ pub(all) struct HostConfig {
   memory_mib : Int
   controller_origin : String
   model_gateway_origin : String
+  /// Expected public catalog URL; private model traffic still uses the above.
+  public_api_base_url : String?
   trusted_ca_config_map : String?
   controller_port : Int
   model_gateway_port : Int

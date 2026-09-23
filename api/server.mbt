@@ -1031,10 +1031,12 @@ pub fn ApiService::with_client_handoff_store(
   client_handoff_store : @client_handoff_store.ClientHandoffStore,
   client_launch_config : @client_handoff.ClientLaunchConfig,
   allowed_http_launch_origins? : Array[String] = [],
+  allowed_http_api_origins? : Array[String] = [],
 ) -> ApiService raise Failure {
   if !@client_handoff.valid_client_launch_config(
       client_launch_config,
       allowed_http_launch_origins~,
+      allowed_http_api_origins~,
     ) {
     raise Failure("client launch configuration is invalid")
   }
@@ -1053,11 +1055,13 @@ pub fn ApiService::with_client_launch_catalog(
   self : ApiService,
   configs : Array[@client_handoff.ClientLaunchConfig],
   allowed_http_launch_origins? : Array[String] = [],
+  allowed_http_api_origins? : Array[String] = [],
 ) -> ApiService raise Failure {
   guard self.client_handoff_store is Some(_) &&
     @client_handoff.valid_client_launch_catalog(
       configs,
       allowed_http_launch_origins~,
+      allowed_http_api_origins~,
     ) &&
     configs.get(0) is Some(first) else {
     raise Failure(
@@ -1824,7 +1828,16 @@ async fn ApiService::schedule_and_admit(
     return (Some(reply), [])
   }
   let required_deployment_id = match delivery {
-    Some(operation) => Some(operation.operation_id)
+    Some(operation) =>
+      match operation.model_service_id {
+        Some(id) =>
+          match self.delivery_store {
+            Some(deliveries) if deliveries.model_service(id) is Some(_) =>
+              Some(id)
+            _ => Some(operation.operation_id)
+          }
+        None => Some(operation.operation_id)
+      }
     None => required_deployment_id
   }
   let budgets = self.global_settings.request_budgets

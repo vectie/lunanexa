@@ -457,6 +457,51 @@ async fn ApiService::media_execution_authorized(
   context : @media_jobs.ExecutionContext,
 ) -> Bool {
   if self.delivery_store is Some(deliveries) &&
+    deliveries.model_service(context.deployment_id) is Some(service) {
+    let runtime = service.runtime
+    let consumers = deliveries.operations()
+    guard runtime.stage == Ready &&
+      runtime.intent.expires_at_ms > @async.now() &&
+      runtime.reservation_id is Some(reservation_id) &&
+      self.scheduler is Some(scheduler) &&
+      scheduler.node_reservation(reservation_id) is Some(reservation) &&
+      reservation.state == Reserved &&
+      reservation.request.tenant_ref == runtime.intent.tenant_id &&
+      reservation.request.organization_id == runtime.intent.organization_id &&
+      reservation.request.expires_unix_ms > @async.now() &&
+      service.consumer_ids.any(id => {
+        consumers
+        .iter()
+        .find_first(value => value.operation_id == id)
+        .map_or(false, consumer => {
+          consumer.stage is (Ready | StartingWorkspace) &&
+          consumer.intent.expires_at_ms > @async.now()
+        })
+      }) &&
+      self.deployment_store is Some(catalog) &&
+      catalog.template({
+        template_id: runtime.intent.template_id,
+        version: runtime.intent.template_version,
+      })
+      is Some(template) &&
+      template.capability == VideoGenerate &&
+      template.model_selector == model else {
+      return false
+    }
+    return self.store
+      .assignments()
+      .any(assignment => {
+        assignment.deployment_id == runtime.operation_id &&
+        assignment.node_id == context.node_id &&
+        assignment.generation == context.generation &&
+        assignment.artifact.digest == template.artifact.digest &&
+        assignment.reservation.map_or(false, value => {
+          Some(value.reservation_id) == runtime.reservation_id &&
+          value.tenant_ref == runtime.intent.tenant_id
+        })
+      })
+  }
+  if self.delivery_store is Some(deliveries) &&
     deliveries.operation(context.deployment_id) is Some(delivery) {
     guard delivery.stage is (Ready | StartingWorkspace | LoadingModel) &&
       delivery.intent.expires_at_ms > @async.now() &&
@@ -515,6 +560,27 @@ async fn ApiService::media_authorized(
     return false
   }
   if self.delivery_store is Some(deliveries) &&
+    deliveries.model_service(binding.deployment_id) is Some(service) {
+    let consumers = deliveries.operations()
+    return service.runtime.stage == Ready &&
+      service.consumer_ids.any(id => {
+        consumers
+        .iter()
+        .find_first(value => value.operation_id == id)
+        .map_or(false, operation => {
+          operation.stage == Ready &&
+          operation.intent.tenant_id == owner.tenant_ref &&
+          operation.intent.organization_id == owner.organization_id &&
+          operation.intent.project_id == owner.project_id &&
+          (match owner.authority {
+            PrivateWorkspace(lease_id) => lease_id == operation.intent.lease_id
+            DedicatedOrder(_) => false
+          })
+        })
+      }) &&
+      self.media_execution_authorized(model, binding.execution_context())
+  }
+  if self.delivery_store is Some(deliveries) &&
     deliveries.operation(binding.deployment_id) is Some(operation) {
     return operation.stage == Ready &&
       self.media_execution_authorized(model, binding.execution_context())
@@ -533,6 +599,25 @@ async fn ApiService::media_order_matches(
   owner : @media_jobs.Owner,
   context : @media_jobs.ExecutionContext,
 ) -> Bool {
+  if self.delivery_store is Some(deliveries) &&
+    deliveries.model_service(context.deployment_id) is Some(service) {
+    let consumers = deliveries.operations()
+    return service.consumer_ids.any(id => {
+      consumers
+      .iter()
+      .find_first(value => value.operation_id == id)
+      .map_or(false, operation => {
+        operation.stage is (Ready | StartingWorkspace) &&
+        operation.intent.tenant_id == owner.tenant_ref &&
+        operation.intent.organization_id == owner.organization_id &&
+        operation.intent.project_id == owner.project_id &&
+        (match owner.authority {
+          PrivateWorkspace(lease_id) => lease_id == operation.intent.lease_id
+          DedicatedOrder(_) => false
+        })
+      })
+    })
+  }
   if self.delivery_store is Some(deliveries) &&
     deliveries.operation(context.deployment_id) is Some(operation) {
     return operation.intent.tenant_id == owner.tenant_ref &&
@@ -749,12 +834,23 @@ async fn ApiService::handle_media(
       if delivery_error is Some(reply) {
         return reply
       }
+      let bound_runtime_id = match bound_delivery {
+        Some(delivery) =>
+          match delivery.model_service_id {
+            Some(id) =>
+              match self.delivery_store {
+                Some(deliveries) if deliveries.model_service(id) is Some(_) =>
+                  Some(id)
+                _ => Some(delivery.operation_id)
+              }
+            None => Some(delivery.operation_id)
+          }
+        None => None
+      }
       let candidates = self
         .media_all_bindings(media.bindings, media.templates)
         .filter(binding => {
-          bound_delivery.map_or(true, delivery => {
-            delivery.operation_id == binding.deployment_id
-          }) &&
+          bound_runtime_id.map_or(true, id => id == binding.deployment_id) &&
           order.map_or(true, order => {
             order.target_deployment_ref == Some(binding.deployment_id) &&
             order.requested_model_selector == Some(binding.profile.model)

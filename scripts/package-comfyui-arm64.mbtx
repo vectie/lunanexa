@@ -1,0 +1,201 @@
+///|
+/// Compose reviewed ComfyUI and model-client sources over an ARM64 Python base.
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/core/string",
+}
+
+///|
+async fn output(program : String, args : Array[String]) -> String {
+  let result = @shell.Cmd(program, args).output()
+  result.check()
+  result.stdout().trim().to_owned()
+}
+
+///|
+async fn hash(path : String) -> String {
+  output("sha256sum", [path]).split(" ").next().unwrap().to_owned()
+}
+
+///|
+async fn size(path : String) -> Int {
+  @string.parse_int(output("stat", ["-c", "%s", path]))
+}
+
+///|
+async fn blob(root : String, name : String, value : Json) -> Json {
+  let path = root + "/" + name
+  @fs.write_file(path, value.stringify(), create_mode=CreateNew)
+  let digest = hash(path)
+  let bytes = size(path)
+  @fs.rename(path, root + "/blobs/sha256/" + digest)
+  { "digest": "sha256:" + digest, "size": bytes }
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, base, source, plugin, packages, root, image] else {
+    fail(
+      "Usage: package-comfyui-arm64.mbtx BASE_OCI_DIRECTORY COMFYUI_SOURCE PLUGIN_SOURCE PYTHON_PACKAGES NEW_OUTPUT IMAGE",
+    )
+  }
+  guard hash(plugin + "/comfyui_vllm_omni/utils/video_transport.py") ==
+    "b2e10c5c7402ac1fa453c6db28c9c9cf32321d687ef223bf4394deec411367b1" &&
+    hash(plugin + "/comfyui_vllm_omni/nodes.py") ==
+    "8bdf33ba1fe86ec9e76f70672b13bb09e746adc09bf13a38b05be76834a3bf34" else {
+    fail("Unexpected model-client source")
+  }
+  guard @fs.read_file(source + "/comfy_extras/nodes_video.py")
+    .text()
+    .contains("SaveVideo") else {
+    fail("Pinned ComfyUI source does not provide SaveVideo")
+  }
+  guard hash(
+      packages +
+      "/comfyui_frontend_package/static/assets/settingStore-KkBYyEnh.js",
+    ) ==
+    "a413a8e373f569276609be5eea3b905dc1415fbac07835099b2f03ed17829660" else {
+    fail("Reviewed persistent-output frontend adapter missing")
+  }
+  for path in ["torch/__init__.py", "av/__init__.py", "aiohttp/__init__.py"] {
+    @shell.Cmd("test", ["-f", packages + "/" + path]).run()
+  }
+  @fs.mkdir(root, permission=0o700)
+  @shell.Cmd("cp", ["-a", base + "/.", root]).run()
+  let index = @json.parse(@fs.read_file(root + "/index.json").text())
+  guard index is { "manifests": [{ "digest": String(manifest_hash), .. }], .. } else {
+    fail("Expected single-platform OCI base")
+  }
+  let manifest = @json.parse(
+    @fs.read_file(
+      root +
+      "/blobs/sha256/" +
+      manifest_hash.strip_prefix("sha256:").unwrap().to_owned(),
+    ).text(),
+  )
+  guard manifest is Object(fields) &&
+    manifest
+    is {
+      "config": { "digest": String(config_hash), .. },
+      "layers": Array(layers),
+      ..
+    } else {
+    fail("Invalid base manifest")
+  }
+  let config = @json.parse(
+    @fs.read_file(
+      root +
+      "/blobs/sha256/" +
+      config_hash.strip_prefix("sha256:").unwrap().to_owned(),
+    ).text(),
+  )
+  guard config
+    is {
+      "architecture": "arm64",
+      "os": "linux",
+      "config": Object(runtime),
+      "rootfs": { "diff_ids": Array(diffs), .. },
+      ..
+    } else {
+    fail("Expected Linux ARM64 Python base")
+  }
+  let layer = root + "/layer"
+  @fs.mkdir(
+    layer + "/opt/ComfyUI/custom_nodes/ComfyUI-vLLM-Omni",
+    recursive=true,
+  )
+  @fs.mkdir(layer + "/usr/local/lib/python3.12/site-packages", recursive=true)
+  @fs.mkdir(layer + "/workspace", recursive=true)
+  @shell.Cmd("cp", ["-a", source + "/.", layer + "/opt/ComfyUI"]).run()
+  @shell.Cmd("cp", [
+    "-a",
+    plugin + "/.",
+    layer + "/opt/ComfyUI/custom_nodes/ComfyUI-vLLM-Omni",
+  ]).run()
+  @shell.Cmd("cp", [
+    "-a",
+    packages + "/.",
+    layer + "/usr/local/lib/python3.12/site-packages",
+  ]).run()
+  let archive = root + "/comfy-layer.tar"
+  @shell.Cmd("tar", [
+    "--sort=name", "--mtime=@0", "--owner=0", "--group=0", "--mode=u+rwX,go+rX",
+    "-C", layer, "-cf", archive, ".",
+  ]).run()
+  diffs.push(Json::string("sha256:" + hash(archive)))
+  @shell.Cmd("gzip", ["-n", "-k", archive]).run()
+  let layer_hash = hash(archive + ".gz")
+  let layer_size = size(archive + ".gz")
+  @fs.rename(archive + ".gz", root + "/blobs/sha256/" + layer_hash)
+  layers.push({
+    "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+    "digest": "sha256:" + layer_hash,
+    "size": layer_size,
+  })
+  fields["mediaType"] = Json::string(
+    "application/vnd.oci.image.manifest.v1+json",
+  )
+  runtime["User"] = Json::string("1000:1000")
+  runtime["WorkingDir"] = Json::string("/opt/ComfyUI")
+  runtime["Entrypoint"] = ["python3", "/opt/ComfyUI/main.py"]
+  runtime["Cmd"] = [
+    "--cpu", "--listen", "0.0.0.0", "--port", "8188", "--disable-auto-launch", "--disable-api-nodes",
+    "--disable-all-custom-nodes", "--whitelist-custom-nodes", "ComfyUI-vLLM-Omni",
+  ]
+  let environment = match runtime.get("Env") {
+    Some(Array(values)) => values
+    _ => []
+  }
+  environment.push("PYTHONDONTWRITEBYTECODE=1".to_json())
+  environment.push("PYTHONUNBUFFERED=1".to_json())
+  environment.push("HOME=/workspace".to_json())
+  runtime["Env"] = environment.to_json()
+  runtime["ExposedPorts"] = { "8188/tcp": {} }
+  let labels = match runtime.get("Labels") {
+    Some(Object(values)) => values
+    _ => {}
+  }
+  labels["io.lunanexa.comfyui.revision"] = Json::string(
+    "e80c1570b6b44a2557d5d8e341e05782d18c9bbb",
+  )
+  labels["io.lunanexa.vllm-omni.revision"] = Json::string(
+    "0d339e25755f067d2f6981ffa7ac998127612163",
+  )
+  runtime["Labels"] = Json::object(labels)
+  guard blob(root, "comfy-config.json", config) is Object(config_descriptor) else {
+    fail("Invalid config descriptor")
+  }
+  config_descriptor["mediaType"] = Json::string(
+    "application/vnd.oci.image.config.v1+json",
+  )
+  fields["config"] = Json::object(config_descriptor)
+  guard blob(root, "comfy-manifest.json", manifest) is Object(descriptor) else {
+    fail("Invalid manifest descriptor")
+  }
+  descriptor["mediaType"] = Json::string(
+    "application/vnd.oci.image.manifest.v1+json",
+  )
+  descriptor["annotations"] = {
+    "org.opencontainers.image.ref.name": image,
+    "io.containerd.image.name": image,
+  }
+  descriptor["platform"] = { "architecture": "arm64", "os": "linux" }
+  @fs.write_file(
+    root + "/index.json",
+    ({ "schemaVersion": 2, "manifests": [Json::object(descriptor)] } : Json).stringify(),
+  )
+  @shell.Cmd("tar", [
+    "-C",
+    root,
+    "-cf",
+    root + ".oci.tar",
+    "oci-layout",
+    "index.json",
+    "blobs",
+  ]).run()
+  println(image + " " + descriptor["digest"].stringify())
+}

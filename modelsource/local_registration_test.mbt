@@ -25,6 +25,117 @@ test "local directories are validated as store-relative keys" {
 }
 
 ///|
+test "component manifests select only the named upstream subtree" {
+  let file : @modelsource.ModelScopeFile = {
+    path: "FL2VA/weights/model.safetensors",
+    revision: "",
+    sha256: "a".repeat(64),
+    size: 17L,
+    lfs: true,
+  }
+  let other : @modelsource.ModelScopeFile = {
+    ..file,
+    path: "Ref2VA/weights/model.safetensors",
+    size: 23L,
+  }
+  let selected = @modelsource.component_tree(
+    { revision: "57559a67", files: [file, other], },
+    "FL2VA",
+  )
+  assert_eq(selected.files.length(), 1)
+  assert_eq(selected.files[0].path, "weights/model.safetensors")
+  assert_eq(selected.files[0].size, 17L)
+  assert_eq(
+    @modelsource.component_upstream_file(selected.files[0], "FL2VA").path,
+    file.path,
+  )
+  let missing = try {
+    ignore(
+      @modelsource.component_tree(
+        { revision: "57559a67", files: [file], },
+        "Ref2VA",
+      ),
+    )
+    false
+  } catch {
+    @modelsource.ModelSourceError::InvalidUpstreamResponse => true
+    _ => false
+  } noraise {
+    value => value
+  }
+  assert_true(missing)
+}
+
+///|
+async test "whole revision and component registrations have independent identities" {
+  let directory = @fs.tmpdir(prefix="lunanexa-modelsource-components-")
+  let root = "\{directory}/store"
+  @fs.mkdir(
+    "\{root}/MiniMax/MiniMax-H3/FL2VA",
+    permission=0o700,
+    recursive=true,
+  )
+  @fs.mkdir(
+    "\{root}/MiniMax/MiniMax-H3/Ref2VA",
+    permission=0o700,
+    recursive=true,
+  )
+  let store = @modelsource.FileImportStore::open("\{directory}/imports.json")
+  let request : @modelsource.ImportRequest = {
+    model_id: "MiniMax/MiniMax-H3",
+    revision: "57559a67",
+  }
+  let whole = store.create_local(
+    request, "license-review-required", "MiniMax/MiniMax-H3", root, 1L,
+  )
+  let fl2va = store.create_local(
+    request,
+    "license-review-required",
+    "MiniMax/MiniMax-H3/FL2VA",
+    root,
+    2L,
+    component="FL2VA",
+  )
+  let ref2va = store.create_local(
+    request,
+    "license-review-required",
+    "MiniMax/MiniMax-H3/Ref2VA",
+    root,
+    3L,
+    component="Ref2VA",
+  )
+  assert_true(whole.import_id != fl2va.import_id)
+  assert_true(fl2va.import_id != ref2va.import_id)
+  assert_eq(store.list().length(), 3)
+  let recovered = @modelsource.FileImportStore::open(
+    "\{directory}/imports.json",
+  )
+  guard recovered.get(fl2va.import_id) is Some(saved) else {
+    fail("component record must survive restart")
+  }
+  assert_eq(saved.component, "FL2VA")
+  let mismatch = try {
+    ignore(
+      store.create_local(
+        request,
+        "license-review-required",
+        "MiniMax/MiniMax-H3/Ref2VA",
+        root,
+        4L,
+        component="FL2VA",
+      ),
+    )
+    false
+  } catch {
+    @modelsource.ModelSourceError::InvalidRepositoryPath => true
+    _ => false
+  } noraise {
+    value => value
+  }
+  assert_true(mismatch)
+}
+
+///|
 /// The same document a pre-`local_directory` build wrote: every option absent,
 /// every Int64 already rendered as a JSON string.
 fn legacy_snapshot() -> String {
@@ -117,7 +228,7 @@ async test "a version 1 snapshot keeps its imports when the schema grows" {
   assert_eq(restored.bytes_completed, 2171355326L)
 
   // The upgrade is written back as the current schema.
-  assert_true(@fs.read_file(path).text().contains("\"schema_version\":2"))
+  assert_true(@fs.read_file(path).text().contains("\"schema_version\":3"))
 }
 
 ///|

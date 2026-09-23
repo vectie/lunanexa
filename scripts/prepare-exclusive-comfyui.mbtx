@@ -1,0 +1,255 @@
+import {
+  "moonbitlang/async", "moonbitlang/async/fs", "moonbitlang/async/shell",
+  "moonbitlang/core/env", "moonbitlang/core/json", "moonbitlang/x/sys",
+}
+
+async fn kube(k : String, args : Array[String]) -> String {
+  let result = @shell.Cmd("kubectl", ["--kubeconfig", k, ..args]).output()
+  result.check()
+  result.stdout()
+}
+
+fn object(value : Json) -> Map[String, Json] raise {
+  guard value is Object(fields) else { fail("Expected object") }
+  fields
+}
+
+fn clean(value : Json) -> Json raise {
+  let fields = object(value)
+  fields.remove("status")
+  let meta = object(fields["metadata"])
+  for key in ["resourceVersion", "uid", "creationTimestamp", "managedFields", "generation"] { meta.remove(key) }
+  value
+}
+
+fn container(deployment : Json, name : String) -> Map[String, Json] raise {
+  guard deployment is { "spec": { "template": { "spec": { "containers": Array(values), .. }, .. }, .. }, .. } &&
+    values.iter().find_first(value => value is { "name": String(found), .. } && found == name) is Some(value) else { fail("Expected container missing") }
+  object(value)
+}
+
+fn environment(container : Map[String, Json]) -> Array[Json] {
+  match container.get("env") { Some(Array(values)) => values; _ => [] }
+}
+
+fn literal(values : Array[Json], name : String) -> String? {
+  for value in values {
+    if value is { "name": String(found), "value": String(text), .. } && found == name {
+      return Some(text)
+    }
+  }
+  None
+}
+
+fn set_env(target : Map[String, Json], name : String, entry : Json) -> Unit {
+  let values = environment(target).filter(value => !(value is { "name": String(found), .. } && found == name))
+  values.push(entry)
+  target["env"] = values.to_json()
+}
+
+fn set_literal(target : Map[String, Json], name : String, value : String) -> Unit {
+  set_env(target, name, { "name": name, "value": value })
+}
+
+fn extend_origins(target : Map[String, Json], name : String, origin : String) -> Unit raise {
+  let values : Array[String] = match literal(environment(target), name) {
+    Some(raw) => @json.from_json(@json.parse(raw))
+    None => []
+  }
+  if !values.contains(origin) { values.push(origin) }
+  set_literal(target, name, values.to_json().stringify())
+}
+
+fn catalog(values : Array[Json]) -> Json raise {
+  let existing : Array[Json] = match literal(values, "LUNANEXA_CLIENT_LAUNCH_CATALOG_JSON") {
+    Some(raw) => @json.from_json(@json.parse(raw))
+    None => [{
+      "client_id": literal(values, "LUNANEXA_CLIENT_ID").unwrap(),
+      "display_name": literal(values, "LUNANEXA_CLIENT_DISPLAY_NAME").unwrap(),
+      "launch_uri": literal(values, "LUNANEXA_CLIENT_LAUNCH_URI").unwrap(),
+      "public_api_base_url": literal(values, "LUNANEXA_PUBLIC_API_BASE_URL").unwrap(),
+      "handoff_lifetime_ms": "120000", "maximum_requests": "100000",
+    }]
+  }
+  let comfy : Json = {
+    "client_id": "comfyui", "display_name": "ComfyUI",
+    "launch_uri": "http://106.39.18.146:5000/connect",
+    "public_api_base_url": "http://106.39.18.146:5000/v1",
+    "handoff_lifetime_ms": "120000", "maximum_requests": "100000",
+  }
+  let merged = existing.map(value => if value is { "client_id": String("comfyui"), .. } { comfy } else { value })
+  if !existing.any(value => value is { "client_id": String("comfyui"), .. }) { merged.push(comfy) }
+  merged.to_json()
+}
+
+fn public_routes(routes : String) -> String raise {
+  if routes.contains("public-workspace:") {
+    guard routes.contains("public-model-api:") &&
+      routes.contains("service: moongate") &&
+      routes.contains("http://webide-gateway.aigc-acceptance-20260915.svc.cluster.local:8082") else {
+      fail("Existing public route differs from the approved gateway topology")
+    }
+    return routes
+  }
+  guard routes.contains("  routers:\n") && routes.contains("  services:\n") && routes.contains("service: moongate") else { fail("Review unexpected routing structure") }
+  let routers =
+    #|  routers:
+    #|    public-model-api:
+    #|      entryPoints: [public-workspace]
+    #|      rule: Host(`106.39.18.146`) && (Path(`/v1`) || PathPrefix(`/v1/`))
+    #|      priority: 100
+    #|      service: moongate
+    #|    public-workspace:
+    #|      entryPoints: [public-workspace]
+    #|      rule: Host(`106.39.18.146`)
+    #|      priority: 1
+    #|      service: exclusive-workspace
+    #|
+  let services =
+    #|  services:
+    #|    exclusive-workspace:
+    #|      loadBalancer:
+    #|        passHostHeader: true
+    #|        servers: [{url: 'http://webide-gateway.aigc-acceptance-20260915.svc.cluster.local:8082'}]
+    #|
+  routes.replace(old="  routers:\n", new=routers).replace(old="  services:\n", new=services)
+}
+
+async fn save(path : String, document : Json) -> Unit {
+  @fs.write_file(path, document.stringify(indent=2), create_mode=CreateNew, permission=0o600)
+}
+
+async fn prepare(k : String, root : String, gateway_image : String, proxy_image : String, comfy_image : String) -> Unit {
+  for image in [gateway_image, proxy_image, comfy_image] {
+    guard image.split("@sha256:").to_array() is [_, digest] && digest.length() == 64 else { fail("Pinned images required") }
+  }
+  @fs.mkdir(root, permission=0o700)
+  @fs.mkdir(root + "/before", permission=0o700)
+  @fs.mkdir(root + "/prepared", permission=0o700)
+  let ns = "aigc-acceptance-20260915"
+  let deny = @json.parse(kube(k, ["-n", ns, "get", "networkpolicy", "default-deny", "-o", "json"]))
+  guard deny is { "spec": { "podSelector": Object(selector), "policyTypes": Array(types), .. }, .. } &&
+    selector.length() == 0 && types.contains("Ingress".to_json()) &&
+    types.contains("Egress".to_json()) &&
+    !object(object(deny)["spec"]).contains("ingress") &&
+    !object(object(deny)["spec"]).contains("egress") else {
+    fail("Namespace isolation preflight failed")
+  }
+  for namespace_name in ["lunanexa", ns] {
+    guard kube(k, ["-n", namespace_name, "get", "secret", "lunanexa-webide-observation", "--ignore-not-found", "-o", "name"]).trim() == "" else {
+      fail("Observation secret already exists; review before changing either component")
+    }
+  }
+  guard kube(k, ["-n", ns, "get", "service", "webide-gateway", "--ignore-not-found", "-o", "name"]).trim() == "" else {
+    fail("Workspace service already exists; review before changing its owner")
+  }
+  let targets = [(ns, "deployment", "webide-gateway"), (ns, "deployment", "internal-gateway"),
+    (ns, "configmap", "webide-gateway"), (ns, "configmap", "internal-gateway-routes"),
+    (ns, "service", "comfyui-public"), (ns, "networkpolicy", "webide-gateway"),
+    (ns, "networkpolicy", "internal-gateway"),
+    ("lunanexa", "deployment", "lunanexa-control")]
+  let docs : Map[String, Json] = Map([])
+  for (namespace_name, kind, name) in targets {
+    let raw = kube(k, ["-n", namespace_name, "get", kind, name, "-o", "json"])
+    let filename = kind + "-" + name + ".json"
+    @fs.write_file(root + "/before/" + filename, raw, create_mode=CreateNew, permission=0o600)
+    docs[filename] = clean(@json.parse(raw))
+  }
+  let control = container(docs["deployment-lunanexa-control.json"], "control")
+  set_literal(control, "LUNANEXA_CLIENT_LAUNCH_CATALOG_JSON", catalog(environment(control)).stringify())
+  extend_origins(control, "LUNANEXA_CLIENT_HTTP_LAUNCH_ORIGINS_JSON", "http://106.39.18.146:5000")
+  extend_origins(control, "LUNANEXA_CLIENT_HTTP_API_ORIGINS_JSON", "http://106.39.18.146:5000")
+  let gateway = container(docs["deployment-webide-gateway.json"], "gateway")
+  gateway["image"] = gateway_image.to_json()
+  set_literal(gateway, "LUNANEXA_WEBIDE_REQUIRE_EXCLUSIVE", "true")
+  set_literal(gateway, "LUNANEXA_WEBIDE_PUBLIC_ORIGIN", "http://106.39.18.146:5000")
+  set_literal(gateway, "LUNANEXA_WEBIDE_ALLOW_INSECURE_PUBLIC_HTTP", "true")
+  for target in [control, gateway] {
+    set_env(target, "LUNANEXA_WEBIDE_OBSERVATION_TOKEN", {
+      "name": "LUNANEXA_WEBIDE_OBSERVATION_TOKEN", "valueFrom": { "secretKeyRef": { "name": "lunanexa-webide-observation", "key": "token" } },
+    })
+  }
+  let data = object(object(docs["configmap-webide-gateway.json"])["data"])
+  guard data["host.json"] is String(raw_host) else { fail("Host config missing") }
+  let host = object(@json.parse(raw_host))
+  host["storage_class"] = "lunanexa-workspaces-rwx"
+  host["storage_access_mode"] = "ReadWriteMany"
+  host["public_api_base_url"] = "http://106.39.18.146:5000/v1"
+  host["comfyui_image"] = comfy_image.to_json()
+  host["model_proxy_image"] = proxy_image.to_json()
+  data["host.json"] = host.to_json().stringify(indent=2).to_json()
+  let route_data = object(object(docs["configmap-internal-gateway-routes.json"])["data"])
+  guard route_data["routes.yaml"] is String(routes) else { fail("Routes missing") }
+  route_data["routes.yaml"] = public_routes(routes).to_json()
+  let frontend = container(docs["deployment-internal-gateway.json"], "proxy")
+  guard frontend.get("args") is Some(Array(args)) else { fail("Proxy args missing") }
+  let entry = "--entrypoints.public-workspace.address=:5000".to_json()
+  if !args.contains(entry) { args.push(entry) }
+  let service = object(object(docs["service-comfyui-public.json"])["spec"])
+  service["selector"] = { "acceptance-component": "internal-gateway" }
+  guard service["ports"] is Array(ports) else { fail("Public service ports missing") }
+  for port in ports {
+    if port is Object(fields) && fields.get("port") == Some((5000).to_json()) { fields["targetPort"] = (5000).to_json() }
+  }
+  let internal_policy = object(object(docs["networkpolicy-internal-gateway.json"])["spec"])
+  guard internal_policy["ingress"] is Array(internal_ingress) &&
+    internal_policy["egress"] is Array(internal_egress) else {
+    fail("Internal gateway network policy changed")
+  }
+  internal_ingress.push({ "ports": [{ "port": 5000, "protocol": "TCP" }] })
+  internal_egress.push({
+    "to": [{ "podSelector": { "matchLabels": { "app.kubernetes.io/name": "lunanexa-webide-gateway" } } }],
+    "ports": [{ "port": 8082, "protocol": "TCP" }],
+  })
+  let webide_policy = object(object(docs["networkpolicy-webide-gateway.json"])["spec"])
+  guard webide_policy["ingress"] is Array(webide_ingress) else {
+    fail("Workspace gateway network policy changed")
+  }
+  webide_ingress.push({
+    "from": [{ "podSelector": { "matchLabels": { "acceptance-component": "internal-gateway" } } }],
+    "ports": [{ "port": 8082, "protocol": "TCP" }],
+  })
+  for filename, document in docs { save(root + "/prepared/" + filename, document) }
+  let random = @shell.Cmd("openssl", ["rand", "-hex", "32"]).output()
+  random.check()
+  let token = random.stdout().trim().to_owned()
+  guard token.length() == 64 && token.all(c => c is ('0'..='9' | 'a'..='f')) else {
+    fail("Observation token generation failed")
+  }
+  for namespace_name in ["lunanexa", ns] {
+    save(root + "/prepared/secret-lunanexa-webide-observation-" + namespace_name + ".json", {
+      "apiVersion": "v1", "kind": "Secret", "metadata": {
+        "name": "lunanexa-webide-observation", "namespace": namespace_name,
+        "labels": { "app.kubernetes.io/managed-by": "lunanexa-exclusive-prep" },
+      },
+      "type": "Opaque", "stringData": { "token": token },
+    })
+  }
+  save(root + "/prepared/service-webide-gateway.json", {
+    "apiVersion": "v1", "kind": "Service", "metadata": {
+      "name": "webide-gateway", "namespace": ns,
+      "labels": { "app.kubernetes.io/managed-by": "lunanexa-exclusive-prep" },
+    },
+    "spec": { "selector": { "app.kubernetes.io/name": "lunanexa-webide-gateway" }, "ports": [{ "name": "http", "port": 8082, "targetPort": 8082 }], "type": "ClusterIP" },
+  })
+  println("Prepared private snapshots, observation token and manifests. No live resources changed.")
+}
+
+async fn main {
+  try {
+    match @env.args() {
+      [_, "--self-test"] => {
+        let kept : Json = { "client_id": "existing", "launch_uri": "https://existing.test" }
+        let merged = catalog([{ "name": "LUNANEXA_CLIENT_LAUNCH_CATALOG_JSON", "value": [kept].to_json().stringify() }])
+        guard merged is Array([first, { "client_id": String("comfyui"), .. }]) && first == kept else { fail("Catalog preservation failed") }
+        let routes = public_routes("http:\n  routers:\n    old:\n      service: moongate\n  services:\n    moongate: {}\n")
+        guard routes.contains("http://webide-gateway.") && routes.contains("service: moongate") && public_routes(routes) == routes else { fail("Route preparation failed") }
+        println("Preparation self-test passed; no Kubernetes access.")
+      }
+      [_, k, root, gateway, proxy, comfy] => prepare(k, root, gateway, proxy, comfy)
+      _ => fail("Usage: prepare-exclusive-comfyui.mbtx KUBECONFIG NEW_PRIVATE_DIRECTORY GATEWAY_AMD64_IMAGE PROXY_ARM64_IMAGE COMFY_ARM64_IMAGE")
+    }
+  } catch {
+    _ => { println("Exclusive ComfyUI preparation failed; inspect private source configuration without publishing secrets."); @sys.exit(1) }
+  }
+}

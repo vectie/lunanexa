@@ -1,0 +1,158 @@
+///|
+/// Reproducible ARM64 browser terminal layer over a pinned NVIDIA CUDA base.
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/core/string",
+}
+
+///|
+async fn output(program : String, args : Array[String]) -> String {
+  let result = @shell.Cmd(program, args).output()
+  result.check()
+  result.stdout().trim().to_owned()
+}
+
+///|
+async fn hash(path : String) -> String {
+  output("sha256sum", [path]).split(" ").next().unwrap().to_owned()
+}
+
+///|
+async fn size(path : String) -> Int {
+  @string.parse_int(output("stat", ["-c", "%s", path]))
+}
+
+///|
+async fn blob(root : String, name : String, value : Json) -> Json {
+  let path = root + "/" + name
+  @fs.write_file(path, value.stringify(), create_mode=CreateNew)
+  let digest = hash(path)
+  let bytes = size(path)
+  @fs.rename(path, root + "/blobs/sha256/" + digest)
+  { "digest": "sha256:" + digest, "size": bytes }
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, base, ttyd, root, image] else {
+    fail(
+      "Usage: package-gpu-terminal.mbtx CUDA_BASE_OCI_TAR TTYD_AARCH64 NEW_OUTPUT IMAGE",
+    )
+  }
+  // NVIDIA CUDA 13.0.1-base-ubuntu24.04 ARM64 and upstream ttyd 1.7.7.
+  let base_digest = "351f28235bee49fbfd8eb97819e8e24934ca33b369edc9656c6d5668bc64ed6c"
+  guard hash(ttyd) ==
+    "b38acadd89d1d396a0f5649aa52c539edbad07f4bc7348b27b4f4b7219dd4165" else {
+    fail("ttyd does not match upstream 1.7.7 ARM64 SHA256SUMS")
+  }
+  @fs.mkdir(root, permission=0o700)
+  @shell.Cmd("tar", ["-xf", base, "-C", root]).run()
+  let base_path = root + "/blobs/sha256/" + base_digest
+  guard hash(base_path) == base_digest else {
+    fail("CUDA base manifest mismatch")
+  }
+  let manifest = @json.parse(@fs.read_file(base_path).text())
+  guard manifest is Object(fields) &&
+    manifest
+    is {
+      "config": { "digest": String(config_digest), .. },
+      "layers": Array(layers),
+      ..
+    } else {
+    fail("Invalid base manifest")
+  }
+  let config = @json.parse(
+    @fs.read_file(
+      root +
+      "/blobs/sha256/" +
+      config_digest.strip_prefix("sha256:").unwrap().to_owned(),
+    ).text(),
+  )
+  guard config
+    is {
+      "architecture": "arm64",
+      "os": "linux",
+      "config": Object(runtime),
+      "rootfs": { "diff_ids": Array(diffs), .. },
+      ..
+    } else {
+    fail("Expected ARM64 Linux base")
+  }
+  let layer = root + "/terminal-layer"
+  @fs.mkdir(layer + "/usr/local/bin", recursive=true)
+  @shell.Cmd("install", ["-m", "755", ttyd, layer + "/usr/local/bin/ttyd"]).run()
+  @fs.mkdir(layer + "/workspace")
+  @fs.mkdir(layer + "/etc")
+  @fs.write_file(
+    layer + "/etc/passwd",
+    "root:x:0:0:root:/root:/bin/bash\nworkspace:x:1000:1000:LunaNexa workspace:/workspace:/bin/bash\n",
+  )
+  @fs.write_file(layer + "/etc/group", "root:x:0:\nworkspace:x:1000:\n")
+  let archive = root + "/terminal-layer.tar"
+  @shell.Cmd("tar", [
+    "--sort=name", "--mtime=@0", "--owner=1000", "--group=1000", "--mode=u+rwX,go+rX",
+    "-C", layer, "-cf", archive, ".",
+  ]).run()
+  diffs.push(("sha256:" + hash(archive)).to_json())
+  @shell.Cmd("gzip", ["-n", "-k", archive]).run()
+  let layer_hash = hash(archive + ".gz")
+  let layer_size = size(archive + ".gz")
+  @fs.rename(archive + ".gz", root + "/blobs/sha256/" + layer_hash)
+  layers.push({
+    "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+    "digest": "sha256:" + layer_hash,
+    "size": layer_size,
+  })
+  for entry in layers {
+    guard entry is Object(layer_fields) else { fail("Invalid layer") }
+    layer_fields["mediaType"] = "application/vnd.oci.image.layer.v1.tar+gzip".to_json()
+  }
+  runtime["User"] = "1000:1000".to_json()
+  runtime["WorkingDir"] = "/workspace".to_json()
+  runtime["Entrypoint"] = ["/usr/local/bin/ttyd"].to_json()
+  runtime["Cmd"] = [
+    "-W", "-p", "8080", "-w", "/workspace", "/bin/bash", "--noprofile", "--norc",
+  ].to_json()
+  if runtime.get("Env") is Some(Array(environment)) {
+    environment.push("HOME=/workspace".to_json())
+    environment.push("TERM=xterm-256color".to_json())
+  }
+  runtime["Labels"] = {
+    "org.opencontainers.image.title": "LunaNexa GPU browser terminal",
+    "org.opencontainers.image.version": "ttyd-1.7.7-cuda-13.0.1",
+  }
+  runtime["ExposedPorts"] = { "8080/tcp": {} }
+  guard blob(root, "terminal-config.json", config) is Object(config_descriptor) else {
+    fail("Invalid descriptor")
+  }
+  config_descriptor["mediaType"] = "application/vnd.oci.image.config.v1+json".to_json()
+  fields["config"] = config_descriptor.to_json()
+  fields["mediaType"] = "application/vnd.oci.image.manifest.v1+json".to_json()
+  guard blob(root, "terminal-manifest.json", manifest) is Object(descriptor) else {
+    fail("Invalid descriptor")
+  }
+  descriptor["mediaType"] = "application/vnd.oci.image.manifest.v1+json".to_json()
+  descriptor["platform"] = { "architecture": "arm64", "os": "linux" }
+  descriptor["annotations"] = {
+    "org.opencontainers.image.ref.name": image,
+    "io.containerd.image.name": image,
+  }
+  @fs.write_file(
+    root + "/index.json",
+    ({ "schemaVersion": 2, "manifests": [descriptor.to_json()] } : Json).stringify(),
+  )
+  @shell.Cmd("tar", [
+    "-C",
+    root,
+    "-cf",
+    root + ".oci.tar",
+    "oci-layout",
+    "index.json",
+    "blobs",
+  ]).run()
+  println(image + " " + descriptor["digest"].stringify())
+}

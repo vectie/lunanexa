@@ -23,7 +23,7 @@
       "title": "LunaNexa H3 自检（384×256）",
       "properties": {},
       "widgets_values": [
-        "## LunaNexa H3 自检（384×256）\n\n诊断用预设：**384×256、24 fps、56 帧（2.33 秒）、8 步、关声**。\n**实测端到端 41 秒**（去噪 5 秒，7 步 0.74 s/步，成片 123,652 字节）。\n\n用途：用最短的闭环确认服务真的在算、而且成片能取回来。\n\n- **进度：** HTTP 上的 `progress` 会随去噪步数上升，**封顶 80** —— 去噪之后还有 VAE 解码和 MP4 编码，服务端对那两段没有粒度，所以 100 只留给「成片真的存在」\n- 服务端 pod 日志里同样能看到 `n/7 ... s/it`\n\n平台 nginx 会注入 bearer token，**不需要 API key**。"
+        "## LunaNexa H3 自检（384×256）\n\n诊断用预设：**384×256、24 fps、56 帧（2.33 秒）、8 步、关声**。\n**实测端到端 41 秒**（去噪 5 秒，7 步 0.74 s/步，成片 123,652 字节）。\n\n用途：用最短的闭环确认服务真的在算、而且成片能取回来。\n\n- **进度：** HTTP 上的 `progress` 会随去噪步数上升，**封顶 80** —— 去噪之后还有 VAE 解码和 MP4 编码，服务端对那两段没有粒度，所以 100 只留给「成片真的存在」\n- 服务端 pod 日志里同样能看到 `n/7 ... s/it`\n\n本地模型代理按当前交付授权提供访问。示例模板须将模型字段改为当前交付的模型别名；直接打开「LunaNexa Video」默认工作流则已自动配置。"
       ],
       "color": "#432",
       "bgcolor": "#000"
@@ -293,8 +293,8 @@
         "Node name for S&R": "VLLMOmniGenerateVideo"
       },
       "widgets_values": [
-        "http://192.168.2.175:4174/h3/v1",
-        "/models/MiniMax-H3/FL2VA",
+        "http://127.0.0.1:8189/v1",
+        "SELECT_DELIVERY_MODEL_ALIAS",
         "A red vintage motorcycle parked on a wet cobblestone street at dusk, neon sign reflections in the puddles, slow push-in camera move, cinematic, 35mm film.",
         "",
         384,
@@ -305,8 +305,8 @@
         900
       ],
       "widgets_values_named": {
-        "url": "http://192.168.2.175:4174/h3/v1",
-        "model": "/models/MiniMax-H3/FL2VA",
+        "url": "http://127.0.0.1:8189/v1",
+        "model": "SELECT_DELIVERY_MODEL_ALIAS",
         "prompt": "A red vintage motorcycle parked on a wet cobblestone street at dusk, neon sign reflections in the puddles, slow push-in camera move, cinematic, 35mm film.",
         "negative_prompt": "",
         "width": 384,

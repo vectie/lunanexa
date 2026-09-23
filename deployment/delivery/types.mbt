@@ -117,7 +117,25 @@ pub extend DeliveryError with Debug::{to_repr}
 struct Snapshot {
   schema_version : String
   operations : Array[Operation]
+  model_services : Array[ModelService]?
 } derive(ToJson, FromJson)
+
+///|
+/// Physical model lifecycle is independent of the delivery that first created
+/// it. Members retain their own workspace, credentials and stop state.
+pub(all) struct ModelService {
+  runtime : Operation
+  consumer_ids : Array[String]
+} derive(Eq, ToJson, FromJson)
+
+///|
+pub extend ModelService with Eq::{equal, not_equal}
+
+///|
+pub extend ModelService with ToJson::{to_json}
+
+///|
+pub extend ModelService with @json.FromJson::{from_json}
 
 ///|
 pub extend DeliveryKind with Debug::{to_repr}

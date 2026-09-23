@@ -1,4 +1,89 @@
 ///|
+async test "shared model candidate requires a live desired assignment" {
+  let directory = @fs.tmpdir(prefix="delivery-shared-candidate-")
+  defer @fs.rmdir(directory, recursive=true)
+  let deliveries = @delivery.DeliveryStore::open("\{directory}/deliveries.json")
+  let template = machine_dedicated_template()
+  let now = @async.now()
+  let intent : @delivery.Intent = {
+    tenant_id: "tenant-a",
+    organization_id: "org-a",
+    project_id: "project-a",
+    authorization_ref: "grant-a",
+    lease_id: "lease-a",
+    idempotency_key: "first",
+    kind: ModelApi,
+    template_id: template.template_id,
+    template_version: template.version,
+    model_digest: Some(template.artifact.digest),
+    node_count: 1,
+    expires_at_ms: now + 60000L,
+  }
+  let created = deliveries.create(intent, now)
+  let mut owner = deliveries.observe(
+    created.operation_id,
+    created.generation,
+    Reserved(reservation_id="reservation-a", node_ids=["spark-a"]),
+    now,
+  )
+  owner = deliveries.observe(
+    owner.operation_id,
+    owner.generation,
+    ModelReplicaObserved({
+      assignment_id: "delivery-1-model",
+      node_id: "spark-a",
+      generation: 1L,
+      prepared: true,
+      ready: true,
+      stopped: false,
+    }),
+    now,
+  )
+  owner = deliveries.observe(
+    owner.operation_id,
+    owner.generation,
+    ModelPrepared(digest=template.artifact.digest, cache_hit=true),
+    now,
+  )
+  owner = deliveries.observe(
+    owner.operation_id,
+    owner.generation,
+    ModelResponded(
+      service_id=owner.operation_id,
+      digest=template.artifact.digest,
+    ),
+    now,
+  )
+  ignore(
+    deliveries.bind_model_service(owner.operation_id, owner.generation, now),
+  )
+  let created = deliveries.create({ ..intent, idempotency_key: "second", }, now)
+  let waiting = deliveries.observe(
+    created.operation_id,
+    created.generation,
+    Reserved(reservation_id="reservation-a", node_ids=["spark-a"]),
+    now,
+  )
+  let runtime = @runtimes.OpenAiTextRuntime::new(
+    "http://127.0.0.1:1/v1/responses",
+    "",
+    template.runtime.version,
+    template.runtime.image_digest,
+    template.artifact.digest,
+    allow_http_loopback=true,
+  )
+  let service = ApiService::new(
+    @store.FileStore::open("\{directory}/state.json"),
+    runtime,
+    "operator",
+    "inference",
+    "node",
+    "test",
+  ).with_delivery_store(deliveries)
+  assert_eq(service.ready_reusable_model_service(waiting, template), None)
+}
+
+///|
 async test "delivery media binding is limited to the exact organization project and lease" {
   let directory = @fs.tmpdir(prefix="delivery-media-authority-")
   defer @fs.rmdir(directory, recursive=true)

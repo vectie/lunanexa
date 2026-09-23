@@ -8,7 +8,7 @@ priv struct ImportSnapshot {
 extend ImportSnapshot with ToJson::{to_json}
 
 ///|
-const ImportSnapshotSchemaVersion : Int = 2
+const ImportSnapshotSchemaVersion : Int = 3
 
 ///|
 fn snapshot_schema_version(value : Json) -> Double? {
@@ -33,6 +33,12 @@ fn migrate_snapshot(value : Json) -> Json {
       Object(entry) if !entry.contains("local_directory") => {
         let entry = entry.copy()
         entry["local_directory"] = Json::string("")
+        entry["component"] = Json::string("")
+        migrated.push(Json::object(entry))
+      }
+      Object(entry) if !entry.contains("component") => {
+        let entry = entry.copy()
+        entry["component"] = Json::string("")
         migrated.push(Json::object(entry))
       }
       _ => migrated.push(item)
@@ -129,9 +135,14 @@ async fn FileImportStore::create_record(
   license : String,
   local_directory : String,
   now_unix_ms : Int64,
+  component? : String = "",
   supersede? : Bool = false,
 ) -> ImportOperation {
-  let id = import_id(request.model_id, request.revision)
+  let id = if component == "" {
+    import_id(request.model_id, request.revision)
+  } else {
+    component_import_id(request.model_id, request.revision, component)
+  }
   self.mutex.acquire()
   defer self.mutex.release()
   let before = self.operations.copy()
@@ -155,6 +166,7 @@ async fn FileImportStore::create_record(
     artifact_uri: "",
     license,
     local_directory,
+    component,
     error_code: "",
     cancel_requested: false,
     created_unix_ms: now_unix_ms,
@@ -191,11 +203,23 @@ pub async fn FileImportStore::create_local(
   local_directory : String,
   model_root : String,
   now_unix_ms : Int64,
+  component? : String = "",
 ) -> ImportOperation {
   if !valid_local_directory(local_directory) {
     raise InvalidRepositoryPath
   }
-  let id = import_id(request.model_id, request.revision)
+  if component != "" &&
+    (
+      !valid_component(component) ||
+      !local_directory.has_suffix("/\{component}")
+    ) {
+    raise InvalidRepositoryPath
+  }
+  let id = if component == "" {
+    import_id(request.model_id, request.revision)
+  } else {
+    component_import_id(request.model_id, request.revision, component)
+  }
   self.mutex.acquire()
   let previous = self.operations.get(id)
   self.mutex.release()
@@ -205,7 +229,14 @@ pub async fn FileImportStore::create_local(
       !@fs.exists("\{model_root}/\{record.local_directory}")
     None => false
   }
-  self.create_record(request, license, local_directory, now_unix_ms, supersede~)
+  self.create_record(
+    request,
+    license,
+    local_directory,
+    now_unix_ms,
+    component~,
+    supersede~,
+  )
 }
 
 ///|

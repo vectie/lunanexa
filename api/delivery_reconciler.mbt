@@ -78,7 +78,18 @@ async fn ApiService::append_delivery_media_bindings(
   }
   let heartbeats = self.store.heartbeats()
   let now = @async.now()
+  let physical : Array[@delivery.Operation] = []
+  for service in deliveries.model_services() {
+    physical.push(service.runtime)
+  }
   for operation in deliveries.operations() {
+    if !deliveries
+      .model_services()
+      .any(service => service.consumer_ids.contains(operation.operation_id)) {
+      physical.push(operation)
+    }
+  }
+  for operation in physical {
     if operation.stage is (Stopped | Expired | Stopping | Failed) {
       continue
     }
@@ -124,6 +135,249 @@ async fn ApiService::append_delivery_media_bindings(
         }
       }
     }
+  }
+}
+
+///|
+/// Reuse is considered only when the original physical assignment is still
+/// present, every replica has live node evidence, and the model-specific probe
+/// responds. The store repeats the scope check inside its durable transaction.
+async fn ApiService::ready_reusable_model_service(
+  self : ApiService,
+  operation : @delivery.Operation,
+  template : @deployment.ModelServiceTemplate,
+) -> String? {
+  guard self.delivery_store is Some(deliveries) else { return None }
+  if operation.intent.model_digest != Some(template.artifact.digest) {
+    return None
+  }
+  let now = @async.now()
+  for service in deliveries.model_services() {
+    let runtime = service.runtime
+    if runtime.operation_id == operation.operation_id ||
+      runtime.stage != Ready ||
+      service.consumer_ids.is_empty() ||
+      !@delivery.model_service_scope_matches(runtime, operation) ||
+      runtime.model_replicas.map_or(true, replicas => {
+        replicas.length() != runtime.node_ids.length() ||
+        !replicas.all(replica => replica.ready && !replica.stopped)
+      }) {
+      continue
+    }
+    let mut all_ready = true
+    for replica in runtime.model_replicas.unwrap_or([]) {
+      guard self.store.assignment(replica.assignment_id) is Some(assignment) &&
+        assignment.deployment_id == runtime.operation_id &&
+        assignment.node_id == replica.node_id &&
+        assignment.generation == replica.generation &&
+        assignment.artifact.digest == template.artifact.digest &&
+        assignment.reservation.map_or(false, value => {
+          Some(value.reservation_id) == runtime.reservation_id &&
+          value.tenant_ref == runtime.intent.tenant_id
+        }) &&
+        self.delivery_runtime_observed(assignment, now) &&
+        self.delivery_model_ready(runtime, template, assignment) else {
+        all_ready = false
+        break
+      }
+    }
+    if all_ready {
+      return Some(runtime.operation_id)
+    }
+  }
+  None
+}
+
+///|
+/// Only the last consumer requests this physical stop. Desired assignments
+/// disappear first; termination, node heartbeats, and scheduler claims then
+/// prove it is safe to mark the service stopped.
+async fn ApiService::reconcile_stopping_model_service(
+  self : ApiService,
+  service : @delivery.ModelService,
+) -> Unit {
+  guard self.delivery_store is Some(deliveries) &&
+    self.scheduler is Some(scheduler) else {
+    return
+  }
+  let mut runtime = service.runtime
+  let now = @async.now()
+  if runtime.stage != Stopping {
+    return
+  }
+  for
+    assignment in self.store
+    .assignments()
+    .filter(value => value.deployment_id == runtime.operation_id) {
+    let replica = delivery_replica_record(runtime, assignment)
+    if !runtime.model_replicas.unwrap_or([]).contains(replica) {
+      runtime = deliveries.observe_model_service(
+        runtime.operation_id,
+        runtime.generation,
+        ModelReplicaObserved(replica),
+        now,
+      )
+    }
+  }
+  self.remove_deployment_assignments(runtime.operation_id)
+  let reservation = match runtime.reservation_id {
+    Some(id) => scheduler.node_reservation(id)
+    None => None
+  }
+  if runtime.model_replicas is None && reservation is Some(value) {
+    for claim in value.services {
+      if claim.service_id == delivery_assignment_id(runtime) &&
+        runtime.model_assignment_generation is Some(generation) {
+        runtime = deliveries.observe_model_service(
+          runtime.operation_id,
+          runtime.generation,
+          ModelReplicaObserved({
+            assignment_id: claim.service_id,
+            node_id: claim.node_id,
+            generation,
+            prepared: false,
+            ready: false,
+            stopped: false,
+          }),
+          now,
+        )
+      }
+    }
+  }
+  let heartbeats = self.store.heartbeats()
+  let stopped = runtime.node_ids.all(node_id => {
+    heartbeats.any(heartbeat => {
+      heartbeat.node_id == node_id &&
+      heartbeat.timestamp_unix_ms >
+      runtime.stop_requested_at_ms.unwrap_or(runtime.updated_at_ms) &&
+      heartbeat.timestamp_unix_ms <= now &&
+      now - heartbeat.timestamp_unix_ms <=
+      self.global_settings.control_timing.heartbeat_timeout_ms &&
+      !heartbeat.running_deployments.contains(runtime.operation_id)
+    })
+  })
+  let terminations = match self.media {
+    Some(media) => media.jobs.snapshot().terminations.unwrap_or([])
+    None => []
+  }
+  let mut model_stopped = true
+  for replica in runtime.model_replicas.unwrap_or([]) {
+    if delivery_replica_terminated(runtime, replica, terminations) {
+      if runtime.reservation_id is Some(id) {
+        scheduler.confirm_node_service_stopped(id, replica.assignment_id, now)
+      }
+      if !replica.stopped {
+        runtime = deliveries.observe_model_service(
+          runtime.operation_id,
+          runtime.generation,
+          ModelReplicaObserved({ ..replica, stopped: true, }),
+          now,
+        )
+      }
+    } else {
+      model_stopped = false
+    }
+  }
+  if reservation is Some(value) &&
+    value.services.any(claim => {
+      delivery_model_claim(runtime, claim.service_id) &&
+      !runtime.model_replicas
+      .unwrap_or([])
+      .any(replica => replica.assignment_id == claim.service_id)
+    }) {
+    model_stopped = false
+  }
+  if stopped && model_stopped {
+    ignore(
+      deliveries.observe_model_service(
+        runtime.operation_id,
+        runtime.generation,
+        WorkloadsStopped,
+        now,
+      ),
+    )
+  }
+}
+
+///|
+/// A controller restart changes the signing epoch. Republish each service
+/// assignment and regain model-specific readiness before bound credentials can
+/// route through it again.
+async fn ApiService::reconcile_active_model_service(
+  self : ApiService,
+  service : @delivery.ModelService,
+) -> Unit {
+  guard self.delivery_store is Some(deliveries) &&
+    self.deployment_store is Some(catalog) &&
+    catalog.template({
+      template_id: service.runtime.intent.template_id,
+      version: service.runtime.intent.template_version,
+    })
+    is Some(template) else {
+    return
+  }
+  let mut runtime = service.runtime
+  if !(runtime.stage is (Ready | LoadingModel)) ||
+    service.consumer_ids.is_empty() {
+    return
+  }
+  for index in 0..<runtime.node_ids.length() {
+    let assignment = self.prepare_delivery_assignment(runtime, template, index)
+    let mut replica = delivery_replica_record(runtime, assignment)
+    if !runtime.model_replicas.unwrap_or([]).contains(replica) {
+      runtime = deliveries.observe_model_service(
+        runtime.operation_id,
+        runtime.generation,
+        ModelReplicaObserved(replica),
+        @async.now(),
+      )
+    }
+    if runtime.stage == LoadingModel &&
+      !replica.prepared &&
+      delivery_metric(
+        self,
+        runtime,
+        assignment.node_id,
+        "artifact_preparation_stage",
+        0L,
+      ) ==
+      Some(3.0) {
+      replica = { ..replica, prepared: true, }
+      runtime = deliveries.observe_model_service(
+        runtime.operation_id,
+        runtime.generation,
+        ModelReplicaObserved(replica),
+        @async.now(),
+      )
+    }
+    if runtime.stage == LoadingModel &&
+      replica.prepared &&
+      !replica.ready &&
+      self.delivery_model_ready(runtime, template, assignment) {
+      runtime = deliveries.observe_model_service(
+        runtime.operation_id,
+        runtime.generation,
+        ModelReplicaObserved({ ..replica, ready: true, }),
+        @async.now(),
+      )
+    }
+  }
+  if runtime.stage == LoadingModel &&
+    runtime.model_replicas.map_or(false, replicas => {
+      replicas.length() == runtime.node_ids.length() &&
+      replicas.all(replica => replica.ready && !replica.stopped)
+    }) {
+    ignore(
+      deliveries.observe_model_service(
+        runtime.operation_id,
+        runtime.generation,
+        ModelResponded(
+          service_id=runtime.operation_id,
+          digest=template.artifact.digest,
+        ),
+        @async.now(),
+      ),
+    )
   }
 }
 
@@ -411,6 +665,17 @@ pub async fn ApiService::reconcile_deliveries(self : ApiService) -> Unit {
     return
   }
   ignore(deliveries.expire_due(@async.now()))
+  for service in deliveries.model_services() {
+    if service.runtime.stage == Stopping {
+      self.reconcile_stopping_model_service(service)
+    } else if service.runtime.stage is (Ready | LoadingModel) {
+      self.reconcile_active_model_service(service) catch {
+        error => if @async.is_cancellation_error(error) { raise error }
+        // Preserve the assignment for a later retry. Admission still needs
+        // fresh epoch and node evidence and fails closed meanwhile.
+      }
+    }
+  }
   for original in deliveries.operations() {
     let mut operation = original
     let now = @async.now()
@@ -462,6 +727,20 @@ pub async fn ApiService::reconcile_deliveries(self : ApiService) -> Unit {
         operation.generation,
         now,
       )
+    }
+    if operation.model_service_id is Some(service_id) &&
+      deliveries.model_service(service_id) is Some(service) &&
+      service.consumer_ids.contains(operation.operation_id) {
+      if operation.stage == Stopping && operation.workspace_id is None {
+        ignore(
+          deliveries.release_model_service(
+            operation.operation_id,
+            operation.generation,
+            now,
+          ),
+        )
+      }
+      continue
     }
     if operation.stage == Stopping {
       for
@@ -571,6 +850,21 @@ pub async fn ApiService::reconcile_deliveries(self : ApiService) -> Unit {
       }
       continue
     }
+    if operation.stage is (Ready | StartingWorkspace) &&
+      operation.intent.model_digest is Some(_) &&
+      operation.model_replicas.map_or(false, replicas => {
+        replicas.length() == operation.node_ids.length() &&
+        replicas.all(replica => replica.ready && !replica.stopped)
+      }) {
+      ignore(
+        deliveries.bind_model_service(
+          operation.operation_id,
+          operation.generation,
+          now,
+        ),
+      )
+      continue
+    }
     if operation.stage is (Failed | Ready | StartingWorkspace) {
       continue
     }
@@ -583,6 +877,19 @@ pub async fn ApiService::reconcile_deliveries(self : ApiService) -> Unit {
       continue
     }
     try {
+      if operation.stage == PreparingModel &&
+        self.ready_reusable_model_service(operation, template)
+        is Some(service_id) {
+        ignore(
+          deliveries.bind_model_service(
+            operation.operation_id,
+            operation.generation,
+            now,
+            reuse_service_id=service_id,
+          ),
+        )
+        continue
+      }
       let assignments : Array[@contracts.DesiredAssignment] = []
       for index in 0..<operation.node_ids.length() {
         let assignment = self.prepare_delivery_assignment(
@@ -724,14 +1031,19 @@ pub async fn ApiService::reconcile_deliveries(self : ApiService) -> Unit {
       }
       if operation.stage == LoadingModel &&
         operation.model_replicas.unwrap_or([]).all(replica => replica.ready) {
+        operation = deliveries.observe(
+          operation.operation_id,
+          operation.generation,
+          ModelResponded(
+            service_id=operation.operation_id,
+            digest=template.artifact.digest,
+          ),
+          @async.now(),
+        )
         ignore(
-          deliveries.observe(
+          deliveries.bind_model_service(
             operation.operation_id,
             operation.generation,
-            ModelResponded(
-              service_id=operation.operation_id,
-              digest=template.artifact.digest,
-            ),
             @async.now(),
           ),
         )

@@ -6560,8 +6560,8 @@ fn model_local_registration_form(
           class="field-help",
           localized(
             state.locale,
-            "A directory populated outside LunaNexa enters the same plane as a download. The adapter re-derives every SHA-256 from the named ModelScope revision, restores any file that drifted, and only then records the revision as verified.",
-            "在 LunaNexa 之外准备的目录会走与下载相同的流水线：适配器按指定的魔搭版本重新计算每个文件的 SHA-256，修复任何漂移的文件，然后才把该版本记录为已校验。",
+            "Choose the whole revision or a FL2VA / Ref2VA component directory. Each gets its own verified manifest and registry identity. The adapter checks every file against ModelScope before registration; later license, signature and evaluation approvals are separate.",
+            "可选择完整版本，或单独选择 FL2VA／Ref2VA 组件目录。每个组件都有独立的校验清单和注册身份。适配器先按魔搭逐文件核对，许可证、签名和评测仍需另行审核。",
           ),
         ),
         @html.div(class="model-local-grid", [

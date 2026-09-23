@@ -1,0 +1,109 @@
+import {
+  "moonbitlang/async", "moonbitlang/async/fs", "moonbitlang/async/shell",
+  "moonbitlang/core/env", "moonbitlang/core/json", "moonbitlang/x/sys",
+}
+
+async fn kube(k : String, args : Array[String]) -> String {
+  let result = @shell.Cmd("kubectl", ["--kubeconfig", k, ..args]).output()
+  result.check()
+  result.stdout()
+}
+
+fn fields(value : Json) -> Map[String, Json] raise {
+  guard value is Object(object) else { fail("Expected Kubernetes object") }
+  object
+}
+
+async fn prepared(k : String, root : String, name : String) -> Unit {
+  ignore(kube(k, ["apply", "-f", root + "/prepared/" + name + ".json"]))
+}
+
+async fn rollout(k : String, namespace_name : String, name : String) -> Unit {
+  ignore(kube(k, ["-n", namespace_name, "rollout", "status", "deployment/" + name, "--timeout=180s"]))
+}
+
+async fn restore(k : String, root : String, namespace_name : String, kind : String, name : String) -> Unit {
+  let original = @json.parse(@fs.read_file(root + "/before/" + kind + "-" + name + ".json").text())
+  let live = @json.parse(kube(k, ["-n", namespace_name, "get", kind, name, "-o", "json"]))
+  let original_fields = fields(original)
+  let original_meta = fields(original_fields["metadata"])
+  let live_meta = fields(fields(live)["metadata"])
+  original_meta["resourceVersion"] = live_meta["resourceVersion"]
+  original_meta.remove("managedFields")
+  original_fields.remove("status")
+  let manifest = root + "/restore-" + kind + "-" + name + ".json"
+  @fs.write_file(manifest, original.stringify(indent=2), create_mode=CreateOrTruncate, permission=0o600)
+  ignore(kube(k, ["replace", "-f", manifest]))
+}
+
+async fn delete_ours(k : String, namespace_name : String, kind : String, name : String) -> Unit {
+  let current = kube(k, ["-n", namespace_name, "get", kind, name, "--ignore-not-found", "-o", "json"])
+  if current.trim() == "" { return }
+  let value = @json.parse(current)
+  guard value is {
+    "metadata": { "labels": { "app.kubernetes.io/managed-by": String("lunanexa-exclusive-prep"), .. }, .. }, ..
+  } else { fail("Refusing to remove an unowned Kubernetes resource") }
+  ignore(kube(k, ["-n", namespace_name, "delete", kind, name, "--wait=true"]))
+}
+
+async fn rollback(k : String, root : String) -> Unit {
+  let ns = "aigc-acceptance-20260915"
+  // Stop public traffic before reverting the components behind it.
+  restore(k, root, ns, "service", "comfyui-public")
+  restore(k, root, "lunanexa", "deployment", "lunanexa-control")
+  rollout(k, "lunanexa", "lunanexa-control")
+  restore(k, root, ns, "configmap", "webide-gateway")
+  restore(k, root, ns, "deployment", "webide-gateway")
+  rollout(k, ns, "webide-gateway")
+  restore(k, root, ns, "configmap", "internal-gateway-routes")
+  restore(k, root, ns, "deployment", "internal-gateway")
+  rollout(k, ns, "internal-gateway")
+  restore(k, root, ns, "networkpolicy", "webide-gateway")
+  restore(k, root, ns, "networkpolicy", "internal-gateway")
+  delete_ours(k, ns, "service", "webide-gateway")
+  delete_ours(k, ns, "secret", "lunanexa-webide-observation")
+  delete_ours(k, "lunanexa", "secret", "lunanexa-webide-observation")
+}
+
+async fn publish(k : String, root : String) -> Unit {
+  let ns = "aigc-acceptance-20260915"
+  prepared(k, root, "secret-lunanexa-webide-observation-lunanexa")
+  prepared(k, root, "secret-lunanexa-webide-observation-" + ns)
+  prepared(k, root, "service-webide-gateway")
+  prepared(k, root, "networkpolicy-webide-gateway")
+  prepared(k, root, "networkpolicy-internal-gateway")
+  prepared(k, root, "configmap-internal-gateway-routes")
+  prepared(k, root, "deployment-internal-gateway")
+  rollout(k, ns, "internal-gateway")
+  prepared(k, root, "configmap-webide-gateway")
+  prepared(k, root, "deployment-webide-gateway")
+  rollout(k, ns, "webide-gateway")
+  prepared(k, root, "deployment-lunanexa-control")
+  rollout(k, "lunanexa", "lunanexa-control")
+  // This selector switch is the public cutover, after all dependencies are ready.
+  prepared(k, root, "service-comfyui-public")
+}
+
+async fn main {
+  guard @env.args() is [_, action, k, root] &&
+    (action == "apply" || action == "rollback") else {
+    fail("Usage: rollout-exclusive-comfyui.mbtx apply|rollback KUBECONFIG PRIVATE_PREPARATION_DIRECTORY")
+  }
+  if action == "rollback" {
+    rollback(k, root)
+    println("Exclusive ComfyUI configuration restored from private snapshots.")
+  } else {
+    try {
+      publish(k, root)
+      println("Exclusive ComfyUI configuration published; browser acceptance remains required.")
+    } catch {
+      _ => {
+        println("Publish failed; restoring private snapshots.")
+        try rollback(k, root) catch {
+          _ => { println("Automatic restore failed. Inspect the private snapshots before retrying."); @sys.exit(1) }
+        }
+        @sys.exit(1)
+      }
+    }
+  }
+}
