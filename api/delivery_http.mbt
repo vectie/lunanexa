@@ -52,6 +52,17 @@ fn ApiService::published_gpu_container_offering(
 }
 
 ///|
+/// The currently published workspace client is the video-only ComfyUI
+/// profile. A text template is valid for an API delivery, but advertising it
+/// as an interactive ComfyUI workspace would launch the wrong model contract.
+fn template_supports_delivery_kind(
+  template : @deployment.ModelServiceTemplate,
+  kind : @delivery.DeliveryKind,
+) -> Bool {
+  kind != Workspace || template.capability == VideoGenerate
+}
+
+///|
 pub fn ApiService::with_delivery_store(
   self : ApiService,
   delivery_store : @delivery.DeliveryStore,
@@ -248,6 +259,9 @@ async fn ApiService::handle_delivery(
     let templates : Array[Json] = []
     for template in model_templates {
       for kind in [@delivery.DeliveryKind::Workspace, ModelApi] {
+        if !template_supports_delivery_kind(template, kind) {
+          continue
+        }
         templates.push({
           "template_id": template.template_id,
           "template_version": template.version,
@@ -339,6 +353,12 @@ async fn ApiService::handle_delivery(
         is Some(template) else {
         return api_error(
           409, "SelectionUnavailable", "select a published model template", false,
+        )
+      }
+      if !template_supports_delivery_kind(template, request.kind) {
+        return api_error(
+          409, "SelectionUnavailable", "the published template does not support the selected delivery kind",
+          false,
         )
       }
       Some(template.artifact.digest)

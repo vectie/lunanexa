@@ -39,14 +39,47 @@ Spark reservation. No password, session token or model weight is recorded here.
 ## Exact remaining blocker
 
 The ModelScope UI shows two MiniMax-H3 component imports at 81/81 verified files
-each, but both still have license, provenance/integrity, exact-digest evaluation
-and explicit approval gates. Opening **登记为候选模型…** confirmed that registry
-identity, verified architecture and measured minimum accelerator memory must be
-provided; it was cancelled without creating a candidate or asserting evidence.
-The approved whole-H3 alias is distinct from those components and is not proof
-that FL2VA can be placed and served on this exclusive node. The catalog lacks a
-published H3 delivery template and pinned, qualified runtime binding. These
-must be completed before real browser generate/download/save/reopen can pass.
+each. Read-only import inventory identifies `ms-4b61ebb895fe7f9f161ae418` as
+FL2VA, with manifest digest
+`sha256:0964a2d8823de7d0a40d3cfa01acd1aa08c3aec632b9b6c25330a158bbe98e73`;
+`ms-3a45d5defabb0df653382579` is Ref2VA, not the text-to-video target.
+The recorded manifest digest matches the FL2VA source file on management.
+
+After the owner's specific license confirmation, Operator **登记为候选模型…**
+created `minimax-h3-fl2va / modelscope-57559a67` with `nvidia-sm121` and a
+100,000 MiB placement floor informed by the previous FL2VA Spark memory
+observation. **接受许可证** recorded MiniMax H3 Community License against this
+exact version and the SHA-256 of the source `LICENSE` file; **验证制品** changed
+the row to **已验证** and displayed the exact FL2VA manifest digest. These are
+real registry transitions, not a runtime evaluation or deployment approval.
+The license itself excludes the EU, UK, Republic of Korea and United States
+from its applicable territory and has hosted-service terms; a broad public
+launch needs its own distribution/access review.
+
+The reviewed ARM64 code-only H3 runtime image already exists in the internal
+registry at manifest digest
+`sha256:b0bb860f5d369ff7e89e1e36fb91d416b15cbaad7f5b689f812f099f3a86529c`.
+Operator **注册运行时** recorded it as a video-capable `nvidia-sm121` runtime.
+The UI explicitly says image-digest verification is still needed before any
+deployment. A **记录验证** request for the exact OCI manifest was rejected by the
+typed API; no verification receipt was created. The internal registry has the
+image, but its manifest presence is not a Cosign signature. No evaluation is
+recorded, no FL2VA alias is promoted, and no H3 delivery template is published.
+The approved whole-H3 alias is distinct from the FL2VA component and cannot
+substitute for these gates. Real browser generate/download/save/reopen therefore
+remains blocked.
+
+## Template-type defect found and corrected in source
+
+The live delivery-options API offered every text model template twice: once as
+`ModelApi` and once as `Workspace` with `client_id=comfyui`. Selecting the latter
+would present a text model as a ComfyUI video workspace. The source now lists
+only `VideoGenerate` templates for the current ComfyUI Workspace profile and
+rejects a crafted Workspace start using a text template; text `ModelApi`
+remains available. This controller change is **not yet rolled out** in this
+checkpoint. The native API suite passed 175/175 and the complete native suite
+passed 1212/1212 with warnings denied. No claim is made that the current public
+template selector has already changed.
 
 ## Public HTTP packaging correction
 
