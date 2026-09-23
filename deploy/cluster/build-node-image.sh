@@ -57,7 +57,8 @@ install -m 0755 /usr/bin/nvidia-smi "$ROOT/usr/bin/nvidia-smi"
 
 # The agent measures the GPUs it owns through nvidia-smi and the NVML library.
 for lib in libc.so.6 libpthread.so.0 libm.so.6 libdl.so.2 librt.so.1 \
-  libnss_dns.so.2 libnss_files.so.2 libresolv.so.2; do
+  libnss_dns.so.2 libnss_files.so.2 libresolv.so.2 \
+  libssl.so.3 libcrypto.so.3; do
   cp -L "/lib/aarch64-linux-gnu/$lib" "$ROOT/lib/aarch64-linux-gnu/$lib"
 done
 cp -L /lib/ld-linux-aarch64.so.1 "$ROOT/lib/ld-linux-aarch64.so.1"
