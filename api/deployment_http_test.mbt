@@ -503,6 +503,7 @@ async test "deployment HTTP adversarial corpus fails closed without side effects
   for
     hostile_intent in [
       { ..intent, deployment_id: "../../service", },
+      { ..intent, deployment_id: "qwen3-0.6b-service", },
       { ..intent, deployment_id: "service<script>", },
       { ..intent, replicas: 0, },
       { ..intent, replicas: 65, },

@@ -252,6 +252,19 @@ spec:
       ports:
         - protocol: TCP
           port: 8080
+    # The node agent reconciles its managed Pods and NetworkPolicies through
+    # the in-cluster Kubernetes API. The Service IP may be DNATed before
+    # network-policy evaluation, so include the control-plane endpoint too.
+    - to:
+        - ipBlock:
+            cidr: 10.43.0.1/32
+        - ipBlock:
+            cidr: 192.168.2.175/32
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 6443
     - to:
         - namespaceSelector:
             matchLabels:

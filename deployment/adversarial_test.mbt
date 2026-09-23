@@ -103,7 +103,7 @@ test "deterministic fuzz exhausts deployment intent boundaries" {
     let deployment_id = "a".repeat(length)
     assert_eq(
       intent_is_valid({ ..base, deployment_id, }),
-      length > 0 && length <= 128,
+      length > 0 && length <= 58,
     )
     let idempotency_key = "b".repeat(length)
     assert_eq(
