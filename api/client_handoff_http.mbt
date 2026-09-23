@@ -119,6 +119,22 @@ async fn ApiService::serving_client_model_aliases(
       template.model_selector
     }
   ]
+  if self.delivery_store is Some(deliveries) {
+    for operation in deliveries.operations() {
+      if operation.intent.kind == ModelApi &&
+        operation.stage == Ready &&
+        operation.intent.tenant_id == tenant_ref &&
+        operation.intent.expires_at_ms > @async.now() &&
+        deployments.template({
+          template_id: operation.intent.template_id,
+          version: operation.intent.template_version,
+        })
+        is Some(template) &&
+        !serving.contains(template.model_selector) {
+        serving.push(template.model_selector)
+      }
+    }
+  }
   if self.external_text_route is Some(route) &&
     tenant_ref == route.tenant_ref &&
     self.external_text_ready() &&
@@ -203,7 +219,14 @@ async fn ApiService::handle_client_handoff(
           )
         None => false
       })
-    if !authorized || !contracted {
+    let (_, delivery_denied) = self.delivery_binding({
+      key_id: redeemed.api_key_id,
+      tenant_ref: redeemed.tenant_ref,
+      subject_ref: redeemed.subject_ref,
+      organization_id: redeemed.organization_id,
+      project_id: redeemed.project_id,
+    })
+    if !authorized || !contracted || delivery_denied is Some(_) {
       ignore(
         try
           handoffs.revoke_for_subject(
@@ -471,8 +494,10 @@ async fn ApiService::handle_client_handoff(
             operation.intent.organization_id ==
             portal_view.membership.organization_id &&
             operation.intent.project_id == intent.project_id &&
-            operation.intent.lease_id == workspace.lease.lease_id &&
-            operation.intent.kind != ModelApi &&
+            (
+              operation.intent.kind == ModelApi ||
+              operation.intent.lease_id == workspace.lease.lease_id
+            ) &&
             (operation.stage == StartingWorkspace || operation.stage == Ready) &&
             operation.intent.expires_at_ms > now &&
             paid_order is None else {
@@ -481,7 +506,79 @@ async fn ApiService::handle_client_handoff(
               true,
             )
           }
-          if operation.intent.kind == GpuContainer {
+          if operation.intent.kind == ModelApi {
+            guard self.client_launch_config is Some(webide_config) &&
+              intent.client_id == webide_config.client_id &&
+              operation.stage == Ready &&
+              operation.reservation_id is Some(reservation_id) &&
+              self.scheduler is Some(scheduler) &&
+              scheduler.node_reservation(reservation_id) is Some(reservation) &&
+              reservation.state == Reserved &&
+              reservation.request.tenant_ref == operation.intent.tenant_id &&
+              reservation.request.organization_id ==
+              operation.intent.organization_id &&
+              reservation.request.lease_id == operation.intent.lease_id &&
+              reservation.request.authority_ref ==
+              operation.intent.authorization_ref &&
+              reservation.request.expires_unix_ms > now &&
+              self.deployment_store is Some(catalog) &&
+              catalog.template({
+                template_id: operation.intent.template_id,
+                version: operation.intent.template_version,
+              })
+              is Some(template) &&
+              intent.allowed_models == [template.model_selector] &&
+              workspace_capability(template.capability) is Some(capability) else {
+              return api_error(
+                409, "DeliveryUnavailable", "shared model service is not ready",
+                true,
+              )
+            }
+            // The service owner's resource grant controls physical lifetime;
+            // the colleague's own grant controls only their WebIDE access.
+            guard directory.snapshot(now).leases
+              .iter()
+              .find_first(lease => lease.lease_id == operation.intent.lease_id)
+              is Some(source_lease) else {
+              return api_error(
+                409, "DeliveryUnavailable", "model service owner lease ended", false,
+              )
+            }
+            let source_active = try {
+              ignore(
+                directory.authorize_subject_for_tenant_lease(
+                  source_lease.subject_ref,
+                  operation.intent.tenant_id,
+                  operation.intent.lease_id,
+                  Developer,
+                  now,
+                  grant_id=operation.intent.authorization_ref,
+                ),
+              )
+              true
+            } catch {
+              _ => false
+            }
+            let consumer_active = try {
+              ignore(
+                directory.authorize_subject_for_tenant_capability(
+                  subject_ref,
+                  portal_view.membership.tenant_ref,
+                  capability,
+                  now,
+                ),
+              )
+              true
+            } catch {
+              _ => false
+            }
+            if !source_active || !consumer_active {
+              return api_error(
+                403, "ActiveLeaseRequired", "personal or service owner authority ended",
+                false,
+              )
+            }
+          } else if operation.intent.kind == GpuContainer {
             guard self.gpu_container_offering is Some(offering) &&
               offering.template_id == operation.intent.template_id &&
               offering.version == operation.intent.template_version &&

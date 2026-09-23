@@ -1,6 +1,7 @@
 ///|
 pub(all) struct DeliveryView {
   operation_id : String
+  project_id : String
   kind : String
   template_id : String
   template_version : String
@@ -12,6 +13,7 @@ pub(all) struct DeliveryView {
   total_bytes : Int64?
   failure_code : String?
   expires_at_ms : Int64
+  can_manage : Bool
 } derive(Eq, FromJson)
 
 ///|
@@ -135,7 +137,11 @@ pub fn delivery_launch_template(
     .iter()
     .find_first(operation => {
       operation.operation_id == operation_id &&
-      (operation.kind == "Workspace" || operation.kind == "GpuContainer") &&
+      (
+        operation.kind == "Workspace" ||
+        operation.kind == "GpuContainer" ||
+        operation.kind == "ModelApi"
+      ) &&
       (operation.stage == "StartingWorkspace" || operation.stage == "Ready")
     })
     is Some(operation) else {
@@ -435,8 +441,19 @@ fn delivery_panel_view(
               },
             ),
             @html.p(
-              "\{operation.node_count} " +
-              copy(locale, "exclusive nodes", "台独占节点"),
+              if operation.kind == "ModelApi" {
+                copy(
+                  locale,
+                  "Shared model service · \{operation.node_count} reserved nodes",
+                  "企业共享模型服务 · 占用 \{operation.node_count} 台预留节点",
+                )
+              } else {
+                "\{operation.node_count} " +
+                copy(locale, "exclusive nodes", "台独占节点")
+              },
+            ),
+            @html.p(
+              copy(locale, "Project: ", "项目：") + operation.project_id,
             ),
             @html.p(
               copy(locale, "Expires: ", "到期时间：") +
@@ -501,7 +518,9 @@ fn delivery_panel_view(
                   emit,
                   Delivery(OpenWorkspace(operation.operation_id)),
                 ),
-                if operation.kind == "GpuContainer" {
+                if operation.kind == "ModelApi" {
+                  copy(locale, "Connect my WebIDE", "连接到我的 WebIDE")
+                } else if operation.kind == "GpuContainer" {
                   if operation.stage == "StartingWorkspace" {
                     copy(
                       locale, "Open and start terminal", "打开并启动终端",
@@ -520,7 +539,7 @@ fn delivery_panel_view(
             } else {
               @html.nothing
             },
-            if operation.stage == "Failed" {
+            if operation.can_manage && operation.stage == "Failed" {
               @html.button(
                 type_="button",
                 class="primary-button",
@@ -531,7 +550,8 @@ fn delivery_panel_view(
             } else {
               @html.nothing
             },
-            if operation.stage != "Stopped" &&
+            if operation.can_manage &&
+              operation.stage != "Stopped" &&
               operation.stage != "Stopping" &&
               operation.stage != "Expired" &&
               operation.stage != "Revoked" {

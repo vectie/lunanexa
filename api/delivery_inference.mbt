@@ -47,21 +47,79 @@ async fn ApiService::delivery_binding(
       return (None, Some(denied))
     }
   }
-  let active = try {
-    let authorization = directory.authorize_subject_for_tenant_lease(
-      authority.subject_ref,
-      authority.tenant_ref,
-      operation.intent.lease_id,
-      Developer,
-      @async.now(),
-      grant_id=operation.intent.authorization_ref,
-    )
-    authorization.lease.lease_id == operation.intent.lease_id &&
-    authorization.access_grant.grant_id == operation.intent.authorization_ref
-  } catch {
-    _ => false
+  let source = directory.snapshot(@async.now()).leases
+    .iter()
+    .find_first(lease => lease.lease_id == operation.intent.lease_id)
+  let source_active = match source {
+    Some(lease) =>
+      try {
+        ignore(
+          directory.authorize_subject_for_tenant_lease(
+            lease.subject_ref,
+            authority.tenant_ref,
+            operation.intent.lease_id,
+            Developer,
+            @async.now(),
+            grant_id=operation.intent.authorization_ref,
+          ),
+        )
+        true
+      } catch {
+        _ => false
+      }
+    None => false
   }
-  if !active {
+  if !source_active {
+    return (None, Some(denied))
+  }
+  let consumer_active = if operation.intent.kind == ModelApi {
+    match self.deployment_store {
+      Some(catalog) =>
+        match
+          catalog.template({
+            template_id: operation.intent.template_id,
+            version: operation.intent.template_version,
+          }) {
+          Some(template) =>
+            match workspace_capability(template.capability) {
+              Some(capability) =>
+                try {
+                  ignore(
+                    directory.authorize_subject_for_tenant_capability(
+                      authority.subject_ref,
+                      authority.tenant_ref,
+                      capability,
+                      @async.now(),
+                    ),
+                  )
+                  true
+                } catch {
+                  _ => false
+                }
+              None => false
+            }
+          None => false
+        }
+      None => false
+    }
+  } else {
+    try {
+      ignore(
+        directory.authorize_subject_for_tenant_lease(
+          authority.subject_ref,
+          authority.tenant_ref,
+          operation.intent.lease_id,
+          Developer,
+          @async.now(),
+          grant_id=operation.intent.authorization_ref,
+        ),
+      )
+      true
+    } catch {
+      _ => false
+    }
+  }
+  if !consumer_active {
     return (None, Some(denied))
   }
   (Some(operation), None)

@@ -65,29 +65,9 @@ async fn ApiService::handle_delivery_access_key(
     return api_error(404, "NotFound", "delivery was not found", false)
   }
   let now = @async.now()
-  let authorization = try
-    directory.authorize_subject_for_tenant_lease(
-      subject,
-      view.membership.tenant_ref,
-      operation.intent.lease_id,
-      Developer,
-      now,
-      grant_id=operation.intent.authorization_ref,
-    )
-  catch {
-    _ =>
-      return api_error(
-        403, "ActiveLeaseRequired", "active delivery workspace access is required",
-        false,
-      )
-  } noraise {
-    value => value
-  }
   guard operation.intent.kind == ModelApi &&
     operation.stage == Ready &&
     operation.intent.expires_at_ms > now &&
-    authorization.lease.lease_id == operation.intent.lease_id &&
-    authorization.access_grant.grant_id == operation.intent.authorization_ref &&
     operation.reservation_id is Some(reservation_id) &&
     scheduler.node_reservation(reservation_id) is Some(reservation) &&
     reservation.state == Reserved &&
@@ -105,6 +85,59 @@ async fn ApiService::handle_delivery_access_key(
       409, "DeliveryUnavailable", "the model API delivery is not ready or its authorization ended",
       true,
     )
+  }
+  // The running model belongs to the organization and project, while a key
+  // belongs to one person. A colleague uses their own active capability lease;
+  // the creator's lease still governs the model's physical lifetime.
+  guard workspace_capability(template.capability) is Some(capability) else {
+    return api_error(
+      403, "CapabilityUnavailable", "this model is not a workspace inference capability",
+      false,
+    )
+  }
+  guard directory.snapshot(now).leases
+    .iter()
+    .find_first(lease => lease.lease_id == operation.intent.lease_id)
+    is Some(source_lease) else {
+    return api_error(
+      409, "DeliveryUnavailable", "model service owner lease ended", false,
+    )
+  }
+  let source_active = try {
+    ignore(
+      directory.authorize_subject_for_tenant_lease(
+        source_lease.subject_ref,
+        operation.intent.tenant_id,
+        operation.intent.lease_id,
+        Developer,
+        now,
+        grant_id=operation.intent.authorization_ref,
+      ),
+    )
+    true
+  } catch {
+    _ => false
+  }
+  if !source_active {
+    return api_error(
+      409, "DeliveryUnavailable", "model service owner authority ended", false,
+    )
+  }
+  let authorization = try
+    directory.authorize_subject_for_tenant_capability(
+      subject,
+      view.membership.tenant_ref,
+      capability,
+      now,
+    )
+  catch {
+    _ =>
+      return api_error(
+        403, "ActiveLeaseRequired", "an active personal model capability lease is required",
+        false,
+      )
+  } noraise {
+    value => value
   }
   if self.management_database is Some(_) &&
     !self.commercial_project_exists(

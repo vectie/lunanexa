@@ -173,6 +173,12 @@ fn delivery_workspace_command(
         template.client_id is Some(client_id) else {
         raise Failure("interactive delivery unavailable")
       }
+      guard model.portal.deliveries.operations
+        .iter()
+        .find_first(operation => operation.operation_id == operation_id)
+        is Some(operation) else {
+        raise Failure("delivery unavailable")
+      }
       let clients : Array[DesktopClientResponse] = @json.from_json(
         @json.parse(
           request(
@@ -191,7 +197,7 @@ fn delivery_workspace_command(
       let body : Json = {
         "request_id": random_identifier("delivery-handoff"),
         "client_id": client.client_id,
-        "project_id": model.portal.project_id,
+        "project_id": operation.project_id,
         "allowed_models": (if template.kind == "GpuContainer" {
           ([] : Array[String])
         } else {
@@ -216,9 +222,14 @@ fn delivery_workspace_command(
         launch.handoff_expires_unix_ms <= current_unix_ms() ||
         !(launch.launch_uri.has_prefix("https://") ||
         launch.launch_uri.has_prefix("http://")) ||
-        launch.launch_uri.contains("127.0.0.1") ||
-        launch.launch_uri.contains("localhost") ||
-        launch.launch_uri.contains("[::1]") {
+        (
+          template.kind != "ModelApi" &&
+          (
+            launch.launch_uri.contains("127.0.0.1") ||
+            launch.launch_uri.contains("localhost") ||
+            launch.launch_uri.contains("[::1]")
+          )
+        ) {
         raise Failure("public workspace address unavailable")
       }
       open_desktop_client(

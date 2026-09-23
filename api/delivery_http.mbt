@@ -114,9 +114,10 @@ fn delivery_path(path : String) -> Bool {
 }
 
 ///|
-fn delivery_view(operation : @delivery.Operation) -> Json {
+fn delivery_view(operation : @delivery.Operation, can_manage : Bool) -> Json {
   {
     "operation_id": operation.operation_id,
+    "project_id": operation.intent.project_id,
     "kind": operation.intent.kind.to_json(),
     "template_id": operation.intent.template_id,
     "template_version": operation.intent.template_version,
@@ -148,6 +149,7 @@ fn delivery_view(operation : @delivery.Operation) -> Json {
     "total_bytes": operation.total_bytes.to_json(),
     "failure_code": operation.failure_code.to_json(),
     "expires_at_ms": operation.intent.expires_at_ms.to_json(),
+    "can_manage": can_manage,
   }
 }
 
@@ -200,7 +202,13 @@ async fn ApiService::handle_delivery(
     }
     if verb == Get {
       return if path == "/v1/deliveries" {
-        json_reply(200, deliveries.operations().map(delivery_view).to_json())
+        json_reply(
+          200,
+          deliveries
+          .operations()
+          .map(operation => delivery_view(operation, true))
+          .to_json(),
+        )
       } else {
         json_reply(
           200,
@@ -229,9 +237,6 @@ async fn ApiService::handle_delivery(
       operation.intent.tenant_id == view.membership.tenant_ref &&
       operation.intent.organization_id == view.membership.organization_id
     })
-  if verb == Get && path == "/v1/portal/self/deliveries" {
-    return json_reply(200, owned.map(delivery_view).to_json())
-  }
   guard @portal.role_allows(view.membership.roles, Developer) &&
     self.workspace_directory is Some(directory) else {
     return api_error(
@@ -254,6 +259,23 @@ async fn ApiService::handle_delivery(
       )
   } noraise {
     value => value
+  }
+  if verb == Get && path == "/v1/portal/self/deliveries" {
+    let leases = directory.snapshot(now).leases
+    return json_reply(
+      200,
+      owned
+      .map(operation => {
+        delivery_view(
+          operation,
+          leases.any(lease => {
+            lease.lease_id == operation.intent.lease_id &&
+            lease.subject_ref == subject
+          }),
+        )
+      })
+      .to_json(),
+    )
   }
   let reservation_candidates = scheduler.snapshot().node_reservations
     .unwrap_or([])
@@ -308,7 +330,7 @@ async fn ApiService::handle_delivery(
           "client_id": if kind == Workspace {
             "comfyui"
           } else {
-            ""
+            self.client_launch_config.map_or("", config => config.client_id)
           },
         })
       }
@@ -452,7 +474,7 @@ async fn ApiService::handle_delivery(
       operation.operation_id,
       "delivery:\{operation.operation_id}",
     )
-    return json_reply(202, delivery_view(operation))
+    return json_reply(202, delivery_view(operation, true))
   }
   if verb == Post && path.has_prefix("/v1/portal/self/deliveries/") {
     let parts = path.split("/").collect()
@@ -504,7 +526,7 @@ async fn ApiService::handle_delivery(
     } noraise {
       value => value
     }
-    return json_reply(202, delivery_view(updated))
+    return json_reply(202, delivery_view(updated, true))
   }
   api_error(404, "NotFound", "delivery route was not found", false)
 }
