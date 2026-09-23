@@ -100,6 +100,22 @@ test "enterprise machine channel only forwards one-time redemption and API-key i
       keyed,
     ),
   )
+  assert_true(
+    enterprise_machine_request_allowed(
+      Enterprise,
+      Get,
+      "/v1/workloads/workload-01",
+      keyed,
+    ),
+  )
+  assert_true(
+    enterprise_machine_request_allowed(
+      Enterprise,
+      Post,
+      "/v1/workloads/workload-01/cancel",
+      keyed,
+    ),
+  )
   assert_false(
     enterprise_machine_request_allowed(
       Operator,
@@ -113,6 +129,14 @@ test "enterprise machine channel only forwards one-time redemption and API-key i
   )
   assert_false(
     enterprise_machine_request_allowed(Enterprise, Post, "/v1/accounts", keyed),
+  )
+  assert_false(
+    enterprise_machine_request_allowed(
+      Enterprise,
+      Post,
+      "/v1/workloads/workload-01/approve",
+      keyed,
+    ),
   )
   assert_false(
     enterprise_machine_request_allowed(
