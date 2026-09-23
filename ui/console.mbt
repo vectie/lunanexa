@@ -6443,8 +6443,19 @@ pub fn model_import_adoptable(import_ : ModelImportRow) -> Bool {
 }
 
 ///|
+/// Early ModelScope imports used a store URI that omitted the `models/`
+/// directory. The immutable manifest digest and the rest of the path still
+/// identify the same revision after the registry URI is corrected.
+fn canonical_model_import_uri(uri : String) -> String {
+  match uri.strip_prefix("modelstore://modelscope/") {
+    Some(path) => "modelstore://models/modelscope/" + path.to_owned()
+    None => uri
+  }
+}
+
+///|
 /// A verified download and a registry entry describe the same immutable
-/// artifact only when both its transport URI and manifest digest agree.
+/// artifact only when their canonical transport URI and manifest digest agree.
 fn registered_model_for_import(
   models : Array[ModelRow],
   import_ : ModelImportRow,
@@ -6455,7 +6466,8 @@ fn registered_model_for_import(
   models
   .iter()
   .find_first(model => {
-    model.artifact_uri == import_.artifact_uri &&
+    canonical_model_import_uri(model.artifact_uri) ==
+    canonical_model_import_uri(import_.artifact_uri) &&
     model.artifact_digest == import_.manifest_digest
   })
 }

@@ -1860,6 +1860,20 @@ test "registered ModelScope artifacts are not offered for adoption again" {
   assert_false(
     @ui.model_import_needs_registration(registered, [candidate_model_row()]),
   )
+  let legacy_store_uri = {
+    ..registered,
+    import_id: "ms-legacy-alias",
+    artifact_uri: "modelstore://modelscope/ms-registered-1",
+  }
+  let corrected_store_model = {
+    ..candidate_model_row(),
+    artifact_uri: "modelstore://models/modelscope/ms-registered-1",
+  }
+  assert_false(
+    @ui.model_import_needs_registration(legacy_store_uri, [
+      corrected_store_model,
+    ]),
+  )
   assert_true(
     @ui.model_import_needs_registration(pending, [candidate_model_row()]),
   )
@@ -1872,6 +1886,13 @@ test "registered ModelScope artifacts are not offered for adoption again" {
   assert_false(html.contains("ms-registered-1"))
   assert_true(html.contains("ms-unregistered-2"))
   assert_true(html.contains("Adopt as Candidate"))
+  let legacy_html = @ui.render({
+    ..console_state(Models),
+    operator_authenticated: true,
+    models: [corrected_store_model],
+    model_imports: [legacy_store_uri],
+  })
+  assert_false(legacy_html.contains("ms-legacy-alias"))
   let searched = @ui.render({
     ..console_state(Models),
     operator_authenticated: true,
