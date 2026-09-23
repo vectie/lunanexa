@@ -53,7 +53,7 @@ def sudo(password, command):
     )
 
 
-def old_html_paths(work, manifest):
+def old_html_paths(work, manifest, target_root):
     """Every regular file currently under the nginx html root, across all layers.
 
     Directories are skipped: a whiteout for a directory whose contents the new
@@ -68,7 +68,7 @@ def old_html_paths(work, manifest):
                 name = info.name.lstrip("./")
                 if (
                     info.isfile()
-                    and name.startswith(HTML_ROOT + "/")
+                    and name.startswith(target_root + "/")
                     and not os.path.basename(name).startswith(".wh.")
                 ):
                     found.add(name)
@@ -86,6 +86,8 @@ def main():
     parser.add_argument("--base", required=True, help="image reference to start from")
     parser.add_argument("--image", required=True, help="tag to produce")
     parser.add_argument("--dist", required=True, help="directory whose contents become the html root")
+    parser.add_argument("--target-root", default=HTML_ROOT,
+                        help="path within the image to shadow (default: nginx HTML root)")
     parser.add_argument("--work", default=os.path.expanduser("~/web-image-build"))
     parser.add_argument("--prune", action="store_true",
                         help="also remove html files the bundle does not contain "
@@ -97,6 +99,9 @@ def main():
         sys.exit("no sudo password: pass --sudo-password or set LUNANEXA_SUDO_PASSWORD")
     if not os.path.isdir(arguments.dist):
         sys.exit(f"no bundle at {arguments.dist}; run scripts/build-browser-bundles.sh first")
+    target_root = arguments.target_root.strip("/")
+    if not target_root or ".." in target_root.split("/"):
+        sys.exit("target root must be a bounded image-relative path")
 
     work = arguments.work
     shutil.rmtree(work, ignore_errors=True)
@@ -121,7 +126,7 @@ def main():
     manifest = json.loads(blob(target["digest"]))
     config = json.loads(blob(manifest["config"]["digest"]))
 
-    previous = old_html_paths(work, manifest)
+    previous = old_html_paths(work, manifest, target_root)
     print(f"base carries {len(previous)} html files across {len(manifest['layers'])} layers")
 
     wanted = {}
@@ -131,7 +136,7 @@ def main():
                 continue
             source = os.path.join(root, name)
             rel = os.path.relpath(source, arguments.dist)
-            wanted[f"{HTML_ROOT}/{rel}"] = source
+            wanted[f"{target_root}/{rel}"] = source
     if not wanted:
         sys.exit(f"bundle at {arguments.dist} is empty")
 

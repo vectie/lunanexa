@@ -3195,6 +3195,9 @@ async fn ApiService::dispatch_with_transport(
   if path == "/v1/guide-diagnostics/aggregate" {
     return self.handle_guide_aggregate(verb, headers)
   }
+  if path == "/v1/storage-nodes" {
+    return self.handle_storage_nodes(verb, headers)
+  }
   if verb != Get && !self.store.current_epoch_is_durable() {
     return api_error(
       409, "StaleControllerEpoch", "controller was fenced by a newer durable epoch",

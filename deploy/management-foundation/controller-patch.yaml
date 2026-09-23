@@ -46,6 +46,10 @@ spec:
             # do not mount model bytes; compute nodes pull directly from S3.
             - name: LUNANEXA_MODEL_STORE_ROOT
               value: /data/models
+            - name: LUNANEXA_STORAGE_MONITOR_PATH
+              value: /data/models
+            - name: LUNANEXA_STORAGE_NODE_ID
+              value: management-storage
           resources:
             requests:
               cpu: 500m

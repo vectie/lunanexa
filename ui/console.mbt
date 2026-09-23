@@ -58,6 +58,26 @@ pub extend NodeRow with ToJson::{to_json}
 pub extend NodeRow with FromJson::{from_json}
 
 ///|
+/// Storage capacity is measured on the management/data host, not inferred
+/// from a GPU node heartbeat or counted as schedulable accelerator capacity.
+pub(all) struct StorageNodeRow {
+  node_id : String
+  state : String
+  total_bytes : Int64?
+  used_bytes : Int64?
+  available_bytes : Int64?
+  total_inodes : Int64?
+  available_inodes : Int64?
+  sampled_at_ms : Int64
+} derive(Eq, FromJson)
+
+///|
+pub extend StorageNodeRow with Eq::{equal, not_equal}
+
+///|
+pub extend StorageNodeRow with FromJson::{from_json}
+
+///|
 pub(all) struct ModelRow {
   model_id : String
   version : String
@@ -1990,6 +2010,7 @@ pub(all) struct ConsoleState {
   route : OperatorRoute
   overview : OverviewMetrics
   nodes : Array[NodeRow]
+  storage_nodes : Array[StorageNodeRow]
   models : Array[ModelRow]
   deployments : Array[DeploymentRow]
   catalog_templates : Array[@deployment.ModelServiceTemplate]
@@ -2202,6 +2223,7 @@ pub fn default_state() -> ConsoleState {
       recent_changes: 0,
     },
     nodes: [],
+    storage_nodes: [],
     models: [],
     deployments: [],
     catalog_templates: [],
@@ -2657,6 +2679,7 @@ pub fn demo_state() -> ConsoleState {
       recent_changes: 6,
     },
     nodes,
+    storage_nodes: [],
     models,
     deployments: [
       {
@@ -5714,6 +5737,38 @@ fn nodes_view(
   emit : @rabbita.Emit[ConsoleMessage]?,
 ) -> @rabbita.Html {
   @html.section(attrs=@html.Attrs::build().aria_labelledby("nodes-title"), [
+    @html.div(class="section-heading", [
+      @html.div([
+        @html.h2(localized(state.locale, "Storage nodes", "存储节点")),
+        @html.p(
+          class="section-copy",
+          localized(
+            state.locale,
+            "Measured capacity and inode headroom on the model-storage host. This is not GPU placement capacity.",
+            "查看模型存储主机的实测容量与 inode 余量；此处不计入 GPU 放置容量。",
+          ),
+        ),
+      ]),
+    ]),
+    if state.storage_nodes.is_empty() {
+      @html.p(
+        class="empty-state",
+        localized(
+          state.locale,
+          "No storage monitor is configured. Configure the storage mount in the controller deployment.",
+          "尚未配置存储监控。请在控制器部署中指定存储挂载卷。",
+        ),
+      )
+    } else {
+      @html.div(
+        class="node-list",
+        [
+          for storage in state.storage_nodes => {
+            storage_node_item(state.locale, storage)
+          }
+        ],
+      )
+    },
     @html.details(class="topology-disclosure", [
       @html.summary(
         localized(
@@ -5776,6 +5831,112 @@ fn nodes_view(
         [
           for node in state.nodes => node_item(state.locale, node, emit)
         ],
+      )
+    },
+  ])
+}
+
+///|
+fn storage_gib(bytes : Int64) -> String {
+  let tenths = (bytes / 107374182L).max(0L)
+  "\{tenths / 10L}.\{tenths % 10L} GiB"
+}
+
+///|
+fn storage_node_item(
+  locale : @i18n.Locale,
+  storage : StorageNodeRow,
+) -> @rabbita.Html {
+  let healthy = storage.state == "healthy" &&
+    storage.total_bytes is Some(_) &&
+    storage.available_bytes is Some(_)
+  let total = storage.total_bytes.unwrap_or(0L)
+  let used = storage.used_bytes.unwrap_or(0L)
+  let available = storage.available_bytes.unwrap_or(0L)
+  let percent = if total > 0L {
+    (used * 100L / total).clamp(min=0L, max=100L).to_int()
+  } else {
+    0
+  }
+  let inodes = storage.total_inodes.unwrap_or(0L)
+  let available_inodes = storage.available_inodes.unwrap_or(0L)
+  @html.article(class="node-record storage-node-record", [
+    @html.div(class="node-summary", [
+      @html.div(class="node-identity", [
+        @html.strong(storage.node_id),
+        @html.span(
+          class="secondary",
+          localized(
+            locale, "Storage · model artifacts", "存储 · 模型制品",
+          ),
+        ),
+      ]),
+      @html.div(class="node-summary-cell", [
+        @html.span(localized(locale, "Status", "状态")),
+        @html.strong(
+          if healthy {
+            localized(locale, "Measured", "已采集")
+          } else {
+            localized(locale, "Unavailable", "采集失败")
+          },
+        ),
+      ]),
+      @html.div(class="node-summary-cell", [
+        @html.span(
+          localized(
+            locale, "Last sample (Beijing)", "最近采集（北京时间）",
+          ),
+        ),
+        @html.strong(@contractdoc.format_unix_ms_beijing(storage.sampled_at_ms)),
+      ]),
+      @html.div(class="node-summary-cell", [
+        @html.span(localized(locale, "Available space", "可用空间")),
+        @html.strong(
+          if healthy {
+            storage_gib(available)
+          } else {
+            localized(locale, "Not reported", "未上报")
+          },
+        ),
+      ]),
+      @html.div(class="node-summary-cell", [
+        @html.span(localized(locale, "Used / total", "已用／总量")),
+        @html.strong(
+          if healthy {
+            "\{storage_gib(used)} / \{storage_gib(total)}"
+          } else {
+            localized(locale, "Not reported", "未上报")
+          },
+        ),
+      ]),
+    ]),
+    if healthy {
+      @html.div(class="node-detail", [
+        @html.div(class="node-metrics", [
+          @html.div(class="node-metric", [
+            @html.span(localized(locale, "Capacity used", "容量已用")),
+            @html.strong("\{percent}%"),
+            @html.progress(value=percent, max=100, "\{percent}%"),
+          ]),
+          @html.div(class="node-metric", [
+            @html.span(localized(locale, "Available inodes", "可用 inode")),
+            @html.strong(
+              if inodes > 0L {
+                "\{available_inodes} / \{inodes}"
+              } else {
+                localized(locale, "Not reported", "未上报")
+              },
+            ),
+          ]),
+        ]),
+      ])
+    } else {
+      @html.p(
+        class="empty-state compact",
+        localized(
+          locale, "The configured storage mount could not be measured. Check its hostPath and controller mount.",
+          "无法采集配置的存储挂载卷。请检查主机目录与控制器挂载。",
+        ),
       )
     },
   ])

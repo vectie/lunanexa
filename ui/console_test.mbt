@@ -11,6 +11,7 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
       alerts: 1,
       recent_changes: 4,
     },
+    storage_nodes: [],
     nodes: [
       {
         node_id: "node-1",
@@ -595,6 +596,36 @@ test "node telemetry says not reported instead of printing an unmeasured zero" {
   })
   assert_true(chinese.contains("未上报"))
   assert_true(chinese.contains("CPU 利用率"))
+}
+
+///|
+test "storage node monitoring is separate from four GPU compute nodes" {
+  let state = console_state(Nodes)
+  let measured : @ui.StorageNodeRow = {
+    node_id: "management-storage",
+    state: "healthy",
+    total_bytes: Some(1099511627776L),
+    used_bytes: Some(274877906944L),
+    available_bytes: Some(824633720832L),
+    total_inodes: Some(1000000L),
+    available_inodes: Some(800000L),
+    sampled_at_ms: 1000L,
+  }
+  let html = @ui.render({ ..state, storage_nodes: [measured], })
+  assert_true(html.contains("Storage nodes"))
+  assert_true(html.contains("management-storage"))
+  assert_true(html.contains("768.0 GiB"))
+  assert_true(html.contains("Available inodes"))
+  assert_true(html.contains(" compute nodes"))
+  assert_eq(state.overview.total_nodes, 4)
+  let unavailable = @ui.render({
+    ..state,
+    locale: ChineseSimplified,
+    storage_nodes: [{ ..measured, state: "unavailable", total_bytes: None, }],
+  })
+  assert_true(unavailable.contains("存储节点"))
+  assert_true(unavailable.contains("采集失败"))
+  assert_true(unavailable.contains("无法采集配置的存储挂载卷"))
 }
 
 ///|
