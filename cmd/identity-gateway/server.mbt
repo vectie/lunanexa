@@ -10,6 +10,7 @@ fn response_reason(status : Int) -> String {
     403 => "Forbidden"
     404 => "Not Found"
     405 => "Method Not Allowed"
+    410 => "Gone"
     413 => "Payload Too Large"
     429 => "Too Many Requests"
     502 => "Bad Gateway"
@@ -171,7 +172,9 @@ async fn browser_state(
   request : @http.Request,
   audience : BrowserAudience,
 ) -> (String, GatewayCookie)? {
-  guard cookie_value(request.headers, config.cookie_name(audience)) is Some(raw) &&
+  guard header(request.headers, "Host") is Some(host) &&
+    cookie_value(request.headers, config.cookie_name_for_host(audience, host))
+    is Some(raw) &&
     decode_cookie_reference(raw, config.cookie_secret(audience)) is Some(id) &&
     store.load(id) is Some(value) else {
     return None
@@ -188,6 +191,9 @@ async fn handle_oidc_start(
   host : String,
   audience : BrowserAudience,
 ) -> Unit {
+  if !config.browser_oidc_enabled {
+    return send_error(connection, 410, "browser-oidc-retired")
+  }
   guard request.meth == Get &&
     (
       safe_start_fetch(request) ||
@@ -240,7 +246,7 @@ async fn handle_oidc_start(
     flow_id,
     config.cookie_secret(audience),
   )
-  let location = "\{discovery.authorization_endpoint}?response_type=code&client_id=\{form_encode(config.client_id(audience))}&redirect_uri=\{form_encode(config.redirect_uri(audience))}&scope=openid%20profile%20email&state=\{form_encode(state)}&nonce=\{form_encode(nonce)}&code_challenge=\{form_encode(challenge)}&code_challenge_method=S256"
+  let location = "\{discovery.authorization_endpoint}?response_type=code&client_id=\{form_encode(config.client_id(audience))}&redirect_uri=\{form_encode(config.redirect_uri_for_host(audience, host))}&scope=openid%20profile%20email&state=\{form_encode(state)}&nonce=\{form_encode(nonce)}&code_challenge=\{form_encode(challenge)}&code_challenge_method=S256"
   connection.send_response(
     302,
     "Found",
@@ -252,7 +258,7 @@ async fn handle_oidc_start(
     },
     cookies=[
       browser_cookie(
-        config.cookie_name(audience),
+        config.cookie_name_for_host(audience, host),
         cookie_reference,
         600L,
         secure=config.browser_secure(),
@@ -323,7 +329,7 @@ async fn handle_oidc_callback(
     },
     cookies=[
       browser_cookie(
-        config.cookie_name(audience),
+        config.cookie_name_for_host(audience, host),
         cookie_reference,
         config.session_absolute_ms / 1000L,
         secure=config.browser_secure(),
@@ -402,7 +408,7 @@ async fn handle_browser_session(
     },
     cookies=[
       browser_cookie(
-        config.cookie_name(audience),
+        config.cookie_name_for_host(audience, host),
         cookie_reference,
         (refreshed.expires_unix_ms - now) / 1000L,
         secure=config.browser_secure(),
@@ -443,7 +449,7 @@ async fn handle_logout(
     _ => 502
   }
   let cookie = expired_cookie(
-    config.cookie_name(audience),
+    config.cookie_name_for_host(audience, host),
     secure=config.browser_secure(),
   )
   if status == 200 || status == 401 {
@@ -609,7 +615,7 @@ async fn handle_api_proxy(
     authorization="Bearer \{session.bearer}",
     no_store=true,
     response_cookie=browser_cookie(
-      config.cookie_name(audience),
+      config.cookie_name_for_host(audience, host),
       cookie_reference,
       (session.expires_unix_ms - @async.now()) / 1000L,
       secure=config.browser_secure(),

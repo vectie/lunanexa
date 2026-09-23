@@ -88,6 +88,8 @@ fn load_config() -> GatewayConfig raise {
       oidc_ca_file: None,
       operator_host: "",
       enterprise_host: "",
+      alternate_https_port: false,
+      browser_oidc_enabled: false,
       operator_redirect_uri: "",
       enterprise_redirect_uri: "",
       operator_client_id: "",
@@ -158,6 +160,20 @@ fn load_config() -> GatewayConfig raise {
   )
   let operator_host = configured_host(operator_redirect_uri)
   let enterprise_host = configured_host(enterprise_redirect_uri)
+  let alternate_https_port = match
+    optional_environment("LUNANEXA_BROWSER_ALTERNATE_HTTPS_PORT") {
+    None => false
+    Some("8443") if operator_host == enterprise_host &&
+      !operator_host.contains(":") &&
+      operator_redirect_uri.has_prefix("https://") => true
+    _ => raise Failure("invalid alternate HTTPS browser port")
+  }
+  let browser_oidc_enabled = match
+    optional_environment("LUNANEXA_BROWSER_OIDC_ENABLED") {
+    None | Some("true") => true
+    Some("false") => false
+    _ => raise Failure("invalid browser OIDC switch")
+  }
   if operator_host == enterprise_host {
     guard operator_redirect_uri ==
       "https://\{operator_host}/mana/auth/oidc/callback" &&
@@ -279,6 +295,8 @@ fn load_config() -> GatewayConfig raise {
     oidc_ca_file: optional_environment("LUNANEXA_OIDC_CA_FILE"),
     operator_host,
     enterprise_host,
+    alternate_https_port,
+    browser_oidc_enabled,
     operator_redirect_uri,
     enterprise_redirect_uri,
     operator_client_id,
@@ -407,9 +425,9 @@ fn GatewayConfig::host_audience(
   if self.operator_host == self.enterprise_host {
     return None
   }
-  if host == self.operator_host {
+  if self.matches_browser_host(host, self.operator_host) {
     Some(Operator)
-  } else if host == self.enterprise_host {
+  } else if self.matches_browser_host(host, self.enterprise_host) {
     Some(Enterprise)
   } else {
     None
@@ -425,7 +443,7 @@ fn GatewayConfig::browser_audience(
   if self.operator_host != self.enterprise_host {
     return self.host_audience(host)
   }
-  if host != self.operator_host {
+  if !self.matches_browser_host(host, self.operator_host) {
     return None
   }
   match forwarded_prefix {
@@ -433,6 +451,15 @@ fn GatewayConfig::browser_audience(
     Some("/user") => Some(Enterprise)
     _ => None
   }
+}
+
+///|
+fn GatewayConfig::matches_browser_host(
+  self : GatewayConfig,
+  host : String,
+  expected : String,
+) -> Bool {
+  host == expected || (self.alternate_https_port && host == "\{expected}:8443")
 }
 
 ///|
@@ -487,6 +514,20 @@ fn GatewayConfig::redirect_uri(
 }
 
 ///|
+fn GatewayConfig::redirect_uri_for_host(
+  self : GatewayConfig,
+  audience : BrowserAudience,
+  host : String,
+) -> String {
+  let configured = self.redirect_uri(audience)
+  if self.alternate_https_port && host == "\{self.operator_host}:8443" {
+    "https://\{host}\{configured[8 + self.operator_host.length():]}"
+  } else {
+    configured
+  }
+}
+
+///|
 fn GatewayConfig::cookie_name(
   self : GatewayConfig,
   audience : BrowserAudience,
@@ -494,6 +535,20 @@ fn GatewayConfig::cookie_name(
   match audience {
     Operator => self.operator_cookie_name
     Enterprise => self.enterprise_cookie_name
+  }
+}
+
+///|
+fn GatewayConfig::cookie_name_for_host(
+  self : GatewayConfig,
+  audience : BrowserAudience,
+  host : String,
+) -> String {
+  let name = self.cookie_name(audience)
+  if self.alternate_https_port && host == "\{self.operator_host}:8443" {
+    "\{name}_8443"
+  } else {
+    name
   }
 }
 

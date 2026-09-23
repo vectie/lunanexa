@@ -9,6 +9,8 @@ fn password_test_config(relay_endpoint : String) -> GatewayConfig {
     oidc_ca_file: None,
     operator_host: "operator.example",
     enterprise_host: "enterprise.example",
+    alternate_https_port: false,
+    browser_oidc_enabled: true,
     operator_redirect_uri: "https://operator.example/auth/oidc/callback",
     enterprise_redirect_uri: "https://enterprise.example/auth/oidc/callback",
     operator_client_id: "lunanexa-operator",

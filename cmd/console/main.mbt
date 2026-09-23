@@ -9684,19 +9684,21 @@ fn login_view(
             ),
           ]),
         ]),
-        @html.div(
-          class="login-divider",
-          console_copy(
-            locale, "or use organization sign-in", "或使用组织账户登录",
-          ),
-        ),
-        if transport_allowed {
+        if configured_endpoint().has_suffix("/mana") {
+          @html.nothing
+        } else {
+          @html.div(
+            class="login-divider",
+            console_copy(
+              locale, "or use organization sign-in", "或使用组织账户登录",
+            ),
+          )
+        },
+        if configured_endpoint().has_suffix("/mana") {
+          @html.nothing
+        } else if transport_allowed {
           @html.a(
-            href=if configured_endpoint().has_suffix("/mana") {
-              "/mana/auth/oidc/start?audience=operator"
-            } else {
-              "/auth/oidc/start?audience=operator"
-            },
+            href="/auth/oidc/start?audience=operator",
             class="login-sso-link",
             console_copy(
               locale, "Continue with organization sign-in", "使用组织账户继续",

@@ -145,10 +145,9 @@ kind: Service
 metadata:
   name: lunanexa-coursebook-public
   annotations:
-    lunanexa.io/exposure: temporary-plain-http
+    lunanexa.io/exposure: ingress-only
 spec:
-  type: LoadBalancer
-  externalTrafficPolicy: Cluster
+  type: ClusterIP
   selector:
     app: lunanexa-coursebook-public-gateway
   ports:

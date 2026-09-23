@@ -197,9 +197,10 @@ async fn exchange_code(
   audience : BrowserAudience,
   code : String,
   verifier : String,
+  host : String,
 ) -> OidcTokenResponse {
   let client_id = config.client_id(audience)
-  let body = "grant_type=authorization_code&code=\{form_encode(code)}&redirect_uri=\{form_encode(config.redirect_uri(audience))}&client_id=\{form_encode(client_id)}&code_verifier=\{form_encode(verifier)}"
+  let body = "grant_type=authorization_code&code=\{form_encode(code)}&redirect_uri=\{form_encode(config.redirect_uri_for_host(audience, host))}&client_id=\{form_encode(client_id)}&code_verifier=\{form_encode(verifier)}"
   let (response, response_body) = oidc_post_form(
     config,
     discovery.token_endpoint,
@@ -289,7 +290,14 @@ async fn complete_oidc_callback(
   now_unix_ms : Int64,
 ) -> GatewayCookie {
   let discovery = discover(config)
-  let token = exchange_code(config, discovery, audience, code, flow.verifier)
+  let token = exchange_code(
+    config,
+    discovery,
+    audience,
+    code,
+    flow.verifier,
+    flow.host,
+  )
   let claims = validate_id_token(
     token.id_token,
     config.issuer,

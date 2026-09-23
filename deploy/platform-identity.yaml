@@ -438,7 +438,7 @@ metadata:
   name: lunanexa-identity-public
   namespace: "${LUNANEXA_IDENTITY_NAMESPACE}"
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: lunanexa-identity-public-edge
   ports:
