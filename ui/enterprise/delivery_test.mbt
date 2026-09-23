@@ -48,6 +48,7 @@ test "delivery progress renders truthful cache status and stop confirmation with
     operations: [
       {
         operation_id: "delivery-a",
+        project_id: "project-a",
         kind: "Workspace",
         template_id: "h3",
         template_version: "1",
@@ -59,6 +60,7 @@ test "delivery progress renders truthful cache status and stop confirmation with
         total_bytes: Some(2097152L),
         failure_code: None,
         expires_at_ms: 99999L,
+        can_manage: true,
       },
     ],
   }
@@ -95,6 +97,7 @@ test "expired delivery does not offer retry or stop" {
     operations: [
       {
         operation_id: "delivery-expired",
+        project_id: "project-a",
         kind: "ModelApi",
         template_id: "h3",
         template_version: "1",
@@ -106,6 +109,7 @@ test "expired delivery does not offer retry or stop" {
         total_bytes: None,
         failure_code: None,
         expires_at_ms: 99L,
+        can_manage: true,
       },
     ],
   }
@@ -133,6 +137,7 @@ test "GPU terminal uses catalog client without requiring a model" {
   }
   let operation : @enterprise.DeliveryView = {
     operation_id: "gpu-delivery",
+    project_id: "project-a",
     kind: "GpuContainer",
     template_id: "gpu-shell",
     template_version: "1",
@@ -144,6 +149,7 @@ test "GPU terminal uses catalog client without requiring a model" {
     total_bytes: None,
     failure_code: None,
     expires_at_ms: 99999L,
+    can_manage: true,
   }
   let panel = {
     ..state.deliveries,
@@ -202,6 +208,7 @@ test "model workspace and model API retain distinct launch requirements" {
   }
   let operation : @enterprise.DeliveryView = {
     operation_id: "workspace-delivery",
+    project_id: "project-a",
     kind: "Workspace",
     template_id: "h3",
     template_version: "1",
@@ -213,6 +220,7 @@ test "model workspace and model API retain distinct launch requirements" {
     total_bytes: None,
     failure_code: None,
     expires_at_ms: 99999L,
+    can_manage: true,
   }
   let configured = {
     ..panel,
@@ -237,9 +245,15 @@ test "model workspace and model API retain distinct launch requirements" {
   let api = {
     ..configured,
     operations: [{ ..operation, kind: "ModelApi", stage: "Ready", }],
+    options: {
+      reservations: [],
+      templates: [
+        { ..template, kind: "ModelApi", client_id: Some("desktop-workspace"), },
+      ],
+    },
   }
   assert_true(
-    @enterprise.delivery_launch_template(api, operation.operation_id) is None,
+    @enterprise.delivery_launch_template(api, operation.operation_id) is Some(_),
   )
 }
 
@@ -248,6 +262,7 @@ test "ready MaaS exposes bound key creation and clears its one time secret" {
   let state = @enterprise.default_state(100L)
   let operation : @enterprise.DeliveryView = {
     operation_id: "model-delivery",
+    project_id: "project-a",
     kind: "ModelApi",
     template_id: "text",
     template_version: "1",
@@ -259,6 +274,7 @@ test "ready MaaS exposes bound key creation and clears its one time secret" {
     total_bytes: None,
     failure_code: None,
     expires_at_ms: 99999L,
+    can_manage: true,
   }
   let panel = { ..state.deliveries, loaded: true, operations: [operation], }
   let ready = @enterprise.render({
@@ -269,6 +285,14 @@ test "ready MaaS exposes bound key creation and clears its one time secret" {
   })
   assert_true(ready.contains("Create delivery API key"))
   assert_false(ready.contains("Open terminal"))
+  let colleague_view = @enterprise.render({
+    ..state,
+    route: DesktopIde,
+    locale: English,
+    deliveries: { ..panel, operations: [{ ..operation, can_manage: false, }], },
+  })
+  assert_false(colleague_view.contains("Stop service"))
+  assert_true(colleague_view.contains("Create delivery API key"))
   let access : @enterprise.DeliveryApiAccess = {
     delivery_id: operation.operation_id,
     key_id: "test-key",
