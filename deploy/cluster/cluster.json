@@ -32,6 +32,7 @@
       "sshUser": "gpu-node",
       "gpuUuid": "GPU-00000001-0001-0001-0001-000000000001",
       "architecture": "nvidia-sm121",
+      "usagePool": "trial",
       "memoryTotalMib": 124608,
       "osRelease": "Ubuntu 24.04.5 LTS",
       "dataClasses": [
@@ -47,6 +48,7 @@
       "sshUser": "gpu-node",
       "gpuUuid": "GPU-00000002-0002-0002-0002-000000000002",
       "architecture": "nvidia-sm121",
+      "usagePool": "trial",
       "memoryTotalMib": 124608,
       "osRelease": "Ubuntu 24.04.5 LTS",
       "dataClasses": [
@@ -62,6 +64,8 @@
       "sshUser": "gpu-node",
       "gpuUuid": "GPU-00000003-0003-0003-0003-000000000003",
       "architecture": "nvidia-sm121",
+      "usagePool": "enterprise-dedicated",
+      "region": "cn-north-1",
       "memoryTotalMib": 124608,
       "osRelease": "Ubuntu 24.04.5 LTS",
       "dataClasses": [
@@ -77,6 +81,8 @@
       "sshUser": "gpu-node",
       "gpuUuid": "GPU-00000004-0004-0004-0004-000000000004",
       "architecture": "nvidia-sm121",
+      "usagePool": "enterprise-dedicated",
+      "region": "cn-north-1",
       "memoryTotalMib": 124608,
       "osRelease": "Ubuntu 24.04.5 LTS",
       "dataClasses": [

@@ -187,6 +187,7 @@ async test "settled bare order provisions internally without leaking its node" {
       ],
       labels: {
         "lunanexa.io/region": "cn-north-1",
+        "lunanexa.io/usage-pool": "enterprise-dedicated",
         "lunanexa.io/host-cpu-count": "16",
         "lunanexa.io/host-memory-mib": "16384",
       },
@@ -219,6 +220,7 @@ async test "settled bare order provisions internally without leaking its node" {
       ],
       labels: {
         "lunanexa.io/region": "cn-south-1",
+        "lunanexa.io/usage-pool": "enterprise-dedicated",
         "lunanexa.io/host-cpu-count": "16",
         "lunanexa.io/host-memory-mib": "16384",
       },
@@ -469,6 +471,21 @@ async test "settled bare order provisions internally without leaking its node" {
     }).stringify(),
   )
   assert_eq(accepted_terms.status, 201)
+  let paid_offering = machine_store
+    .active_offerings()
+    .iter()
+    .find_first(value => value.offering_id == "bare-self-checkout")
+    .unwrap()
+  for pool in ["trial", ""] {
+    let labels = heartbeat.inventory.labels.copy()
+    labels["lunanexa.io/usage-pool"] = pool
+    durable.put_heartbeat({
+      ..heartbeat,
+      inventory: { ..heartbeat.inventory, labels, },
+    })
+    assert_eq(service.machine_offering_nodes(paid_offering, now).length(), 0)
+  }
+  durable.put_heartbeat(heartbeat)
   for
     limits in [
       ("15", "16384"),
@@ -905,6 +922,7 @@ async fn exercise_dedicated_endpoint(
       labels: {
         "lunanexa.data-classes": "Internal",
         "lunanexa.io/region": "cn-north-1",
+        "lunanexa.io/usage-pool": "enterprise-dedicated",
         "lunanexa.io/host-cpu-count": "16",
         "lunanexa.io/host-memory-mib": "16384",
       },
