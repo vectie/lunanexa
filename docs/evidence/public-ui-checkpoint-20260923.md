@@ -29,6 +29,13 @@ order signed, payment recorded or service launched in this check.
    post-rollout expiry-state verification is still required.
 6. Observed the old Overview checklist still saying “运维分配一个节点”. This
    contradicts the new node-set architecture; its source copy is being fixed.
+7. Opened Operator “模型”. The live registry showed `minimax-minimax-h3` /
+   `modelscope-master` as approved with an accepted license and service alias.
+   The separate ModelScope import list showed the 281-file whole-model import
+   with checksum verification complete but four subsequent gates still pending.
+   These are different records and do not establish approval for either new
+   81-file FL2VA/Ref2VA component digest. No license/approval button was
+   pressed in this inspection.
 
 ## Not proven
 
@@ -38,3 +45,8 @@ operator/customer delivery states. A newly confirmed bounded test grant and
 updated deployed components are still required for the complete UI campaign.
 Public HTTP is the explicitly approved acceptance setup, not production-safe
 transport. The pages' presence does not prove public workspace port 5000 works.
+
+The user subsequently approved a **45-minute** acceptance grant. This approval
+does not itself create a lease or start its clock. The grant must be opened
+through the public UI after the updated path is ready, then both sites must
+show its actual effective interval and expiry.
