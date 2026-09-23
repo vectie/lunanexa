@@ -100,8 +100,17 @@ async fn ApiService::configured_model_allowed(
 async fn ApiService::serving_client_model_aliases(
   self : ApiService,
   approved : Array[String],
+  tenant_ref? : String = "",
 ) -> Array[String] {
-  guard self.deployment_store is Some(deployments) else { return approved }
+  guard self.deployment_store is Some(deployments) else {
+    return match self.external_text_route {
+      Some(route) if tenant_ref == route.tenant_ref &&
+        self.external_text_ready() =>
+        approved.filter(model_alias => model_alias == route.model_alias)
+      Some(_) => []
+      None => approved
+    }
+  }
   let serving = [
     for operation in deployments.operations() if operation.state == Ready &&
     operation.endpoint is Some(_) &&
@@ -110,6 +119,12 @@ async fn ApiService::serving_client_model_aliases(
       template.model_selector
     }
   ]
+  if self.external_text_route is Some(route) &&
+    tenant_ref == route.tenant_ref &&
+    self.external_text_ready() &&
+    !serving.contains(route.model_alias) {
+    serving.push(route.model_alias)
+  }
   approved.filter(model_alias => serving.contains(model_alias))
 }
 
@@ -300,6 +315,7 @@ async fn ApiService::handle_client_handoff(
       }
       let aliases = self.serving_client_model_aliases(
         access_package_approved_aliases(self.registry),
+        tenant_ref=portal_view.membership.tenant_ref,
       )
       let blockers : Array[String] = []
       if !contract_ready {
@@ -356,6 +372,7 @@ async fn ApiService::handle_client_handoff(
       }
       let serving_aliases = self.serving_client_model_aliases(
         access_package_approved_aliases(self.registry),
+        tenant_ref=portal_view.membership.tenant_ref,
       )
       for model in intent.allowed_models {
         if !self.configured_model_allowed(model) ||

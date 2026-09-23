@@ -485,6 +485,7 @@ pub struct OpenAiTextRuntime {
   maximum_event_bytes : Int
   maximum_response_bytes : Int
   lunaflux_streaming_responses : Bool
+  served_model_name : String?
 }
 pub fn OpenAiTextRuntime::artifact_digest(Self) -> String
 pub fn OpenAiTextRuntime::image_digest(Self) -> String
@@ -499,6 +500,7 @@ pub fn OpenAiTextRuntime::with_lunaflux_streaming_responses(Self) -> Self
 pub fn OpenAiTextRuntime::with_node_endpoints(Self, Array[NodeRuntimeEndpoint]) -> Self raise RemoteRuntimeError
 pub fn OpenAiTextRuntime::with_node_endpoints_json(Self, String) -> Self raise
 pub fn OpenAiTextRuntime::with_response_budgets(Self, Int, Int) -> Self raise RemoteRuntimeError
+pub fn OpenAiTextRuntime::with_served_model_name(Self, String) -> Self
 
 pub(all) struct RuntimeInvocationResult {
   output : Json

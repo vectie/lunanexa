@@ -72,6 +72,46 @@ test "OpenAI bridge declares the actual canonical input size" {
 }
 
 ///|
+test "OpenAI bridge does not under-declare an over-budget canonical payload" {
+  let budgets = {
+    ..@settings.default_global_admin_settings().request_budgets,
+    openai_max_input_units: 4,
+  }
+  let value : OpenAiChatRequest = {
+    model: "smoke-model",
+    messages: [{ "role": "user", "content": "This exceeds four bytes" }],
+    stream: Some(true),
+    max_tokens: Some(16),
+    tools: None,
+    tool_choice: None,
+    parallel_tool_calls: None,
+    temperature: None,
+    top_p: None,
+  }
+  let (workload, _) = openai_workload(
+    value,
+    {
+      key_id: "smoke-key",
+      tenant_ref: "default-tenant",
+      subject_ref: "static-inference-subject",
+      organization_id: "default-organization",
+      project_id: "default-project",
+    },
+    {},
+    true,
+    1788015700000L,
+    budgets,
+  )
+  assert_eq(
+    workload.resource_ceiling.max_input_units,
+    @utf8.encode(workload.payload.stringify()).length(),
+  )
+  assert_true(
+    workload.resource_ceiling.max_input_units > budgets.openai_max_input_units,
+  )
+}
+
+///|
 test "OpenAI bridge converts Responses function calls without leaking the envelope" {
   let output : Json = {
     "id": "resp-1",

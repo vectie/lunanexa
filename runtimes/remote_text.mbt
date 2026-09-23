@@ -49,6 +49,7 @@ pub struct OpenAiTextRuntime {
   maximum_event_bytes : Int
   maximum_response_bytes : Int
   lunaflux_streaming_responses : Bool
+  served_model_name : String?
 }
 
 ///|
@@ -123,7 +124,18 @@ pub fn OpenAiTextRuntime::new(
     maximum_event_bytes: 1048576,
     maximum_response_bytes: 16777216,
     lunaflux_streaming_responses: false,
+    served_model_name: None,
   }
+}
+
+///|
+/// Maps a governed alias to the exact model name advertised by an external
+/// serving endpoint. The alias remains the northbound authorization scope.
+pub fn OpenAiTextRuntime::with_served_model_name(
+  self : OpenAiTextRuntime,
+  name : String,
+) -> OpenAiTextRuntime {
+  { ..self, served_model_name: Some(name), }
 }
 
 ///|
@@ -270,9 +282,10 @@ fn responses_upstream_request(
   input : Json,
   stream : Bool,
   lunaflux_streaming_responses : Bool,
+  served_model_name : String?,
 ) -> Json raise RemoteRuntimeError {
   let fields : Map[String, Json] = {
-    "model": Json::string(request.model_selector),
+    "model": Json::string(served_model_name.unwrap_or(request.model_selector)),
     "input": if lunaflux_streaming_responses {
       lunaflux_responses_input(input)
     } else {
@@ -525,6 +538,7 @@ pub async fn OpenAiTextRuntime::invoke_at(
     input,
     false,
     self.lunaflux_streaming_responses,
+    self.served_model_name,
   )
   let endpoint = self.endpoint_for(node_id)
   let (response, body) = @http.post(endpoint, upstream_request, headers~)
@@ -588,6 +602,7 @@ pub async fn OpenAiTextRuntime::invoke_stream_at(
     input,
     true,
     self.lunaflux_streaming_responses,
+    self.served_model_name,
   )
   let endpoint = self.endpoint_for(node_id)
   let stream = @http.post_stream(endpoint, headers~)
