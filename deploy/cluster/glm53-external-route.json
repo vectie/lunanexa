@@ -1,6 +1,6 @@
 {
   "model_alias": "glm-5.3.flash",
-  "tenant_ref": "tenant-93e05f3067946c079f9327a21926fb85",
+  "tenant_ref": "tenant-4a2394cf9b9a6b3c02697fab0097489a",
   "node_id": "spark-57f5-98a504ed",
   "origin": "http://127.0.0.1:19091",
   "served_model": "GLM-5.3-Flash-EXL3",
