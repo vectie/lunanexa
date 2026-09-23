@@ -444,7 +444,15 @@ pub async fn RuntimeSupervisor::reap_expired(
   let mut failed = false
   for record in expired {
     try self.stop_record(record) catch {
-      _ => failed = true
+      error => {
+        println(
+          "LunaNexa runtime cleanup failed for " +
+          record.name +
+          ": " +
+          Repr(error).to_string(),
+        )
+        failed = true
+      }
     } noraise {
       _ => ()
     }
@@ -472,7 +480,15 @@ pub async fn RuntimeSupervisor::remove_absent(
   let mut failed = false
   for record in absent {
     try self.stop_record(record) catch {
-      _ => failed = true
+      error => {
+        println(
+          "LunaNexa absent runtime cleanup failed for " +
+          record.name +
+          ": " +
+          Repr(error).to_string(),
+        )
+        failed = true
+      }
     } noraise {
       _ => ()
     }
