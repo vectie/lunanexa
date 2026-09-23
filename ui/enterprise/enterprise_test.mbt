@@ -35,6 +35,20 @@ test "company administrator can invite members in UI without sharing a WebIDE" {
   assert_true(html.contains("Company members"))
   assert_true(html.contains("Create member invitation"))
   assert_true(html.contains("Their WebIDE and chat remain personal"))
+  let company = state.organizations[0]
+  let pending = @enterprise.render({
+    ..state,
+    route: AccountAccess,
+    organizations: [
+      {
+        ..company,
+        organization: { ..company.organization, state: PendingVerification, },
+      },
+    ],
+  })
+  assert_true(
+    pending.contains("Company registration is awaiting platform review"),
+  )
 }
 
 ///|
@@ -766,6 +780,13 @@ test "organization selection is explicit and drives the scoped request header" {
   let selected = ambiguous.update(
     SelfService(SelectOrganization("org-moonlab")),
   )
+  let secret_bearing = {
+    ..ambiguous,
+    member_invite_email: "colleague@example.invalid",
+    member_invite_secret: Some("one-time-invite"),
+  }.update(SelfService(SelectOrganization("org-moonlab")))
+  assert_eq(secret_bearing.member_invite_email, "")
+  assert_eq(secret_bearing.member_invite_secret, None)
   assert_eq(
     @enterprise.selected_organization_header(selected),
     Some("org-moonlab"),
