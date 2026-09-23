@@ -672,7 +672,18 @@ async fn reconcile_once(
           }
         }
       } catch {
-        _ => agent.observe_runtime(assignment.assignment_id, Failed)
+        error => {
+          // The Kubernetes transport does not expose response bodies or
+          // credentials in errors. Keep the reason visible so a stalled
+          // managed deployment can be diagnosed on the assigned node.
+          println(
+            "LunaNexa managed runtime reconcile failed for " +
+            assignment.deployment_id +
+            ": " +
+            error.to_string(),
+          )
+          agent.observe_runtime(assignment.assignment_id, Failed)
+        }
       }
     }
   }

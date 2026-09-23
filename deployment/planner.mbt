@@ -179,6 +179,12 @@ pub fn validate_intent(
   if intent.version != @contracts.contract_version ||
     !@contracts.valid_identifier(intent.idempotency_key, maximum_length=256) ||
     !@contracts.valid_identifier(intent.deployment_id, maximum_length=128) ||
+    intent.deployment_id.length() > 58 ||
+    intent.deployment_id.has_prefix("-") ||
+    intent.deployment_id.has_suffix("-") ||
+    !intent.deployment_id.all(c => {
+      (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-'
+    }) ||
     !@contracts.valid_identifier(
       intent.template.template_id,
       maximum_length=128,
