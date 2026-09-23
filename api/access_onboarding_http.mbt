@@ -325,7 +325,9 @@ async fn ApiService::access_package_view_for_membership(
         )
       None => false
     })
-  let aliases = access_package_approved_aliases(self.registry)
+  let aliases = self.serving_client_model_aliases(
+    access_package_approved_aliases(self.registry),
+  )
   let account_active = account.state == Active &&
     @account.role_allows(account.roles, EnterpriseUser)
   let membership_ready = membership.active &&

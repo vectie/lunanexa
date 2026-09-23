@@ -312,6 +312,38 @@ async fn check_workspace_handoff(private_cloud : Bool) -> Unit {
       "project_id": "project-client",
       "allowed_models": ["text.default"],
     } : Json).stringify()
+  let deployment_gated = service.with_deployment_store(
+    @deployment_store.FileDeploymentStore::open(
+      "\{temp}/client-deployments.json",
+      "client-deployment-test-signing-secret",
+    ),
+  )
+  let no_model = deployment_gated.handle(
+    Get,
+    "/v1/portal/self/client",
+    enterprise_headers,
+    "",
+  )
+  guard @json.parse(no_model.body)
+    is {
+      "models_ready": false,
+      "ready": false,
+      "approved_model_aliases": [],
+      ..
+    } else {
+    fail(
+      "a registry alias must not open WebIDE before a serving deployment is ready",
+    )
+  }
+  assert_eq(
+    deployment_gated.handle(
+      Post,
+      "/v1/portal/self/client-handoffs",
+      enterprise_headers,
+      issue_body,
+    ).status,
+    400,
+  )
   assert_eq(
     service.handle(Post, "/v1/portal/self/client-handoffs", Map([]), issue_body).status,
     401,

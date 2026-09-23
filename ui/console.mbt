@@ -4259,8 +4259,12 @@ fn access_package_card(
         @html.button(
           type_="button",
           disabled=state.loading,
-          on_click=command(emit, Navigate(Models)),
-          localized(state.locale, "Approve a model alias", "批准模型别名"),
+          on_click=command(emit, Navigate(Catalog)),
+          localized(
+            state.locale,
+            "Deploy a serving model",
+            "部署可调用模型",
+          ),
         )
       } else if item.ready {
         @html.span(
@@ -4291,7 +4295,11 @@ fn access_package_card(
           @html.dt("Workspace user / grant / lease"),
           @html.dd(class="mono", "\{user_id} / \{grant_id} / \{lease_id}"),
           @html.dt(
-            localized(state.locale, "Approved aliases", "已批准别名"),
+            localized(
+              state.locale,
+              "Serving model aliases",
+              "可用模型别名",
+            ),
           ),
           @html.dd(
             class="mono",

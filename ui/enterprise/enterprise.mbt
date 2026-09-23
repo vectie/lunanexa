@@ -3183,7 +3183,11 @@ fn desktop_ide_view(
   } else if !workspace_ready {
     enterprise_copy(state.locale, YourOperatorNeedsToEnableThe)
   } else if !models_ready {
-    enterprise_copy(state.locale, YourOperatorNeedsToApproveAt)
+    copy(
+      state.locale,
+      "A model must be deployed and serving before MoonDesk / MoonCode can open.",
+      "请先部署并验证至少一个可调用模型，然后再打开 MoonDesk / MoonCode。",
+    )
   } else if state.webide_order_id is Some(_) &&
     webide_launch_selection(state) is None {
     enterprise_copy(state.locale, TheSelectedPaidEndpointIsUnavailable)
@@ -3299,8 +3303,8 @@ fn desktop_ide_view(
         @html.h2(
           copy(
             state.locale,
-            "Continue your leased workspace in \{name}",
-            "在 \{name} 中继续使用租赁工作区",
+            "Continue working in \{name}",
+            "在 \{name} 中继续工作",
           ),
         ),
         @html.p(next_action),
@@ -3393,12 +3397,16 @@ fn desktop_ide_view(
           [
             @html.span("4"),
             @html.div([
-              @html.strong(enterprise_copy(state.locale, ApprovedModels)),
+              @html.strong(copy(state.locale, "Serving models", "可用模型")),
               @html.p(
                 if models_ready {
                   aliases.join(", ")
                 } else {
-                  enterprise_copy(state.locale, NoModelAliasIsReadyYet)
+                  copy(
+                    state.locale,
+                    "No deployed model is serving yet.",
+                    "尚无已部署且可调用的模型。",
+                  )
                 },
               ),
             ]),
@@ -3431,8 +3439,8 @@ fn desktop_ide_view(
         class="request-boundary",
         copy(
           state.locale,
-          "Approved models: \{aliases.length()} · Previous connections: \{connected} · Access remains lease-bound",
-          "已批准模型：\{aliases.length()} · 历史连接：\{connected} · 访问权限仍受租约约束",
+          "Serving models: \{aliases.length()} · Previous connections: \{connected} · Access remains lease-bound",
+          "可用模型：\{aliases.length()} · 历史连接：\{connected} · 访问权限仍受租约约束",
         ),
       ),
     ]),
