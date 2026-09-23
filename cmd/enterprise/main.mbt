@@ -6386,7 +6386,7 @@ fn app_view(
               class="bootstrap-status",
               attrs=@html.Attrs::build().role("status").aria_live("polite"),
               portal_copy(
-                locale, "Checking for an existing secure browser session…", "正在检查现有安全浏览器会话…",
+                locale, "Checking for an existing browser session…", "正在检查现有浏览器会话…",
               ),
             )
           } else {
@@ -6520,17 +6520,22 @@ fn app_view(
       "\{membership.subject_ref} · \{membership.organization_id}"
     None => portal_copy(locale, "Organization setup", "组织设置")
   }
+  let session_transport_copy = if model.endpoint.has_prefix("http://") &&
+    !development_allowed {
+    portal_copy(
+      locale, "HTTP browser session (unencrypted); ends on logout or expiry", "HTTP 浏览器会话（未加密）；退出或到期时结束",
+    )
+  } else {
+    portal_copy(
+      locale, "browser session; ends on logout or expiry", "浏览器会话；退出或到期时结束",
+    )
+  }
   @html.div([
     @html.style_tag(shell_styles),
     @html.header(class="session-strip", [
       @html.p([
         @html.strong(session_scope),
-        @html.span(
-          " · " +
-          portal_copy(
-            locale, "secure browser session; ends on logout or expiry", "安全浏览器会话；退出或到期时结束",
-          ),
-        ),
+        @html.span(" · " + session_transport_copy),
       ]),
       @html.button(
         type_="button",
