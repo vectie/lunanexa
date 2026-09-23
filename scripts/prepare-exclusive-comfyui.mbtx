@@ -119,8 +119,8 @@ async fn save(path : String, document : Json) -> Unit {
   @fs.write_file(path, document.stringify(indent=2), create_mode=CreateNew, permission=0o600)
 }
 
-async fn prepare(k : String, root : String, gateway_image : String, proxy_image : String, comfy_image : String) -> Unit {
-  for image in [gateway_image, proxy_image, comfy_image] {
+async fn prepare(k : String, root : String, control_image : String, gateway_image : String, proxy_image : String, comfy_image : String) -> Unit {
+  for image in [control_image, gateway_image, proxy_image, comfy_image] {
     guard image.split("@sha256:").to_array() is [_, digest] && digest.length() == 64 else { fail("Pinned images required") }
   }
   @fs.mkdir(root, permission=0o700)
@@ -156,6 +156,7 @@ async fn prepare(k : String, root : String, gateway_image : String, proxy_image 
     docs[filename] = clean(@json.parse(raw))
   }
   let control = container(docs["deployment-lunanexa-control.json"], "control")
+  control["image"] = control_image.to_json()
   set_literal(control, "LUNANEXA_CLIENT_LAUNCH_CATALOG_JSON", catalog(environment(control)).stringify())
   extend_origins(control, "LUNANEXA_CLIENT_HTTP_LAUNCH_ORIGINS_JSON", "http://106.39.18.146:5000")
   extend_origins(control, "LUNANEXA_CLIENT_HTTP_API_ORIGINS_JSON", "http://106.39.18.146:5000")
@@ -246,8 +247,8 @@ async fn main {
         guard routes.contains("http://webide-gateway.") && routes.contains("service: moongate") && public_routes(routes) == routes else { fail("Route preparation failed") }
         println("Preparation self-test passed; no Kubernetes access.")
       }
-      [_, k, root, gateway, proxy, comfy] => prepare(k, root, gateway, proxy, comfy)
-      _ => fail("Usage: prepare-exclusive-comfyui.mbtx KUBECONFIG NEW_PRIVATE_DIRECTORY GATEWAY_AMD64_IMAGE PROXY_ARM64_IMAGE COMFY_ARM64_IMAGE")
+      [_, k, root, control, gateway, proxy, comfy] => prepare(k, root, control, gateway, proxy, comfy)
+      _ => fail("Usage: prepare-exclusive-comfyui.mbtx KUBECONFIG NEW_PRIVATE_DIRECTORY CONTROL_AMD64_IMAGE GATEWAY_AMD64_IMAGE PROXY_ARM64_IMAGE COMFY_ARM64_IMAGE")
     }
   } catch {
     _ => { println("Exclusive ComfyUI preparation failed; inspect private source configuration without publishing secrets."); @sys.exit(1) }
