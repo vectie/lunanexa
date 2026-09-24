@@ -62,6 +62,12 @@ history reappeared after the gateway and workspace were rebuilt. The public
 ComfyUI trial on port 5005 remained reachable. `/user`, `/mana`, and `/docs`
 on the HTTPS edge also returned 200 during the check.
 
+The enterprise browser bundle is deployed as
+`lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/acceptance/web-enterprise@sha256:240d229d62a3a884c00760d6e8ad880ed76fc08bbc501c086a50c23da3233d93`.
+The acceptance gateway and model proxy use the digest pinned in
+`deploy/cluster/personal-mooncode-gateways.yaml`. Both images live in the
+cluster registry, not only in the management node's local image cache.
+
 The shared GLM upstream is the `glm53-exl3` Kubernetes Service, currently
 `10.43.242.46:8899`, forwarding to Spark 192.168.2.178:8888. The host
 MoonGate provider had retained a removed `127.0.0.1:4174/glm53/v1` URL; its
