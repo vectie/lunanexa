@@ -1,4 +1,34 @@
 ///|
+test "personal MoonDesk catalog decodes the live string-encoded handoff lifetime" {
+  let payload =
+    $|[{"client_id":"desktop-workspace","display_name":"MoonDesk / MoonCode","launch_uri":"http://106.39.18.146:5003/connect","handoff_lifetime_ms":"120000","contract_ready":true,"workspace_ready":true,"models_ready":true,"ready":true,"blocker_codes":[],"approved_model_aliases":["glm-5.3.flash"],"handoffs":[]}]
+  let clients : Array[DesktopClientResponse] = @json.from_json(
+    @json.parse(payload),
+  )
+  assert_eq(clients.length(), 1)
+  assert_eq(clients[0].client_id, "desktop-workspace")
+  assert_eq(clients[0].handoff_lifetime_ms, 120000L)
+  assert_eq(clients[0].approved_model_aliases, ["glm-5.3.flash"])
+}
+
+///|
+test "PaaS entry prefers personal MoonDesk over GPU-only ComfyUI" {
+  let base = @enterprise_ui.demo_state().desktop_client.unwrap()
+  let comfy = { ..base, client_id: "comfyui", display_name: "ComfyUI", }
+  let personal = {
+    ..base,
+    client_id: "desktop-workspace",
+    display_name: "MoonDesk / MoonCode",
+  }
+  assert_eq(
+    preferred_personal_webide([comfy, personal]).unwrap().client_id,
+    "desktop-workspace",
+  )
+  assert_eq(preferred_personal_webide([comfy]).unwrap().client_id, "comfyui")
+  assert_true(preferred_personal_webide([]) is None)
+}
+
+///|
 test "enterprise lease model input is trimmed and empty entries are ignored" {
   assert_eq(
     requested_models(" text.default,embedding.default ,, image.default "),

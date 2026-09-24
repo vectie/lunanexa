@@ -1,0 +1,22 @@
+# Only the two account-bound MoonCode gateways are public. Each gateway still
+# validates the handoff and its configured subject on every browser operation;
+# managed workspace Pods and the generic WebIDE gateway remain private.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: personal-mooncode-public-ingress
+  namespace: aigc-acceptance-20260915
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - mooncode-limuheng-gateway
+          - mooncode-wangzhixiang-gateway
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8082

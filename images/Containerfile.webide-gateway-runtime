@@ -1,0 +1,9 @@
+# Package a reviewed Linux-amd64 gateway binary with its host-linked libc.
+FROM lunanexa/runtime-base:bookworm-amd64
+COPY lunanexa-webide-gateway /usr/local/bin/lunanexa-webide-gateway
+COPY lunanexa-webide-model-proxy /usr/local/bin/lunanexa-webide-model-proxy
+COPY lib/x86_64-linux-gnu/ /lib/x86_64-linux-gnu/
+COPY lib64/ld-linux-x86-64.so.2 /lib64/ld-linux-x86-64.so.2
+USER 1000:1000
+EXPOSE 8082
+ENTRYPOINT ["/usr/local/bin/lunanexa-webide-gateway"]

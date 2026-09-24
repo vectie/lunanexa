@@ -449,8 +449,21 @@ async test "partial provisioning resumes deterministically and stale reconciliat
     locks: {},
     kubernetes_override: Some((verb, path, body) => {
       requests.push(path)
-      if path.contains("/pods?") || path.contains("/deployments?") {
+      if path.contains("/pods?") {
         (200, { "items": [] })
+      } else if path.contains("/deployments?") {
+        (
+          200,
+          {
+            "items": if resources
+              .keys()
+              .any(key => key.contains("/deployments/")) {
+              [{ "metadata": { "name": name } }]
+            } else {
+              []
+            },
+          },
+        )
       } else if verb == Patch {
         if path.contains("/secrets/") && state["fail_secret"] {
           raise HostError::WorkspaceUnavailable
@@ -546,6 +559,32 @@ async test "partial provisioning resumes deterministically and stale reconciliat
       2,
     )
   }
+}
+
+///|
+async test "reconciliation tolerates an old secret without its deployment" {
+  let grant = proxy_config(
+    host_config().controller_origin,
+    host_config().model_gateway_origin,
+  ).grant()
+  let name = resource_name(@webide.workspace_id(grant))
+  let requests : Array[String] = []
+  let host : WorkspaceHost = {
+    config: host_config(),
+    require_exclusive: false,
+    observation_token: "",
+    locks: {},
+    kubernetes_override: Some((verb, path, _) => {
+      requests.push(path)
+      if verb == Get && path.contains("/deployments?") {
+        (200, { "items": [] })
+      } else {
+        fail("stale workspace must not scale a missing deployment")
+      }
+    }),
+  }
+  host.scale_down(name)
+  assert_eq(requests.length(), 1)
 }
 
 ///|

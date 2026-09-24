@@ -3482,8 +3482,8 @@ fn desktop_ide_view(
     client.client_id == "comfyui" {
     copy(
       state.locale,
-      "ComfyUI needs an active GPU delivery. Select an authorized resource and published template in Exclusive resource services above, then open it from that delivery. A workspace lease alone does not reserve a machine.",
-      "ComfyUI 需要有效的 GPU 交付。请在上方「独占资源服务」选择已授权资源和已发布模板，再从该交付打开。仅有工作区租约不会预留机器。",
+      "ComfyUI needs an active GPU delivery. Select an authorized resource and published template in Exclusive resource services below, then open it from that delivery. A workspace lease alone does not reserve a machine.",
+      "ComfyUI 需要有效的 GPU 交付。请在下方「独占资源服务」选择已授权资源和已发布模板，再从该交付打开。仅有工作区租约不会预留机器。",
     )
   } else if !contract_ready {
     enterprise_copy(state.locale, CompleteTheMasterleaseEverythingElseStays)
@@ -3502,7 +3502,6 @@ fn desktop_ide_view(
     enterprise_copy(state.locale, YourAccessIsReadyOpenThe)
   }
   @html.div(class="page-stack", [
-    delivery_panel_view(state.deliveries, state.locale, emit),
     if state.desktop_clients.length() > 1 {
       @html.section(class="workflow-panel", [
         @html.h2(enterprise_copy(state.locale, ChooseYourWebide)),
@@ -3719,8 +3718,14 @@ fn desktop_ide_view(
                 client.client_id == "comfyui" {
                 copy(
                   state.locale,
-                  "Open ComfyUI from an active GPU delivery above; the generic WebIDE handoff cannot start it.",
-                  "请从上方有效的 GPU 交付打开 ComfyUI；通用 WebIDE 交接无法启动它。",
+                  "Open ComfyUI from an active GPU delivery below; the generic WebIDE handoff cannot start it.",
+                  "请从下方有效的 GPU 交付打开 ComfyUI；通用 WebIDE 交接无法启动它。",
+                )
+              } else if state.desktop_client is None {
+                copy(
+                  state.locale,
+                  "Choose an available workspace to see its one-click launch details.",
+                  "选择可用工作台后，这里会显示一键启动方式。",
                 )
               } else {
                 copy(
@@ -3742,6 +3747,7 @@ fn desktop_ide_view(
         ),
       ),
     ]),
+    delivery_panel_view(state.deliveries, state.locale, emit),
   ])
 }
 

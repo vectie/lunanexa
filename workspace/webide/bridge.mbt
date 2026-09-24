@@ -116,7 +116,7 @@ async fn Bridge::connect_page(
   // before any network action, never reflect provider diagnostics or secrets.
   let page =
     $|<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Open \{app_name}</title>
-    $|<main><h1>Open \{app_name}</h1><p role="status" id="status">\{connecting}</p><a href="/connect">Retry with a new launch from your portal</a></main>
+    $|<main><h1>打开 \{app_name}</h1><p role="status" id="status">\{connecting}</p><p>如果连接失败，请返回用户门户重新点击「打开工作台」。</p></main>
     $|<script nonce="\{nonce}">
     $|const fragment = new URLSearchParams(location.hash.slice(1));
     $|const code = fragment.get('lunanexa_handoff');
@@ -129,7 +129,7 @@ async fn Bridge::connect_page(
     $|  if (!response.ok) throw new Error();
     $|  location.replace('/');
     $|}
-    $|connect().catch(() => {document.getElementById('status').textContent='Unable to open this workspace. Check its readiness and launch again from your portal.';});
+    $|connect().catch(() => {document.getElementById('status').textContent='工作台连接失败。请确认权限和服务状态，然后从用户门户重新启动。';});
     $|</script></html>
   connection.write_string(page)
   connection.end_response()
@@ -151,6 +151,10 @@ async fn Bridge::connect(
     header(request.headers, "x-webide-csrf") == Some(challenge) else {
     raise BridgeError::Unauthorized
   }
+  // Log only a fixed stage label. Upstream exceptions may contain credentials,
+  // prompts, filesystem paths, or private service addresses.
+  let mut stage = "request parsing"
+  errdefer eprintln("WebIDE launch failed during " + stage)
   let payload : ConnectRequest = @json.from_json(
     @json.parse(@utf8.decode(read_bounded(body, 2048))),
   )
@@ -169,11 +173,14 @@ async fn Bridge::connect(
   if self.sessions.length() >= self.config.maximum_sessions {
     raise BridgeError::CapacityExceeded
   }
+  stage = "controller redemption"
   let grant = (self.redeem)(payload.handoff_code)
+  stage = "grant validation"
   if !self.valid_grant(grant, @async.now()) || !(self.authorize)(grant) {
     raise BridgeError::InvalidGrant
   }
   let id = workspace_id(grant)
+  stage = "workspace provisioning"
   let backend = (self.provision)(id, grant)
   if !(backend.http_url.has_prefix("http://") ||
     backend.http_url.has_prefix("https://")) ||

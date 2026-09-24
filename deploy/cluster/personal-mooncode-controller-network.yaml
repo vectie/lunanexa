@@ -1,0 +1,44 @@
+# The hosted MoonCode gateway reaches the controller through the internal
+# HTTPS gateway. Permit only that gateway's backend hop to the controller;
+# do not grant the whole acceptance namespace controller access.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: personal-mooncode-controller-egress
+  namespace: aigc-acceptance-20260915
+spec:
+  podSelector:
+    matchLabels:
+      acceptance-component: internal-gateway
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: lunanexa
+          podSelector:
+            matchLabels:
+              app: lunanexa-control
+      ports:
+        - {protocol: TCP, port: 8080}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: personal-mooncode-controller-ingress
+  namespace: lunanexa
+spec:
+  podSelector:
+    matchLabels:
+      app: lunanexa-control
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: aigc-acceptance-20260915
+          podSelector:
+            matchLabels:
+              acceptance-component: internal-gateway
+      ports:
+        - {protocol: TCP, port: 8080}

@@ -327,16 +327,16 @@ async fn WorkspaceHost::reconcile_page(
 
 ///|
 async fn WorkspaceHost::scale_down(self : WorkspaceHost, name : String) -> Unit {
-  if self.require_exclusive {
-    let (_, deployments) = self.kubernetes(
-      Get,
-      "/apis/apps/v1/namespaces/\{self.config.namespace_name}/deployments?labelSelector=lunanexa.io%2Fworkspace%3D\{name}",
-      None,
-    )
-    if deployments is { "items": Array([]), .. } {
+  let (_, deployments) = self.kubernetes(
+    Get,
+    "/apis/apps/v1/namespaces/\{self.config.namespace_name}/deployments?labelSelector=lunanexa.io%2Fworkspace%3D\{name}",
+    None,
+  )
+  if deployments is { "items": Array([]), .. } {
+    if self.require_exclusive {
       self.wait_for_workspace_pods(name, terminating_only=false)
-      return
     }
+    return
   }
   // Apply the scale subresource rather than replacing the full deployment.
   let scale : Json = {

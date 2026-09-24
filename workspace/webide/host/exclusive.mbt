@@ -123,6 +123,9 @@ fn WorkspaceHost::place_container(
   let private_mounts : Array[Json] = []
   let private_env : Array[Json] = []
   if grant.client_id == "desktop-workspace" {
+    // MoonDesk verifies the MoonClaw PID recorded in its shared workspace.
+    // These companion containers belong to one user's isolated pod.
+    pod["shareProcessNamespace"] = true
     let name = resource_name(@webide.workspace_id(grant))
     app_env.push({
       "name": "MOONDESK_ALLOWED_HOSTS",
@@ -210,7 +213,13 @@ fn WorkspaceHost::place_container(
     ],
     "ports": [{ "name": "workspace", "containerPort": container.port }],
     "readinessProbe": {
-      "httpGet": { "path": "/", "port": container.port },
+      "exec": {
+        "command": [
+          "/usr/bin/bash",
+          "-c",
+          "exec 3<>/dev/tcp/127.0.0.1/" + container.port.to_string(),
+        ],
+      },
       "periodSeconds": 5,
     },
   }
@@ -223,10 +232,9 @@ fn WorkspaceHost::place_container(
   })
   for platform_container in platform_containers {
     if platform_container is Object(fields) {
-      fields["readinessProbe"] = {
-        "httpGet": { "path": "/v1/models", "port": 8189 },
-        "periodSeconds": 5,
-      }
+      // The proxy intentionally listens only on pod loopback. Kubelet HTTP
+      // probes target the pod IP and can never reach that listener.
+      fields.remove("readinessProbe")
     }
   }
   let tenant_runtime : Array[Json] = if grant.client_id == "desktop-workspace" {
@@ -262,7 +270,11 @@ fn WorkspaceHost::place_container(
           { "name": "tmp", "mountPath": "/tmp" },
         ],
         "readinessProbe": {
-          "httpGet": { "path": "/health", "port": 15721 },
+          "exec": {
+            "command": [
+              "/usr/bin/bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/15721",
+            ],
+          },
           "periodSeconds": 5,
         },
       },
@@ -294,7 +306,11 @@ fn WorkspaceHost::place_container(
           ..private_mounts,
         ],
         "readinessProbe": {
-          "httpGet": { "path": "/v1/hosted-ready", "port": 8090 },
+          "exec": {
+            "command": [
+              "/usr/bin/bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8090",
+            ],
+          },
           "periodSeconds": 5,
         },
       },
