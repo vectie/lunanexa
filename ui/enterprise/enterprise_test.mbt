@@ -218,14 +218,31 @@ test "account route presents identity membership sessions and key lifecycle" {
   assert_true(html.contains("Account &amp; API keys"))
   assert_true(html.contains("Alice Chen"))
   assert_true(html.contains("alice@example.invalid"))
+  assert_true(html.contains("a newly issued API key is shown only once"))
+  assert_false(
+    html.contains("Authentication is supplied by the trusted ingress"),
+  )
   assert_true(html.contains("Organization administrator"))
   assert_true(html.contains("session-demo-current"))
+  assert_true(html.contains("<details class=\"account-technical-details\""))
+  assert_true(html.contains("Technical identifiers and active sessions"))
   assert_true(html.contains("Research notebook"))
   assert_true(html.contains("Active"))
   assert_true(html.contains("Revoked"))
   assert_true(html.contains("Expired"))
   assert_true(html.contains("Atomic rotation is not available yet"))
   assert_false(html.contains("secret_sha256"))
+  let old_session : @enterprise.BrowserSessionView = {
+    ..state.browser_sessions[0],
+    session_id: "session-old",
+    expires_unix_ms: state.machine_access.now_unix_ms - 1L,
+  }
+  let filtered = @enterprise.render({
+    ..state,
+    route: AccountAccess,
+    browser_sessions: [state.browser_sessions[0], old_session],
+  })
+  assert_false(filtered.contains("session-old"))
 }
 
 ///|
