@@ -999,6 +999,23 @@ fn gateway_auth_test_model() -> AppModel {
 }
 
 ///|
+#warnings("-alert_unstable")
+test "signed-in shell shows a human status instead of internal tenant ids" {
+  let base = gateway_auth_test_model()
+  let model = {
+    ..base,
+    token: "session-test",
+    portal: @enterprise_ui.demo_state(),
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let html = @rabbita.render_to_string(() => {
+    @rabbita.Val::constant(app_view(model, emit))
+  })
+  assert_true(html.contains("Signed in"))
+  assert_false(html.contains("<strong>subject-"))
+}
+
+///|
 test "the gateway's refusal codes choose the customer-facing copy" {
   let refusal = fn(code : String, registering : Bool) -> String {
     gateway_auth_refusal(

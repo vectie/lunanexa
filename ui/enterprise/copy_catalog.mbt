@@ -349,8 +349,6 @@ priv enum EnterpriseCopyMessage {
   InvitationCode
   TheSignedOneTimeInvitationSelects
   JoiningCompany
-  IntegrationContract
-  ListOrCreateGetPostV
   Available
   Unavailable
   Gpu
@@ -1302,13 +1300,6 @@ fn enterprise_copy(
       )
     JoiningCompany =>
       @i18n.copy(locale, "Joining company…", "正在加入公司…")
-    IntegrationContract =>
-      @i18n.copy(locale, "Integration contract", "集成契约")
-    ListOrCreateGetPostV =>
-      @i18n.copy(
-        locale, "List or create: GET/POST /v1/portal/self/organizations. Creation sends a legal profile; organization, tenant, owner membership, cost center and project identifiers are server-derived. Join uses POST /v1/portal/self/invitations:accept with a one-time invitation secret. Ambiguous multi-organization requests fail closed until X-LunaNexa-Organization is selected.",
-        "查询或创建：GET/POST /v1/portal/self/organizations。创建时提交法定主体资料；组织、租户、所有者成员资格、成本中心与项目标识均由服务端派生。加入使用一次性邀请密钥调用 POST /v1/portal/self/invitations:accept。多组织选择不明确时请求失败关闭，直至选择 X-LunaNexa-Organization。",
-      )
     Available => @i18n.copy(locale, "Available", "可用")
     Unavailable => @i18n.copy(locale, "Unavailable", "暂无资源")
     Gpu => @i18n.copy(locale, "GPU", "GPU")
@@ -1334,8 +1325,8 @@ fn enterprise_copy(
       )
     YouReceiveAnIsolatedWorkspaceNo =>
       @i18n.copy(
-        locale, "You receive an isolated workspace. No managed model is installed unless you choose Dedicated MaaS.",
-        "您将获得隔离工作区。除非选择专属 MaaS，否则不会安装托管模型。",
+        locale, "You receive dedicated GPU capacity and the access method specified by your order. No managed model is installed unless you choose Dedicated MaaS.",
+        "您将获得独占 GPU 算力及订单约定的访问方式。除非选择专属 MaaS，否则不会安装托管模型。",
       )
     LoadingLiveCapacity =>
       @i18n.copy(

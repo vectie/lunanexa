@@ -1116,10 +1116,6 @@ fn organization_step(
             enterprise_copy(state.locale, Back),
           ),
         ]),
-        @html.details(class="integration-contract", [
-          @html.summary(enterprise_copy(state.locale, IntegrationContract)),
-          @html.p(enterprise_copy(state.locale, ListOrCreateGetPostV)),
-        ]),
       ])
   }
 }
@@ -1542,12 +1538,6 @@ fn capacity_step(
         enterprise_copy(state.locale, Back),
       ),
     ]),
-    @html.details(class="integration-contract", [
-      @html.summary(enterprise_copy(state.locale, IntegrationContract)),
-      @html.p(
-        "GET /v1/portal/self/machine-offerings · POST /v1/portal/self/machine-quotes · BareMachine quotes require unix_username; DedicatedEndpoint quotes omit it · X-LunaNexa-Organization: <selected organization>",
-      ),
-    ]),
   ])
 }
 
@@ -1888,12 +1878,6 @@ fn contract_payment_step(
         enterprise_copy(state.locale, BackToQuote),
       ),
     ]),
-    @html.details(class="integration-contract", [
-      @html.summary(enterprise_copy(state.locale, IntegrationContract)),
-      @html.p(
-        "POST /v1/portal/self/machine-orders · X-LunaNexa-Organization: <selected organization> · entitlement_transaction_ref = machine-order:<order_id>",
-      ),
-    ]),
   ])
 }
 
@@ -2150,12 +2134,6 @@ fn provisioning_step(
         class="quiet-button",
         on_click=self_service_command(emit, RestartSelfService),
         enterprise_copy(state.locale, StartAnotherOrder),
-      ),
-    ]),
-    @html.details(class="integration-contract", [
-      @html.summary(enterprise_copy(state.locale, IntegrationContract)),
-      @html.p(
-        "GET /v1/portal/self/machine-orders · POST /v1/portal/self/machine-orders/{id}/cancel · POST /v1/portal/self/machine-orders/{id}/terminate · X-LunaNexa-Organization: <selected organization>",
       ),
     ]),
   ])
