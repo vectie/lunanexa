@@ -541,9 +541,9 @@ test "machine path requires organization and supports create or signed invite" {
   assert_true(html.contains("Create company"))
   assert_true(html.contains("Join company"))
   assert_true(html.contains("aria-pressed=\"true\""))
-  assert_true(html.contains("GET/POST /v1/portal/self/organizations"))
-  assert_true(html.contains("POST /v1/portal/self/invitations:accept"))
-  assert_true(html.contains("X-LunaNexa-Organization"))
+  assert_false(html.contains("GET/POST /v1/portal/self/organizations"))
+  assert_false(html.contains("POST /v1/portal/self/invitations:accept"))
+  assert_false(html.contains("X-LunaNexa-Organization"))
   let join = selected.update(SelfService(ChooseOrganizationMode(JoinCompany)))
   let join_html = @enterprise.render(join)
   assert_true(join_html.contains("Invitation code"))
@@ -604,8 +604,8 @@ test "dedicated machine wizard exposes SKU region duration model and signed quot
   assert_true(capacity.contains("7 days"))
   assert_true(capacity.contains("text.default · qwen3-32b"))
   assert_true(capacity.contains("Review price"))
-  assert_true(capacity.contains("GET /v1/portal/self/machine-offerings"))
-  assert_true(capacity.contains("POST /v1/portal/self/machine-quotes"))
+  assert_false(capacity.contains("Integration contract"))
+  assert_false(capacity.contains("GET /v1/portal/self/machine-offerings"))
   assert_true(@enterprise.self_service_configuration_valid(state.self_service))
   assert_false(
     @enterprise.self_service_configuration_valid({
@@ -665,7 +665,7 @@ test "bare GPU quotes require a valid non-system Linux username" {
     self_service: bare,
   })
   assert_true(html.contains("Linux username"))
-  assert_true(html.contains("BareMachine quotes require unix_username"))
+  assert_false(html.contains("BareMachine quotes require unix_username"))
 }
 
 ///|
@@ -733,7 +733,7 @@ test "machine order gates and provisioning remain resumable and fail closed" {
   assert_true(checkout.contains("Open secure checkout"))
   assert_true(checkout.contains("independently before capacity is reserved"))
   assert_true(checkout.contains("disabled"))
-  assert_true(checkout.contains("machine-order:&lt;order_id&gt;"))
+  assert_false(checkout.contains("machine-order:&lt;order_id&gt;"))
   let progress = @enterprise.render({
     ..state,
     route: SelfService,

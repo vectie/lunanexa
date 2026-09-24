@@ -6626,10 +6626,10 @@ fn app_view(
       ),
     ])
   }
-  let session_scope = match model.portal.membership {
-    Some(membership) =>
-      "\{membership.subject_ref} · \{membership.organization_id}"
-    None => portal_copy(locale, "Organization setup", "组织设置")
+  let session_scope = if model.portal.membership is Some(_) {
+    portal_copy(locale, "Signed in", "已登录")
+  } else {
+    portal_copy(locale, "Organization setup", "组织设置")
   }
   let session_transport_copy = if model.endpoint.has_prefix("http://") &&
     !development_allowed {

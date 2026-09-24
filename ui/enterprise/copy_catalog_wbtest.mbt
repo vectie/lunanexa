@@ -361,8 +361,6 @@ test "static enterprise catalog has complete unique bilingual entries" {
     InvitationCode,
     TheSignedOneTimeInvitationSelects,
     JoiningCompany,
-    IntegrationContract,
-    ListOrCreateGetPostV,
     Available,
     Unavailable,
     Gpu,
@@ -502,5 +500,5 @@ test "static enterprise catalog has complete unique bilingual entries" {
     assert_false(seen.contains(pair))
     seen[pair] = true
   }
-  assert_eq(keys.length(), 478)
+  assert_eq(keys.length(), 476)
 }
