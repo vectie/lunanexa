@@ -23,7 +23,7 @@
       "title": "LunaNexa H3 图生视频（首帧 512×512）",
       "properties": {},
       "widgets_values": [
-        "## LunaNexa H3 图生视频（首帧 512×512）\n\n跑在 LunaNexa 的**共享 H3 推理服务**上：不下载权重，也不占本机显存。\n\n- **路径：** FL2VA（首/末帧 + 文本）→ `http://192.168.2.175:4174/h3/v1`，模型 `/models/MiniMax-H3/FL2VA`\n- **喂图方式：** 左侧「首帧图」节点（`LoadImage`）已经接到「生成视频」的 `image` 输入。**你给的图就是成片的第 0 帧**，视频从它接着往下生成\n- **图放哪：** 直接在节点上上传，或把文件放进 `/workspace/input`（文件选择器浏览的就是这里）\n- **和「参考图」的区别：** 这一条是首帧约束（第 0 帧必须是你这张图）；参考图那条（Ref2VA）只是内容/风格参考，不保证从这一帧开始\n- **规格：** 512×512、25 帧（约 1.0 秒）、24 fps、8 步、不生成声音；想更长要按 17 帧栅格给（124 帧 ≈ 5 秒，481 帧 ≈ 20 秒）\n- **`max_wait_seconds` = 900**\n\n平台 nginx 会注入 bearer token，**不需要 API key**。"
+        "## LunaNexa H3 图生视频（首帧 512×512）\n\n跑在 LunaNexa 的**共享 H3 推理服务**上：不下载权重，也不占本机显存。\n\n- **路径：** FL2VA（首/末帧 + 文本）→ `http://192.168.2.175:8081/h3/v1`，模型 `/models/MiniMax-H3/FL2VA`\n- **喂图方式：** 左侧「首帧图」节点（`LoadImage`）已经接到「生成视频」的 `image` 输入。**你给的图就是成片的第 0 帧**，视频从它接着往下生成\n- **图放哪：** 直接在节点上上传，或把文件放进 `/workspace/input`（文件选择器浏览的就是这里）\n- **和「参考图」的区别：** 这一条是首帧约束（第 0 帧必须是你这张图）；参考图那条（Ref2VA）只是内容/风格参考，不保证从这一帧开始\n- **规格：** 512×512、25 帧（约 1.0 秒）、24 fps、8 步、不生成声音；想更长要按 17 帧栅格给（124 帧 ≈ 5 秒，481 帧 ≈ 20 秒）\n- **`max_wait_seconds` = 900**\n\n平台 nginx 会注入 bearer token，**不需要 API key**。"
       ],
       "color": "#432",
       "bgcolor": "#000"
@@ -293,7 +293,7 @@
         "Node name for S&R": "VLLMOmniGenerateVideo"
       },
       "widgets_values": [
-        "http://192.168.2.175:4174/h3/v1",
+        "http://192.168.2.175:8081/h3/v1",
         "/models/MiniMax-H3/FL2VA",
         "A red vintage motorcycle parked on a wet cobblestone street at dusk, neon sign reflections in the puddles, slow push-in camera move, cinematic, 35mm film.",
         "",
@@ -305,7 +305,7 @@
         900
       ],
       "widgets_values_named": {
-        "url": "http://192.168.2.175:4174/h3/v1",
+        "url": "http://192.168.2.175:8081/h3/v1",
         "model": "/models/MiniMax-H3/FL2VA",
         "prompt": "A red vintage motorcycle parked on a wet cobblestone street at dusk, neon sign reflections in the puddles, slow push-in camera move, cinematic, 35mm film.",
         "negative_prompt": "",

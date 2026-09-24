@@ -23,7 +23,7 @@
       "title": "LunaNexa H3 图生视频（参考图 512×512）",
       "properties": {},
       "widgets_values": [
-        "## LunaNexa H3 图生视频（参考图 512×512）\n\n跑在 LunaNexa 的**共享 H3 推理服务**上：不下载权重，也不占本机显存。\n\n- **路径：** Ref2VA（参考图 + 文本）→ `http://192.168.2.175:4174/h3r/v1`，模型 `/models/MiniMax-H3/Ref2VA`\n- **和「首帧」的区别：** 首帧那条路（FL2VA）把你给的图当成成片的**第 0 帧**；这里（Ref2VA）图是**内容/风格参考**，成片由它生成，不保证从这一帧开始\n- **喂图方式：** 左侧「参考图」节点（`LoadImage`）已接到「生成视频」的 `image` 输入；文件选择器浏览 `/workspace/input`\n- **规格：** 512×512、25 帧（约 1.0 秒）、24 fps、8 步、不生成声音\n- **必须有参考图。** Ref2VA 同时需要音频条件；当前免登录演示会自动补一段与视频等长的静音音频，无需另传音频。\n- **`max_wait_seconds` = 900**\n\n平台 nginx 会注入 bearer token，**不需要 API key**。"
+        "## LunaNexa H3 图生视频（参考图 512×512）\n\n跑在 LunaNexa 的**共享 H3 推理服务**上：不下载权重，也不占本机显存。\n\n- **路径：** Ref2VA（参考图 + 文本）→ `http://192.168.2.175:8081/h3r/v1`，模型 `/models/MiniMax-H3/Ref2VA`\n- **和「首帧」的区别：** 首帧那条路（FL2VA）把你给的图当成成片的**第 0 帧**；这里（Ref2VA）图是**内容/风格参考**，成片由它生成，不保证从这一帧开始\n- **喂图方式：** 左侧「参考图」节点（`LoadImage`）已接到「生成视频」的 `image` 输入；文件选择器浏览 `/workspace/input`\n- **规格：** 512×512、25 帧（约 1.0 秒）、24 fps、8 步、不生成声音\n- **必须有参考图。** Ref2VA 同时需要音频条件；当前免登录演示会自动补一段与视频等长的静音音频，无需另传音频。\n- **`max_wait_seconds` = 900**\n\n平台 nginx 会注入 bearer token，**不需要 API key**。"
       ],
       "color": "#432",
       "bgcolor": "#000"
@@ -293,7 +293,7 @@
         "Node name for S&R": "VLLMOmniGenerateVideo"
       },
       "widgets_values": [
-        "http://192.168.2.175:4174/h3r/v1",
+        "http://192.168.2.175:8081/h3r/v1",
         "/models/MiniMax-H3/Ref2VA",
         "A red vintage motorcycle parked on a wet cobblestone street at dusk, neon sign reflections in the puddles, slow push-in camera move, cinematic, 35mm film.",
         "",
@@ -305,7 +305,7 @@
         900
       ],
       "widgets_values_named": {
-        "url": "http://192.168.2.175:4174/h3r/v1",
+        "url": "http://192.168.2.175:8081/h3r/v1",
         "model": "/models/MiniMax-H3/Ref2VA",
         "prompt": "A red vintage motorcycle parked on a wet cobblestone street at dusk, neon sign reflections in the puddles, slow push-in camera move, cinematic, 35mm film.",
         "negative_prompt": "",
