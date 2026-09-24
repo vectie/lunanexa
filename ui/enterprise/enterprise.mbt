@@ -2472,11 +2472,6 @@ fn account_access_view(
           },
         ),
       ]),
-      if state.trial is Some(_) {
-        @html.p(message(state.locale, TrialSecret))
-      } else {
-        @html.nothing
-      },
       if state.api_keys.length() == 0 {
         @html.p(
           class="empty-state",
