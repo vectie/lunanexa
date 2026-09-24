@@ -457,23 +457,42 @@ async fn ensure_certificate(
 }
 
 ///|
+async fn read_node_inventory(
+  path : String,
+  node_id : String,
+) -> @contracts.NodeInventory {
+  let inventory : @contracts.NodeInventory = @json.from_json(
+    @json.parse(@fs.read_file(path).text()),
+  )
+  if inventory.node_id != node_id {
+    raise Failure::Failure("inventory belongs to a different node identity")
+  }
+  inventory
+}
+
+///|
 async fn send_heartbeat(
   base : String,
   node_id : String,
   token : String,
-  inventory : @contracts.NodeInventory,
   agent : @node_agent.NodeAgent,
   materializer : @node_agent.ArtifactMaterializer,
 ) -> Unit {
   let runtime_endpoints = agent.runtime_endpoints(@async.now())
+  // ConfigMap volumes update in place. Re-read the declared inventory for
+  // every heartbeat so placement labels do not remain stale until a restart.
+  let declared = read_node_inventory(
+    environment("LUNANEXA_NODE_INVENTORY_PATH"),
+    node_id,
+  )
   let measured_inventory = @node_agent.collect_linux_host_resources().inventory(
-    inventory,
+    declared,
   ) catch {
     _ => {
       println(
         "LunaNexa host resource measurement unavailable; heartbeat omits paid-capacity claims",
       )
-      @node_agent.inventory_without_host_resources(inventory)
+      @node_agent.inventory_without_host_resources(declared)
     }
   }
   let unsigned : @contracts.NodeHeartbeat = {
@@ -511,7 +530,6 @@ async fn materialize_while_heartbeating(
   base : String,
   node_id : String,
   token : String,
-  inventory : @contracts.NodeInventory,
   agent : @node_agent.NodeAgent,
   materializer : @node_agent.ArtifactMaterializer,
   artifact_verifier : @node_agent.CosignArtifactSignatureVerifier,
@@ -523,7 +541,7 @@ async fn materialize_while_heartbeating(
       materializer.materialize(assignment, artifact_verifier)
     })
     for ;; {
-      send_heartbeat(base, node_id, token, inventory, agent, materializer)
+      send_heartbeat(base, node_id, token, agent, materializer)
       let result = {
         errdefer send_artifact_progress(
           base,
@@ -654,8 +672,8 @@ async fn reconcile_once(
     if agent.reconcile(assignment, verifier, now) {
       try {
         let artifact = materialize_while_heartbeating(
-          base, node_id, token, inventory, agent, materializer, artifact_verifier,
-          assignment, materialization_heartbeat_interval_ms,
+          base, node_id, token, agent, materializer, artifact_verifier, assignment,
+          materialization_heartbeat_interval_ms,
         )
         if assignment.lease_expires_unix_ms <= @async.now() {
           agent.observe_runtime(assignment.assignment_id, Failed)
@@ -709,7 +727,7 @@ async fn reconcile_once(
       .unwrap_or([]),
   )
   persist_agent(state_path, agent)
-  send_heartbeat(base, node_id, token, inventory, agent, materializer)
+  send_heartbeat(base, node_id, token, agent, materializer)
   let timestamp_unix_ms = @async.now()
   let samples : Array[@contracts.TelemetrySample] = []
   let sensor_binary = @env.get_env_var("LUNANEXA_NVIDIA_SMI_BINARY").unwrap_or(
@@ -889,14 +907,10 @@ async fn main {
     "lunanexa-node-certificate.json",
   )
   let public_key_ref = environment("LUNANEXA_NODE_PUBLIC_KEY_REF")
-  let inventory : @contracts.NodeInventory = @json.from_json(
-    @json.parse(
-      @fs.read_file(environment("LUNANEXA_NODE_INVENTORY_PATH")).text(),
-    ),
+  let inventory = read_node_inventory(
+    environment("LUNANEXA_NODE_INVENTORY_PATH"),
+    node_id,
   )
-  if inventory.node_id != node_id {
-    raise Failure::Failure("inventory belongs to a different node identity")
-  }
   let state_path = @env.get_env_var("LUNANEXA_NODE_STATE_PATH").unwrap_or(
     "lunanexa-node-state.json",
   )

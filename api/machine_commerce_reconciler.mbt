@@ -55,6 +55,28 @@ let machine_usage_pool_label : String = "lunanexa.io/usage-pool"
 ///|
 let machine_enterprise_pool : String = "enterprise-dedicated"
 
+///| Spark/GB10 GPUs share host memory. A healthy accelerator and declared
+
+///|
+/// capacity do not mean the whole node is free while an external model runs.
+fn machine_unified_memory_ready(
+  architecture : String,
+  node_id : String,
+  total_mib : Int64,
+  samples : Array[@contracts.TelemetrySample],
+  now_unix_ms : Int64,
+  maximum_age_ms : Int64,
+) -> Bool {
+  if architecture != "nvidia-sm121" && architecture != "nvidia-gb10" {
+    return true
+  }
+  observed_available_memory_mib(samples, node_id, now_unix_ms, maximum_age_ms).map_or(
+    false,
+    // Allow for the host OS, but do not sell a node with model weights loaded.
+    available => available.to_int64() * 100L >= total_mib * 95L,
+  )
+}
+
 ///| Returns controller-enrolled nodes that satisfy the purchased SKU itself.
 
 ///| Missing region labels fail closed; there is no implicit cross-region
@@ -67,6 +89,9 @@ async fn ApiService::machine_offering_nodes(
   now_unix_ms : Int64,
 ) -> Array[String] {
   let candidates : Array[String] = []
+  let samples = self.telemetry.map_or([], telemetry => {
+    telemetry.snapshot().samples
+  })
   for heartbeat in self.store.heartbeats() {
     if self.scheduler is Some(scheduler) &&
       scheduler.node_is_reserved(heartbeat.node_id) {
@@ -96,6 +121,14 @@ async fn ApiService::machine_offering_nodes(
       Some(offering.region) &&
       heartbeat.inventory.labels.get(machine_usage_pool_label) ==
       Some(machine_enterprise_pool) &&
+      machine_unified_memory_ready(
+        offering.accelerator_class,
+        heartbeat.node_id,
+        host.memory_total_mib,
+        samples,
+        now_unix_ms,
+        self.global_settings.control_timing.heartbeat_timeout_ms,
+      ) &&
       healthy_accelerators.length().to_int64() >= offering.accelerator_count &&
       !lease_blocked {
       candidates.push(heartbeat.node_id)

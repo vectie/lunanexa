@@ -145,6 +145,13 @@ test "enterprise machine route shows safe live access without topology" {
 test "lease form requires every bounded field" {
   let state = @enterprise.demo_state()
   assert_true(@enterprise.lease_form_valid(state))
+  assert_false(@enterprise.lease_form_valid({ ..state, agreements: [], }))
+  let blocked = @enterprise.render({
+    ..state,
+    route: LeaseRequests,
+    agreements: [],
+  })
+  assert_true(blocked.contains("An executed machine agreement is required"))
   assert_false(@enterprise.lease_form_valid({ ..state, unix_username: "", }))
   assert_false(
     @enterprise.lease_form_valid({ ..state, unix_username: "root", }),
@@ -892,9 +899,30 @@ test "terms unavailable keeps catalog visible but blocks clickwrap ordering" {
     },
   })
   assert_true(html.contains("Review price and scope"))
-  assert_true(html.contains("Machine terms are unavailable"))
+  assert_true(
+    html.contains(
+      "Machine ordering is closed until the platform publishes reviewed terms",
+    ),
+  )
   assert_true(html.contains("disabled"))
   assert_true(html.contains("Create order"))
+}
+
+///|
+test "bare GPU self-service pricing is distinguished from undertaking tariff" {
+  let state = @enterprise.demo_state()
+  let html = @enterprise.render({
+    ..state,
+    route: SelfService,
+    self_service: {
+      ..state.self_service,
+      selected_product: Some(BareGpu),
+      step: Capacity,
+    },
+  })
+  assert_true(
+    html.contains("The undertaking rental route has its own quoted tariff"),
+  )
 }
 
 ///|
