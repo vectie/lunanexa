@@ -3187,8 +3187,11 @@ fn models_view(
     } else {
       @html.div(class="model-grid", cards)
     },
-    if state.deliveries.options.templates.any(value => value.kind == "ModelApi") ||
-      state.deliveries.operations.any(value => value.kind == "ModelApi") {
+    if state.deliveries.operations.any(value => value.kind == "ModelApi") ||
+      (
+        !state.deliveries.options.reservations.is_empty() &&
+        state.deliveries.options.templates.any(value => value.kind == "ModelApi")
+      ) {
       delivery_panel_view(state.deliveries, state.locale, emit, "ModelApi")
     } else {
       @html.nothing
@@ -3424,8 +3427,8 @@ fn desktop_ide_view(
     client.client_id == "comfyui" {
     copy(
       state.locale,
-      "ComfyUI needs an active GPU delivery. Select an authorized resource and published template in Exclusive resource services below, then open it from that delivery. A workspace lease alone does not reserve a machine.",
-      "ComfyUI 需要有效的 GPU 交付。请在下方「独占资源服务」选择已授权资源和已发布模板，再从该交付打开。仅有工作区租约不会预留机器。",
+      "ComfyUI needs an active GPU delivery. Select an authorized resource and published template in Dedicated application workspaces below, then open it from that delivery. A workspace lease alone does not reserve a machine.",
+      "ComfyUI 需要有效的 GPU 交付。请在下方「PaaS · 专属应用工作区」选择已授权资源和已发布模板，再从该交付打开。仅有工作区租约不会预留机器。",
     )
   } else if !contract_ready {
     enterprise_copy(state.locale, CompleteTheMasterleaseEverythingElseStays)
@@ -3485,7 +3488,11 @@ fn desktop_ide_view(
     } else {
       @html.span("")
     },
-    if !is_comfyui {
+    if !is_comfyui &&
+      (
+        state.webide_order_id is Some(_) ||
+        webide_orders(state).any(order => order.kind == DedicatedMaaS)
+      ) {
       @html.section(class="workflow-panel", [
         @html.label(
           for_="webide-model-source",
@@ -3580,8 +3587,13 @@ fn desktop_ide_view(
       @html.nothing
     },
     if is_comfyui ||
-      state.deliveries.options.templates.any(value => value.kind == "Workspace") ||
-      state.deliveries.operations.any(value => value.kind == "Workspace") {
+      state.deliveries.operations.any(value => value.kind == "Workspace") ||
+      (
+        !state.deliveries.options.reservations.is_empty() &&
+        state.deliveries.options.templates.any(value => {
+          value.kind == "Workspace"
+        })
+      ) {
       delivery_panel_view(state.deliveries, state.locale, emit, "Workspace")
     } else {
       @html.nothing

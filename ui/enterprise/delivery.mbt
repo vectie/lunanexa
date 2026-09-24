@@ -349,13 +349,20 @@ fn delivery_panel_view(
     if panel.error is Some(_) && panel.options.reservations.is_empty() {
       @html.nothing
     } else if panel.loaded && panel.options.reservations.is_empty() {
-      @html.p(
-        class="empty",
-        copy(
-          locale, "No active exclusive resource authorization. Ask your administrator to authorize resources, or complete your machine order.",
-          "暂无有效的独占资源授权。请管理员授权资源，或完成机器订单。",
+      @html.div(class="empty", [
+        @html.p(
+          copy(
+            locale, "No active exclusive resource authorization. Ask your administrator to authorize resources, or complete your machine order.",
+            "暂无有效的独占资源授权。请管理员授权资源，或完成机器订单。",
+          ),
         ),
-      )
+        @html.button(
+          type_="button",
+          class="quiet-button",
+          on_click=command(emit, Navigate(LeaseRequests)),
+          copy(locale, "Request resources", "申请资源"),
+        ),
+      ])
     } else if panel.loaded && templates.is_empty() {
       @html.p(
         class="empty",
