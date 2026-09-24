@@ -42,18 +42,26 @@ pub async fn WorkspaceHost::redeem(
   code : String,
 ) -> @webide.Grant {
   @async.with_timeout(10000, () => {
+    // Never log the one-time code, scoped key, or response body. Fixed stages
+    // and the HTTP status are sufficient to diagnose deployment wiring.
+    let mut stage = "TLS client initialization"
+    errdefer eprintln("WebIDE controller redemption failed during " + stage)
     let client = controller_client(self.config.controller_origin)
     defer client.close()
     let body : Json = { "client_id": client_id, "handoff_code": code }
+    stage = "controller POST"
     let response = client.post("/v1/client-handoffs:redeem", body, extra_headers={
       "content-type": "application/json",
     })
     if response.code != 200 {
+      eprintln("WebIDE controller redemption HTTP status {response.code}")
       raise HostError::ControllerRejected
     }
+    stage = "redemption response parsing"
     let result : Redeemed = @json.from_json(
       @json.parse(@utf8.decode(limited(client, 32768))),
     )
+    stage = "client and public API origin validation"
     // The provider route is deployment-owned at both ends. A stale catalog must
     // not silently send a credential to another origin or bypass its gateway.
     if result.client_id != client_id ||

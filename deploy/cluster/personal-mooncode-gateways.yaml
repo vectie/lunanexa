@@ -1,0 +1,161 @@
+# Both public ports terminate at account-bound gateways; workspace Pods and
+# their PVCs remain private and per subject. Image digests are pinned to the
+# verified acceptance registry artifacts.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: personal-mooncode-runtime
+  namespace: lunanexa-acceptance-example
+data:
+  host.json: |
+    {
+      "namespace_name": "lunanexa-acceptance-example",
+      "controller_namespace": "lunanexa-acceptance-example",
+      "model_gateway_namespace": "lunanexa-acceptance-example",
+      "comfyui_image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/acceptance/comfyui-workspace@sha256:489212562530724c6699f312577e9777bc800fd271556c7b5d08f07b8245a59e",
+      "model_proxy_image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/acceptance/webide-runtime@sha256:72e24ca913a9f8464bf186b9d87f27b30b00d6c89c336cebd58394a0dd06dd34",
+      "storage_class": "lunanexa-workspaces-rwx",
+      "storage_access_mode": "ReadWriteMany",
+      "storage_gib": 20,
+      "cpu_millis": 1000,
+      "memory_mib": 4096,
+      "controller_origin": "https://controller.lunanexa-acceptance-example.svc.cluster.local:5888",
+      "model_gateway_origin": "https://moongate.lunanexa-acceptance-example.svc.cluster.local:5883",
+      "public_api_base_url": "https://suanli.example.com:8443/user/v1",
+      "trusted_ca_config_map": "internal-gateway-ca",
+      "controller_port": 5888,
+      "model_gateway_port": 5883,
+      "kubernetes_origin": "https://kubernetes.default.svc",
+      "kubernetes_ca_file": "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
+      "kubernetes_token_file": "/var/run/secrets/kubernetes.io/serviceaccount/token"
+    }
+  desktop-container.json: |
+    {
+      "image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/acceptance/moondesk-hosted@sha256:c91f29fd14b965cad07a2492881ce604e6764e6c43c038030965be1b8a63e10a",
+      "command": ["/usr/local/bin/moondesk"],
+      "args": ["serve", "/workspace", "--ui", "/opt/moondesk/ui", "--host", "0.0.0.0", "--port", "8188"],
+      "port": 8188,
+      "cpu_millis": 2000,
+      "memory_mib": 4096,
+      "gpu": false
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mooncode-member-a-gateway
+  namespace: lunanexa-acceptance-example
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {app: mooncode-member-a-gateway}
+  template:
+    metadata:
+      labels:
+        app: mooncode-member-a-gateway
+        app.kubernetes.io/name: lunanexa-webide-gateway
+    spec:
+      serviceAccountName: webide-gateway
+      automountServiceAccountToken: true
+      nodeSelector: {kubernetes.io/hostname: ubuntu}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: gateway
+          image: lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/acceptance/webide-runtime@sha256:72e24ca913a9f8464bf186b9d87f27b30b00d6c89c336cebd58394a0dd06dd34
+          imagePullPolicy: IfNotPresent
+          ports:
+            - {name: http, containerPort: 8082, hostIP: 192.0.2.175, hostPort: 5002}
+          env:
+            - {name: LUNANEXA_WEBIDE_BIND, value: "0.0.0.0:8082"}
+            - {name: LUNANEXA_WEBIDE_CLIENT_ID, value: desktop-workspace}
+            - {name: LUNANEXA_WEBIDE_SUBJECT_REF, value: example-user-ref}
+            - {name: LUNANEXA_WEBIDE_CONFIG_FILE, value: /config/host.json}
+            - {name: LUNANEXA_WEBIDE_CONTAINER_FILE, value: /config/desktop-container.json}
+            - {name: LUNANEXA_WEBIDE_REQUIRE_EXCLUSIVE, value: "false"}
+            - {name: LUNANEXA_WEBIDE_PUBLIC_ORIGIN, value: "http://203.0.113.10:5002"}
+            - {name: LUNANEXA_WEBIDE_ALLOW_INSECURE_PUBLIC_HTTP, value: "true"}
+            - {name: SSL_CERT_FILE, value: /run/platform-trust/ca-bundle.crt}
+          volumeMounts:
+            - {name: config, mountPath: /config, readOnly: true}
+            - {name: trust, mountPath: /run/platform-trust, readOnly: true}
+          readinessProbe:
+            tcpSocket: {port: 8082}
+            periodSeconds: 5
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 1000m, memory: 1024Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+      volumes:
+        - name: config
+          configMap: {name: personal-mooncode-runtime}
+        - name: trust
+          configMap: {name: internal-gateway-ca}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mooncode-wangzhixiang-gateway
+  namespace: lunanexa-acceptance-example
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {app: mooncode-wangzhixiang-gateway}
+  template:
+    metadata:
+      labels:
+        app: mooncode-wangzhixiang-gateway
+        app.kubernetes.io/name: lunanexa-webide-gateway
+    spec:
+      serviceAccountName: webide-gateway
+      automountServiceAccountToken: true
+      nodeSelector: {kubernetes.io/hostname: ubuntu}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: gateway
+          image: lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/acceptance/webide-runtime@sha256:72e24ca913a9f8464bf186b9d87f27b30b00d6c89c336cebd58394a0dd06dd34
+          imagePullPolicy: IfNotPresent
+          ports:
+            - {name: http, containerPort: 8082, hostIP: 192.0.2.175, hostPort: 5003}
+          env:
+            - {name: LUNANEXA_WEBIDE_BIND, value: "0.0.0.0:8082"}
+            - {name: LUNANEXA_WEBIDE_CLIENT_ID, value: desktop-workspace}
+            - {name: LUNANEXA_WEBIDE_SUBJECT_REF, value: example-user-ref}
+            - {name: LUNANEXA_WEBIDE_CONFIG_FILE, value: /config/host.json}
+            - {name: LUNANEXA_WEBIDE_CONTAINER_FILE, value: /config/desktop-container.json}
+            - {name: LUNANEXA_WEBIDE_REQUIRE_EXCLUSIVE, value: "false"}
+            - {name: LUNANEXA_WEBIDE_PUBLIC_ORIGIN, value: "http://203.0.113.10:5003"}
+            - {name: LUNANEXA_WEBIDE_ALLOW_INSECURE_PUBLIC_HTTP, value: "true"}
+            - {name: SSL_CERT_FILE, value: /run/platform-trust/ca-bundle.crt}
+          volumeMounts:
+            - {name: config, mountPath: /config, readOnly: true}
+            - {name: trust, mountPath: /run/platform-trust, readOnly: true}
+          readinessProbe:
+            tcpSocket: {port: 8082}
+            periodSeconds: 5
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 1000m, memory: 1024Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+      volumes:
+        - name: config
+          configMap: {name: personal-mooncode-runtime}
+        - name: trust
+          configMap: {name: internal-gateway-ca}

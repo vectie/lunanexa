@@ -85,12 +85,16 @@ async test "stop drains only the selected workspace and does not delete persiste
       } else {
         assert_eq(verb, Get)
         assert_true(path.contains("workspace%3D\{name}"))
-        (200, { "items": [] })
+        if path.contains("/deployments?") {
+          (200, { "items": [{ "metadata": { "name": name } }] })
+        } else {
+          (200, { "items": [] })
+        }
       }
     }),
   }
   host.stop(id)
-  assert_eq(requests.length(), 2)
+  assert_eq(requests.length(), 3)
   assert_false(requests.any(path => path.contains("persistentvolumeclaims")))
 }
 
@@ -226,9 +230,12 @@ test "two company members get separate hosted MoonDesk pods and PVCs" {
   assert_true(workload.contains("MOONDESK_TRUSTED_WORKSPACE_GATEWAY"))
   assert_true(workload.contains("MOONDESK_EXECUTION_SANDBOX_CONFIG"))
   assert_true(workload.contains("initialize-desktop-control"))
+  assert_true(workload.contains("\"shareProcessNamespace\":true"))
   assert_true(workload.contains("moondesk-private"))
-  assert_true(workload.contains("/v1/hosted-ready"))
-  assert_true(workload.contains("/v1/models"))
+  assert_true(workload.contains("/dev/tcp/127.0.0.1/15721"))
+  assert_true(workload.contains("/dev/tcp/127.0.0.1/8090"))
+  assert_true(workload.contains("/dev/tcp/127.0.0.1/4188"))
+  assert_false(workload.contains("/v1/hosted-ready"))
   assert_false(workload.contains("nvidia.com/gpu"))
   assert_false(workload.contains("reservation-"))
   assert_true(first_resources[3].1.stringify().contains("\"targetPort\":4188"))

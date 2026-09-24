@@ -61,7 +61,7 @@ async fn main {
       },
       code => {
         // Fixed stage names only: exceptions may contain credentials or JSON.
-        errdefer println("WebIDE launch failed at controller redemption")
+        errdefer eprintln("WebIDE launch failed at controller redemption")
         let grant = host.redeem(client_id, code)
         if expected_subject != "" && grant.subject_ref != expected_subject {
           raise @webide.BridgeError::InvalidGrant
@@ -71,12 +71,12 @@ async fn main {
       grant => {
         let authorized = host.authorize(grant)
         if !authorized {
-          println("WebIDE authority check rejected")
+          eprintln("WebIDE authority check rejected")
         }
         authorized
       },
       (id, grant) => {
-        errdefer println("WebIDE launch failed at workspace provisioning")
+        errdefer eprintln("WebIDE launch failed at workspace provisioning")
         host.provision(id, grant, container?)
       },
       allow_model_free_workspace=require_exclusive && container is Some(_),
@@ -94,7 +94,7 @@ async fn main {
         while true {
           host.reconcile() catch {
             _ =>
-              println(
+              eprintln(
                 "WebIDE reconciliation incomplete; retrying without releasing authority",
               )
           }

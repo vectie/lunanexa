@@ -294,6 +294,19 @@ priv struct DesktopClientResponse {
 } derive(FromJson)
 
 ///|
+/// The PaaS entry should open the personal workspace first. ComfyUI stays
+/// selectable, but it requires a separate active GPU delivery.
+fn preferred_personal_webide(
+  clients : Array[@enterprise_ui.EnterpriseDesktopClient],
+) -> @enterprise_ui.EnterpriseDesktopClient? {
+  match
+    clients.iter().find_first(client => client.client_id == "desktop-workspace") {
+    Some(client) => Some(client)
+    None => clients.get(0)
+  }
+}
+
+///|
 priv struct DesktopClientHandoffLaunch {
   client_id : String
   display_name : String
@@ -5659,9 +5672,9 @@ fn update(
                 .filter(client => client.client_id == selected.client_id)
                 .get(0) {
                 Some(client) => Some(client)
-                None => desktop_client.get(0)
+                None => preferred_personal_webide(desktop_client)
               }
-            None => desktop_client.get(0)
+            None => preferred_personal_webide(desktop_client)
           },
           project_id: match active_trial {
             Some(value) if @enterprise_ui.selected_organization_header(
