@@ -28,13 +28,21 @@ priv struct Redeemed {
 } derive(FromJson)
 
 ///|
+async fn controller_client(origin : String) -> @http.Client {
+  match @env.get_env_var("SSL_CERT_FILE") {
+    Some(path) if path != "" => @http.Client(origin, trust=CustomPemFile(path))
+    _ => @http.Client(origin)
+  }
+}
+
+///|
 pub async fn WorkspaceHost::redeem(
   self : WorkspaceHost,
   client_id : String,
   code : String,
 ) -> @webide.Grant {
   @async.with_timeout(10000, () => {
-    let client = @http.Client(self.config.controller_origin)
+    let client = controller_client(self.config.controller_origin)
     defer client.close()
     let body : Json = { "client_id": client_id, "handoff_code": code }
     let response = client.post("/v1/client-handoffs:redeem", body, extra_headers={
@@ -97,7 +105,7 @@ async fn authorize_grant(
     return false
   }
   @async.with_timeout(5000, () => {
-    let client = @http.Client(controller_origin)
+    let client = controller_client(controller_origin)
     defer client.close()
     let response = client.get("/v1/models", extra_headers={
       "authorization": "Bearer " + grant.api_secret,

@@ -1,16 +1,16 @@
 [
   {
-    "client_id": "desktop-workspace",
-    "display_name": "MoonDesk / MoonCode",
-    "launch_uri": "http://127.0.0.1:4188/?mode=mooncode",
+    "client_id": "comfyui",
+    "display_name": "ComfyUI",
+    "launch_uri": "http://203.0.113.10:5005/",
     "public_api_base_url": "https://suanli.example.com:8443/user/v1",
     "handoff_lifetime_ms": "120000",
     "maximum_requests": "100000"
   },
   {
-    "client_id": "comfyui",
-    "display_name": "ComfyUI",
-    "launch_uri": "http://203.0.113.10:5005/",
+    "client_id": "desktop-workspace",
+    "display_name": "MoonDesk / MoonCode",
+    "launch_uri": "http://203.0.113.10:5002/connect",
     "public_api_base_url": "https://suanli.example.com:8443/user/v1",
     "handoff_lifetime_ms": "120000",
     "maximum_requests": "100000"

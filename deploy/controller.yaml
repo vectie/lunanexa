@@ -82,6 +82,12 @@ spec:
                   name: lunanexa-control-config
                   key: client-launch-catalog
                   optional: true
+            - name: LUNANEXA_PERSONAL_DESKTOP_LAUNCHES_JSON
+              valueFrom:
+                configMapKeyRef:
+                  name: lunanexa-control-config
+                  key: personal-desktop-launches
+                  optional: true
             - name: LUNANEXA_CLIENT_HANDOFF_LIFETIME_MS
               value: "120000"
             - name: LUNANEXA_CLIENT_MAXIMUM_REQUESTS

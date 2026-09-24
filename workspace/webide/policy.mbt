@@ -114,6 +114,11 @@ pub fn workspace_id(grant : Grant) -> String {
     grant.organization_id,
     grant.project_id,
   ]
+  // Preserve existing ComfyUI volume names while giving every other hosted
+  // application its own process and PVC, even for the same person and project.
+  if grant.client_id != "comfyui" {
+    identity.push(grant.client_id)
+  }
   if grant.delivery_id is Some(delivery) {
     identity.push(grant.client_id)
     identity.push(delivery)
@@ -209,7 +214,11 @@ fn Bridge::cookie_name(self : Bridge, challenge : Bool) -> String {
 ///|
 /// This gateway is deliberately not an unrestricted HTTP tunnel. Administrative
 /// extension installation and filesystem administration stay operator-only.
-fn allowed_path(verb : @http.RequestMethod, path : String) -> Bool {
+fn allowed_path(
+  verb : @http.RequestMethod,
+  path : String,
+  client_id? : String = "comfyui",
+) -> Bool {
   if path.length() > 4096 ||
     !path.has_prefix("/") ||
     path.has_prefix("//") ||
@@ -232,6 +241,15 @@ fn allowed_path(verb : @http.RequestMethod, path : String) -> Bool {
     route[4:].to_owned()
   } else {
     route
+  }
+  if client_id == "desktop-workspace" {
+    // The entire application is confined to the caller's own pod and PVC.
+    // Keep the common traversal checks above and never expose a generic
+    // gateway to any other client profile.
+    return match verb {
+      Get | Head | Post | Put | Patch | Delete => true
+      _ => false
+    }
   }
   match verb {
     Get | Head =>

@@ -271,6 +271,66 @@ async fn check_workspace_handoff(private_cloud : Bool) -> Unit {
   let service = service.with_client_launch_catalog([
     desktop_config, comfy_config,
   ])
+  let blocked_local = service.with_client_launch_catalog([
+    { ..desktop_config, client_id: "desktop-workspace", },
+    comfy_config,
+  ])
+  let blocked = blocked_local.handle(
+    Post,
+    "/v1/portal/self/client-handoffs",
+    {
+      "Authorization": "Bearer inference-token",
+      "X-LunaNexa-Subject": "subject-client",
+    },
+    (
+      {
+        "request_id": "blocked-local-desktop",
+        "client_id": "desktop-workspace",
+        "project_id": "project-client",
+        "allowed_models": ["text.default"],
+      } : Json).stringify(),
+  )
+  assert_eq(blocked.status, 503)
+  assert_true(blocked.body.contains("PersonalWorkspaceNotConfigured"))
+  let personal = blocked_local.with_personal_desktop_launches(
+    [
+      {
+        subject_ref: "subject-client",
+        launch_uri: "http://198.51.100.5:5002/connect",
+      },
+      {
+        subject_ref: "subject-other",
+        launch_uri: "http://198.51.100.5:5003/connect",
+      },
+    ],
+    allowed_http_launch_origins=[
+      "http://198.51.100.5:5002", "http://198.51.100.5:5003",
+    ],
+  )
+  let personal_catalog = personal.handle(
+    Get,
+    "/v1/portal/self/clients",
+    enterprise_headers,
+    "",
+  )
+  assert_eq(personal_catalog.status, 200)
+  assert_true(personal_catalog.body.contains("198.51.100.5:5002/connect"))
+  assert_false(personal_catalog.body.contains("198.51.100.5:5003/connect"))
+  let personal_handoff = personal.handle(
+    Post,
+    "/v1/portal/self/client-handoffs",
+    enterprise_headers,
+    (
+      {
+        "request_id": "personal-desktop-client",
+        "client_id": "desktop-workspace",
+        "project_id": "project-client",
+        "allowed_models": ["text.default"],
+      } : Json).stringify(),
+  )
+  assert_eq(personal_handoff.status, 201)
+  assert_true(personal_handoff.body.contains("198.51.100.5:5002/connect"))
+  assert_false(personal_handoff.body.contains("198.51.100.5:5003/connect"))
   let catalog = service.handle(
     Get,
     "/v1/portal/self/clients",

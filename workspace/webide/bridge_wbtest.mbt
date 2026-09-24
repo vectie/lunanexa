@@ -71,6 +71,27 @@ test "workspace identities include every authority dimension without delimiter c
   }
   assert_false(workspace_id(first).contains("alice"))
   assert_false(workspace_id(first).contains("secret"))
+  let desktop = { ..first, client_id: "desktop-workspace", }
+  assert_true(workspace_id(desktop) != workspace_id(first))
+  assert_true(workspace_storage_id(desktop) != workspace_storage_id(first))
+  assert_true(
+    workspace_storage_id(desktop) !=
+    workspace_storage_id({ ..desktop, subject_ref: "bob", }),
+  )
+}
+
+///|
+test "personal desktop routes never turn another client into an open proxy" {
+  assert_true(
+    allowed_path(Post, "/api/mooncode/chat", client_id="desktop-workspace"),
+  )
+  assert_true(
+    allowed_path(Get, "/api/mooncode/sessions", client_id="desktop-workspace"),
+  )
+  assert_false(allowed_path(Get, "/api/mooncode/sessions"))
+  assert_false(
+    allowed_path(Get, "/api/../secrets", client_id="desktop-workspace"),
+  )
 }
 
 ///|

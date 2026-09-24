@@ -1103,6 +1103,11 @@ async fn main {
     Some(document) => @json.from_json(@json.parse(document))
     None => []
   }
+  let personal_desktop_launches : Array[@api.PersonalDesktopLaunch] = match
+    @env.get_env_var("LUNANEXA_PERSONAL_DESKTOP_LAUNCHES_JSON") {
+    Some(document) => @json.from_json(@json.parse(document))
+    None => []
+  }
   guard @client_handoff.valid_client_launch_catalog(
       client_launch_catalog,
       allowed_http_launch_origins~,
@@ -1423,6 +1428,10 @@ async fn main {
       client_launch_catalog,
       allowed_http_launch_origins~,
       allowed_http_api_origins~,
+    )
+    .with_personal_desktop_launches(
+      personal_desktop_launches,
+      allowed_http_launch_origins~,
     )
     .with_lease_helper_receipt_secret(lease_helper_receipt_secret)
     .with_portal_store(portal_store)

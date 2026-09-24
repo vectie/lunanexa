@@ -23,7 +23,7 @@ async fn WorkspaceHost::delivery_placement(
     return None
   }
   @async.with_timeout(5000, () => {
-    let client = @http.Client(self.config.controller_origin)
+    let client = controller_client(self.config.controller_origin)
     defer client.close()
     let response = client.get("/v1/workspace-delivery/placement", extra_headers={
       "authorization": "Bearer " + grant.api_secret,
@@ -101,7 +101,7 @@ async fn WorkspaceHost::report_delivery_ready(
     if observed.code != 200 {
       raise HostError::WorkspaceUnavailable
     }
-    let controller = @http.Client(self.config.controller_origin)
+    let controller = controller_client(self.config.controller_origin)
     defer controller.close()
     let recorded = controller.post(
       "/v1/workspace-delivery/ready",
@@ -134,7 +134,7 @@ async fn WorkspaceHost::report_delivery_starting(
     Some(value) if value.gpu => value.memory_mib
     _ => 0
   }
-  let client = @http.Client(self.config.controller_origin)
+  let client = controller_client(self.config.controller_origin)
   defer client.close()
   let response = client.post(
     "/v1/workspace-delivery/starting",
@@ -157,7 +157,7 @@ async fn WorkspaceHost::report_delivery_stopped(
   self : WorkspaceHost,
   id : String,
 ) -> Unit {
-  let client = @http.Client(self.config.controller_origin)
+  let client = controller_client(self.config.controller_origin)
   defer client.close()
   let response = client.post(
     "/v1/workspace-delivery/stopped",

@@ -102,11 +102,21 @@ async fn Bridge::connect_page(
   connection.send_response(200, "OK", extra_headers=headers, cookies=[
     self.browser_cookie(nonce, true, 120L),
   ])
+  let app_name = if self.config.client_id == "desktop-workspace" {
+    "MoonDesk"
+  } else {
+    "ComfyUI"
+  }
+  let connecting = if self.config.client_id == "desktop-workspace" {
+    "正在连接你的独立 MoonDesk 工作空间…"
+  } else {
+    "Connecting your isolated workspace…"
+  }
   // The handoff stays in the fragment until this same-origin POST. Remove it
   // before any network action, never reflect provider diagnostics or secrets.
   let page =
-    $|<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Open ComfyUI</title>
-    $|<main><h1>Open ComfyUI</h1><p role="status" id="status">Connecting your isolated workspace…</p><a href="/connect">Retry with a new launch from your portal</a></main>
+    $|<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Open \{app_name}</title>
+    $|<main><h1>Open \{app_name}</h1><p role="status" id="status">\{connecting}</p><a href="/connect">Retry with a new launch from your portal</a></main>
     $|<script nonce="\{nonce}">
     $|const fragment = new URLSearchParams(location.hash.slice(1));
     $|const code = fragment.get('lunanexa_handoff');
@@ -223,12 +233,16 @@ async fn Bridge::proxy_http(
 ) -> Unit {
   let headers : Map[String, String] = Map([])
   // Never forward browser cookies, Authorization, Host, forwarded identity or
-  // hop-by-hop headers. ComfyUI has no access to the browser session secret.
+  // hop-by-hop headers. The personal desktop sees only the private gateway's
+  // service origin, not the browser's public origin or session secret.
   for name in ["content-type", "accept", "range"] {
     match header(request.headers, name) {
       Some(value) => headers[name] = value
       None => ()
     }
+  }
+  if self.config.client_id == "desktop-workspace" {
+    headers["origin"] = session.backend.http_url
   }
   let payload = read_bounded(body, self.config.maximum_request_bytes)
   let upstream = @http.Client(session.backend.http_url)
@@ -286,7 +300,14 @@ async fn Bridge::proxy_socket(
   connection : @http.ServerConnection,
 ) -> Unit {
   let upstream = @async.with_timeout(self.config.request_timeout_ms, () => {
-    @websocket.Conn::connect(session.backend.websocket_url + request.path)
+    @websocket.Conn::connect(
+      session.backend.websocket_url + request.path,
+      headers=if self.config.client_id == "desktop-workspace" {
+        { "origin": session.backend.http_url }
+      } else {
+        Map([])
+      },
+    )
   })
   defer upstream.close()
   let browser = @websocket.Conn::from_http_server(request, connection)
@@ -371,12 +392,20 @@ pub async fn Bridge::handle(
       )
       return connection.end_response()
     }
-    if !allowed_path(request.meth, request.path) {
+    if !allowed_path(
+        request.meth,
+        request.path,
+        client_id=self.config.client_id,
+      ) {
       return reply(
         connection, 403, "Route is not available in managed workspaces.",
       )
     }
-    if request.path.split("?").next() == Some("/ws") {
+    if request.path.split("?").next() == Some("/ws") ||
+      (
+        self.config.client_id == "desktop-workspace" &&
+        header(request.headers, "upgrade") == Some("websocket")
+      ) {
       if request.meth != Get ||
         header(request.headers, "origin") != Some(origin) {
         raise BridgeError::Unauthorized

@@ -71,6 +71,14 @@ pub async fn WorkspaceHost::provision(
   if id != @webide.workspace_id(grant) || !self.authorize(grant) {
     raise HostError::ControllerRejected
   }
+  if grant.client_id == "desktop-workspace" && container is None {
+    raise HostError::InvalidConfiguration
+  }
+  if container is Some(runtime) &&
+    !self.require_exclusive &&
+    (runtime.gpu || grant.client_id != "desktop-workspace") {
+    raise HostError::ControllerRejected
+  }
   let placement = if self.require_exclusive {
     guard self.delivery_placement(grant, container?, validate_container=true)
       is Some((resolved, _)) else {

@@ -1,0 +1,10 @@
+[
+  {
+    "subject_ref": "example-user-ref",
+    "launch_uri": "http://203.0.113.10:5002/connect"
+  },
+  {
+    "subject_ref": "example-user-ref",
+    "launch_uri": "http://203.0.113.10:5003/connect"
+  }
+]

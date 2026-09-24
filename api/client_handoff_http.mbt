@@ -11,6 +11,21 @@ fn client_handoff_path(path : String) -> Bool {
 }
 
 ///|
+fn ApiService::client_launch_uri(
+  self : ApiService,
+  config : @client_handoff.ClientLaunchConfig,
+  subject_ref : String,
+) -> String? {
+  if config.client_id != "desktop-workspace" {
+    return Some(config.launch_uri)
+  }
+  self.personal_desktop_launches
+  .iter()
+  .find_first(launch => launch.subject_ref == subject_ref)
+  .map(launch => launch.launch_uri)
+}
+
+///|
 priv struct PortalClientHandoffIntent {
   request_id : String
   client_id : String
@@ -352,6 +367,7 @@ async fn ApiService::handle_client_handoff(
         subject_ref,
       )
       let views = configs.map(config => {
+        let launch_uri = self.client_launch_uri(config, subject_ref)
         let model_required = !self.gpu_container_offering.map_or(false, offering => {
           offering.client_id == config.client_id
         })
@@ -359,11 +375,14 @@ async fn ApiService::handle_client_handoff(
         if model_required && aliases.is_empty() {
           client_blockers.push("ServingModelRequired")
         }
+        if launch_uri is None {
+          client_blockers.push("PersonalWorkspaceNotConfigured")
+        }
         (
           {
             "client_id": config.client_id,
             "display_name": config.display_name,
-            "launch_uri": config.launch_uri,
+            "launch_uri": launch_uri.unwrap_or(""),
             "handoff_lifetime_ms": config.handoff_lifetime_ms.to_json(),
             "contract_required": !self.private_cloud_workspace_access,
             "contract_ready": contract_ready,
@@ -391,6 +410,12 @@ async fn ApiService::handle_client_handoff(
         (intent.allowed_models.length() > 0 || intent.delivery_id is Some(_)) else {
         return api_error(
           400, "InvalidRequest", "invalid client handoff intent", false,
+        )
+      }
+      guard self.client_launch_uri(config, subject_ref) is Some(launch_uri) else {
+        return api_error(
+          503, "PersonalWorkspaceNotConfigured", "a personal MoonDesk launch is not configured for this account",
+          false,
         )
       }
       let serving_aliases = self.serving_client_model_aliases(
@@ -713,7 +738,7 @@ async fn ApiService::handle_client_handoff(
         "handoff_id": issued.handoff_id,
         "client_id": issued.client_id,
         "display_name": config.display_name,
-        "launch_uri": config.launch_uri,
+        "launch_uri": launch_uri,
         "public_api_base_url": config.public_api_base_url,
         "handoff_code": issued.handoff_code,
         "redemption_path": issued.redemption_path,

@@ -82,6 +82,7 @@ pub struct ApiService {
   client_handoff_store : @client_handoff_store.ClientHandoffStore?
   client_launch_config : @client_handoff.ClientLaunchConfig?
   additional_client_launch_configs : Array[@client_handoff.ClientLaunchConfig]
+  personal_desktop_launches : Array[PersonalDesktopLaunch]
   lease_helper_receipt_secret : String
   machine_helper_adapter_evidence : @nodelease.MachineHelperAdapterReadinessEvidence?
   guide_diagnostics_token : String
@@ -188,6 +189,7 @@ pub fn ApiService::new(
     client_handoff_store: None,
     client_launch_config: None,
     additional_client_launch_configs: [],
+    personal_desktop_launches: [],
     lease_helper_receipt_secret: "",
     machine_helper_adapter_evidence: None,
     guide_diagnostics_token: "",
@@ -293,6 +295,7 @@ pub fn ApiService::with_registry(
     client_handoff_store: None,
     client_launch_config: None,
     additional_client_launch_configs: [],
+    personal_desktop_launches: [],
     lease_helper_receipt_secret: "",
     machine_helper_adapter_evidence: None,
     guide_diagnostics_token: "",
@@ -399,6 +402,7 @@ pub fn ApiService::with_services(
     client_handoff_store: None,
     client_launch_config: None,
     additional_client_launch_configs: [],
+    personal_desktop_launches: [],
     lease_helper_receipt_secret: "",
     machine_helper_adapter_evidence: None,
     guide_diagnostics_token: "",
@@ -507,6 +511,7 @@ pub fn ApiService::with_control_plane(
     client_handoff_store: None,
     client_launch_config: None,
     additional_client_launch_configs: [],
+    personal_desktop_launches: [],
     lease_helper_receipt_secret: "",
     machine_helper_adapter_evidence: None,
     guide_diagnostics_token: "",
@@ -1050,6 +1055,7 @@ pub fn ApiService::with_client_handoff_store(
     client_handoff_store: Some(client_handoff_store),
     client_launch_config: Some(client_launch_config),
     additional_client_launch_configs: [],
+    personal_desktop_launches: [],
   }
 }
 
@@ -1078,6 +1084,54 @@ pub fn ApiService::with_client_launch_catalog(
     client_launch_config: Some(first),
     additional_client_launch_configs: configs[1:].to_owned(),
   }
+}
+
+///|
+/// A hosted desktop address is bound to a verified subject, never selected by
+/// a browser-supplied account name or by the first catalog entry.
+pub(all) struct PersonalDesktopLaunch {
+  subject_ref : String
+  launch_uri : String
+} derive(FromJson, ToJson)
+
+///|
+pub extend PersonalDesktopLaunch with @json.FromJson::{from_json}
+
+///|
+pub extend PersonalDesktopLaunch with ToJson::{to_json}
+
+///|
+pub fn ApiService::with_personal_desktop_launches(
+  self : ApiService,
+  launches : Array[PersonalDesktopLaunch],
+  allowed_http_launch_origins? : Array[String] = [],
+) -> ApiService raise Failure {
+  if launches.is_empty() {
+    return { ..self, personal_desktop_launches: [], }
+  }
+  guard self.client_launch_config is Some(first) else {
+    raise Failure("personal desktop launch requires a desktop catalog entry")
+  }
+  let configs = [first, ..self.additional_client_launch_configs]
+  guard configs
+    .iter()
+    .find_first(config => config.client_id == "desktop-workspace")
+    is Some(desktop) else {
+    raise Failure("personal desktop launch requires a desktop catalog entry")
+  }
+  let seen : Map[String, Bool] = Map([])
+  for launch in launches {
+    if launch.subject_ref == "" ||
+      seen.get(launch.subject_ref) is Some(_) ||
+      !@client_handoff.valid_client_launch_config(
+        { ..desktop, launch_uri: launch.launch_uri, },
+        allowed_http_launch_origins~,
+      ) {
+      raise Failure("personal desktop launch configuration is invalid")
+    }
+    seen[launch.subject_ref] = true
+  }
+  { ..self, personal_desktop_launches: launches, }
 }
 
 ///|
