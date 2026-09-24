@@ -688,8 +688,14 @@ extern "js" fn request_promise(
   #|     // refusal -- a permanent 403 included -- arrived as an unclassifiable
   #|     // string and was reported as "the action failed, retry".
   #|     let detail = "";
-  #|     try { detail = JSON.parse(text)?.error?.message || ""; } catch (_) {}
-  #|     throw new Error(detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response.status}`);
+  #|     let code = "";
+  #|     try {
+  #|       const error = JSON.parse(text)?.error;
+  #|       detail = typeof error?.message === "string" ? error.message : "";
+  #|       code = typeof error?.code === "string" && /^[A-Za-z0-9]{1,80}$/.test(error.code)
+  #|         ? error.code : "";
+  #|     } catch (_) {}
+  #|     throw new Error(`HTTP ${response.status}${code ? ` ${code}` : ""}${detail ? `: ${detail}` : ""}`);
   #|   }
   #|   return text;
   #| }

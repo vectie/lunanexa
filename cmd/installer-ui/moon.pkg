@@ -3,7 +3,6 @@ import {
   "vectie/lunanexa/ui/i18n",
   "vectie/lunanexa/ui/installer" @installer_ui,
   "moonbit-community/rabbita",
-  "moonbit-community/rabbita/html",
   "moonbit-community/rabbita/js",
   "moonbitlang/core/json",
   "moonbitlang/core/string",

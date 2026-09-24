@@ -1224,6 +1224,10 @@ pub fn api_key_allowed_models(state : EnterpriseState) -> Array[String] {
 ///|
 pub fn lease_form_valid(state : EnterpriseState) -> Bool {
   state.membership is Some(_) &&
+  state.agreements.any(agreement => {
+    agreement.organization_id == state.selected_organization_id.unwrap_or("") &&
+    agreement.state == Executed
+  }) &&
   state.project_id.trim() != "" &&
   @portal.valid_unix_username(state.unix_username.trim().to_owned()) &&
   state.model_ids.trim() != "" &&
@@ -2740,6 +2744,10 @@ fn lease_requests_view(
   state : EnterpriseState,
   emit : @rabbita.Emit[EnterpriseMessage]?,
 ) -> @rabbita.Html {
+  let has_executed_agreement = state.agreements.any(agreement => {
+    agreement.organization_id == state.selected_organization_id.unwrap_or("") &&
+    agreement.state == Executed
+  })
   @html.div(class="lease-layout", [
     @html.section(class="request-form", [
       @html.p(
@@ -2751,6 +2759,21 @@ fn lease_requests_view(
         enterprise_copy(state.locale, RequestRequirementsNotASpecificMachine),
       ),
       @html.p(enterprise_copy(state.locale, DescribeYourWorkloadAndModelsThe)),
+      if !has_executed_agreement {
+        @html.div(class="notice is-error", [
+          @html.p(
+            enterprise_copy(state.locale, AnExecutedMachineAgreementIsRequired),
+          ),
+          @html.button(
+            type_="button",
+            class="quiet-button",
+            on_click=command(emit, Navigate(Agreements)),
+            enterprise_copy(state.locale, Agreements),
+          ),
+        ])
+      } else {
+        @html.span("")
+      },
       @html.div(class="form-grid", [
         @html.div(class="field", [
           @html.label(

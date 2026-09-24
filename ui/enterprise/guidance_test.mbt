@@ -41,7 +41,8 @@ test "friendly failures preserve recovery and never technical secrets" {
   for
     code in [
       "TrialApiKeyRejected", "EffectiveMasterLeaseRequired", "PortalAccessDenied",
-      "401", "403", "409", "429", "Timeout", "Network", "Unexpected",
+      "AgreementRequired", "MachineTermsUnavailable", "401", "403", "409", "429",
+      "Timeout", "Network", "Unexpected",
     ] {
     for locale in [@i18n.English, ChineseSimplified] {
       let result = @enterprise.friendly_failure(
@@ -63,6 +64,20 @@ test "friendly failures preserve recovery and never technical secrets" {
     @enterprise.friendly_failure(English, "Issue", "Timeout").contains(
       "may already have completed",
     ),
+  )
+  assert_true(
+    @enterprise.friendly_failure(
+      ChineseSimplified,
+      "提交申请",
+      "HTTP 409 AgreementRequired: agreement missing",
+    ).contains("已生效的机器协议"),
+  )
+  assert_false(
+    @enterprise.friendly_failure(
+      ChineseSimplified,
+      "提交申请",
+      "HTTP 409 AgreementRequired",
+    ).contains("资源状态已变化"),
   )
 }
 

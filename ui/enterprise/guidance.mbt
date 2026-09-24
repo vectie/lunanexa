@@ -74,6 +74,10 @@ pub fn friendly_failure(
     message(locale, TrialSecret)
   } else if raw.contains("EffectiveMasterLeaseRequired") {
     enterprise_copy(locale, CommercialAuthorizationIsNotActiveCheck)
+  } else if raw.contains("AgreementRequired") {
+    enterprise_copy(locale, AnExecutedMachineAgreementIsRequired)
+  } else if raw.contains("MachineTermsUnavailable") {
+    enterprise_copy(locale, PublishedMachineTermsAreRequired)
   } else if raw.contains("PortalAccessDenied") || raw.contains("403") {
     enterprise_copy(locale, ThisAccountLacksPermissionForThis)
   } else if raw.contains("401") {

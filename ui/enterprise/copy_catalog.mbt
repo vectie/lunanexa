@@ -462,6 +462,9 @@ priv enum EnterpriseCopyMessage {
   RecentMachineOrders
   StartAnotherOrder
   CommercialAuthorizationIsNotActiveCheck
+  AnExecutedMachineAgreementIsRequired
+  PublishedMachineTermsAreRequired
+  SelfServicePricesAreSeparateFromUndertaking
   ThisAccountLacksPermissionForThis
   YourSessionOrCredentialIsInvalid
   TheResourceChangedRefreshItsStatus
@@ -1417,7 +1420,8 @@ fn enterprise_copy(
       @i18n.copy(locale, "Accept terms to continue", "接受条款并继续")
     MachineTermsAreUnavailableOrderingRemains =>
       @i18n.copy(
-        locale, "Machine terms are unavailable. Ordering remains blocked.", "机器条款不可用，下单保持关闭。",
+        locale, "Machine ordering is closed until the platform publishes reviewed terms. Contact the platform operator.",
+        "平台尚未发布经审核的机器条款，下单暂不可用。请联系平台管理员。",
       )
     AnExecutedOrganizationAgreementSatisfiesThe =>
       @i18n.copy(
@@ -1571,6 +1575,21 @@ fn enterprise_copy(
       @i18n.copy(
         locale, "Commercial authorization is not active. Check Agreements or contact your administrator.",
         "商业授权尚未生效，请查看协议或联系管理员。",
+      )
+    AnExecutedMachineAgreementIsRequired =>
+      @i18n.copy(
+        locale, "An executed machine agreement is required. Check Agreements; if none is available, contact your organization administrator.",
+        "需要已生效的机器协议。请查看「协议」；如无可办理的协议，请联系企业管理员。",
+      )
+    PublishedMachineTermsAreRequired =>
+      @i18n.copy(
+        locale, "Machine ordering is closed until the platform publishes reviewed terms. Contact the platform operator.",
+        "平台尚未发布经审核的机器条款，下单暂不可用。请联系平台管理员。",
+      )
+    SelfServicePricesAreSeparateFromUndertaking =>
+      @i18n.copy(
+        locale, "This is the online self-service price. The undertaking rental route has its own quoted tariff and approval process.",
+        "此处是线上自助下单价格；承诺函租赁另有报价档位与审批流程。",
       )
     ThisAccountLacksPermissionForThis =>
       @i18n.copy(

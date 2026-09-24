@@ -41,3 +41,48 @@ async test "controller transport failure cannot bypass offline lease expiry" {
   assert_eq(persisted.state, QuarantinedAgent)
   @fs.rmdir(directory, recursive=true)
 }
+
+///|
+async test "node inventory updates are read without restarting the agent" {
+  let directory = @fs.tmpdir(prefix="lunanexa-node-inventory-refresh-")
+  defer @fs.rmdir(directory, recursive=true)
+  let path = "\{directory}/inventory.json"
+  let original : @contracts.NodeInventory = {
+    node_id: "spark-179",
+    agent_version: "test",
+    os_release: "test",
+    runtime_names: [],
+    accelerators: [],
+    labels: { "lunanexa.io/usage-pool": "trial" },
+    taints: [],
+  }
+  @fs.write_file(
+    path,
+    original.to_json().stringify(),
+    create_mode=CreateOrTruncate,
+  )
+  assert_eq(
+    read_node_inventory(path, "spark-179").labels.get("lunanexa.io/usage-pool"),
+    Some("trial"),
+  )
+  let updated = {
+    ..original,
+    labels: { "lunanexa.io/usage-pool": "enterprise-dedicated" },
+  }
+  @fs.write_file(
+    path,
+    updated.to_json().stringify(),
+    create_mode=CreateOrTruncate,
+  )
+  assert_eq(
+    read_node_inventory(path, "spark-179").labels.get("lunanexa.io/usage-pool"),
+    Some("enterprise-dedicated"),
+  )
+  let mut refused = false
+  try read_node_inventory(path, "spark-178") catch {
+    _ => refused = true
+  } noraise {
+    _ => ()
+  }
+  assert_true(refused)
+}

@@ -91,6 +91,68 @@ fn machine_dedicated_template() -> @deployment.ModelServiceTemplate {
 }
 
 ///|
+test "paid Spark inventory closes when measured unified memory is busy or stale" {
+  let now = 1900000000000L
+  let sample : @contracts.TelemetrySample = {
+    node_id: "spark-179",
+    deployment_id: "",
+    metric: "host_memory_available_mib",
+    value: 120000.0,
+    timestamp_unix_ms: now - 100L,
+  }
+  assert_true(
+    machine_unified_memory_ready(
+      "nvidia-sm121",
+      "spark-179",
+      124608L,
+      [sample],
+      now,
+      1000L,
+    ),
+  )
+  assert_false(
+    machine_unified_memory_ready(
+      "nvidia-sm121",
+      "spark-179",
+      124608L,
+      [{ ..sample, value: 10240.0, }],
+      now,
+      1000L,
+    ),
+  )
+  assert_false(
+    machine_unified_memory_ready(
+      "nvidia-sm121",
+      "spark-179",
+      124608L,
+      [sample],
+      now,
+      50L,
+    ),
+  )
+  assert_false(
+    machine_unified_memory_ready(
+      "nvidia-sm121",
+      "spark-179",
+      124608L,
+      [],
+      now,
+      1000L,
+    ),
+  )
+  assert_true(
+    machine_unified_memory_ready(
+      "nvidia-rtx-5060-ti",
+      "node-a",
+      16384L,
+      [],
+      now,
+      1000L,
+    ),
+  )
+}
+
+///|
 async fn machine_dedicated_registry(
   path : String,
   template : @deployment.ModelServiceTemplate,
@@ -1042,7 +1104,15 @@ async fn exercise_dedicated_endpoint(
     template.artifact.digest,
     allow_http_loopback=true,
   )
-  let service = ApiService::with_registry(
+  let telemetry = @telemetry.FileTelemetry::open("\{directory}/telemetry.json")
+  telemetry.record_sample({
+    node_id: "managed-node-a",
+    deployment_id: "",
+    metric: "host_memory_available_mib",
+    value: 15800.0,
+    timestamp_unix_ms: now,
+  })
+  let base_service = ApiService::with_registry(
       durable, registry, runtime, "operator-token", "inference-token", "node-token",
       "0.1.0",
     )
@@ -1052,6 +1122,7 @@ async fn exercise_dedicated_endpoint(
     .with_machine_commerce_store(machine_store)
     .with_portal_store(portal)
     .with_access_store(access_store)
+  let service = { ..base_service, telemetry: Some(telemetry), }
   service.reconcile_machine_commerce()
   let first = machine_store.order("dedicated-order-a").unwrap()
   let second = machine_store.order("dedicated-order-b").unwrap()

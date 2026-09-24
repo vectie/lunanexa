@@ -1163,6 +1163,16 @@ fn offering_card(
         ]),
       ]),
       @html.p(class="price-summary", offering.price_summary),
+      if offering.kind == BareGpu {
+        @html.small(
+          enterprise_copy(
+            state.locale,
+            SelfServicePricesAreSeparateFromUndertaking,
+          ),
+        )
+      } else {
+        @html.span("")
+      },
       @html.button(
         type_="button",
         class=if selected { "primary-button" } else { "quiet-button" },
