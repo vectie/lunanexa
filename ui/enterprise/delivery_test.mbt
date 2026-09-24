@@ -290,6 +290,23 @@ test "delivery operations appear only under their matching product" {
 }
 
 ///|
+test "personal MoonDesk hides exclusive-delivery setup until it is relevant" {
+  let state = @enterprise.demo_state()
+  let personal = @enterprise.render({ ..state, route: DesktopIde, })
+  assert_true(personal.contains("One-click connection"))
+  assert_false(personal.contains("Dedicated application workspaces"))
+  let models = @enterprise.render({ ..state, route: Models, })
+  assert_false(models.contains("Dedicated model API"))
+  let machine = @enterprise.render({
+    ..state,
+    route: MachineAccess,
+    deliveries: { ..state.deliveries, loaded: true, },
+  })
+  assert_true(machine.contains("GPU container deliveries"))
+  assert_true(machine.contains("Request resources"))
+}
+
+///|
 test "ready MaaS exposes bound key creation and clears its one time secret" {
   let state = @enterprise.default_state(100L)
   let operation : @enterprise.DeliveryView = {
