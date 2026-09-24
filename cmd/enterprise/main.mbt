@@ -3864,7 +3864,11 @@ fn update(
       if generation != model.session_generation ||
         organization != model.portal.selected_organization_id ||
         poll_generation != model.portal.deliveries.poll_generation ||
-        model.portal.route != DesktopIde ||
+        (
+          model.portal.route != DesktopIde &&
+          model.portal.route != MachineAccess &&
+          model.portal.route != Models
+        ) ||
         model.portal.deliveries.loading {
         return (model, @rabbita.none)
       }
@@ -3898,7 +3902,7 @@ fn update(
       if generation != model.session_generation ||
         organization != model.portal.selected_organization_id ||
         poll_generation != model.portal.deliveries.poll_generation ||
-        model.portal.route != DesktopIde {
+        model.portal.route != Models {
         return (model, @rabbita.none)
       }
       let panel = model.portal.deliveries
@@ -3956,6 +3960,7 @@ fn update(
         deliveries: {
           ..portal.deliveries,
           api_access: None,
+          template_choice: "",
           loading: false,
           poll_generation: portal.deliveries.poll_generation + 1L,
         },
@@ -3966,7 +3971,7 @@ fn update(
         contract_poll_generation: model.contract_poll_generation + 1L,
       }
       match route {
-        DesktopIde if !model.demo_mode => {
+        DesktopIde | MachineAccess | Models if !model.demo_mode => {
           let next = { ..next, portal: next.portal.update(Delivery(Refresh)), }
           (next, delivery_command(next, None, emit))
         }

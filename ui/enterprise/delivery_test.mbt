@@ -115,7 +115,7 @@ test "expired delivery does not offer retry or stop" {
   }
   let rendered = @enterprise.render({
     ..state,
-    route: DesktopIde,
+    route: Models,
     locale: English,
     deliveries: panel,
   })
@@ -163,7 +163,7 @@ test "GPU terminal uses catalog client without requiring a model" {
   )
   let rendered = @enterprise.render({
     ..state,
-    route: DesktopIde,
+    route: MachineAccess,
     locale: English,
     deliveries: panel,
   })
@@ -174,7 +174,7 @@ test "GPU terminal uses catalog client without requiring a model" {
   assert_true(
     @enterprise.render({
       ..state,
-      route: DesktopIde,
+      route: MachineAccess,
       locale: English,
       deliveries: ready,
     }).contains("Open terminal"),
@@ -258,6 +258,38 @@ test "model workspace and model API retain distinct launch requirements" {
 }
 
 ///|
+test "delivery operations appear only under their matching product" {
+  let state = @enterprise.default_state(100L)
+  let operation : @enterprise.DeliveryView = {
+    operation_id: "gpu-delivery",
+    project_id: "project-a",
+    kind: "GpuContainer",
+    template_id: "gpu-shell",
+    template_version: "1",
+    node_count: 1,
+    stage: "Ready",
+    generation: 1L,
+    cache_hit: false,
+    transferred_bytes: 0L,
+    total_bytes: None,
+    failure_code: None,
+    expires_at_ms: 99999L,
+    can_manage: true,
+  }
+  let panel = { ..state.deliveries, loaded: true, operations: [operation], }
+  assert_true(
+    @enterprise.render({ ..state, route: MachineAccess, deliveries: panel, }).contains(
+      "gpu-shell",
+    ),
+  )
+  assert_false(
+    @enterprise.render({ ..state, route: DesktopIde, deliveries: panel, }).contains(
+      "gpu-shell",
+    ),
+  )
+}
+
+///|
 test "ready MaaS exposes bound key creation and clears its one time secret" {
   let state = @enterprise.default_state(100L)
   let operation : @enterprise.DeliveryView = {
@@ -279,7 +311,7 @@ test "ready MaaS exposes bound key creation and clears its one time secret" {
   let panel = { ..state.deliveries, loaded: true, operations: [operation], }
   let ready = @enterprise.render({
     ..state,
-    route: DesktopIde,
+    route: Models,
     locale: English,
     deliveries: panel,
   })
@@ -287,7 +319,7 @@ test "ready MaaS exposes bound key creation and clears its one time secret" {
   assert_false(ready.contains("Open terminal"))
   let colleague_view = @enterprise.render({
     ..state,
-    route: DesktopIde,
+    route: Models,
     locale: English,
     deliveries: { ..panel, operations: [{ ..operation, can_manage: false, }], },
   })
@@ -306,7 +338,7 @@ test "ready MaaS exposes bound key creation and clears its one time secret" {
   let showing = { ..panel, api_access: Some(access), }
   let shown = @enterprise.render({
     ..state,
-    route: DesktopIde,
+    route: Models,
     locale: English,
     deliveries: showing,
   })
@@ -317,7 +349,7 @@ test "ready MaaS exposes bound key creation and clears its one time secret" {
   assert_false(
     @enterprise.render({
       ..state,
-      route: DesktopIde,
+      route: Models,
       locale: English,
       deliveries: cleared,
     }).contains("test-only-once-not-a-real-secret"),
@@ -327,7 +359,7 @@ test "ready MaaS exposes bound key creation and clears its one time secret" {
   assert_false(
     @enterprise.render({
       ..state,
-      route: DesktopIde,
+      route: Models,
       locale: English,
       deliveries: stopped,
     }).contains("Create delivery API key"),

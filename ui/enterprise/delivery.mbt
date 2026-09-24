@@ -250,10 +250,26 @@ fn delivery_panel_view(
   panel : DeliveryPanel,
   locale : @i18n.Locale,
   emit : @rabbita.Emit[EnterpriseMessage]?,
+  kind : String,
 ) -> @rabbita.Html {
+  let templates = panel.options.templates.filter(option => option.kind == kind)
+  let operations = panel.operations.filter(operation => operation.kind == kind)
+  let selected_kind = selected_delivery_template(panel).map_or(false, option => {
+    option.kind == kind
+  })
   @html.section(class="workflow-panel", [
     @html.div(class="section-heading", [
-      @html.h2(copy(locale, "Exclusive services", "独占资源服务")),
+      @html.h2(
+        match kind {
+          "GpuContainer" =>
+            copy(locale, "GPU container deliveries", "IaaS · GPU 容器交付")
+          "Workspace" =>
+            copy(
+              locale, "Dedicated application workspaces", "PaaS · 专属应用工作区",
+            )
+          _ => copy(locale, "Dedicated model APIs", "MaaS · 专属模型 API")
+        },
+      ),
       @html.button(
         type_="button",
         class="quiet-button",
@@ -340,7 +356,7 @@ fn delivery_panel_view(
           "暂无有效的独占资源授权。请管理员授权资源，或完成机器订单。",
         ),
       )
-    } else if panel.loaded && panel.options.templates.is_empty() {
+    } else if panel.loaded && templates.is_empty() {
       @html.p(
         class="empty",
         copy(
@@ -396,7 +412,7 @@ fn delivery_panel_view(
                 selected=panel.template_choice == "",
                 copy(locale, "Choose a template", "选择模板"),
               ),
-              ..panel.options.templates.map(option => {
+              ..templates.map(option => {
                 @html.option(
                   value=delivery_template_choice(option),
                   selected=panel.template_choice ==
@@ -410,7 +426,7 @@ fn delivery_panel_view(
         @html.button(
           type_="button",
           class="primary-button",
-          disabled=!delivery_start_available(panel),
+          disabled=!selected_kind || !delivery_start_available(panel),
           on_click=command(emit, Delivery(Start)),
           copy(locale, "Start service", "启动服务"),
         ),
@@ -425,7 +441,7 @@ fn delivery_panel_view(
     },
     @html.div(
       class="record-list",
-      panel.operations.map(operation => {
+      operations.map(operation => {
         @html.article(class="record-card", [
           @html.div(class="record-main", [
             @html.h3(

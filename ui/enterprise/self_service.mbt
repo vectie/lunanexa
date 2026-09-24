@@ -389,13 +389,13 @@ fn SelfServiceState::update(
     RefreshOfferings =>
       { ..self, offerings_loading: true, offerings_error: None, }
     SelectOffering(offering_id) => {
-      let template = match
-        self.offerings
+      guard self.offerings
         .iter()
-        .find_first(value => value.offering_id == offering_id) {
-        Some(value) => value.allowed_model_template_refs.get(0).unwrap_or("")
-        None => ""
+        .find_first(value => value.offering_id == offering_id && value.available)
+        is Some(offering) else {
+        return self
       }
+      let template = offering.allowed_model_template_refs.get(0).unwrap_or("")
       {
         ..self,
         selected_offering_id: offering_id,
@@ -1224,6 +1224,7 @@ fn capacity_step(
   let matching = state.self_service.offerings.filter(value => {
     value.kind == product
   })
+  let available = matching.filter(value => value.available)
   let chosen = selected_offering(state.self_service)
   let region_options : Array[@rabbita.Html] = [
     @html.option(
@@ -1302,7 +1303,7 @@ fn capacity_step(
           enterprise_copy(state.locale, RetryCatalog),
         ),
       ])
-    } else if state.self_service.offerings_loaded && matching.length() == 0 {
+    } else if state.self_service.offerings_loaded && available.length() == 0 {
       @html.div(class="inline-state", [
         @html.h3(enterprise_copy(state.locale, NoCapacityAvailable)),
         @html.p(
@@ -1331,12 +1332,12 @@ fn capacity_step(
       @html.div(
         class="offering-grid",
         [
-          for offering in matching => offering_card(state, emit, offering)
+          for offering in available => offering_card(state, emit, offering)
         ],
       )
     },
     match chosen {
-      Some(offering) if offering.kind == product =>
+      Some(offering) if offering.kind == product && offering.available =>
         @html.div(class="guided-form capacity-configuration", [
           @html.h3(enterprise_copy(state.locale, ConfigureOrder)),
           @html.div(class="form-grid", [

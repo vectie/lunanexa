@@ -38,7 +38,6 @@ priv enum EnterpriseCopyMessage {
   EnterpriseNavigation
   CustomerBoundary
   CatalogOrdersAreSelfServiceManaged
-  NotConnected
   SelectOrganization
   EnterpriseControlCenter
   Language
@@ -67,15 +66,6 @@ priv enum EnterpriseCopyMessage {
   SharedCentralCatalog
   CurrentSpend
   ProvisionalCentralLedger
-  LeaseReadiness
-  EnterpriseVerified
-  OrganizationMembershipAndSignerAuthorityRecorded
-  ExecuteRequiredAgreements
-  ExternalSignatureEvidenceIsVerifiedBefore
-  RequestCapacity
-  ChooseProjectTimeWindowUsernameAnd
-  OperatorAssignsOneNode
-  ACredentialReferenceIsCreatedNo
   OrganizationAdministrator
   LegalSigner
   LeaseRequester
@@ -237,7 +227,6 @@ priv enum EnterpriseCopyMessage {
   YourOperatorMustFinishDesktopIntegration
   CompleteTheMasterleaseEverythingElseStays
   YourOperatorNeedsToEnableThe
-  YourOperatorNeedsToApproveAt
   TheSelectedPaidEndpointIsUnavailable
   YourAccessIsReadyOpenThe
   ChooseYourWebide
@@ -249,18 +238,6 @@ priv enum EnterpriseCopyMessage {
   SecureWebideHandoff
   CompleteMasterlease
   Connecting
-  YourAccessJourney
-  SignedIn
-  YourIdentityAndDeveloperMembershipAre
-  Masterlease
-  ContractIsEffective
-  ReviewAndCompleteTheContractTemplate
-  WorkspaceAccess
-  DeveloperLeaseIsActive
-  WaitingForOperatorEnablement
-  ApprovedModels
-  NoModelAliasIsReadyYet
-  OpenWebide
   CopyModelAlias
   NoCallableAliasPublished
   TextGeneration
@@ -562,7 +539,6 @@ fn enterprise_copy(
         locale, "Catalog orders are self-service. Managed requests remain available when an operator must select exceptional capacity.",
         "目录订单支持自助开通；需要运维人员选择特殊算力时，仍可提交受管申请。",
       )
-    NotConnected => @i18n.copy(locale, "Not connected", "未连接")
     SelectOrganization =>
       @i18n.copy(locale, "Select organization", "选择组织")
     EnterpriseControlCenter =>
@@ -630,37 +606,6 @@ fn enterprise_copy(
     CurrentSpend => @i18n.copy(locale, "Current spend", "当前支出")
     ProvisionalCentralLedger =>
       @i18n.copy(locale, "Provisional central ledger", "中央台账暂计")
-    LeaseReadiness =>
-      @i18n.copy(locale, "Lease readiness", "租用准备流程")
-    EnterpriseVerified =>
-      @i18n.copy(
-        locale, "Register and verify your organization", "注册并核验企业",
-      )
-    OrganizationMembershipAndSignerAuthorityRecorded =>
-      @i18n.copy(
-        locale, "Create or join a customer organization in self-service. Trial access is not enterprise verification.",
-        "请在自助开通中创建或加入企业；试用权限不代表企业已核验。",
-      )
-    ExecuteRequiredAgreements =>
-      @i18n.copy(locale, "Execute required agreements", "签署必需协议")
-    ExternalSignatureEvidenceIsVerifiedBefore =>
-      @i18n.copy(
-        locale, "External signature evidence is verified before execution.", "外部签名证据验证后才标记为已签署。",
-      )
-    RequestCapacity => @i18n.copy(locale, "Request capacity", "申请容量")
-    ChooseProjectTimeWindowUsernameAnd =>
-      @i18n.copy(
-        locale, "Choose project, time window, username and required models.", "选择项目、时段、用户名与所需模型。",
-      )
-    OperatorAssignsOneNode =>
-      @i18n.copy(
-        locale, "Administrator allocates approved resources", "管理员分配已批准的资源",
-      )
-    ACredentialReferenceIsCreatedNo =>
-      @i18n.copy(
-        locale, "A credential reference is created; no raw password is stored.",
-        "系统创建凭据引用，不存储明文密码。",
-      )
     OrganizationAdministrator =>
       @i18n.copy(locale, "Organization administrator", "组织管理员")
     LegalSigner => @i18n.copy(locale, "Legal signer", "法定签署人")
@@ -1035,10 +980,6 @@ fn enterprise_copy(
         locale, "No active workspace access. Check Orders & Materials for expiry or revocation, or contact your administrator.",
         "当前没有有效的工作区权限。请在“订单与材料”查看到期或撤销状态，或联系管理员。",
       )
-    YourOperatorNeedsToApproveAt =>
-      @i18n.copy(
-        locale, "Your operator needs to approve at least one model alias.", "需要运维人员批准至少一个模型别名。",
-      )
     TheSelectedPaidEndpointIsUnavailable =>
       @i18n.copy(
         locale, "The selected paid endpoint is unavailable. Choose an active order; no shared fallback will be used.",
@@ -1072,38 +1013,6 @@ fn enterprise_copy(
     CompleteMasterlease =>
       @i18n.copy(locale, "Complete MasterLease", "完成主租约")
     Connecting => @i18n.copy(locale, "Connecting…", "正在连接…")
-    YourAccessJourney =>
-      @i18n.copy(locale, "Your access journey", "您的访问流程")
-    SignedIn => @i18n.copy(locale, "Signed in", "已登录")
-    YourIdentityAndDeveloperMembershipAre =>
-      @i18n.copy(
-        locale, "Your identity and Developer membership are verified.", "您的身份和开发者成员资格已验证。",
-      )
-    Masterlease => @i18n.copy(locale, "MasterLease", "主租约")
-    ContractIsEffective =>
-      @i18n.copy(
-        locale, "Agreement or deployment-policy access requirements are satisfied; this does not attest a signature or payment.",
-        "已满足协议或部署策略的准入条件；不代表已签署或已付款。",
-      )
-    ReviewAndCompleteTheContractTemplate =>
-      @i18n.copy(
-        locale, "Review and complete the contract template.", "查看并完成合同模板。",
-      )
-    WorkspaceAccess => @i18n.copy(locale, "Workspace access", "工作区访问")
-    DeveloperLeaseIsActive =>
-      @i18n.copy(
-        locale, "Developer lease is active.", "开发者租约已生效。",
-      )
-    WaitingForOperatorEnablement =>
-      @i18n.copy(
-        locale, "No active access: not yet enabled, expired, or revoked.", "无有效权限：尚未开通、已到期或已撤销。",
-      )
-    ApprovedModels => @i18n.copy(locale, "Approved models", "已批准模型")
-    NoModelAliasIsReadyYet =>
-      @i18n.copy(
-        locale, "No model alias is ready yet.", "尚无可用模型别名。",
-      )
-    OpenWebide => @i18n.copy(locale, "Open WebIDE", "打开 WebIDE")
     CopyModelAlias =>
       @i18n.copy(locale, "Copy model alias", "复制模型别名")
     NoCallableAliasPublished =>
@@ -1256,7 +1165,7 @@ fn enterprise_copy(
     SkipToContent => @i18n.copy(locale, "Skip to content", "跳到内容")
     SharedMaas => @i18n.copy(locale, "Shared MaaS", "共享 MaaS")
     DedicatedMaas => @i18n.copy(locale, "Dedicated MaaS", "专属 MaaS")
-    BareGpu => @i18n.copy(locale, "Bare GPU", "裸 GPU")
+    BareGpu => @i18n.copy(locale, "Exclusive GPU machine", "独占 GPU 机器")
     ChooseThisService =>
       @i18n.copy(locale, "Choose this service", "选择此服务")
     StartWithAnOutcome =>
@@ -1292,15 +1201,17 @@ fn enterprise_copy(
         locale, "You receive a private endpoint", "您将获得专属端点",
       )
     RentAGpuWorkspace =>
-      @i18n.copy(locale, "Rent a GPU workspace", "租用 GPU 工作区")
+      @i18n.copy(
+        locale, "Rent exclusive GPU capacity", "租用独占 GPU 算力",
+      )
     ChooseCapacityAndManageYourOwn =>
       @i18n.copy(
-        locale, "Choose capacity and manage your own software through short-lived SSH or WebIDE access.",
-        "选择算力，并通过短期 SSH 或 WebIDE 自主管理软件。",
+        locale, "Choose dedicated capacity for your company. The delivery page will show the actual container or machine access granted by your order.",
+        "为企业选择独占算力。实际交付的容器或机器访问方式，以订单和授权状态为准。",
       )
     YouReceiveSshAndWebideAccess =>
       @i18n.copy(
-        locale, "You receive SSH and WebIDE access", "您将获得 SSH 与 WebIDE 访问",
+        locale, "Access is enabled after provisioning", "完成资源开通后获得访问入口",
       )
     Service => @i18n.copy(locale, "Service", "服务")
     Capacity => @i18n.copy(locale, "Capacity", "配置")

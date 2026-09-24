@@ -15,7 +15,7 @@ test "enterprise portal separates customer requests from operator assignment" {
   assert_true(requests.contains("Password is not accepted"))
   assert_true(requests.contains(">WebIDE</button>"))
   assert_true(desktop.contains("SECURE WEBIDE HANDOFF"))
-  assert_true(desktop.contains("single-use handoff"))
+  assert_true(desktop.contains("One-click connection"))
   assert_false(desktop.contains("href=\"/workbench/\""))
   assert_true(models.contains("Shared model catalog"))
   assert_true(models.contains("Managed centrally"))
@@ -52,10 +52,11 @@ test "company administrator can invite members in UI without sharing a WebIDE" {
 }
 
 ///|
-test "enterprise WebIDE journey exposes one truthful next action" {
+test "enterprise WebIDE shows one connection status and next action" {
   let state = @enterprise.demo_state()
   let ready = @enterprise.render({ ..state, route: DesktopIde, })
-  assert_true(ready.contains("Your access journey"))
+  assert_true(ready.contains("One-click connection"))
+  assert_false(ready.contains("Your access journey"))
   assert_true(ready.contains("Your access is ready"))
   assert_true(ready.contains("text.default"))
   assert_true(ready.contains("Open Desktop WebIDE"))
@@ -75,7 +76,7 @@ test "enterprise WebIDE journey exposes one truthful next action" {
   })
   assert_true(blocked.contains("Complete the MasterLease"))
   assert_true(blocked.contains("Complete MasterLease"))
-  assert_true(blocked.contains("Review and complete the contract template"))
+  assert_true(blocked.contains("One-click connection"))
   assert_false(blocked.contains("disabled>Complete MasterLease"))
 }
 
@@ -500,16 +501,16 @@ test "qualified signature handoff is explicit HTTPS-only and renewable" {
 }
 
 ///|
-test "self-service entry separates shared dedicated and bare GPU outcomes" {
+test "self-service entry separates shared dedicated and exclusive GPU outcomes" {
   let state = @enterprise.demo_state()
   let overview = @enterprise.render({ ..state, route: Overview, })
   assert_true(overview.contains("What do you want to run?"))
   assert_true(overview.contains("Shared MaaS"))
   assert_true(overview.contains("Dedicated MaaS"))
-  assert_true(overview.contains("Bare GPU"))
+  assert_true(overview.contains("Exclusive GPU machine"))
   assert_true(overview.contains("You receive an API key"))
   assert_true(overview.contains("You receive a private endpoint"))
-  assert_true(overview.contains("You receive SSH and WebIDE access"))
+  assert_true(overview.contains("Access is enabled after provisioning"))
   assert_true(overview.contains(">Get started</button>"))
   let chinese = @enterprise.render({
     ..state,
@@ -519,7 +520,7 @@ test "self-service entry separates shared dedicated and bare GPU outcomes" {
   assert_true(chinese.contains("您希望以哪种方式运行？"))
   assert_true(chinese.contains("共享 MaaS"))
   assert_true(chinese.contains("专属 MaaS"))
-  assert_true(chinese.contains("裸 GPU"))
+  assert_true(chinese.contains("独占 GPU 机器"))
 }
 
 ///|
@@ -779,7 +780,8 @@ test "organization selection is explicit and drives the scoped request header" {
   let html = @enterprise.render(ambiguous)
   assert_true(html.contains("Active organization for scoped requests"))
   assert_true(html.contains("Select organization"))
-  assert_true(html.contains("Moon Lab · org-moonlab"))
+  assert_true(html.contains("Moon Lab"))
+  assert_false(html.contains("Moon Lab · org-moonlab"))
   let selected = ambiguous.update(
     SelfService(SelectOrganization("org-moonlab")),
   )

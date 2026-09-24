@@ -1,11 +1,13 @@
 ///|
-test "overview resource allocation does not impose a single-node delivery" {
-  let english = enterprise_copy(English, OperatorAssignsOneNode)
-  let chinese = enterprise_copy(ChineseSimplified, OperatorAssignsOneNode)
-  assert_eq(english, "Administrator allocates approved resources")
-  assert_eq(chinese, "管理员分配已批准的资源")
-  assert_false(english.contains("one node"))
-  assert_false(chinese.contains("一个节点"))
+test "IaaS copy distinguishes exclusive capacity from host access" {
+  let english = enterprise_copy(English, ChooseCapacityAndManageYourOwn)
+  let chinese = enterprise_copy(
+    ChineseSimplified,
+    ChooseCapacityAndManageYourOwn,
+  )
+  assert_true(english.contains("actual container or machine access"))
+  assert_true(chinese.contains("实际交付的容器或机器访问方式"))
+  assert_false(chinese.contains("裸 GPU"))
 }
 
 ///|
@@ -48,7 +50,6 @@ test "static enterprise catalog has complete unique bilingual entries" {
     EnterpriseNavigation,
     CustomerBoundary,
     CatalogOrdersAreSelfServiceManaged,
-    NotConnected,
     SelectOrganization,
     EnterpriseControlCenter,
     Language,
@@ -77,15 +78,6 @@ test "static enterprise catalog has complete unique bilingual entries" {
     SharedCentralCatalog,
     CurrentSpend,
     ProvisionalCentralLedger,
-    LeaseReadiness,
-    EnterpriseVerified,
-    OrganizationMembershipAndSignerAuthorityRecorded,
-    ExecuteRequiredAgreements,
-    ExternalSignatureEvidenceIsVerifiedBefore,
-    RequestCapacity,
-    ChooseProjectTimeWindowUsernameAnd,
-    OperatorAssignsOneNode,
-    ACredentialReferenceIsCreatedNo,
     OrganizationAdministrator,
     LegalSigner,
     LeaseRequester,
@@ -247,7 +239,6 @@ test "static enterprise catalog has complete unique bilingual entries" {
     YourOperatorMustFinishDesktopIntegration,
     CompleteTheMasterleaseEverythingElseStays,
     YourOperatorNeedsToEnableThe,
-    YourOperatorNeedsToApproveAt,
     TheSelectedPaidEndpointIsUnavailable,
     YourAccessIsReadyOpenThe,
     ChooseYourWebide,
@@ -259,18 +250,6 @@ test "static enterprise catalog has complete unique bilingual entries" {
     SecureWebideHandoff,
     CompleteMasterlease,
     Connecting,
-    YourAccessJourney,
-    SignedIn,
-    YourIdentityAndDeveloperMembershipAre,
-    Masterlease,
-    ContractIsEffective,
-    ReviewAndCompleteTheContractTemplate,
-    WorkspaceAccess,
-    DeveloperLeaseIsActive,
-    WaitingForOperatorEnablement,
-    ApprovedModels,
-    NoModelAliasIsReadyYet,
-    OpenWebide,
     CopyModelAlias,
     NoCallableAliasPublished,
     TextGeneration,
@@ -523,5 +502,5 @@ test "static enterprise catalog has complete unique bilingual entries" {
     assert_false(seen.contains(pair))
     seen[pair] = true
   }
-  assert_eq(keys.length(), 501)
+  assert_eq(keys.length(), 478)
 }
