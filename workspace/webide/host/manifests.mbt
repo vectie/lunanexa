@@ -42,6 +42,9 @@ fn WorkspaceHost::resources(
   container? : ExclusiveContainer,
 ) -> Array[(String, Json)] raise HostError {
   let name = resource_name(id)
+  if grant.client_id == "desktop-workspace" && container is None {
+    raise InvalidConfiguration
+  }
   if container is None && grant.allowed_models.is_empty() {
     raise ControllerRejected
   }
@@ -119,12 +122,37 @@ fn WorkspaceHost::resources(
       "resources": { "requests": { "storage": "\{config.storage_gib}Gi" } },
     },
   }
+  let secret_data : Json = {
+    "model-proxy.json": ToJson::to_json(proxy).stringify(),
+  }
+  if grant.client_id == "desktop-workspace" && secret_data is Object(fields) {
+    fields["moongate-control-token"] = @crypto.bytes_to_hex_string(
+      @crypto.sha256(
+        @utf8.encode("moon-gateway-control.v1|" + grant.api_secret),
+      ),
+    ).to_json()
+    let instance_id = @crypto.bytes_to_hex_string(
+      @crypto.sha256(@utf8.encode("moonclaw-instance.v1|" + id)),
+    )[:32].to_owned()
+    let control : Json = {
+      "protocol_version": 1,
+      "instance_id": instance_id,
+      "auth_token": @crypto.bytes_to_hex_string(
+        @crypto.sha256(
+          @utf8.encode("moonclaw-private-control.v1|" + grant.api_secret),
+        ),
+      ),
+      "workspace_id": name,
+      "workspace_root": "/workspace",
+    }
+    fields["moondesk-control.json"] = control.stringify().to_json()
+  }
   let secret : Json = {
     "apiVersion": "v1",
     "kind": "Secret",
     "metadata": meta,
     "type": "Opaque",
-    "stringData": { "model-proxy.json": ToJson::to_json(proxy).stringify() },
+    "stringData": secret_data,
   }
   let service : Json = {
     "apiVersion": "v1",
@@ -267,8 +295,11 @@ fn WorkspaceHost::resources(
   }
   if placement is Some(assigned) {
     self.place_exclusive(deployment, grant, assigned, container)
-  } else if container is Some(_) {
-    raise InvalidConfiguration
+  } else if container is Some(runtime) {
+    if runtime.gpu || grant.client_id != "desktop-workspace" {
+      raise InvalidConfiguration
+    }
+    self.place_container(deployment, grant, runtime)
   }
   let service = match container {
     Some(runtime) => {

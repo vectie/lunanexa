@@ -179,3 +179,69 @@ test "exclusive GPU terminal has persistent HOME and no host authority" {
     _ => fail("GPU container without placement accepted")
   }
 }
+
+///|
+test "two company members get separate hosted MoonDesk pods and PVCs" {
+  let config = host_config()
+  let host = WorkspaceHost::new(config)
+  let base = proxy_config(config.controller_origin, config.model_gateway_origin).grant()
+  let first = { ..base, client_id: "desktop-workspace", }
+  let second = { ..first, subject_ref: "bob", }
+  let runtime : ExclusiveContainer = {
+    image: "registry.test/moondesk@sha256:" + "d".repeat(64),
+    command: ["/usr/local/bin/moondesk"],
+    args: ["serve", "/workspace", "--host", "0.0.0.0", "--port", "4188"],
+    port: 4188,
+    cpu_millis: 1000,
+    memory_mib: 2048,
+    gpu: false,
+  }
+  try host.resources(@webide.workspace_id(first), first) catch {
+    HostError::InvalidConfiguration => ()
+    error => fail("unexpected error: \{Repr(error)}")
+  } noraise {
+    _ => fail("MoonDesk without its own container was accepted")
+  }
+  let first_resources = host.resources(
+    @webide.workspace_id(first),
+    first,
+    container=runtime,
+  )
+  let second_resources = host.resources(
+    @webide.workspace_id(second),
+    second,
+    container=runtime,
+  )
+  assert_true(first_resources[1].0 != second_resources[1].0)
+  assert_true(first_resources[4].0 != second_resources[4].0)
+  let workload = first_resources[4].1.stringify()
+  assert_true(workload.contains("/workspace"))
+  assert_true(workload.contains("workspace-host"))
+  assert_true(workload.contains("\"name\":\"moonclaw\""))
+  assert_true(workload.contains("\"name\":\"moongate\""))
+  assert_true(workload.contains("MOONCLAW_HOSTED_MODEL_ALIAS"))
+  assert_true(workload.contains("MOONSUITE_WORKSPACE_ROOT"))
+  assert_true(workload.contains("MOONDESK_WORKSPACE_ROOT"))
+  assert_true(workload.contains("MOONDESK_ALLOWED_HOSTS"))
+  assert_true(workload.contains("MOONDESK_TRUSTED_WORKSPACE_GATEWAY"))
+  assert_true(workload.contains("MOONDESK_EXECUTION_SANDBOX_CONFIG"))
+  assert_true(workload.contains("initialize-desktop-control"))
+  assert_true(workload.contains("moondesk-private"))
+  assert_true(workload.contains("/v1/hosted-ready"))
+  assert_true(workload.contains("/v1/models"))
+  assert_false(workload.contains("nvidia.com/gpu"))
+  assert_false(workload.contains("reservation-"))
+  assert_true(first_resources[3].1.stringify().contains("\"targetPort\":4188"))
+  guard first_resources[2].1
+    is { "stringData": { "moongate-control-token": String(token), .. }, .. } else {
+    fail("missing private MoonGate control token")
+  }
+  assert_true(token.length() == 64)
+  assert_false(token == first.api_secret)
+  guard first_resources[2].1
+    is { "stringData": { "moondesk-control.json": String(control), .. }, .. } else {
+    fail("missing personal MoonDesk control file")
+  }
+  assert_true(control.contains("\"workspace_root\":\"/workspace\""))
+  assert_false(control.contains(first.api_secret))
+}

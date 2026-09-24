@@ -3249,6 +3249,13 @@ pub fn webide_launch_selection(
 ) -> (String?, String, Array[String])? {
   guard state.desktop_client is Some(client) &&
     client.client_id != "comfyui" &&
+    // A loopback MoonDesk is one machine-wide profile, not a tenant-isolated
+    // hosted workspace. Never issue another person's handoff into it.
+    !(client.client_id == "desktop-workspace" &&
+    (
+      client.launch_uri.contains("127.0.0.1") ||
+      client.launch_uri.contains("localhost")
+    )) &&
     client.ready &&
     !client.approved_model_aliases.is_empty() else {
     return None
@@ -3461,6 +3468,17 @@ fn desktop_ide_view(
   let next_action = if state.desktop_client is None {
     enterprise_copy(state.locale, YourOperatorMustFinishDesktopIntegration)
   } else if state.desktop_client is Some(client) &&
+    client.client_id == "desktop-workspace" &&
+    (
+      client.launch_uri.contains("127.0.0.1") ||
+      client.launch_uri.contains("localhost")
+    ) {
+    copy(
+      state.locale,
+      "This legacy local MoonDesk shares one data directory. Hosted one-click access is paused until each account has its own container and saved volume; existing files were not deleted.",
+      "旧版本机 MoonDesk 共用同一数据目录。已暂停一键打开，待每个账户接入独立容器和持久化卷；现有文件未删除。",
+    )
+  } else if state.desktop_client is Some(client) &&
     client.client_id == "comfyui" {
     copy(
       state.locale,
@@ -3480,16 +3498,6 @@ fn desktop_ide_view(
   } else if state.webide_order_id is Some(_) &&
     webide_launch_selection(state) is None {
     enterprise_copy(state.locale, TheSelectedPaidEndpointIsUnavailable)
-  } else if state.desktop_client is Some(client) &&
-    (
-      client.launch_uri.contains("127.0.0.1") ||
-      client.launch_uri.contains("localhost")
-    ) {
-    copy(
-      state.locale,
-      "Open the local MoonDesk app on this computer before continuing. This loopback address is not a public website.",
-      "请先在这台电脑上启动 MoonDesk 客户端。此本机地址不是公网网站。",
-    )
   } else {
     enterprise_copy(state.locale, YourAccessIsReadyOpenThe)
   }

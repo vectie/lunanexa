@@ -26,17 +26,29 @@ async fn main {
       require_exclusive~,
       observation_token~,
     )
+    let client_id = required("LUNANEXA_WEBIDE_CLIENT_ID")
+    let expected_subject = if client_id == "desktop-workspace" {
+      required("LUNANEXA_WEBIDE_SUBJECT_REF")
+    } else {
+      ""
+    }
     let container : @host.ExclusiveContainer? = match
       @env.get_env_var("LUNANEXA_WEBIDE_CONTAINER_FILE") {
       Some(path) => {
-        if !require_exclusive {
-          raise Failure("GPU workspace requires exclusive delivery")
+        let runtime : @host.ExclusiveContainer = @json.from_json(
+          @json.parse(@fs.read_file(path).text()),
+        )
+        if !require_exclusive &&
+          (client_id != "desktop-workspace" || runtime.gpu) {
+          raise Failure("Hosted workspace requires a CPU-only desktop profile")
         }
-        Some(@json.from_json(@json.parse(@fs.read_file(path).text())))
+        Some(runtime)
       }
       None => None
     }
-    let client_id = required("LUNANEXA_WEBIDE_CLIENT_ID")
+    if client_id == "desktop-workspace" && container is None {
+      raise Failure("Hosted MoonDesk requires an isolated container image")
+    }
     let bridge = @webide.Bridge::new(
       {
         client_id,
@@ -50,7 +62,11 @@ async fn main {
       code => {
         // Fixed stage names only: exceptions may contain credentials or JSON.
         errdefer println("WebIDE launch failed at controller redemption")
-        host.redeem(client_id, code)
+        let grant = host.redeem(client_id, code)
+        if expected_subject != "" && grant.subject_ref != expected_subject {
+          raise @webide.BridgeError::InvalidGrant
+        }
+        grant
       },
       grant => {
         let authorized = host.authorize(grant)

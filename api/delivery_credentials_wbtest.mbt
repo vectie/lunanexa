@@ -61,6 +61,16 @@ async test "model delivery API key is one time bound and stops with delivery" {
       handoff_lifetime_ms: 120000L,
       maximum_requests: 1000L,
     })
+    .with_personal_desktop_launches([
+      {
+        subject_ref: "subject-a",
+        launch_uri: "https://workspace-a.example.invalid/connect",
+      },
+      {
+        subject_ref: "subject-c",
+        launch_uri: "https://workspace-b.example.invalid/connect",
+      },
+    ])
   ignore(
     scheduler.reserve_nodes(
       {

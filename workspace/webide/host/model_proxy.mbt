@@ -246,7 +246,11 @@ pub async fn handle_model_proxy(
     let upstream_headers = {
       "authorization": "Bearer " + config.api_secret,
       "content-type": content_type,
-      "accept": "application/json, video/mp4",
+      "accept": if request.path == "/v1/chat/completions" {
+        "application/json, text/event-stream"
+      } else {
+        "application/json, video/mp4"
+      },
     }
     if request.meth == Post && request.path == "/v1/videos" {
       guard request_header(request.headers, "idempotency-key") is Some(key) &&

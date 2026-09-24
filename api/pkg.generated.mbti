@@ -94,6 +94,7 @@ pub struct ApiService {
   client_handoff_store : @vectie/lunanexa/workspace/client_handoff/store.ClientHandoffStore?
   client_launch_config : @client_handoff.ClientLaunchConfig?
   additional_client_launch_configs : Array[@client_handoff.ClientLaunchConfig]
+  personal_desktop_launches : Array[PersonalDesktopLaunch]
   lease_helper_receipt_secret : String
   machine_helper_adapter_evidence : @nodelease.MachineHelperAdapterReadinessEvidence?
   guide_diagnostics_token : String
@@ -222,6 +223,7 @@ pub fn ApiService::with_offline_template_approvals(Self, Array[OfflineTemplateAp
 pub fn ApiService::with_offline_transfer_adapter(Self, String, String, String) -> Self raise
 pub fn ApiService::with_open_registration_trial(Self, Int64, Int64, Array[String]) -> Self raise Failure
 pub fn ApiService::with_operator_tokens(Self, Array[(String, String)]) -> Self
+pub fn ApiService::with_personal_desktop_launches(Self, Array[PersonalDesktopLaunch], allowed_http_launch_origins? : Array[String]) -> Self raise Failure
 pub fn ApiService::with_portal_store(Self, @vectie/lunanexa/portal/store.FilePortalStore) -> Self
 pub fn ApiService::with_private_cloud_workspace_access(Self, Bool) -> Self
 pub fn ApiService::with_provider_callback_secrets(Self, Map[String, String]) -> Self raise
@@ -364,6 +366,13 @@ pub fn OfflineUploadTransferView::from_json(Json, @json.JsonPath) -> Self raise 
 pub fn OfflineUploadTransferView::not_equal(Self, Self) -> Bool
 pub fn OfflineUploadTransferView::to_json(Self) -> Json
 pub fn OfflineUploadTransferView::to_repr(Self) -> @debug.Repr
+
+pub(all) struct PersonalDesktopLaunch {
+  subject_ref : String
+  launch_uri : String
+} derive(ToJson, @json.FromJson)
+pub fn PersonalDesktopLaunch::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn PersonalDesktopLaunch::to_json(Self) -> Json
 
 pub(all) enum StreamEvent {
   Opened

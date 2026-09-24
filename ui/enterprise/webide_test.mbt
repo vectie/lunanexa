@@ -95,7 +95,19 @@ test "ComfyUI is selectable beside code WebIDE without weakening readiness" {
 }
 
 ///|
-test "exclusive ComfyUI is launched only from a delivery and loopback WebIDE explains local app" {
+test "legacy shared local MoonDesk cannot issue another user's one-click launch" {
+  let demo = @enterprise.demo_state()
+  guard demo.desktop_client is Some(client) else { fail("missing demo client") }
+  let legacy = { ..client, launch_uri: "http://127.0.0.1:4188/?mode=mooncode", }
+  let state = { ..demo, route: DesktopIde, desktop_client: Some(legacy), }
+  assert_true(@enterprise.webide_launch_selection(state) is None)
+  let page = @enterprise.render(state.update(LocaleChanged(ChineseSimplified)))
+  assert_true(page.contains("共用同一数据目录"))
+  assert_true(page.contains("disabled>打开"))
+}
+
+///|
+test "exclusive ComfyUI is launched only from a delivery and shared local desktop is blocked" {
   let demo = @enterprise.demo_state()
   guard demo.desktop_client is Some(desktop) else {
     fail("missing demo client")
@@ -135,7 +147,7 @@ test "exclusive ComfyUI is launched only from a delivery and loopback WebIDE exp
   }
   assert_true(
     @enterprise.render(local_state).contains(
-      "loopback address is not a public website",
+      "legacy local MoonDesk shares one data directory",
     ),
   )
 }

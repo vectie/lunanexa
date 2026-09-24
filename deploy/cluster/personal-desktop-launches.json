@@ -1,0 +1,10 @@
+[
+  {
+    "subject_ref": "subject-0e9eefd5ffecc74c54f84fb1",
+    "launch_uri": "http://106.39.18.146:5002/connect"
+  },
+  {
+    "subject_ref": "subject-c83af2a3503e34aaae05c511",
+    "launch_uri": "http://106.39.18.146:5003/connect"
+  }
+]
