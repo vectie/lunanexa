@@ -128,7 +128,11 @@ fn delivery_poll_command(
   model : AppModel,
   emit : @rabbita.Emit[AppMessage],
 ) -> @rabbita.Cmd {
-  if model.portal.route != DesktopIde ||
+  if (
+      model.portal.route != DesktopIde &&
+      model.portal.route != MachineAccess &&
+      model.portal.route != Models
+    ) ||
     model.portal.deliveries.error is Some(_) ||
     !model.portal.deliveries.operations.any(operation => {
       operation.stage == "Reserving" ||

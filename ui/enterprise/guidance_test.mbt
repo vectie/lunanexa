@@ -250,3 +250,37 @@ test "a rental period outside the offering's allowance says so" {
     @enterprise.render(allowed).contains("is longer than this offering allows"),
   )
 }
+
+///|
+test "unavailable IaaS offerings do not expose a dead selection" {
+  let offering : @enterprise.SelfServiceOfferingView = {
+    offering_id: "stale-sku",
+    kind: BareGpu,
+    display_name: "DGX Spark",
+    gpu_sku: "nvidia-gb10",
+    accelerator_count: 1,
+    accelerator_memory_mib: 131072,
+    regions: ["cn-north-1"],
+    minimum_duration_hours: 1,
+    maximum_duration_hours: 24,
+    price_summary: "CNY 0.02 / second",
+    allowed_model_template_refs: [],
+    available: false,
+  }
+  let base = @enterprise.default_state(1000L)
+  let self_service = {
+    ..@enterprise.default_self_service_state(),
+    step: Capacity,
+    selected_product: Some(BareGpu),
+    offerings: [offering],
+    offerings_loaded: true,
+  }
+  let state = { ..base, route: SelfService, self_service, }
+  assert_true(
+    state.update(SelfService(SelectOffering("stale-sku"))).self_service ==
+    self_service,
+  )
+  let page = @enterprise.render(state)
+  assert_true(page.contains("No capacity available"))
+  assert_false(page.contains("Select capacity"))
+}

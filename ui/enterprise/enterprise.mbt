@@ -62,6 +62,12 @@ pub(all) enum DesktopConnectPhase {
 } derive(Debug, Eq)
 
 ///|
+pub extend DesktopConnectPhase with Debug::{to_repr}
+
+///|
+pub extend DesktopConnectPhase with Eq::{equal, not_equal}
+
+///|
 pub(all) struct ApiKeyIssueDraft {
   display_name : String
   model_list_scope : Bool
@@ -1561,10 +1567,6 @@ fn page_header(
   state : EnterpriseState,
   emit : @rabbita.Emit[EnterpriseMessage]?,
 ) -> @rabbita.Html {
-  let organization = match state.membership {
-    Some(value) => value.organization_id
-    None => enterprise_copy(state.locale, NotConnected)
-  }
   let organization_options : Array[@rabbita.Html] = [
     @html.option(
       value="",
@@ -1578,7 +1580,7 @@ fn page_header(
         value=value.organization.organization_id,
         selected=state.selected_organization_id ==
           Some(value.organization.organization_id),
-        "\{value.organization.display_name} · \{value.organization.organization_id}",
+        value.organization.display_name,
       ),
     )
   }
@@ -1640,7 +1642,6 @@ fn page_header(
       },
       @html.div(class="topbar-meta", [
         @html.span(class="status-dot", ""),
-        @html.span(organization),
         @html.span(
           class="role-pill",
           enterprise_copy(state.locale, TenantScoped),
@@ -1762,58 +1763,6 @@ fn overview_view(
         @html.span(enterprise_copy(state.locale, CurrentSpend)),
         @html.strong(state.provisional_spend),
         @html.small(enterprise_copy(state.locale, ProvisionalCentralLedger)),
-      ]),
-    ]),
-    @html.section(class="workflow-panel", [
-      @html.h2(enterprise_copy(state.locale, LeaseReadiness)),
-      @html.ol(class="workflow-steps", [
-        @html.li(class="", [
-          @html.span("1"),
-          @html.div([
-            @html.strong(enterprise_copy(state.locale, EnterpriseVerified)),
-            @html.p(
-              enterprise_copy(
-                state.locale,
-                OrganizationMembershipAndSignerAuthorityRecorded,
-              ),
-            ),
-          ]),
-        ]),
-        @html.li(
-          class=if pending == 0 { "is-complete" } else { "is-current" },
-          [
-            @html.span("2"),
-            @html.div([
-              @html.strong(
-                enterprise_copy(state.locale, ExecuteRequiredAgreements),
-              ),
-              @html.p(
-                enterprise_copy(
-                  state.locale,
-                  ExternalSignatureEvidenceIsVerifiedBefore,
-                ),
-              ),
-            ]),
-          ],
-        ),
-        @html.li(class=if open_requests > 0 { "is-current" } else { "" }, [
-          @html.span("3"),
-          @html.div([
-            @html.strong(enterprise_copy(state.locale, RequestCapacity)),
-            @html.p(
-              enterprise_copy(state.locale, ChooseProjectTimeWindowUsernameAnd),
-            ),
-          ]),
-        ]),
-        @html.li([
-          @html.span("4"),
-          @html.div([
-            @html.strong(enterprise_copy(state.locale, OperatorAssignsOneNode)),
-            @html.p(
-              enterprise_copy(state.locale, ACredentialReferenceIsCreatedNo),
-            ),
-          ]),
-        ]),
       ]),
     ]),
   ])
@@ -3238,6 +3187,12 @@ fn models_view(
     } else {
       @html.div(class="model-grid", cards)
     },
+    if state.deliveries.options.templates.any(value => value.kind == "ModelApi") ||
+      state.deliveries.operations.any(value => value.kind == "ModelApi") {
+      delivery_panel_view(state.deliveries, state.locale, emit, "ModelApi")
+    } else {
+      @html.nothing
+    },
   ])
 }
 
@@ -3345,8 +3300,8 @@ fn desktop_connect_progress_view(state : EnterpriseState) -> @rabbita.Html {
       } else if !access_ready {
         copy(
           state.locale,
-          "Waiting for workspace access.",
-          "等待工作区授权。",
+          "No active workspace access: not yet enabled, expired, or revoked.",
+          "无有效工作区权限：尚未开通、已到期或已撤销。",
         )
       } else {
         copy(
@@ -3358,6 +3313,10 @@ fn desktop_connect_progress_view(state : EnterpriseState) -> @rabbita.Html {
   }
   @html.section(class="workflow-panel", [
     @html.h2(copy(state.locale, "One-click connection", "一键贯通认证")),
+    @html.p(
+      copy(state.locale, "Available model: ", "可用模型：") +
+      client.map_or("", value => value.approved_model_aliases.join(", ")),
+    ),
     @html.p(
       attrs=@html.Attrs::build().role("status").aria_live("polite"),
       status,
@@ -3429,38 +3388,21 @@ fn desktop_ide_view(
   state : EnterpriseState,
   emit : @rabbita.Emit[EnterpriseMessage]?,
 ) -> @rabbita.Html {
-  let (
-    name,
-    lifetime,
-    connected,
-    contract_ready,
-    workspace_ready,
-    models_ready,
-    ready,
-    aliases,
-  ) = match state.desktop_client {
+  let is_comfyui = state.desktop_client.map_or(false, client => {
+    client.client_id == "comfyui"
+  })
+  let (name, contract_ready, workspace_ready, models_ready, ready) = match
+    state.desktop_client {
     Some(client) =>
       (
         client.display_name,
-        client.handoff_lifetime_ms / 1000L,
-        client.connected_handoffs,
         client.contract_ready,
         client.workspace_ready,
         client.models_ready,
         client.ready,
-        client.approved_model_aliases,
       )
     None =>
-      (
-        enterprise_copy(state.locale, DesktopClient),
-        0L,
-        0,
-        false,
-        false,
-        false,
-        false,
-        [],
-      )
+      (enterprise_copy(state.locale, DesktopClient), false, false, false, false)
   }
   let available = ready &&
     !state.loading &&
@@ -3543,53 +3485,57 @@ fn desktop_ide_view(
     } else {
       @html.span("")
     },
-    @html.section(class="workflow-panel", [
-      @html.label(
-        for_="webide-model-source",
-        enterprise_copy(state.locale, ModelSource),
-      ),
-      @html.select(
-        id="webide-model-source",
-        disabled=state.loading,
-        on_change=text_command(emit, value => SelectWebIdeOrder(value)),
-        [
-          @html.option(
-            value="",
-            selected=state.webide_order_id is None,
-            enterprise_copy(state.locale, AuthorizedSharedModels),
-          ),
-          ..match state.webide_order_id {
-            Some(id) if !webide_orders(state).any(order => {
-                order.order_id == id && order.kind == DedicatedMaaS
-              }) =>
-              [
+    if !is_comfyui {
+      @html.section(class="workflow-panel", [
+        @html.label(
+          for_="webide-model-source",
+          enterprise_copy(state.locale, ModelSource),
+        ),
+        @html.select(
+          id="webide-model-source",
+          disabled=state.loading,
+          on_change=text_command(emit, value => SelectWebIdeOrder(value)),
+          [
+            @html.option(
+              value="",
+              selected=state.webide_order_id is None,
+              enterprise_copy(state.locale, AuthorizedSharedModels),
+            ),
+            ..match state.webide_order_id {
+              Some(id) if !webide_orders(state).any(order => {
+                  order.order_id == id && order.kind == DedicatedMaaS
+                }) =>
+                [
+                  @html.option(
+                    value=id,
+                    disabled=true,
+                    selected=true,
+                    enterprise_copy(state.locale, SelectedOrderIsUnavailable),
+                  ),
+                ]
+              _ => []
+            },
+            ..[
+              for order in webide_orders(state) if order.kind == DedicatedMaaS => {
                 @html.option(
-                  value=id,
-                  disabled=true,
-                  selected=true,
-                  enterprise_copy(state.locale, SelectedOrderIsUnavailable),
-                ),
-              ]
-            _ => []
-          },
-          ..[
-            for order in webide_orders(state) if order.kind == DedicatedMaaS => {
-              @html.option(
-                value=order.order_id,
-                disabled=order.status != ActiveOrder,
-                selected=state.webide_order_id == Some(order.order_id),
-                order.gpu_sku +
-                " · " +
-                order.model_selector.unwrap_or("") +
-                " · " +
-                order.order_id,
-              )
-            }
+                  value=order.order_id,
+                  disabled=order.status != ActiveOrder,
+                  selected=state.webide_order_id == Some(order.order_id),
+                  order.gpu_sku +
+                  " · " +
+                  order.model_selector.unwrap_or("") +
+                  " · " +
+                  order.order_id,
+                )
+              }
+            ],
           ],
-        ],
-      ),
-      @html.p(enterprise_copy(state.locale, DedicatedOrdersStayBoundToTheir)),
-    ]),
+        ),
+        @html.p(enterprise_copy(state.locale, DedicatedOrdersStayBoundToTheir)),
+      ])
+    } else {
+      @html.nothing
+    },
     @html.section(class="welcome-panel", [
       @html.div([
         @html.p(
@@ -3605,7 +3551,9 @@ fn desktop_ide_view(
         ),
         @html.p(next_action),
       ]),
-      if !contract_ready && state.desktop_client is Some(_) {
+      if is_comfyui {
+        @html.nothing
+      } else if !contract_ready && state.desktop_client is Some(_) {
         @html.button(
           type_="button",
           class="primary-action",
@@ -3626,128 +3574,18 @@ fn desktop_ide_view(
         )
       },
     ]),
-    desktop_connect_progress_view(state),
-    @html.section(class="workflow-panel", [
-      @html.h2(enterprise_copy(state.locale, YourAccessJourney)),
-      @html.ul(class="workflow-steps", [
-        @html.li(class="is-complete", [
-          @html.span("1"),
-          @html.div([
-            @html.strong(enterprise_copy(state.locale, SignedIn)),
-            @html.p(
-              enterprise_copy(
-                state.locale,
-                YourIdentityAndDeveloperMembershipAre,
-              ),
-            ),
-          ]),
-        ]),
-        @html.li(
-          class=if contract_ready { "is-complete" } else { "is-current" },
-          [
-            @html.span("2"),
-            @html.div([
-              @html.strong(enterprise_copy(state.locale, Masterlease)),
-              @html.p(
-                if contract_ready {
-                  enterprise_copy(state.locale, ContractIsEffective)
-                } else {
-                  enterprise_copy(
-                    state.locale,
-                    ReviewAndCompleteTheContractTemplate,
-                  )
-                },
-              ),
-            ]),
-          ],
-        ),
-        @html.li(
-          class=if workspace_ready {
-            "is-complete"
-          } else if contract_ready {
-            "is-current"
-          } else {
-            ""
-          },
-          [
-            @html.span("3"),
-            @html.div([
-              @html.strong(enterprise_copy(state.locale, WorkspaceAccess)),
-              @html.p(
-                if workspace_ready {
-                  enterprise_copy(state.locale, DeveloperLeaseIsActive)
-                } else {
-                  enterprise_copy(state.locale, WaitingForOperatorEnablement)
-                },
-              ),
-            ]),
-          ],
-        ),
-        @html.li(
-          class=if models_ready {
-            "is-complete"
-          } else if contract_ready && workspace_ready {
-            "is-current"
-          } else {
-            ""
-          },
-          [
-            @html.span("4"),
-            @html.div([
-              @html.strong(copy(state.locale, "Serving models", "可用模型")),
-              @html.p(
-                if models_ready {
-                  aliases.join(", ")
-                } else {
-                  copy(
-                    state.locale,
-                    "No deployed model is serving yet.",
-                    "尚无已部署且可调用的模型。",
-                  )
-                },
-              ),
-            ]),
-          ],
-        ),
-        @html.li(class=if ready { "is-current" } else { "" }, [
-          @html.span("5"),
-          @html.div([
-            @html.strong(enterprise_copy(state.locale, OpenWebide)),
-            @html.p(
-              if state.desktop_client is Some(client) &&
-                client.client_id == "comfyui" {
-                copy(
-                  state.locale,
-                  "Open ComfyUI from an active GPU delivery below; the generic WebIDE handoff cannot start it.",
-                  "请从下方有效的 GPU 交付打开 ComfyUI；通用 WebIDE 交接无法启动它。",
-                )
-              } else if state.desktop_client is None {
-                copy(
-                  state.locale,
-                  "Choose an available workspace to see its one-click launch details.",
-                  "选择可用工作台后，这里会显示一键启动方式。",
-                )
-              } else {
-                copy(
-                  state.locale,
-                  "One click opens \{name} with a \{lifetime}-second single-use handoff.",
-                  "点击一次即可通过 \{lifetime} 秒有效的单次交接打开 \{name}。",
-                )
-              },
-            ),
-          ]),
-        ]),
-      ]),
-      @html.p(
-        class="request-boundary",
-        copy(
-          state.locale,
-          "Serving models: \{aliases.length()} · Previous connections: \{connected} · Access remains lease-bound",
-          "可用模型：\{aliases.length()} · 历史连接：\{connected} · 访问权限仍受租约约束",
-        ),
-      ),
-    ]),
-    delivery_panel_view(state.deliveries, state.locale, emit),
+    if !is_comfyui {
+      desktop_connect_progress_view(state)
+    } else {
+      @html.nothing
+    },
+    if is_comfyui ||
+      state.deliveries.options.templates.any(value => value.kind == "Workspace") ||
+      state.deliveries.operations.any(value => value.kind == "Workspace") {
+      delivery_panel_view(state.deliveries, state.locale, emit, "Workspace")
+    } else {
+      @html.nothing
+    },
   ])
 }
 
@@ -4146,14 +3984,22 @@ fn content(
     DesktopIde => desktop_ide_view(state, emit)
     MachineAccess => {
       let machine = { ..state.machine_access, locale: state.locale, }
-      match emit {
-        Some(send) =>
-          @machine_access.interactive_view(
-            machine,
-            send.map(message => MachineAccess(message)),
-          )
-        None => @machine_access.view(machine)
-      }
+      @html.div(class="page-stack", [
+        match emit {
+          Some(send) =>
+            @machine_access.interactive_view(
+              machine,
+              send.map(message => MachineAccess(message)),
+            )
+          None => @machine_access.view(machine)
+        },
+        delivery_panel_view(
+          state.deliveries,
+          state.locale,
+          emit,
+          "GpuContainer",
+        ),
+      ])
     }
     OfflineCommerce => {
       let commerce = { ..state.offline_commerce, locale: state.locale, }
@@ -4216,6 +4062,9 @@ fn enterprise_view(
     @html.style_tag(self_service_styles()),
     @html.style_tag(
       ".confirmation-dialog{max-height:calc(100dvh - 2rem);overflow:auto}.first-call-guide pre{white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%;font-size:.75rem}.copy-detail{display:inline-flex;flex-wrap:wrap;align-items:center;gap:.5rem}.copy-detail .quiet-button{min-height:44px}.quota-track{display:block;height:.55rem;background:#223743;min-width:8rem;border-radius:.3rem;overflow:hidden}.quota-fill{display:block;height:100%;background:#7ee0bd}.quota-warning .quota-fill{background:#f1c66c}",
+    ),
+    @html.style_tag(
+      ".enterprise-topbar{flex-wrap:wrap}.topbar-actions{min-width:0;max-width:100%;flex-wrap:wrap}.organization-control{display:flex;align-items:center;gap:.4rem;min-width:0}.organization-control select{max-width:min(24rem,70vw);min-width:0;min-height:44px;padding:.5rem .65rem;border:1px solid #35505f;border-radius:.45rem;background:#09151c;color:var(--ink);font:inherit}@media(max-width:52rem){.organization-control{width:100%}.organization-control select{max-width:none;width:100%}}",
     ),
     @html.a(
       class="skip-link",

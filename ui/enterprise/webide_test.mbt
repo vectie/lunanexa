@@ -81,8 +81,11 @@ test "ComfyUI is selectable beside code WebIDE without weakening readiness" {
   assert_true(rendered.contains("Choose your WebIDE"))
   assert_true(rendered.contains("ComfyUI"))
   assert_true(rendered.contains("aria-pressed=\"true\""))
-  assert_true(rendered.contains("disabled>Open ComfyUI"))
-  assert_true(rendered.contains("No deployed model is serving yet"))
+  assert_false(rendered.contains("Open ComfyUI</button>"))
+  assert_true(
+    rendered.contains("workspace lease alone does not reserve a machine"),
+  )
+  assert_false(rendered.contains("One-click connection"))
   assert_false(rendered.contains("href=\"https://creative.example/connect"))
   assert_true(selected.update(SelectWebIde("unregistered")) == selected)
   let loading = { ..selected, loading: true, }
@@ -91,7 +94,7 @@ test "ComfyUI is selectable beside code WebIDE without weakening readiness" {
     selected.update(LocaleChanged(ChineseSimplified)),
   )
   assert_true(chinese.contains("选择 WebIDE"))
-  assert_true(chinese.contains("打开 ComfyUI"))
+  assert_true(chinese.contains("ComfyUI 需要有效的 GPU 交付"))
 }
 
 ///|
@@ -129,12 +132,12 @@ test "exclusive ComfyUI is launched only from a delivery and shared local deskto
   assert_true(
     rendered.contains("workspace lease alone does not reserve a machine"),
   )
-  assert_true(rendered.contains("disabled>Open ComfyUI"))
+  assert_false(rendered.contains("Open ComfyUI</button>"))
   let chinese = @enterprise.render(
     selected.update(LocaleChanged(ChineseSimplified)),
   )
   assert_true(chinese.contains("仅有工作区租约不会预留机器"))
-  assert_true(chinese.contains("通用 WebIDE 交接无法启动它"))
+  assert_true(chinese.contains("PaaS · 专属应用工作区"))
   let local_desktop = {
     ..desktop,
     launch_uri: "http://127.0.0.1:4188/connect",
