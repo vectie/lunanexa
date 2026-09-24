@@ -2218,7 +2218,9 @@ fn account_access_view(
       _ => true
     })
   let browser_session_rows = [
-    for browser_session in state.browser_sessions => {
+    for browser_session in state.browser_sessions if browser_session.revoked_unix_ms
+    is None &&
+    browser_session.expires_unix_ms > state.machine_access.now_unix_ms => {
       @html.div(class="browser-session-row", [
         copy_detail(state, emit, browser_session.session_id),
         @html.span(
@@ -2266,10 +2268,6 @@ fn account_access_view(
                 @html.dd(account.email),
               ]),
               @html.div([
-                @html.dt(enterprise_copy(state.locale, AccountId)),
-                @html.dd([copy_detail(state, emit, account.account_id)]),
-              ]),
-              @html.div([
                 @html.dt(enterprise_copy(state.locale, AccountState)),
                 @html.dd(account_state_label(state.locale, account.state)),
               ]),
@@ -2295,24 +2293,6 @@ fn account_access_view(
             ),
           )
       },
-      @html.dl(class="account-facts", [
-        @html.div([
-          @html.dt(enterprise_copy(state.locale, Organization)),
-          @html.dd([copy_detail(state, emit, membership.organization_id)]),
-        ]),
-        @html.div([
-          @html.dt(enterprise_copy(state.locale, Tenant)),
-          @html.dd([copy_detail(state, emit, membership.tenant_ref)]),
-        ]),
-        @html.div([
-          @html.dt(enterprise_copy(state.locale, Subject)),
-          @html.dd([copy_detail(state, emit, membership.subject_ref)]),
-        ]),
-        @html.div([
-          @html.dt(enterprise_copy(state.locale, BrowserSession)),
-          @html.dd(enterprise_copy(state.locale, EndsOnLogoutOrReload)),
-        ]),
-      ]),
       @html.div(
         class="role-list",
         [
@@ -2324,17 +2304,54 @@ fn account_access_view(
           }
         ],
       ),
-      if state.browser_sessions.length() == 0 {
-        @html.nothing
-      } else {
-        @html.div(
-          class="browser-session-list",
-          [
-            @html.h3(enterprise_copy(state.locale, BrowserSessions)),
-            ..browser_session_rows,
-          ],
-        )
-      },
+      @html.details(class="account-technical-details", [
+        @html.summary(
+          copy(
+            state.locale,
+            "Technical identifiers and active sessions",
+            "技术标识与有效会话",
+          ),
+        ),
+        @html.dl(class="account-facts", [
+          match state.account {
+            Some(account) =>
+              @html.div([
+                @html.dt(enterprise_copy(state.locale, AccountId)),
+                @html.dd([copy_detail(state, emit, account.account_id)]),
+              ])
+            None => @html.nothing
+          },
+          @html.div([
+            @html.dt(enterprise_copy(state.locale, Organization)),
+            @html.dd([copy_detail(state, emit, membership.organization_id)]),
+          ]),
+          @html.div([
+            @html.dt(enterprise_copy(state.locale, Tenant)),
+            @html.dd([copy_detail(state, emit, membership.tenant_ref)]),
+          ]),
+          @html.div([
+            @html.dt(enterprise_copy(state.locale, Subject)),
+            @html.dd([copy_detail(state, emit, membership.subject_ref)]),
+          ]),
+        ]),
+        if browser_session_rows.is_empty() {
+          @html.p(
+            copy(
+              state.locale,
+              "No active browser sessions",
+              "暂无有效浏览器会话",
+            ),
+          )
+        } else {
+          @html.div(
+            class="browser-session-list",
+            [
+              @html.h3(enterprise_copy(state.locale, BrowserSessions)),
+              ..browser_session_rows,
+            ],
+          )
+        },
+      ]),
     ]),
     if membership.active && membership.roles.contains(OrganizationAdministrator) {
       @html.section(class="api-key-panel", [

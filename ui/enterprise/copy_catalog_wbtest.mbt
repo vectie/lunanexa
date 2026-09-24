@@ -138,8 +138,6 @@ test "static enterprise catalog has complete unique bilingual entries" {
     DevelopmentFallbackTheGatewayAccountProfile,
     Tenant,
     Subject,
-    BrowserSession,
-    EndsOnLogoutOrReload,
     BrowserSessions,
     ApiKeys,
     KeysAreSubjectBoundExpiringModel,
@@ -500,5 +498,5 @@ test "static enterprise catalog has complete unique bilingual entries" {
     assert_false(seen.contains(pair))
     seen[pair] = true
   }
-  assert_eq(keys.length(), 476)
+  assert_eq(keys.length(), 474)
 }

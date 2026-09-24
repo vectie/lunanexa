@@ -126,8 +126,6 @@ priv enum EnterpriseCopyMessage {
   DevelopmentFallbackTheGatewayAccountProfile
   Tenant
   Subject
-  BrowserSession
-  EndsOnLogoutOrReload
   BrowserSessions
   ApiKeys
   KeysAreSubjectBoundExpiringModel
@@ -693,8 +691,8 @@ fn enterprise_copy(
       @i18n.copy(locale, "Identity & membership", "身份与成员资格")
     AuthenticationIsSuppliedByTheTrusted =>
       @i18n.copy(
-        locale, "Authentication is supplied by the trusted ingress. The platform stores only the opaque subject and authorization records.",
-        "身份验证由受信任入口提供。平台仅存储不透明主体和授权记录。",
+        locale, "Your sign-in is verified. Passwords are not shown here; a newly issued API key is shown only once.",
+        "登录身份已验证；此处不展示密码，新签发的 API 密钥仅显示一次。",
       )
     ActiveMembership =>
       @i18n.copy(locale, "Active membership", "有效成员资格")
@@ -711,11 +709,6 @@ fn enterprise_copy(
       )
     Tenant => @i18n.copy(locale, "Tenant", "租户")
     Subject => @i18n.copy(locale, "Subject", "主体")
-    BrowserSession => @i18n.copy(locale, "Browser session", "浏览器会话")
-    EndsOnLogoutOrReload =>
-      @i18n.copy(
-        locale, "Ends on logout or reload", "退出登录或重新加载时结束",
-      )
     BrowserSessions => @i18n.copy(locale, "Browser sessions", "浏览器会话")
     ApiKeys => @i18n.copy(locale, "API keys", "API 密钥")
     KeysAreSubjectBoundExpiringModel =>
