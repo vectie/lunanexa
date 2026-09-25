@@ -14,6 +14,7 @@
 | `/user` | “受管申请”及“订单与材料” | 表单能打开；受管申请提示需要有效机器协议；可见租期档位及创建草稿入口。未创建无用订单 |
 | `/user` | “模型目录” | 可见模型目录；该账户不属于 GLM 服务所有企业，未显示其停止权限 |
 | `/docs` | 打开 `https://suanli.kechuangfuwu.com:8443/docs/` | 中文文档可达 |
+| 标准 443 | 打开 `https://suanli.kechuangfuwu.com/mana/` | 外侧连接失败；同域名 `:8443/mana/` 正常。标准 443 不能标记通过，需检查路由器公网 443 转发/占用 |
 | `:5005` | 打开 MiniMax H3 ComfyUI 模板 | 工作流、提示词和“运行”按钮可见；本轮未重复耗时生成 |
 | `:5002` | 打开既有 MoonDesk Code 会话 → “Retry Code runtime” → 刷新 | 旧会话可见，但持续显示 `Code runtime is unavailable`；本轮未能完成新回合 |
 | `:5003` | 打开既有 MoonDesk Code 会话 → 输入 `请只回复：5003_UI_E2E_20260925_OK` → 点击 “Prompt” | 输入框与发送按钮可用；发送失败，页面显示 `Invalid character 'L' at line 1, column 0`，不能算 Code 可用 |
