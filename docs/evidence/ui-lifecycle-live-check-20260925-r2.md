@@ -14,7 +14,7 @@
 | IaaS 选型 | `/user`「自助开通」→「租用独占 GPU 算力」；恢复调度前显示“当前无可用算力”，恢复后出现两项 DGX Spark。修复同名卡片无法区分后显示 `offer-dgx-spark-02` 与 `offer-dgx-spark-03` → 选择后显示 Linux 用户名、区域、租期和“查看报价” | 库存刷新、选型和表单通过；**未下单** |
 | IaaS 访问 | `/user`「我的机器」显示 0 条独占机器访问、无有效授权；「申请资源」进入受管申请并明确提示需要有效机器协议；「订单与材料」展示最低 1 天的收费档位 | 机器开通/停止未通过；本次 1 小时测试授权不是付费购买或协议签署 |
 | PaaS / Code | 已有 `:5003` 旧标签页「代码」→「新建对话」→ 输入测试消息 →「启动」；旧会话此前「Prompt」返回 `Invalid character 'L' at line 1, column 0`，本次新对话未出现可核验回复。`:5002` 旧会话显示 `Code runtime is unavailable`。需要 wangzhixiang 重新从 `/user` 登录，生成新 handoff 后再测发送、停止、重开与文件保留 | **未通过**；旧标签页不能替代新授权验收 |
-| 其他入口 | `:8443/mana/`、`:8443/user/`、`:8443/docs/` 可打开；`:5005` 的 MiniMax H3 ComfyUI 工作流和“运行”按钮仍可见 | 页面可达；本轮没有重复生成视频 |
+| 其他入口 | `:8443/mana/`、`:8443/user/`、`:8443/docs/` 可打开；`:5005` 的 MiniMax H3 ComfyUI 工作流和“运行”按钮仍可见；本测试浏览器访问标准 443 返回 `ERR_TUNNEL_CONNECTION_FAILED` | 8443/5005 页面可达；443 在本测试环境不通；本轮没有重复生成视频 |
 | 临时权限回收 | `/mana`「策略」→「撤销企业成员关系」→ 精确填写 `membership-ceshi-glm-ui-20260925` →「验证并提交」→ 核对范围和回执 →「确认操作」→ 页面显示已撤销；刷新 CeShi `/user` 后组织选择器不再有“能源谷青创街区” | **通过**；没有留下临时企业管理员权限 |
 
 ## 根因与修复
@@ -34,3 +34,5 @@
 历史基线见 `ui-lifecycle-live-check-20260925.md`；其中“GLM 仍在运行、`.179` 仍封锁调度”的描述仅代表前一轮，不再是当前状态。
 
 源码验证：`moon info && moon fmt`；MoonBit native 全量 `1238/1238`、JS 全量 `633/633` 通过。企业端最终镜像 `lunanexa-web-enterprise:20260925-lifecycle-final` 已滚动上线。
+
+发布后清理了仅由本轮创建的临时镜像构建目录 `/home/HwHiAiUser/lunanexa-enterprise-status.GkaevW`（约 3.3 GiB）；最终镜像已导入 containerd，企业端与控制器 Deployment 均维持 Ready。没有删除模型、账户或工作文件。
