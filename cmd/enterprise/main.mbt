@@ -3674,6 +3674,7 @@ fn signed_out_model(model : AppModel) -> AppModel {
     connecting: false,
     session_generation: model.session_generation + 1L,
     session_expires_unix_ms: None,
+    login_password: "",
     machine_clock_generation: model.machine_clock_generation + 1L,
     contract_preview_generation: model.contract_preview_generation + 1L,
     contract_poll_generation: model.contract_poll_generation + 1L,
@@ -3839,6 +3840,7 @@ fn update(
           connecting: true,
           session_generation: model.session_generation + 1L,
           session_expires_unix_ms: Some(browser_session.expires_unix_ms),
+          login_password: "",
         }
         (next, organization_bootstrap_command(next, emit))
       }
@@ -6217,8 +6219,27 @@ fn update(
           (next, machine_clock_command(next, emit))
         }
       }
-    Outcome(Failed(dispatched_locale, message)) => {
-      let message = portal_failure_message(model.portal.locale, message)
+    Outcome(Failed(dispatched_locale, raw_message)) => {
+      if model.token.has_prefix("lnxs_") && raw_message.contains("HTTP 401") {
+        let signed_out = signed_out_model(model)
+        return (
+          {
+            ..signed_out,
+            portal: {
+              ..signed_out.portal,
+              error_message: Some(
+                portal_copy(
+                  signed_out.portal.locale,
+                  "Your session has expired. Sign in again.",
+                  "会话已过期，请重新登录。",
+                ),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
+      }
+      let message = portal_failure_message(model.portal.locale, raw_message)
       (
         {
           ..model,
