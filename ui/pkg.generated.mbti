@@ -324,6 +324,7 @@ pub(all) enum ConsoleMessage {
   Navigate(OperatorRoute)
   AlertsWindowChanged(AlertsWindow)
   BeginCordon(String)
+  BeginUncordon(String)
   BeginDrain(String)
   BeginRollback(String)
   BeginStopDeployment(String)
@@ -534,6 +535,7 @@ pub fn DeploymentRow::to_repr(Self) -> @debug.Repr
 
 pub(all) enum DestructiveAction {
   CordonNode(String)
+  UncordonNode(String)
   DrainNode(String)
   StopDeployment(String)
   RollbackAlias(String)

@@ -1890,6 +1890,7 @@ pub extend QualifiedServiceRow with FromJson::{from_json}
 ///|
 pub(all) enum DestructiveAction {
   CordonNode(String)
+  UncordonNode(String)
   DrainNode(String)
   StopDeployment(String)
   RollbackAlias(String)
@@ -2097,6 +2098,7 @@ pub(all) enum ConsoleMessage {
   Navigate(OperatorRoute)
   AlertsWindowChanged(AlertsWindow)
   BeginCordon(String)
+  BeginUncordon(String)
   BeginDrain(String)
   BeginRollback(String)
   BeginStopDeployment(String)
@@ -6578,16 +6580,29 @@ fn node_item(
           ),
         ),
         @html.div(class="row-actions", [
-          @html.button(
-            type_="button",
-            title=localized(
-              locale,
-              "Cordon \{node.node_id}",
-              "封锁调度 \{node.node_id}",
-            ),
-            on_click=command(emit, BeginCordon(node.node_id)),
-            localized(locale, "Cordon…", "封锁调度…"),
-          ),
+          if node.state == Cordoned {
+            @html.button(
+              type_="button",
+              title=localized(
+                locale,
+                "Restore scheduling on \{node.node_id}",
+                "恢复 \{node.node_id} 的调度",
+              ),
+              on_click=command(emit, BeginUncordon(node.node_id)),
+              localized(locale, "Restore scheduling…", "恢复调度…"),
+            )
+          } else {
+            @html.button(
+              type_="button",
+              title=localized(
+                locale,
+                "Cordon \{node.node_id}",
+                "封锁调度 \{node.node_id}",
+              ),
+              on_click=command(emit, BeginCordon(node.node_id)),
+              localized(locale, "Cordon…", "封锁调度…"),
+            )
+          },
           @html.button(
             type_="button",
             class="danger-secondary",
@@ -11358,6 +11373,11 @@ fn confirmation_copy(
     CordonNode(_) =>
       localized(
         locale, "Cordoning prevents new assignments on this node.", "封锁调度会阻止此节点接收新的分配。",
+      )
+    UncordonNode(_) =>
+      localized(
+        locale, "Restoring scheduling makes this node eligible for new assignments. Verify external workloads have stopped before continuing.",
+        "恢复调度后，此节点可接收新分配。继续前请确认外部工作负载已停止。",
       )
     DrainNode(_) =>
       localized(
