@@ -1134,6 +1134,10 @@ fn offering_card(
         @html.div([
           @html.h3(offering.display_name),
           @html.p([copy_detail(state, emit, offering.gpu_sku)]),
+          @html.p([
+            @html.span(copy(state.locale, "Configuration: ", "配置编号：")),
+            copy_detail(state, emit, offering.offering_id),
+          ]),
         ]),
         @html.span(
           class=if offering.available {

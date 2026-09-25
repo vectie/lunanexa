@@ -1650,9 +1650,10 @@ async fn main {
       @env.get_env_var("LUNANEXA_GLM_CONTROL_ORIGIN"),
       @env.get_env_var("LUNANEXA_GLM_CONTROL_TOKEN"),
     ) {
-    (Some(origin), Some(token)) if origin == "http://192.168.2.175:5907" &&
-      token.length() >= 32 &&
-      service.has_external_text_route() =>
+    (Some(origin), Some(raw_token)) if origin == "http://192.168.2.175:5907" &&
+      raw_token.trim().length() >= 32 &&
+      service.has_external_text_route() => {
+      let token = raw_token.trim().to_owned()
       service.with_external_text_control(stop => {
         let headers = { "authorization": "Bearer " + token }
         let (response, body) = if stop {
@@ -1668,6 +1669,7 @@ async fn main {
         }
         state
       })
+    }
     (None, None) | (Some(_), None) => service
     _ => raise Failure("GLM control configuration is incomplete")
   }
