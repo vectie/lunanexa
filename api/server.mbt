@@ -103,7 +103,7 @@ pub struct ApiService {
   reconciliation_only : Bool
   runtime : @runtimes.OpenAiTextRuntime
   external_text_route : ExternalTextRoute?
-  external_text_control : (async (Bool) -> String)?
+  external_text_control : (async (String) -> String)?
   operator_token : String
   retire_bootstrap_operator_token : Bool
   // Token → operator identity map for contract-document operator routes,

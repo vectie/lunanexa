@@ -80,6 +80,17 @@ fn delivery_command(
                 body="{}",
               ),
             )
+          Some(ConfirmStartExternal) =>
+            ignore(
+              request(
+                "POST",
+                model.endpoint,
+                "/v1/portal/self/external-model-service:start",
+                model.token,
+                model.subject_ref,
+                body="{}",
+              ),
+            )
           _ => ()
         }
         // Enterprise model control belongs to the organization administrator;

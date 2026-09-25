@@ -74,6 +74,21 @@ async fn observe() -> Array[(Target, String, Bool)] {
 }
 
 ///|
+async fn gpu_idle(target : Target) -> Bool {
+  let (code, output, _error) = @process.collect_output("ssh", [
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "ConnectTimeout=10",
+    target.host,
+    "nvidia-smi",
+    "--query-compute-apps=pid",
+    "--format=csv,noheader,nounits",
+  ])
+  code == 0 && output.text().trim() == ""
+}
+
+///|
 fn state(observed : Array[(Target, String, Bool)]) -> String {
   if observed.all(item => item.2) {
     "Running"
@@ -94,6 +109,24 @@ async fn stop_glm() -> String {
       ignore(docker(target, ["stop", "--time=60", id])) catch {
         _ => ()
       }
+    }
+  }
+  state(observe())
+}
+
+///|
+async fn start_glm() -> String {
+  let before = observe()
+  for item in before {
+    if item.2 || !gpu_idle(item.0) {
+      raise Failure("GLM Spark pair is not idle")
+    }
+  }
+  // The worker joins the distributed runtime before the head advertises it.
+  for index in [1, 0] {
+    let (target, id, running) = before[index]
+    if !running {
+      ignore(docker(target, ["start", id]))
     }
   }
   state(observe())
@@ -142,16 +175,24 @@ async fn main {
     if header(request.headers, "authorization") != Some("Bearer " + token) {
       return reply(connection, 401, "Unauthorized")
     }
-    if request.path != "/v1/glm-control" {
+    if request.path != "/v1/glm-control" &&
+      request.path != "/v1/glm-control:start" {
       return reply(connection, 404, "NotFound")
     }
-    if request.meth != Get && request.meth != Post {
+    if (request.path == "/v1/glm-control:start" && request.meth != Post) ||
+      (
+        request.path == "/v1/glm-control" &&
+        request.meth != Get &&
+        request.meth != Post
+      ) {
       return reply(connection, 405, "MethodNotAllowed")
     }
     lock.acquire()
     defer lock.release()
     let result = try {
-      if request.meth == Post {
+      if request.path == "/v1/glm-control:start" {
+        start_glm()
+      } else if request.meth == Post {
         stop_glm()
       } else {
         state(observe())
