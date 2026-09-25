@@ -82,17 +82,26 @@ fn delivery_command(
             )
           _ => ()
         }
-        let operations : Array[@enterprise_ui.DeliveryView] = @json.from_json(
-          @json.parse(
-            request(
-              "GET",
-              model.endpoint,
-              "/v1/portal/self/deliveries",
-              model.token,
-              model.subject_ref,
+        // Enterprise model control belongs to the organization administrator;
+        // personal deliveries require Developer access. A missing personal
+        // lease must not hide the shared model's status or stop action.
+        let operations : Array[@enterprise_ui.DeliveryView] = try
+          @json.from_json(
+            @json.parse(
+              request(
+                "GET",
+                model.endpoint,
+                "/v1/portal/self/deliveries",
+                model.token,
+                model.subject_ref,
+              ),
             ),
-          ),
-        )
+          )
+        catch {
+          _ => panel.operations
+        } noraise {
+          value => value
+        }
         let (options, option_error) : (@enterprise_ui.DeliveryOptions, String?) = (
           @json.from_json(
             @json.parse(
@@ -119,32 +128,53 @@ fn delivery_command(
               ),
             )
         }
-        let external_model : @enterprise_ui.ExternalModelServiceView? = try
-          Some(
-            @json.from_json(
-              @json.parse(
-                request(
-                  "GET",
-                  model.endpoint,
-                  "/v1/portal/self/external-model-service",
-                  model.token,
-                  model.subject_ref,
+        let (external_model, external_error) : (
+          @enterprise_ui.ExternalModelServiceView?,
+          String?,
+        ) = try
+          (
+            Some(
+              @json.from_json(
+                @json.parse(
+                  request(
+                    "GET",
+                    model.endpoint,
+                    "/v1/portal/self/external-model-service",
+                    model.token,
+                    model.subject_ref,
+                  ),
                 ),
               ),
             ),
+            None,
           )
         catch {
-          _ =>
-            panel.external_model.map(service => {
-              ..service,
-              state: "Unavailable",
-              ready: false,
-              can_stop: false,
-            })
+          error if error.to_string().contains("HTTP 404 NotFound") =>
+            (None, None)
+          error =>
+            (
+              panel.external_model.map(service => {
+                ..service,
+                state: "Unavailable",
+                ready: false,
+                can_stop: false,
+              }),
+              Some(
+                portal_copy(
+                  model.portal.locale,
+                  "Shared model status unavailable: \{error.to_string()}",
+                  "企业共享模型状态暂不可用：\{error.to_string()}",
+                ),
+              ),
+            )
         } noraise {
           value => value
         }
-        Ok((options, operations, external_model, option_error))
+        let status_error = match external_error {
+          Some(_) => external_error
+          None => option_error
+        }
+        Ok((options, operations, external_model, status_error))
       } catch {
         _ =>
           Err(

@@ -3222,12 +3222,11 @@ fn models_view(
     } else {
       @html.div(class="model-grid", cards)
     },
-    if state.deliveries.external_model is Some(_) ||
-      state.deliveries.operations.any(value => value.kind == "ModelApi") ||
-      (
-        !state.deliveries.options.reservations.is_empty() &&
-        state.deliveries.options.templates.any(value => value.kind == "ModelApi")
-      ) {
+    if state.deliveries.loaded ||
+      state.deliveries.loading ||
+      state.deliveries.error is Some(_) ||
+      state.deliveries.external_model is Some(_) ||
+      state.deliveries.operations.any(value => value.kind == "ModelApi") {
       delivery_panel_view(state.deliveries, state.locale, emit, "ModelApi")
     } else {
       @html.nothing

@@ -352,6 +352,23 @@ test "shared external GLM stop belongs to company administrator in MaaS" {
 }
 
 ///|
+test "MaaS keeps status and refresh visible when model control fails to load" {
+  let state = @enterprise.default_state(100L)
+  let html = @enterprise.render({
+    ..state,
+    route: Models,
+    deliveries: {
+      ..state.deliveries,
+      loaded: true,
+      error: Some("model status unavailable"),
+    },
+  })
+  assert_true(html.contains("Dedicated model APIs"))
+  assert_true(html.contains("Refresh status"))
+  assert_true(html.contains("model status unavailable"))
+}
+
+///|
 test "ready MaaS exposes bound key creation and clears its one time secret" {
   let state = @enterprise.default_state(100L)
   let operation : @enterprise.DeliveryView = {

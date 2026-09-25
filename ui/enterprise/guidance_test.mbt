@@ -242,7 +242,8 @@ test "a rental period outside the offering's allowance says so" {
       ..@enterprise.default_self_service_state(),
       step: Capacity,
       selected_product: Some(BareGpu),
-      offerings: [offering],
+      offerings: [offering, { ..offering, offering_id: "offering-trial-2", }],
+      offerings_loaded: true,
       selected_offering_id: "offering-trial",
       project_id: "trial-project",
       unix_username: "trialuser",
@@ -251,6 +252,8 @@ test "a rental period outside the offering's allowance says so" {
     },
   }
   let html = @enterprise.render(state)
+  assert_true(html.contains("offering-trial"))
+  assert_true(html.contains("offering-trial-2"))
   assert_true(html.contains("168 hours is longer than this offering allows"))
   assert_false(@enterprise.self_service_configuration_valid(state.self_service))
   // The same state at a period inside the allowance says nothing extra.
