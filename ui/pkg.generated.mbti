@@ -542,6 +542,7 @@ pub(all) enum DestructiveAction {
   SuspendUser(String)
   RevokeUser(String)
   RevokeAccessGrant(String)
+  RevokeEnterpriseMembership(String)
   EndComputeLease(String)
   TerminateExclusiveNodeLease(String, Int64)
   RedriveNotificationDelivery(String, Int, Int64)

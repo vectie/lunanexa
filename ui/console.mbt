@@ -1898,6 +1898,7 @@ pub(all) enum DestructiveAction {
   SuspendUser(String)
   RevokeUser(String)
   RevokeAccessGrant(String)
+  RevokeEnterpriseMembership(String)
   EndComputeLease(String)
   TerminateExclusiveNodeLease(String, Int64)
   RedriveNotificationDelivery(String, Int, Int64)
@@ -10585,6 +10586,15 @@ fn policies_view(
                 ),
               ),
               @html.option(
+                value="revoke-enterprise-membership",
+                selected=state.operation_name == "revoke-enterprise-membership",
+                localized(
+                  state.locale,
+                  "Revoke enterprise membership",
+                  "撤销企业成员关系",
+                ),
+              ),
+              @html.option(
                 value="publish-portal-agreement",
                 selected=state.operation_name == "publish-portal-agreement",
                 localized(
@@ -11323,6 +11333,11 @@ fn confirmation_copy(
       localized(
         locale, "Revoking this grant removes its scoped access. Confirm only after checking the principal and scope.",
         "撤销此授权会移除其限定范围的访问权限。请在核对主体和范围后确认。",
+      )
+    RevokeEnterpriseMembership(_) =>
+      localized(
+        locale, "Revoking this membership immediately removes this enterprise role and its shared resource access. Confirm the exact membership ID.",
+        "撤销此成员关系会立即移除企业角色和共享资源访问权限。请核对成员关系编号。",
       )
     EndComputeLease(_) =>
       localized(

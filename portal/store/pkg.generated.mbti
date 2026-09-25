@@ -29,6 +29,7 @@ pub async fn FilePortalStore::record_execution(Self, @portal.AgreementExecution,
 pub async fn FilePortalStore::replace_trial_membership(Self, String, @portal.EnterpriseMembership) -> @portal.EnterpriseMembership
 pub async fn FilePortalStore::request_signature(Self, String, @portal.SignatureRequest, Int64) -> @portal.PortalAgreement
 pub async fn FilePortalStore::review_lease_request(Self, @portal.LeaseReview, String?, Int64) -> @portal.EnterpriseLeaseRequest
+pub async fn FilePortalStore::revoke_membership(Self, String) -> @portal.EnterpriseMembership
 pub async fn FilePortalStore::self_view(Self, String) -> @portal.EnterpriseSelfView
 pub async fn FilePortalStore::self_view_for_organization(Self, String, String) -> @portal.EnterpriseSelfView
 pub async fn FilePortalStore::snapshot(Self) -> @portal.PortalSnapshot

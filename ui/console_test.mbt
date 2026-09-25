@@ -1543,6 +1543,8 @@ test "policies route exposes keyboard-accessible typed operations" {
   assert_true(html.contains("Typed operator operation"))
   assert_true(html.contains("operation-name"))
   assert_true(html.contains("operation-body"))
+  assert_true(html.contains("Create enterprise membership"))
+  assert_true(html.contains("Revoke enterprise membership"))
   assert_true(html.contains("Publish assignment for controller signing"))
   assert_true(html.contains("Validate and submit"))
 }

@@ -402,3 +402,41 @@ async test "corrupted portal snapshot cannot duplicate an active organization me
   }
   @fs.rmdir(directory, recursive=true)
 }
+
+///|
+async test "operator revocation closes exactly one membership and survives restart" {
+  let directory = @fs.tmpdir(prefix="lunanexa-portal-revoke-")
+  defer @fs.rmdir(directory, recursive=true)
+  let path = "\{directory}/portal.json"
+  let store = @store.FilePortalStore::open(path)
+  for (id, subject) in [("member-a", "subject-a"), ("member-b", "subject-b")] {
+    ignore(
+      store.put_membership({
+        membership_id: id,
+        tenant_ref: "tenant-a",
+        organization_id: "org-a",
+        subject_ref: subject,
+        roles: [OrganizationAdministrator, Developer],
+        active: true,
+        created_unix_ms: 1000L,
+      }),
+    )
+  }
+  let revoked = store.revoke_membership("member-b")
+  assert_false(revoked.active)
+  assert_eq(store.revoke_membership("member-b"), revoked)
+  let restored = @store.FilePortalStore::open(path)
+  let memberships = restored.snapshot().memberships
+  assert_true(
+    memberships.any(value => value.membership_id == "member-a" && value.active),
+  )
+  assert_true(
+    memberships.any(value => value.membership_id == "member-b" && !value.active),
+  )
+  try restored.revoke_membership("missing") catch {
+    @portal.PortalError::NotFound(_) => ()
+    error => fail("unexpected revocation error: \{Repr(error)}")
+  } noraise {
+    _ => fail("missing membership was revoked")
+  }
+}

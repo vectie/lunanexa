@@ -11,6 +11,17 @@ fn decode_portal_membership(body : String) -> @portal.EnterpriseMembership? {
 }
 
 ///|
+fn decode_membership_revocation(body : String) -> String? {
+  try @json.parse(body) catch {
+    _ => None
+  } noraise {
+    { "membership_id": String(membership_id), .. } if membership_id != "" =>
+      Some(membership_id)
+    _ => None
+  }
+}
+
+///|
 fn decode_portal_agreement(body : String) -> @portal.PortalAgreement? {
   Some(@json.from_json(@json.parse(body))) catch {
     _ => None
@@ -332,6 +343,24 @@ async fn ApiService::handle_enterprise_portal(
           "portal:membership:\{persisted.membership_id}",
         )
         return json_reply(201, persisted.to_json())
+      }
+      (Post, "/v1/portal/operator/memberships:revoke") => {
+        guard decode_membership_revocation(body) is Some(membership_id) else {
+          return api_error(
+            400, "InvalidRequest", "membership ID is required", false,
+          )
+        }
+        let revoked = try portal.revoke_membership(membership_id) catch {
+          error => return portal_error_reply(error)
+        } noraise {
+          value => value
+        }
+        self.operator_audit(
+          "portal.membership.revoke",
+          revoked.membership_id,
+          "portal:membership:\{revoked.membership_id}",
+        )
+        return json_reply(200, revoked.to_json())
       }
       (Post, "/v1/portal/operator/agreements") => {
         guard decode_portal_agreement(body) is Some(agreement) else {
