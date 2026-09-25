@@ -40,15 +40,19 @@ flowchart LR
   Ingress --> Auth
   Ingress --> API
   Auth <--> PG
+  Auth -->|"个人授权"| Workspace
+  Auth -->|"企业/用户范围"| Gate
   API --> Commerce
   API --> Registry
   API --> Scheduler
   API <--> PG
+  Commerce -->|"订单与预留资格"| Scheduler
+  Registry -->|"模型与运行时资格"| Scheduler
   Scheduler <-->|"签名期望状态／心跳"| Trial
   Scheduler <-->|"签名期望状态／心跳"| Enterprise
   Trial --> Telemetry
   Enterprise --> Telemetry
-  Telemetry --> Mana
+  Telemetry --> API
   ModelSource -->|"制品传输／本地缓存"| Trial
   ModelSource -->|"制品传输／本地缓存"| Enterprise
   User -->|"授权后一键交接"| Workspace
@@ -58,7 +62,7 @@ flowchart LR
   DeskA -->|"推理请求"| Gate
   DeskB -->|"推理请求"| Gate
   Gate -->|"企业与个人授权校验"| API
-  API -->|"已就绪模型端点"| Enterprise
+  API -->|"就绪时转发推理"| Enterprise
   Comfy -->|"视频任务"| H3Proxy
   H3Proxy -->|"转发与注入令牌"| Trial
 ```
