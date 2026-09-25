@@ -339,6 +339,15 @@ test "shared external GLM stop belongs to company administrator in MaaS" {
     },
   })
   assert_false(colleague.contains("Stop GLM service"))
+  let stopped_colleague = @enterprise.render({
+    ..state,
+    route: Models,
+    deliveries: {
+      ..panel,
+      external_model: Some({ ..shared, state: "Stopped", can_stop: false, }),
+    },
+  })
+  assert_false(stopped_colleague.contains("Start GLM service"))
   let stopped = @enterprise.render({
     ..state,
     route: Models,
@@ -349,6 +358,14 @@ test "shared external GLM stop belongs to company administrator in MaaS" {
   })
   assert_true(stopped.contains("Stopped; model files retained"))
   assert_false(stopped.contains("Stop GLM service"))
+  assert_true(stopped.contains("Start GLM service"))
+  let start_confirm = panel.update(RequestStartExternal)
+  assert_true(
+    @enterprise.render({ ..state, route: Models, deliveries: start_confirm, }).contains(
+      "Confirm start GLM",
+    ),
+  )
+  assert_false(start_confirm.update(CancelStop).external_start_confirmation)
 }
 
 ///|

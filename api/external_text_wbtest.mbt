@@ -111,7 +111,7 @@ async test "external text route rejects non-loopback origins" {
 }
 
 ///|
-async test "only the owning company administrator can stop its shared external model" {
+async test "only the owning company administrator can start and stop its shared external model" {
   let root = @fs.tmpdir(prefix="lunanexa-external-control-")
   let durable = @store.FileStore::open("\{root}/state.json")
   durable.fence_controller(1L)
@@ -123,7 +123,7 @@ async test "only the owning company administrator can stop its shared external m
     "sha256:" + "b".repeat(64),
     "sha256:" + "a".repeat(64),
   )
-  let calls : Array[Bool] = []
+  let calls : Array[String] = []
   let service = ApiService::new(
       durable, runtime, "operator-token", "inference-token", "node-token", "0.2.0",
     )
@@ -138,9 +138,9 @@ async test "only the owning company administrator can stop its shared external m
       "sha256:" + "b".repeat(64),
       "sha256:" + "a".repeat(64),
     )
-    .with_external_text_control(stop => {
-      calls.push(stop)
-      if stop {
+    .with_external_text_control(action => {
+      calls.push(action)
+      if action == "stop" {
         "Stopped"
       } else {
         "Running"
@@ -204,10 +204,15 @@ async test "only the owning company administrator can stop its shared external m
   assert_eq(listed.status, 200)
   assert_true(listed.body.contains("\"can_stop\":true"))
   assert_eq(service.handle(Get, path, other, "").status, 404)
+  assert_eq(service.handle(Post, path + ":start", other, "").status, 404)
   assert_eq(service.handle(Post, path + ":stop", user, "").status, 403)
-  assert_eq(calls, [false])
+  assert_eq(service.handle(Post, path + ":start", user, "").status, 403)
+  assert_eq(calls, ["status"])
   let stopped = service.handle(Post, path + ":stop", admin, "")
   assert_eq(stopped.status, 200)
   assert_true(stopped.body.contains("\"state\":\"Stopped\""))
-  assert_eq(calls, [false, true])
+  let started = service.handle(Post, path + ":start", admin, "")
+  assert_eq(started.status, 200)
+  assert_true(started.body.contains("\"state\":\"Running\""))
+  assert_eq(calls, ["status", "stop", "start"])
 }

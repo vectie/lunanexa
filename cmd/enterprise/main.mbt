@@ -3939,6 +3939,7 @@ fn update(
         | SelectTemplate(_)
         | RequestStop(_)
         | RequestStopExternal
+        | RequestStartExternal
         | DismissApiAccess
         | CancelStop => (next, @rabbita.none)
         _ if model.demo_mode => (model, @rabbita.none)

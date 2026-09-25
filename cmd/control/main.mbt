@@ -1654,10 +1654,12 @@ async fn main {
       raw_token.trim().length() >= 32 &&
       service.has_external_text_route() => {
       let token = raw_token.trim().to_owned()
-      service.with_external_text_control(stop => {
+      service.with_external_text_control(action => {
         let headers = { "authorization": "Bearer " + token }
-        let (response, body) = if stop {
+        let (response, body) = if action == "stop" {
           @http.post(origin + "/v1/glm-control", Json::null(), headers~)
+        } else if action == "start" {
+          @http.post(origin + "/v1/glm-control:start", Json::null(), headers~)
         } else {
           @http.get(origin + "/v1/glm-control", headers~)
         }

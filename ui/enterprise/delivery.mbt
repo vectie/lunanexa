@@ -75,6 +75,7 @@ pub(all) struct DeliveryPanel {
   error : String?
   stop_confirmation : String?
   external_stop_confirmation : Bool
+  external_start_confirmation : Bool
   poll_generation : Int64
   api_access : DeliveryApiAccess?
 } derive(Eq)
@@ -91,6 +92,8 @@ pub(all) enum DeliveryMessage {
   ConfirmStop(String)
   RequestStopExternal
   ConfirmStopExternal
+  RequestStartExternal
+  ConfirmStartExternal
   OpenWorkspace(String)
   IssueApiAccess(String)
   DismissApiAccess
@@ -110,6 +113,7 @@ pub fn default_delivery_panel() -> DeliveryPanel {
     error: None,
     stop_confirmation: None,
     external_stop_confirmation: false,
+    external_start_confirmation: false,
     poll_generation: 0L,
     api_access: None,
   }
@@ -199,9 +203,19 @@ pub fn DeliveryPanel::update(
       }
     RequestStop(id) => { ..self, stop_confirmation: Some(id), }
     RequestStopExternal => { ..self, external_stop_confirmation: true, }
+    RequestStartExternal => { ..self, external_start_confirmation: true, }
     CancelStop =>
-      { ..self, stop_confirmation: None, external_stop_confirmation: false, }
-    Refresh | Retry(_) | ConfirmStop(_) | ConfirmStopExternal =>
+      {
+        ..self,
+        stop_confirmation: None,
+        external_stop_confirmation: false,
+        external_start_confirmation: false,
+      }
+    Refresh
+    | Retry(_)
+    | ConfirmStop(_)
+    | ConfirmStopExternal
+    | ConfirmStartExternal =>
       {
         ..self,
         loading: true,
@@ -372,9 +386,16 @@ fn delivery_panel_view(
                 attrs=@html.Attrs::build().role("status").aria_live("polite"),
                 match service.state {
                   "Running" =>
-                    copy(
-                      locale, "Running on the Spark pair", "运行中 · 占用两台 Spark",
-                    )
+                    if service.ready {
+                      copy(
+                        locale, "Running on the Spark pair", "运行中 · 占用两台 Spark",
+                      )
+                    } else {
+                      copy(
+                        locale, "Starting on the Spark pair; inference is not ready yet",
+                        "两台 Spark 启动中 · 推理尚未就绪",
+                      )
+                    }
                   "Stopped" =>
                     copy(
                       locale, "Stopped; model files retained", "已停止 · 模型文件保留",
@@ -410,6 +431,17 @@ fn delivery_panel_view(
                   disabled=panel.loading,
                   on_click=command(emit, Delivery(RequestStopExternal)),
                   copy(locale, "Stop GLM service", "停止 GLM 服务"),
+                )
+              } else {
+                @html.nothing
+              },
+              if service.can_stop && service.state == "Stopped" {
+                @html.button(
+                  type_="button",
+                  class="primary-button",
+                  disabled=panel.loading,
+                  on_click=command(emit, Delivery(RequestStartExternal)),
+                  copy(locale, "Start GLM service", "启动 GLM 服务"),
                 )
               } else {
                 @html.nothing
@@ -710,6 +742,32 @@ fn delivery_panel_view(
           disabled=panel.loading,
           on_click=command(emit, Delivery(ConfirmStopExternal)),
           copy(locale, "Confirm stop GLM", "确认停止 GLM"),
+        ),
+        @html.button(
+          type_="button",
+          class="quiet-button",
+          disabled=panel.loading,
+          on_click=command(emit, Delivery(CancelStop)),
+          copy(locale, "Cancel", "取消"),
+        ),
+      ])
+    } else {
+      @html.nothing
+    },
+    if panel.external_start_confirmation {
+      @html.div(class="request-boundary", [
+        @html.p(
+          copy(
+            locale, "Start the company-shared GLM on the two Spark nodes? Confirm that other workloads have been coordinated first. Inference becomes available after the model passes its health check.",
+            "确认在两台 Spark 上启动企业共享 GLM？请先协调其他运行任务；模型健康检查通过后，企业成员才能调用推理。",
+          ),
+        ),
+        @html.button(
+          type_="button",
+          class="primary-button",
+          disabled=panel.loading,
+          on_click=command(emit, Delivery(ConfirmStartExternal)),
+          copy(locale, "Confirm start GLM", "确认启动 GLM"),
         ),
         @html.button(
           type_="button",
