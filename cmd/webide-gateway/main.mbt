@@ -84,6 +84,7 @@ async fn main {
           "LUNANEXA_WEBIDE_ALLOW_INSECURE_PUBLIC_HTTP",
         ) ==
         Some("true"),
+      stop=Some(id => host.stop(id)),
     )
     let server = @http.Server(
       @socket.Addr::parse(required("LUNANEXA_WEBIDE_BIND")),

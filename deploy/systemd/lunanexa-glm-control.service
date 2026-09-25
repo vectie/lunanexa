@@ -1,0 +1,23 @@
+[Unit]
+Description=LunaNexa legacy GLM lifecycle adapter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=HwHiAiUser
+Group=HwHiAiUser
+WorkingDirectory=/home/HwHiAiUser
+Environment=LUNANEXA_GLM_CONTROL_BIND=192.168.2.175:5907
+Environment=LUNANEXA_GLM_CONTROL_TOKEN_FILE=/home/HwHiAiUser/.config/lunanexa/glm-control-token
+ExecStart=/opt/lunanexa/bin/glm-control.exe
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

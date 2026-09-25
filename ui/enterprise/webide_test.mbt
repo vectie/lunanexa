@@ -59,6 +59,31 @@ test "one-click connection shows model-first progress and never claims client co
 }
 
 ///|
+test "personal MoonDesk exposes a stop control without stopping the shared model" {
+  let base = @enterprise.demo_state()
+  guard base.desktop_client is Some(client) else {
+    fail("missing demo desktop")
+  }
+  let desktop = {
+    ..client,
+    client_id: "desktop-workspace",
+    launch_uri: "http://198.51.100.5:5002/connect",
+  }
+  let state = {
+    ..base,
+    route: DesktopIde,
+    desktop_client: Some(desktop),
+    desktop_clients: [desktop],
+  }
+  let rendered = @enterprise.render(state)
+  assert_true(
+    rendered.contains("管理／停止我的 WebIDE") ||
+    rendered.contains("Manage / stop my WebIDE"),
+  )
+  assert_true(rendered.contains("http://198.51.100.5:5002/workspace-control"))
+}
+
+///|
 test "ComfyUI is selectable beside code WebIDE without weakening readiness" {
   let demo = @enterprise.demo_state()
   guard demo.desktop_client is Some(desktop) else {

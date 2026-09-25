@@ -1645,6 +1645,32 @@ async fn main {
     }
     _ => service
   }
+  let service = match
+    (
+      @env.get_env_var("LUNANEXA_GLM_CONTROL_ORIGIN"),
+      @env.get_env_var("LUNANEXA_GLM_CONTROL_TOKEN"),
+    ) {
+    (Some(origin), Some(token)) if origin == "http://192.168.2.175:5907" &&
+      token.length() >= 32 &&
+      service.has_external_text_route() =>
+      service.with_external_text_control(stop => {
+        let headers = { "authorization": "Bearer " + token }
+        let (response, body) = if stop {
+          @http.post(origin + "/v1/glm-control", Json::null(), headers~)
+        } else {
+          @http.get(origin + "/v1/glm-control", headers~)
+        }
+        guard response.code == 200 &&
+          body.text().length() < 4096 &&
+          @json.parse(body.text()) is { "state": String(state), .. } &&
+          (state == "Running" || state == "Stopped" || state == "Partial") else {
+          raise Failure("GLM control status is unavailable")
+        }
+        state
+      })
+    (None, None) | (Some(_), None) => service
+    _ => raise Failure("GLM control configuration is incomplete")
+  }
   let server = @http.Server(@socket.Addr::parse(address), reuse_addr=true)
   let identity_server = @http.Server(
     @socket.Addr::parse(identity_address),

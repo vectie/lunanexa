@@ -3222,7 +3222,8 @@ fn models_view(
     } else {
       @html.div(class="model-grid", cards)
     },
-    if state.deliveries.operations.any(value => value.kind == "ModelApi") ||
+    if state.deliveries.external_model is Some(_) ||
+      state.deliveries.operations.any(value => value.kind == "ModelApi") ||
       (
         !state.deliveries.options.reservations.is_empty() &&
         state.deliveries.options.templates.any(value => value.kind == "ModelApi")
@@ -3274,6 +3275,18 @@ pub fn webide_launch_selection(
       Some((Some(order_id), order.project_id, [model]))
     }
   }
+}
+
+///|
+fn personal_webide_control_uri(client : EnterpriseDesktopClient) -> String? {
+  if client.client_id != "desktop-workspace" ||
+    !client.launch_uri.has_suffix("/connect") {
+    return None
+  }
+  Some(
+    client.launch_uri[0:client.launch_uri.length() - "/connect".length()].to_owned() +
+    "/workspace-control",
+  )
 }
 
 ///|
@@ -3614,6 +3627,22 @@ fn desktop_ide_view(
             copy(state.locale, "Open \{name}", "打开 \{name}")
           },
         )
+      },
+      match state.desktop_client {
+        Some(client) if personal_webide_control_uri(client) is Some(url) =>
+          @html.a(
+            class="quiet-button external-action",
+            href=url,
+            target=Blank,
+            rel="noopener noreferrer",
+            escape=true,
+            copy(
+              state.locale,
+              "Manage / stop my WebIDE",
+              "管理／停止我的 WebIDE",
+            ),
+          )
+        _ => @html.nothing
       },
     ]),
     if !is_comfyui {

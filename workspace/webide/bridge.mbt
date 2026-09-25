@@ -231,6 +231,53 @@ async fn Bridge::session(self : Bridge, token : String) -> Session {
 }
 
 ///|
+async fn Bridge::workspace_controls(
+  self : Bridge,
+  connection : @http.ServerConnection,
+) -> Unit {
+  let headers = response_headers("text/html; charset=utf-8")
+  headers["content-security-policy"] = "default-src 'none'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
+  connection.send_response(200, "OK", extra_headers=headers)
+  connection.write_string(
+    if self.stop is Some(_) {
+      "<!doctype html><html lang=\"zh-CN\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>管理工作台</title><main><h1>管理我的工作台</h1><p>停止仅关闭当前账户的运行容器；已保存的工作文件不会删除。重新打开时请从用户门户再次点击「打开工作台」。</p><form method=\"post\" action=\"/workspace-control/stop\"><button type=\"submit\">确认停止工作台</button></form><p><a href=\"/\">返回工作台</a></p></main></html>"
+    } else {
+      "<!doctype html><html lang=\"zh-CN\"><meta charset=\"utf-8\"><title>管理工作台</title><main><h1>暂不可停止</h1><p>这个工作台尚未接入受管停止能力，请联系管理员。</p><p><a href=\"/\">返回工作台</a></p></main></html>"
+    },
+  )
+  connection.end_response()
+}
+
+///|
+async fn Bridge::stop_workspace(
+  self : Bridge,
+  session : Session,
+  connection : @http.ServerConnection,
+) -> Unit {
+  guard self.stop is Some(stop) else {
+    return reply(connection, 503, "Workspace stop is not configured.")
+  }
+  let id = workspace_id(session.grant)
+  stop(id)
+  self.mutex.acquire()
+  defer self.mutex.release()
+  for key, value in self.sessions.copy() {
+    if workspace_id(value.grant) == id {
+      self.sessions.remove(key)
+    }
+  }
+  let headers = response_headers("text/html; charset=utf-8")
+  headers["content-security-policy"] = "default-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+  connection.send_response(200, "Stopped", extra_headers=headers, cookies=[
+    self.browser_cookie("", false, 0L),
+  ])
+  connection.write_string(
+    "<!doctype html><html lang=\"zh-CN\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>工作台已停止</title><main><h1>工作台已停止</h1><p>当前运行容器已停止，保存的工作文件仍在。需要继续时，请返回用户门户重新打开。</p></main></html>",
+  )
+  connection.end_response()
+}
+
+///|
 async fn Bridge::proxy_http(
   self : Bridge,
   session : Session,
@@ -389,6 +436,12 @@ pub async fn Bridge::handle(
     let session = @async.with_timeout(self.config.request_timeout_ms, () => {
       self.session(token)
     })
+    if request.path == "/workspace-control" && request.meth == Get {
+      return self.workspace_controls(connection)
+    }
+    if request.path == "/workspace-control/stop" && request.meth == Post {
+      return self.stop_workspace(session, connection)
+    }
     if request.path == "/logout" && request.meth == Post {
       self.sessions.remove(token)
       connection.send_response(

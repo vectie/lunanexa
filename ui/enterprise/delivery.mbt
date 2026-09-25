@@ -17,6 +17,14 @@ pub(all) struct DeliveryView {
 } derive(Eq, FromJson)
 
 ///|
+pub(all) struct ExternalModelServiceView {
+  model_alias : String
+  state : String
+  can_stop : Bool
+  ready : Bool
+} derive(Eq, FromJson)
+
+///|
 pub(all) struct DeliveryReservationOption {
   reservation_id : String
   label : String
@@ -57,6 +65,7 @@ pub(all) struct DeliveryApiAccess {
 ///|
 pub(all) struct DeliveryPanel {
   operations : Array[DeliveryView]
+  external_model : ExternalModelServiceView?
   options : DeliveryOptions
   reservation_id : String
   template_choice : String
@@ -65,6 +74,7 @@ pub(all) struct DeliveryPanel {
   loaded : Bool
   error : String?
   stop_confirmation : String?
+  external_stop_confirmation : Bool
   poll_generation : Int64
   api_access : DeliveryApiAccess?
 } derive(Eq)
@@ -79,6 +89,8 @@ pub(all) enum DeliveryMessage {
   RequestStop(String)
   CancelStop
   ConfirmStop(String)
+  RequestStopExternal
+  ConfirmStopExternal
   OpenWorkspace(String)
   IssueApiAccess(String)
   DismissApiAccess
@@ -88,6 +100,7 @@ pub(all) enum DeliveryMessage {
 pub fn default_delivery_panel() -> DeliveryPanel {
   {
     operations: [],
+    external_model: None,
     options: { reservations: [], templates: [], },
     reservation_id: "",
     template_choice: "",
@@ -96,6 +109,7 @@ pub fn default_delivery_panel() -> DeliveryPanel {
     loaded: false,
     error: None,
     stop_confirmation: None,
+    external_stop_confirmation: false,
     poll_generation: 0L,
     api_access: None,
   }
@@ -184,8 +198,10 @@ pub fn DeliveryPanel::update(
         api_access: None,
       }
     RequestStop(id) => { ..self, stop_confirmation: Some(id), }
-    CancelStop => { ..self, stop_confirmation: None, }
-    Refresh | Retry(_) | ConfirmStop(_) =>
+    RequestStopExternal => { ..self, external_stop_confirmation: true, }
+    CancelStop =>
+      { ..self, stop_confirmation: None, external_stop_confirmation: false, }
+    Refresh | Retry(_) | ConfirmStop(_) | ConfirmStopExternal =>
       {
         ..self,
         loading: true,
@@ -345,6 +361,65 @@ fn delivery_panel_view(
           ]),
         ])
       None => @html.nothing
+    },
+    if kind == "ModelApi" {
+      match panel.external_model {
+        Some(service) =>
+          @html.article(class="record-card", [
+            @html.div(class="record-main", [
+              @html.h3("企业共享模型 · " + service.model_alias),
+              @html.p(
+                attrs=@html.Attrs::build().role("status").aria_live("polite"),
+                match service.state {
+                  "Running" =>
+                    copy(
+                      locale, "Running on the Spark pair", "运行中 · 占用两台 Spark",
+                    )
+                  "Stopped" =>
+                    copy(
+                      locale, "Stopped; model files retained", "已停止 · 模型文件保留",
+                    )
+                  "Partial" =>
+                    copy(
+                      locale, "Partially stopped; operator attention required", "部分停止 · 需管理员处理",
+                    )
+                  "Unavailable" =>
+                    copy(
+                      locale, "Control status unavailable; no stop is confirmed",
+                      "控制状态暂不可用 · 尚未确认停止",
+                    )
+                  _ =>
+                    copy(
+                      locale, "Externally operated; stop is not yet available", "站外运行 · 暂不可在此停止",
+                    )
+                },
+              ),
+              @html.p(
+                copy(
+                  locale, "Company-shared model. Stopping it disconnects every member; personal WebIDE files are unaffected.",
+                  "企业共享模型。停止后所有成员将无法调用；个人 WebIDE 工作文件不受影响。",
+                ),
+              ),
+            ]),
+            @html.div(class="record-actions", [
+              if service.can_stop &&
+                (service.state == "Running" || service.state == "Partial") {
+                @html.button(
+                  type_="button",
+                  class="quiet-button",
+                  disabled=panel.loading,
+                  on_click=command(emit, Delivery(RequestStopExternal)),
+                  copy(locale, "Stop GLM service", "停止 GLM 服务"),
+                )
+              } else {
+                @html.nothing
+              },
+            ]),
+          ])
+        None => @html.nothing
+      }
+    } else {
+      @html.nothing
     },
     if panel.error is Some(_) && panel.options.reservations.is_empty() {
       @html.nothing
@@ -621,6 +696,32 @@ fn delivery_panel_view(
         ])
       None => @html.nothing
     },
+    if panel.external_stop_confirmation {
+      @html.div(class="request-boundary", [
+        @html.p(
+          copy(
+            locale, "Stop the company-shared GLM for all members? This releases its two GPU runtimes but keeps model files and personal WebIDE data.",
+            "确认停止企业共享 GLM？所有成员的推理会中断；两台 GPU 运行实例将关闭，模型文件和个人 WebIDE 数据保留。",
+          ),
+        ),
+        @html.button(
+          type_="button",
+          class="danger-button",
+          disabled=panel.loading,
+          on_click=command(emit, Delivery(ConfirmStopExternal)),
+          copy(locale, "Confirm stop GLM", "确认停止 GLM"),
+        ),
+        @html.button(
+          type_="button",
+          class="quiet-button",
+          disabled=panel.loading,
+          on_click=command(emit, Delivery(CancelStop)),
+          copy(locale, "Cancel", "取消"),
+        ),
+      ])
+    } else {
+      @html.nothing
+    },
   ])
 }
 
@@ -629,6 +730,12 @@ pub extend DeliveryView with Eq::{equal, not_equal}
 
 ///|
 pub extend DeliveryView with @json.FromJson::{from_json}
+
+///|
+pub extend ExternalModelServiceView with Eq::{equal, not_equal}
+
+///|
+pub extend ExternalModelServiceView with @json.FromJson::{from_json}
 
 ///|
 pub extend DeliveryReservationOption with Eq::{equal, not_equal}

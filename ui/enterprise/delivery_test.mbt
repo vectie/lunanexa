@@ -307,6 +307,51 @@ test "personal MoonDesk hides exclusive-delivery setup until it is relevant" {
 }
 
 ///|
+test "shared external GLM stop belongs to company administrator in MaaS" {
+  let state = @enterprise.default_state(100L)
+  let shared : @enterprise.ExternalModelServiceView = {
+    model_alias: "glm-5.3.flash",
+    state: "Running",
+    can_stop: true,
+    ready: true,
+  }
+  let panel = {
+    ..state.deliveries,
+    loaded: true,
+    external_model: Some(shared),
+  }
+  let owner = @enterprise.render({ ..state, route: Models, deliveries: panel, })
+  assert_true(owner.contains("Stop GLM service"))
+  assert_true(owner.contains("Running on the Spark pair"))
+  let confirm = panel.update(RequestStopExternal)
+  assert_true(
+    @enterprise.render({ ..state, route: Models, deliveries: confirm, }).contains(
+      "Confirm stop GLM",
+    ),
+  )
+  assert_false(confirm.update(CancelStop).external_stop_confirmation)
+  let colleague = @enterprise.render({
+    ..state,
+    route: Models,
+    deliveries: {
+      ..panel,
+      external_model: Some({ ..shared, can_stop: false, }),
+    },
+  })
+  assert_false(colleague.contains("Stop GLM service"))
+  let stopped = @enterprise.render({
+    ..state,
+    route: Models,
+    deliveries: {
+      ..panel,
+      external_model: Some({ ..shared, state: "Stopped", }),
+    },
+  })
+  assert_true(stopped.contains("Stopped; model files retained"))
+  assert_false(stopped.contains("Stop GLM service"))
+}
+
+///|
 test "ready MaaS exposes bound key creation and clears its one time secret" {
   let state = @enterprise.default_state(100L)
   let operation : @enterprise.DeliveryView = {

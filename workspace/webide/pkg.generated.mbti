@@ -44,13 +44,14 @@ pub struct Bridge {
   redeem : async (String) -> Grant
   authorize : async (Grant) -> Bool
   provision : async (String, Grant) -> Backend
+  stop : (async (String) -> Unit)?
   sessions : Map[String, Session]
   challenges : Map[String, Int64]
   authorizations : Map[String, AuthorizationFlight]
   mutex : @async.Mutex
 }
 pub async fn Bridge::handle(Self, @http.Request, &@io.Reader, @http.ServerConnection) -> Unit
-pub fn Bridge::new(BridgeConfig, async (String) -> Grant, async (Grant) -> Bool, async (String, Grant) -> Backend, allow_insecure_public_http? : Bool, allow_model_free_workspace? : Bool) -> Self raise BridgeError
+pub fn Bridge::new(BridgeConfig, async (String) -> Grant, async (Grant) -> Bool, async (String, Grant) -> Backend, allow_insecure_public_http? : Bool, allow_model_free_workspace? : Bool, stop? : (async (String) -> Unit)?) -> Self raise BridgeError
 
 pub(all) struct BridgeConfig {
   client_id : String
