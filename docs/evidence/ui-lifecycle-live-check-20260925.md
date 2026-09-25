@@ -19,7 +19,7 @@
 | `:5002` | 打开既有 MoonDesk Code 会话 → “Retry Code runtime” → 刷新 | 旧会话可见，但持续显示 `Code runtime is unavailable`；本轮未能完成新回合 |
 | `:5003` | 打开既有 MoonDesk Code 会话 → 输入 `请只回复：5003_UI_E2E_20260925_OK` → 点击 “Prompt” | 输入框与发送按钮可用；发送失败，页面显示 `Invalid character 'L' at line 1, column 0`，不能算 Code 可用 |
 
-只读现场诊断：GLM 控制适配器返回 `Running`；控制器和管理站 Deployment 均 Ready。新控制器启动时曾因 PostgreSQL `ConnectionUnavailable` 重启一次，之后恢复并持续处理请求。`5003` 的报错首字母与工作区网关的过期会话提示 `Launch this workspace again from your portal.` 一致；这**提示**登录/交接状态失效，但尚未取得请求响应证据，不把推断当成定论。
+只读现场诊断：GLM 控制适配器返回 `Running`；控制器和管理站 Deployment 均 Ready。新控制器启动时曾因 PostgreSQL `ConnectionUnavailable` 重启一次，之后恢复并持续处理请求。管理端授权列表明确显示 `grant-wangzhixiang-enterprise-20260924` 与 `grant-limuheng-personal-desktop-20260924` 均已过期（页面显示 2026-09-25 06:10:17 北京时间）；这解释了为什么既有聊天页面不能证明当前 Code 可用。`5003` 的原始解析错误仍属于不友好的 UI 反馈；虽然首字母与网关的失效会话提示相符，尚未逐请求抓到响应，不把该推断当成网络定论。
 
 ## 阻塞与下一轮验收
 
