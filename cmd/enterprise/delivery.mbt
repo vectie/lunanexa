@@ -69,6 +69,17 @@ fn delivery_command(
               ),
             )
           }
+          Some(ConfirmStopExternal) =>
+            ignore(
+              request(
+                "POST",
+                model.endpoint,
+                "/v1/portal/self/external-model-service:stop",
+                model.token,
+                model.subject_ref,
+                body="{}",
+              ),
+            )
           _ => ()
         }
         let operations : Array[@enterprise_ui.DeliveryView] = @json.from_json(
@@ -108,7 +119,32 @@ fn delivery_command(
               ),
             )
         }
-        Ok((options, operations, option_error))
+        let external_model : @enterprise_ui.ExternalModelServiceView? = try
+          Some(
+            @json.from_json(
+              @json.parse(
+                request(
+                  "GET",
+                  model.endpoint,
+                  "/v1/portal/self/external-model-service",
+                  model.token,
+                  model.subject_ref,
+                ),
+              ),
+            ),
+          )
+        catch {
+          _ =>
+            panel.external_model.map(service => {
+              ..service,
+              state: "Unavailable",
+              ready: false,
+              can_stop: false,
+            })
+        } noraise {
+          value => value
+        }
+        Ok((options, operations, external_model, option_error))
       } catch {
         _ =>
           Err(

@@ -295,6 +295,61 @@ async fn launch_test(origin : String, code : String) -> (String, String) {
 }
 
 ///|
+async test "workspace owner stops only their own running WebIDE from its authenticated page" {
+  let server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
+  defer server.close()
+  let origin = "http://\{server.addr}"
+  let stopped : Array[String] = []
+  let bridge = Bridge::new(
+    test_config(origin),
+    code => test_grant(if code == "lnxc_alice" { "alice" } else { "bob" }),
+    _ => true,
+    (_, _) => {
+      http_url: "http://127.0.0.1:8189",
+      websocket_url: "ws://127.0.0.1:8189",
+    },
+    stop=Some(id => stopped.push(id)),
+  )
+  @async.with_task_group <| group => {
+    group.spawn_bg(no_wait=true, allow_failure=true, () => {
+      server.run_forever((req, body, conn) => bridge.handle(req, body, conn))
+    })
+    let (anonymous, _) = @http.get(origin + "/workspace-control")
+    assert_eq(anonymous.code, 401)
+    let (alice_cookie, _) = launch_test(origin, "lnxc_alice")
+    let (bob_cookie, _) = launch_test(origin, "lnxc_bob")
+    let (controls, page) = @http.get(origin + "/workspace-control", headers={
+      "cookie": alice_cookie,
+    })
+    assert_eq(controls.code, 200)
+    assert_true(page.text().contains("确认停止工作台"))
+    let (wrong_origin, _) = @http.post(
+      origin + "/workspace-control/stop",
+      Json::null(),
+      headers={ "cookie": alice_cookie, "origin": "http://example.invalid" },
+    )
+    assert_eq(wrong_origin.code, 403)
+    assert_eq(stopped.length(), 0)
+    let (result, response) = @http.post(
+      origin + "/workspace-control/stop",
+      Json::null(),
+      headers={ "cookie": alice_cookie, "origin": origin },
+    )
+    assert_eq(result.code, 200)
+    assert_true(response.text().contains("工作台已停止"))
+    assert_eq(stopped, [workspace_id(test_grant("alice"))])
+    let (alice_after, _) = @http.get(origin + "/workspace-control", headers={
+      "cookie": alice_cookie,
+    })
+    assert_eq(alice_after.code, 401)
+    let (bob_after, _) = @http.get(origin + "/workspace-control", headers={
+      "cookie": bob_cookie,
+    })
+    assert_eq(bob_after.code, 200)
+  }
+}
+
+///|
 async test "real HTTP bridge keeps credentials private, isolates workspaces and rechecks revocation" {
   let public = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
   let alice = @http.Server(@socket.Addr::parse("127.0.0.1:0"))

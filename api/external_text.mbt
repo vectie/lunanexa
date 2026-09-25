@@ -11,6 +11,129 @@ struct ExternalTextRoute {
 }
 
 ///|
+fn external_text_control_path(path : String) -> Bool {
+  path == "/v1/portal/self/external-model-service" ||
+  path == "/v1/portal/self/external-model-service:stop"
+}
+
+///|
+pub fn ApiService::has_external_text_route(self : ApiService) -> Bool {
+  self.external_text_route is Some(_)
+}
+
+///|
+pub fn ApiService::with_external_text_control(
+  self : ApiService,
+  control : async (Bool) -> String,
+) -> ApiService {
+  { ..self, external_text_control: Some(control), }
+}
+
+///|
+async fn ApiService::handle_external_text_control(
+  self : ApiService,
+  verb : ApiMethod,
+  path : String,
+  headers : Map[String, String],
+  allow_asserted_subject : Bool,
+) -> HttpReply {
+  guard self.portal_store is Some(portal) &&
+    self.portal_subject(headers, allow_asserted_subject) is Some(subject) else {
+    return api_error(
+      401, "Unauthenticated", "enterprise sign-in is required", false,
+    )
+  }
+  guard self.external_text_route is Some(route) else {
+    return api_error(
+      404, "NotFound", "external model service was not found", false,
+    )
+  }
+  let view = try portal_view_for_request(portal, subject, headers) catch {
+    error => return portal_error_reply(error)
+  } noraise {
+    value => value
+  }
+  if view.membership.tenant_ref != route.tenant_ref {
+    return api_error(
+      404, "NotFound", "external model service was not found", false,
+    )
+  }
+  let can_stop = view.membership.roles.contains(OrganizationAdministrator)
+  guard self.external_text_control is Some(control) else {
+    return if verb == Get && path == "/v1/portal/self/external-model-service" {
+      json_reply(200, {
+        "model_alias": route.model_alias,
+        "state": "Unmanaged",
+        "can_stop": false,
+        "ready": self.external_text_ready(),
+      })
+    } else {
+      api_error(
+        503, "ModelControlUnavailable", "this external model is not controlled by LunaNexa",
+        true,
+      )
+    }
+  }
+  if verb == Post &&
+    path == "/v1/portal/self/external-model-service:stop" &&
+    !can_stop {
+    return api_error(
+      403, "OrganizationAdministratorRequired", "company administrator permission is required to stop a shared model",
+      false,
+    )
+  }
+  guard (verb == Get && path == "/v1/portal/self/external-model-service") ||
+    (verb == Post && path == "/v1/portal/self/external-model-service:stop") else {
+    return api_error(
+      405, "MethodNotAllowed", "unsupported model service action", false,
+    )
+  }
+  let state = try
+    @async.with_timeout(150000, () => control(verb == Post))
+  catch {
+    _ =>
+      return api_error(
+        503, "ModelControlUnavailable", "model service state could not be confirmed",
+        true,
+      )
+  } noraise {
+    value => value
+  }
+  if state != "Running" && state != "Stopped" && state != "Partial" {
+    return api_error(
+      503, "ModelControlUnavailable", "model service state could not be confirmed",
+      true,
+    )
+  }
+  if verb == Post {
+    self.with_audit_lock(() => {
+      self.store.append_audit(
+        self.next_audit(
+          "portal:\{subject}",
+          "external-model.stop",
+          route.model_alias,
+          "requested",
+          state,
+          if state == "Stopped" {
+            "accepted"
+          } else {
+            "partial"
+          },
+          "external-model:\{route.node_id}",
+          @async.now(),
+        ),
+      )
+    })
+  }
+  json_reply(200, {
+    "model_alias": route.model_alias,
+    "state": state,
+    "can_stop": can_stop,
+    "ready": self.external_text_ready(),
+  })
+}
+
+///|
 /// The origin is a controller-local proxy, never an arbitrary user URL.
 pub fn ApiService::with_external_text_route(
   self : ApiService,

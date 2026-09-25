@@ -78,6 +78,7 @@ pub struct Bridge {
   redeem : async (String) -> Grant
   authorize : async (Grant) -> Bool
   provision : async (String, Grant) -> Backend
+  stop : (async (String) -> Unit)?
   sessions : Map[String, Session]
   challenges : Map[String, Int64]
   authorizations : Map[String, AuthorizationFlight]

@@ -109,3 +109,105 @@ async test "external text route rejects non-loopback origins" {
   }
   assert_true(rejected)
 }
+
+///|
+async test "only the owning company administrator can stop its shared external model" {
+  let root = @fs.tmpdir(prefix="lunanexa-external-control-")
+  let durable = @store.FileStore::open("\{root}/state.json")
+  durable.fence_controller(1L)
+  let portal = @portal_store.FilePortalStore::open("\{root}/portal.json")
+  let runtime = @runtimes.OpenAiTextRuntime::new(
+    "https://runtime.invalid/v1/responses",
+    "",
+    "runtime-v1",
+    "sha256:" + "b".repeat(64),
+    "sha256:" + "a".repeat(64),
+  )
+  let calls : Array[Bool] = []
+  let service = ApiService::new(
+      durable, runtime, "operator-token", "inference-token", "node-token", "0.2.0",
+    )
+    .with_portal_store(portal)
+    .with_external_text_route(
+      "glm-5.3.flash",
+      "tenant-a",
+      "spark-a",
+      "http://127.0.0.1:19091",
+      "GLM-5.3-Flash-EXL3",
+      "runtime-v1",
+      "sha256:" + "b".repeat(64),
+      "sha256:" + "a".repeat(64),
+    )
+    .with_external_text_control(stop => {
+      calls.push(stop)
+      if stop {
+        "Stopped"
+      } else {
+        "Running"
+      }
+    })
+  let operator = { "Authorization": "Bearer operator-token" }
+  for
+    membership in [
+      @portal.EnterpriseMembership::{
+        membership_id: "member-admin",
+        tenant_ref: "tenant-a",
+        organization_id: "org-a",
+        subject_ref: "admin",
+        roles: [OrganizationAdministrator, Developer],
+        active: true,
+        created_unix_ms: @async.now(),
+      },
+      @portal.EnterpriseMembership::{
+        membership_id: "member-user",
+        tenant_ref: "tenant-a",
+        organization_id: "org-a",
+        subject_ref: "user",
+        roles: [Developer],
+        active: true,
+        created_unix_ms: @async.now(),
+      },
+      @portal.EnterpriseMembership::{
+        membership_id: "member-other",
+        tenant_ref: "tenant-b",
+        organization_id: "org-b",
+        subject_ref: "other",
+        roles: [OrganizationAdministrator, Developer],
+        active: true,
+        created_unix_ms: @async.now(),
+      },
+    ] {
+    assert_eq(
+      service.handle(
+        Post,
+        "/v1/portal/operator/memberships",
+        operator,
+        membership.to_json().stringify(),
+      ).status,
+      201,
+    )
+  }
+  let path = "/v1/portal/self/external-model-service"
+  let admin = {
+    "Authorization": "Bearer inference-token",
+    "X-LunaNexa-Subject": "admin",
+  }
+  let user = {
+    "Authorization": "Bearer inference-token",
+    "X-LunaNexa-Subject": "user",
+  }
+  let other = {
+    "Authorization": "Bearer inference-token",
+    "X-LunaNexa-Subject": "other",
+  }
+  let listed = service.handle(Get, path, admin, "")
+  assert_eq(listed.status, 200)
+  assert_true(listed.body.contains("\"can_stop\":true"))
+  assert_eq(service.handle(Get, path, other, "").status, 404)
+  assert_eq(service.handle(Post, path + ":stop", user, "").status, 403)
+  assert_eq(calls, [false])
+  let stopped = service.handle(Post, path + ":stop", admin, "")
+  assert_eq(stopped.status, 200)
+  assert_true(stopped.body.contains("\"state\":\"Stopped\""))
+  assert_eq(calls, [false, true])
+}

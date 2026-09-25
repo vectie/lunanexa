@@ -115,6 +115,7 @@ pub struct ApiService {
   reconciliation_only : Bool
   runtime : @runtimes.OpenAiTextRuntime
   external_text_route : ExternalTextRoute?
+  external_text_control : (async (Bool) -> String)?
   operator_token : String
   retire_bootstrap_operator_token : Bool
   operator_tokens : Map[String, String]
@@ -155,6 +156,7 @@ pub struct ApiService {
 }
 pub async fn ApiService::activate_machine_order_settled_payment(Self, String, @machinecommerce.MachinePaymentSettlement, Int64) -> (@machinecommerce.MachineOrder, @machinecommerce.IdempotencyResult)
 pub async fn ApiService::handle(Self, ApiMethod, String, Map[String, String], String) -> HttpReply
+pub fn ApiService::has_external_text_route(Self) -> Bool
 pub async fn ApiService::internal_component_ready(Self) -> Bool
 pub async fn ApiService::management_readiness(Self, Int64) -> ManagementReadiness
 pub fn ApiService::new(@vectie/lunanexa/store.FileStore, @runtimes.OpenAiTextRuntime, String, String, String, String) -> Self
@@ -201,6 +203,7 @@ pub fn ApiService::with_exclusive_lease_store(Self, @vectie/lunanexa/nodelease/s
 pub fn ApiService::with_exclusive_lease_unit_price(Self, @commercial.FixedMoney) -> Self raise
 pub fn ApiService::with_external_export_proof_token(Self, String) -> Self
 pub fn ApiService::with_external_observability_collector_configured(Self, Bool) -> Self
+pub fn ApiService::with_external_text_control(Self, async (Bool) -> String) -> Self
 pub fn ApiService::with_external_text_route(Self, String, String, String, String, String, String, String, String) -> Self raise
 pub fn ApiService::with_global_admin_settings(Self, @settings.GlobalAdminSettings) -> Self raise
 pub fn ApiService::with_gpu_container_offering(Self, GpuContainerOffering) -> Self raise

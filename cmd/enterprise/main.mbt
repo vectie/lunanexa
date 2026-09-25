@@ -408,6 +408,7 @@ priv enum AppMessage {
       (
         @enterprise_ui.DeliveryOptions,
         Array[@enterprise_ui.DeliveryView],
+        @enterprise_ui.ExternalModelServiceView?,
         String?,
       ),
       String,
@@ -3889,15 +3890,17 @@ fn update(
       }
       let panel = model.portal.deliveries
       let deliveries = match result {
-        Ok((options, operations, error)) =>
+        Ok((options, operations, external_model, error)) =>
           {
             ..panel,
             options,
             operations,
+            external_model,
             loaded: true,
             loading: false,
             error,
             stop_confirmation: None,
+            external_stop_confirmation: false,
           }
         Err(error) => { ..panel, loading: false, error: Some(error), }
       }
@@ -3933,6 +3936,7 @@ fn update(
         SelectReservation(_)
         | SelectTemplate(_)
         | RequestStop(_)
+        | RequestStopExternal
         | DismissApiAccess
         | CancelStop => (next, @rabbita.none)
         _ if model.demo_mode => (model, @rabbita.none)

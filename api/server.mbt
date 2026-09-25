@@ -103,6 +103,7 @@ pub struct ApiService {
   reconciliation_only : Bool
   runtime : @runtimes.OpenAiTextRuntime
   external_text_route : ExternalTextRoute?
+  external_text_control : (async (Bool) -> String)?
   operator_token : String
   retire_bootstrap_operator_token : Bool
   // Token → operator identity map for contract-document operator routes,
@@ -210,6 +211,7 @@ pub fn ApiService::new(
     reconciliation_only: false,
     runtime,
     external_text_route: None,
+    external_text_control: None,
     operator_token,
     retire_bootstrap_operator_token: false,
     operator_tokens: Map([(operator_token, "operator")]),
@@ -316,6 +318,7 @@ pub fn ApiService::with_registry(
     reconciliation_only: false,
     runtime,
     external_text_route: None,
+    external_text_control: None,
     operator_token,
     retire_bootstrap_operator_token: false,
     operator_tokens: Map([(operator_token, "operator")]),
@@ -423,6 +426,7 @@ pub fn ApiService::with_services(
     reconciliation_only: false,
     runtime,
     external_text_route: None,
+    external_text_control: None,
     operator_token,
     retire_bootstrap_operator_token: false,
     operator_tokens: Map([(operator_token, "operator")]),
@@ -532,6 +536,7 @@ pub fn ApiService::with_control_plane(
     reconciliation_only: false,
     runtime,
     external_text_route: None,
+    external_text_control: None,
     operator_token,
     retire_bootstrap_operator_token: false,
     operator_tokens: Map([(operator_token, "operator")]),
@@ -3304,6 +3309,11 @@ async fn ApiService::dispatch_with_transport(
   if client_handoff_path(path) {
     return self.handle_client_handoff(
       verb, path, headers, body, allow_asserted_subject,
+    )
+  }
+  if external_text_control_path(path) {
+    return self.handle_external_text_control(
+      verb, path, headers, allow_asserted_subject,
     )
   }
   if machine_commerce_path(path) {

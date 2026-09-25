@@ -75,6 +75,7 @@ pub fn Bridge::new(
   provision : async (String, Grant) -> Backend,
   allow_insecure_public_http? : Bool = false,
   allow_model_free_workspace? : Bool = false,
+  stop? : (async (String) -> Unit)? = None,
 ) -> Bridge raise BridgeError {
   if !valid_atom(config.client_id) ||
     !valid_origin(config.public_origin, allow_insecure_public_http~) ||
@@ -96,6 +97,7 @@ pub fn Bridge::new(
     redeem,
     authorize,
     provision,
+    stop,
     sessions: {},
     challenges: {},
     authorizations: {},
