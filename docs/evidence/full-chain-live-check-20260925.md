@@ -47,3 +47,12 @@
 | wangzhixiang | 与上方同样的三次提交/激活，使用其独立主体及工作区租约 | `grant-wangzhixiang-ui-1d-20260926` 与 `lease-wangzhixiang-ui-1d-20260926` 均显示有效，截止 **2026-09-27 02:19:20**。 |
 
 两人都仅获目标企业 `tenant-4a2394cf9b9a6b3c02697fab0097489a` 的开发者权限；租约为文本生成、每人最多 2 个会话、2 路并发、每小时 100 个请求。未授平台运维角色，也未分配独占机器。管理端授权总数从 52 增至 54，有效工作区租约从 4 增至 6。用户端当时仍是 CeShi 的浏览器会话，因此两人新的单击交接、Code 对话与模型共享尚未通过用户侧正向验收；已请用户切换至 wangzhixiang 登录后继续。
+
+## 2026-09-26 发布与公网回归补记（北京时间）
+
+- `b945ca7` 为企业管理员补齐共享 GLM 服务的 `:start` 动作，和已有 `:stop` 共用同一企业管理员权限边界；前端对已停止状态提供带确认的启动按钮。源码回归为 native **1238/1238**、JS **634/634**，已推送 GitHub、GitLab `main`。
+- GLM 生命周期适配器在管理节点更新，原二进制保留为 `/opt/lunanexa/bin/glm-control.exe.bak-20260926-b945ca7`；新二进制 SHA-256 为 `7cd393cd3ce2f0eff2ddaee71261db84e1fdce9d16588eabe9e2eb41e2e8c087`。`systemd` 状态为 `active`，未携带凭据的状态请求返回 401。
+- 新控制器首轮镜像因构建制品权限为 `750`，Kubernetes 非 root 用户执行时报 `permission denied`，曾两次有界诊断并回滚；两次旧版都重新达到 Ready。问题不是 PostgreSQL 启动错误。修正版在镜像构建时明确 `COPY --chmod=0755`，镜像内文件权限已读取核对。
+- 修正版控制器已按私有仓库摘要 `moon/lunanexa-control@sha256:c4f151845e414a79226cff1f4c9fe54d1e5fa8f71e158ba9272fa52491a53587` 发布；企业端已按 `moon/lunanexa-web@sha256:c99276d3d51bd1daf5a37a6383e0990c74fb5f8b12f7581ca8d6a5ac911ea191` 发布。两个镜像均经 TLS 验证的仓库 HEAD 回读，两个 Deployment 均完成 rollout。
+- 公网浏览器复核：`/mana` 为有效管理会话，四台节点心跳正常、22 个已批准模型；`/docs/?page=architecture` 中文页面可加载；`/user` 新版页面可加载，但控制器更新后需重新登录。旧公网 `:5005` ComfyUI 仍打开并显示 MiniMax H3 工作流及运行按钮，未改动 `.176/.177`。不带身份请求 `/user/v1/portal/self/external-model-service:start` 返回 401，说明新路径公开路由可达但拒绝匿名。
+- `.178/.179` 的 `nvidia-smi --query-compute-apps` 此时均无进程，但**未启动** GLM；GPU 空闲读数不等于已协调全部任务。目标企业两个用户的浏览器新会话、MoonDesk Code 消息收发、共享模型实际推理、停止与重启均仍待正向实测。因未登录目标用户，不把服务上线与权限续期冒充完整链路通过。
