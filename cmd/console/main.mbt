@@ -5729,6 +5729,19 @@ fn update_live(
         },
         @rabbita.none,
       )
+    Console(BeginUncordon(node_id)) =>
+      (
+        {
+          ..model,
+          console: {
+            ..model.console,
+            confirmation: Some(
+              @ui.confirmation_receipt(UncordonNode(node_id), node_id),
+            ),
+          },
+        },
+        @rabbita.none,
+      )
     Console(BeginRollback(alias_name)) =>
       (
         {
@@ -7887,6 +7900,48 @@ fn update_live(
       })
       ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
+    Console(ConfirmAction(UncordonNode(node_id))) => {
+      let generation = current_unix_ms()
+      let directive : @contracts.NodeDirective = {
+        node_id,
+        desired_state: Active,
+        generation,
+        issued_unix_ms: generation,
+        receipt: "console:uncordon:\{node_id}:\{generation}",
+      }
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try
+          request(
+            "PUT",
+            model.endpoint,
+            "/v1/nodes/directive",
+            model.credential,
+            body=directive.to_json().stringify(),
+          )
+        catch {
+          _ =>
+            ActionFailed(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "The restore-scheduling request was rejected.",
+                "恢复调度请求被拒绝。",
+              ),
+            )
+        } noraise {
+          _ =>
+            ActionComplete(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "Scheduling restoration requested for \{node_id}.",
+                "已请求恢复 \{node_id} 的调度。",
+              ),
+            )
+        }
+      })
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+    }
     Console(ConfirmAction(RollbackAlias(alias_name))) => {
       let body : Json = {
         "alias_name": alias_name,
@@ -9099,6 +9154,7 @@ fn update(
       | Console(OperationBodyChanged(_))
       | Console(BeginDrain(_))
       | Console(BeginCordon(_))
+      | Console(BeginUncordon(_))
       | Console(BeginRollback(_))
       | Console(BeginStopDeployment(_))
       | Console(BeginRollbackServiceDeployment(_))

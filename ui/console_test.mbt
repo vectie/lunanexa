@@ -1550,6 +1550,20 @@ test "policies route exposes keyboard-accessible typed operations" {
 }
 
 ///|
+test "cordoned node offers restore scheduling instead of duplicate cordon" {
+  let active = console_state(Nodes)
+  let active_html = @ui.render(active)
+  assert_true(active_html.contains("Cordon…"))
+  assert_false(active_html.contains("Restore scheduling…"))
+  let cordoned_html = @ui.render({
+    ..active,
+    nodes: [{ ..active.nodes[0], state: Cordoned, }],
+  })
+  assert_true(cordoned_html.contains("Restore scheduling…"))
+  assert_false(cordoned_html.contains("Cordon…"))
+}
+
+///|
 test "models route exposes ModelScope browse and import workflow" {
   let html = @ui.render(console_state(Models))
   assert_true(html.contains("Find and import a model"))

@@ -986,6 +986,18 @@ test "demo mode previews every destructive node operation without mutation" {
     Some("Demo is read-only; the operation was previewed but not persisted."),
   )
   assert_eq(confirmed.console.nodes, model.console.nodes)
+  let (restore_prepared, _) = update(
+    model,
+    Console(BeginUncordon(node_id)),
+    emit,
+  )
+  assert_true(restore_prepared.console.confirmation is Some(_))
+  let (restore_confirmed, _) = update(
+    restore_prepared,
+    Console(ConfirmAction(UncordonNode(node_id))),
+    emit,
+  )
+  assert_eq(restore_confirmed.console.nodes, model.console.nodes)
 }
 
 ///|
