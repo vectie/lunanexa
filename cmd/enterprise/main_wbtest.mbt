@@ -435,7 +435,7 @@ test "gateway bootstrap remains memory-only and generation fenced" {
     contract_poll_generation: 0L,
     portal: @enterprise_ui.default_state(1000L),
     login_email: "",
-    login_password: "",
+    login_password: "MustBeClearedAfterSignIn",
     register_display_name: "",
     registering: false,
   }
@@ -451,6 +451,7 @@ test "gateway bootstrap remains memory-only and generation fenced" {
   let (ready, _) = update(started, BootstrapReady(3L, browser_session), emit)
   assert_eq(ready.token, "lnxs_memory_only")
   assert_eq(ready.csrf_token, "csrf-memory-only")
+  assert_eq(ready.login_password, "")
   assert_eq(ready.session_expires_unix_ms, Some(9999999999999L))
   assert_eq(ready.session_generation, 4L)
   let stale_session : GatewayBrowserBootstrap = {
@@ -496,6 +497,45 @@ test "matching browser-session expiry clears the local session" {
   assert_eq(expired.token, "")
   assert_eq(expired.portal.membership, None)
   assert_eq(expired.portal.api_keys, [])
+}
+
+///|
+test "HTTP 401 signs out a stale browser session with a clear message" {
+  let model : AppModel = {
+    ..gateway_auth_test_model(),
+    token: "lnxs_expired",
+    csrf_token: "csrf-expired",
+    subject_ref: "subject-test",
+    login_password: "MustNotRemainInMemory",
+    session_generation: 7L,
+    session_expires_unix_ms: Some(9999999999999L),
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (signed_out, _) = update(
+    model,
+    Outcome(
+      Failed(
+        model.portal.locale,
+        "Unable to load your organizations: HTTP 401 Unauthenticated",
+      ),
+    ),
+    emit,
+  )
+  assert_eq(signed_out.token, "")
+  assert_eq(signed_out.csrf_token, "")
+  assert_eq(signed_out.subject_ref, "")
+  assert_eq(signed_out.login_password, "")
+  assert_eq(signed_out.session_generation, 8L)
+  assert_eq(
+    signed_out.portal.error_message,
+    Some("Your session has expired. Sign in again."),
+  )
+  let (forbidden, _) = update(
+    model,
+    Outcome(Failed(model.portal.locale, "HTTP 403 Forbidden")),
+    emit,
+  )
+  assert_eq(forbidden.token, "lnxs_expired")
 }
 
 ///|
