@@ -24,6 +24,14 @@ priv struct ConsoleTelemetrySnapshot {
 } derive(FromJson)
 
 ///|
+priv struct MembershipRevocationIntent {
+  membership_id : String
+} derive(ToJson)
+
+///|
+extend MembershipRevocationIntent with ToJson::{to_json}
+
+///|
 priv struct OfflineQuoteAction {
   order_id : String
   quote : @offline.ImmutableQuote
@@ -7610,6 +7618,49 @@ fn update_live(
       ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(SubmitOperation) => {
+      if model.console.operation_name == "revoke-enterprise-membership" {
+        let membership_id = try
+          @json.parse(model.console.operation_body)
+        catch {
+          _ => None
+        } noraise {
+          { "membership_id": String(value), .. } if value != "" => Some(value)
+          _ => None
+        }
+        return match membership_id {
+          Some(id) =>
+            (
+              {
+                ..model,
+                console: {
+                  ..model.console,
+                  confirmation: Some(
+                    @ui.confirmation_receipt(RevokeEnterpriseMembership(id), id),
+                  ),
+                  error_message: None,
+                },
+              },
+              @rabbita.none,
+            )
+          None =>
+            (
+              {
+                ..model,
+                console: {
+                  ..model.console,
+                  error_message: Some(
+                    console_copy(
+                      model.console.locale,
+                      "Provide a membership_id in the JSON body.",
+                      "请在 JSON 正文中填写 membership_id。",
+                    ),
+                  ),
+                },
+              },
+              @rabbita.none,
+            )
+        }
+      }
       let (verb, path, inference) = match model.console.operation_name {
         "issue-enrollment-token" => ("POST", "/v1/enrollment/tokens", false)
         "register-runtime" => ("POST", "/v1/runtimes", false)
@@ -8208,6 +8259,43 @@ fn update_live(
                 model.console.locale,
                 "Access grant \{grant_id} was revoked.",
                 "访问授权 \{grant_id} 已撤销。",
+              ),
+            )
+        }
+      })
+      ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
+    }
+    Console(ConfirmAction(RevokeEnterpriseMembership(membership_id))) => {
+      let body = MembershipRevocationIntent::{ membership_id, }
+        .to_json()
+        .stringify()
+      let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
+        try
+          request(
+            "POST",
+            model.endpoint,
+            "/v1/portal/operator/memberships:revoke",
+            model.credential,
+            body~,
+          )
+        catch {
+          _ =>
+            ActionFailed(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "The enterprise membership could not be revoked.",
+                "无法撤销企业成员关系。",
+              ),
+            )
+        } noraise {
+          _ =>
+            ActionComplete(
+              model.console.locale,
+              console_copy(
+                model.console.locale,
+                "Enterprise membership \{membership_id} was revoked.",
+                "企业成员关系 \{membership_id} 已撤销。",
               ),
             )
         }

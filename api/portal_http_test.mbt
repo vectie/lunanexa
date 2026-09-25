@@ -288,5 +288,30 @@ async test "enterprise portal denies cross-tenant and non-signer actions" {
     ).status,
     401,
   )
+  let revoke_path = "/v1/portal/operator/memberships:revoke"
+  let revoke_body = "{\"membership_id\":\"member-observer\"}"
+  assert_eq(
+    service.handle(Post, revoke_path, observer, revoke_body).status,
+    401,
+  )
+  assert_eq(service.handle(Post, revoke_path, operator, "{}").status, 400)
+  assert_eq(
+    service.handle(Post, revoke_path, operator, revoke_body).status,
+    200,
+  )
+  assert_eq(
+    service.handle(Post, revoke_path, operator, revoke_body).status,
+    200,
+  )
+  assert_eq(
+    service.handle(
+      Post,
+      revoke_path,
+      operator,
+      "{\"membership_id\":\"missing\"}",
+    ).status,
+    404,
+  )
+  assert_eq(service.handle(Get, "/v1/portal/self", observer, "").status, 403)
   @fs.rmdir(directory, recursive=true)
 }

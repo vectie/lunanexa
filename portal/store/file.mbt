@@ -377,6 +377,30 @@ pub async fn FilePortalStore::put_membership(
 }
 
 ///|
+/// Revokes one exact membership; repeating the request is idempotent.
+pub async fn FilePortalStore::revoke_membership(
+  self : FilePortalStore,
+  membership_id : String,
+) -> @portal.EnterpriseMembership {
+  self.mutex.acquire()
+  defer self.mutex.release()
+  guard self.memberships.get(membership_id) is Some(membership) else {
+    raise @portal.PortalError::NotFound(membership_id)
+  }
+  if !membership.active {
+    return membership
+  }
+  let previous = self.memberships.copy()
+  errdefer {
+    self.memberships = previous
+  }
+  let revoked = { ..membership, active: false, }
+  self.memberships[membership_id] = revoked
+  self.persist()
+  revoked
+}
+
+///|
 /// Atomically replaces a known active trial membership with an enterprise
 /// membership. An arbitrary active membership can never be overwritten.
 pub async fn FilePortalStore::replace_trial_membership(
