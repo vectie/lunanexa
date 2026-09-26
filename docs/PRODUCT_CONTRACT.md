@@ -35,7 +35,8 @@ Human-facing operator and customer timestamps and alert calendar grouping use
 Asia/Shanghai (UTC+8). Unix timestamps in storage and API contracts remain
 absolute instants; changing the display zone must never shift an expiry instant
 or a metering event. Date-only contract admission retains its existing UTC
-calendar-day rule until the controller and browser can migrate it together.
+calendar-day rule for legacy templates. The undertaking-letter path uses
+Asia/Shanghai calendar-day boundaries in both the controller and browser.
 Billing-period timezone remains an explicit commercial setting rather than a
 browser-local default.
 
