@@ -379,6 +379,7 @@ priv enum Outcome {
   ContractActionNeedsRefresh
   ContractApprovalNudged
   DesktopClientLaunched(String)
+  WorkspaceControlsOpened
   ContractPreviewLoaded(Int64, @contractdoc.ContractPreviewDocument)
   ContractPreviewFailed(Int64, @i18n.Locale, String)
   ApiKeyIssued(Int64, @enterprise_ui.IssuedApiKeyView)
@@ -1644,6 +1645,16 @@ fn desktop_client_command(
     } noraise {
       name => DesktopClientLaunched(name)
     }
+  })
+}
+
+///|
+fn workspace_control_command(
+  uri : String,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  @rabbita.perform(_ => emit(Outcome(WorkspaceControlsOpened)), fn() noraise {
+    navigate_to_workspace_control(uri)
   })
 }
 
@@ -4688,8 +4699,7 @@ fn update(
     }
     Portal(ManageWebIde(uri)) => {
       let next = model.portal.update(ManageWebIde(uri))
-      navigate_to_workspace_control(uri)
-      ({ ..model, portal: next, }, @rabbita.none)
+      ({ ..model, portal: next, }, workspace_control_command(uri, emit))
     }
     Portal(RefreshDesktopStatus) => {
       let next = { ..model, portal: model.portal.update(RefreshDesktopStatus), }
@@ -5843,6 +5853,7 @@ fn update(
         },
         @rabbita.none,
       )
+    Outcome(WorkspaceControlsOpened) => (model, @rabbita.none)
     Outcome(OfflineOrderCreated(order)) =>
       (
         {
