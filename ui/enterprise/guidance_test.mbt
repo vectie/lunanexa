@@ -197,8 +197,15 @@ test "a refusal keeps its status so the copy can name the real problem" {
     "Operation",
     "Unable to create the signed machine quote: Error(\"HTTP 403: lease requester role is required\")",
   )
-  assert_true(refusal.contains("lacks permission"))
+  assert_true(refusal.contains("LeaseRequester"))
   assert_false(refusal.contains("Refresh and retry"))
+  assert_true(
+    @enterprise.friendly_failure(
+      ChineseSimplified,
+      "操作",
+      "HTTP 403 MachineOrderAccessDenied: lease requester role is required",
+    ).contains("租用申请人"),
+  )
   // The connection branch is unchanged.
   assert_true(
     @enterprise.friendly_failure(
