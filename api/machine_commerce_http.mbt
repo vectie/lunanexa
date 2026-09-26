@@ -255,6 +255,10 @@ fn machine_commerce_error_reply(error : Error) -> HttpReply {
         409, "QuoteIntegrityFailed", "machine quote integrity validation failed",
         false,
       )
+    @machinecommerce.MachineCommerceError::QuotePriceChanged =>
+      api_error(
+        409, "QuotePriceChanged", "machine price changed; request a new quote", false,
+      )
     @machinecommerce.MachineCommerceError::PriceMismatch =>
       api_error(
         409, "PriceMismatch", "settled payment does not equal the signed quote",

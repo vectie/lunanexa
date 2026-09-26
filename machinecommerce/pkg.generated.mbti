@@ -30,6 +30,7 @@ pub(all) suberror MachineCommerceError {
   InvalidTransition(String)
   QuoteExpired
   QuoteIntegrityFailed
+  QuotePriceChanged
   PriceMismatch
   CapacityUnavailable
 } derive(Eq, @debug.Debug)
@@ -147,6 +148,7 @@ pub(all) struct MachineOffering {
   cpu_count : Int64
   meter : String
   unit_price : @commercial.FixedMoney
+  price_unit_seconds : Int64?
   billing_quantum_seconds : Int64
   minimum_duration_seconds : Int64
   maximum_duration_seconds : Int64

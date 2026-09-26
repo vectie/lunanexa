@@ -18,6 +18,7 @@ fn test_offering(
     meter: "exclusive-node-second",
     unit_price: { minor_units: 2L, currency: "CNY", scale: 2, },
     billing_quantum_seconds: 60L,
+    price_unit_seconds: None,
     minimum_duration_seconds: 60L,
     maximum_duration_seconds: 86400L,
     capacity_total: capacity,
@@ -96,6 +97,80 @@ test "active purchasable offerings cannot be zero-priced" {
     error => fail("unexpected error: \{Repr(error)}")
   } noraise {
     _ => fail("zero-priced active offering must be rejected")
+  }
+}
+
+///|
+test "legacy offering JSON without a price unit still prices seconds" {
+  let legacy = test_offering("legacy", BareMachine, 1L, 1000000L).to_json()
+  guard legacy is Object(fields) else {
+    fail("offering JSON must be an object")
+  }
+  fields.remove("price_unit_seconds")
+  let decoded : @machinecommerce.MachineOffering = @json.from_json(legacy)
+  assert_eq(decoded.price_unit_seconds, None)
+}
+
+///|
+test "daily Spark offer quotes exactly CNY 49 per whole day" {
+  let now = 1000000L
+  let store = @machinecommerce.MachineCommerceStore::new(
+    "machine-commerce-test-signing-secret-daily-price",
+  )
+  let daily = {
+    ..test_offering("spark-day", BareMachine, 1L, now),
+    unit_price: { minor_units: 4900L, currency: "CNY", scale: 2, },
+    price_unit_seconds: Some(86400L),
+    billing_quantum_seconds: 86400L,
+    minimum_duration_seconds: 86400L,
+    maximum_duration_seconds: 2592000L,
+  }
+  ignore(store.put_offering(daily))
+  let (one_day, _) = store.create_quote(
+    { ..quote_intent("one-day", "spark-day", false), duration_seconds: 86400L, },
+    now + 1L,
+  )
+  assert_eq(one_day.total.minor_units, 4900L)
+  let (seven_days, _) = store.create_quote(
+    {
+      ..quote_intent("seven-days", "spark-day", false),
+      duration_seconds: 604800L,
+    },
+    now + 2L,
+  )
+  assert_eq(seven_days.total.minor_units, 34300L)
+}
+
+///|
+test "an old signed quote cannot create an order after a price change" {
+  let now = 1000000L
+  let store = @machinecommerce.MachineCommerceStore::new(
+    "machine-commerce-test-signing-secret-price-change",
+  )
+  let old = test_offering("repriced", BareMachine, 1L, now)
+  ignore(store.put_offering(old))
+  let (quote, _) = store.create_quote(
+    quote_intent("repriced", "repriced", false),
+    now + 1L,
+  )
+  ignore(
+    store.put_offering({
+      ..old,
+      unit_price: { minor_units: 4900L, currency: "CNY", scale: 2, },
+      price_unit_seconds: Some(86400L),
+      billing_quantum_seconds: 86400L,
+      minimum_duration_seconds: 86400L,
+      generation: 2L,
+      updated_unix_ms: now + 2L,
+    }),
+  )
+  try
+    store.create_order(order_intent("repriced", quote.quote_id), now + 3L)
+  catch {
+    QuotePriceChanged => ()
+    error => fail("unexpected error: \{Repr(error)}")
+  } noraise {
+    _ => fail("the old price must not remain orderable")
   }
 }
 

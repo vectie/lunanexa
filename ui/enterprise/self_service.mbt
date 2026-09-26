@@ -297,7 +297,7 @@ fn demo_self_service_state(now_unix_ms : Int64) -> SelfServiceState {
         regions: ["cn-north-1"],
         minimum_duration_hours: 24,
         maximum_duration_hours: 720,
-        price_summary: "From CNY 3.20 / hour",
+        price_summary: "¥49.00 / 天",
         allowed_model_template_refs: [],
         available: true,
       },

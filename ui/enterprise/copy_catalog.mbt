@@ -1588,8 +1588,8 @@ fn enterprise_copy(
       )
     SelfServicePricesAreSeparateFromUndertaking =>
       @i18n.copy(
-        locale, "This is the online self-service price. The undertaking rental route has its own quoted tariff and approval process.",
-        "此处是线上自助下单价格；承诺函租赁另有报价档位与审批流程。",
+        locale, "The daily machine price is CNY 49, billed in whole days. Undertaking orders retain their published weekly and monthly tiers and operator approval.",
+        "机器日租统一为 ¥49，按整天计费；承诺函订单的周／月档位和管理侧审批保持不变。",
       )
     ThisAccountLacksPermissionForThis =>
       @i18n.copy(

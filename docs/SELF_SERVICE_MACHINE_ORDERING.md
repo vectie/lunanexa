@@ -75,6 +75,16 @@ availability is the lower of that ceiling and fresh, healthy, SKU-compatible
 heartbeat inventory after existing exclusive leases and dedicated reservations.
 A missing or incorrect region label therefore fails closed.
 
+For the DGX Spark bare-machine catalog, the approved daily price is **CNY 49
+per machine per whole day**. Set `unit_price` to 4900 minor units,
+`price_unit_seconds` and `billing_quantum_seconds` to 86400, and the minimum
+duration to at least 86400 seconds. A seven-day self-service quote is CNY 343;
+the separately approved undertaking route retains its CNY 322 weekly tier and
+operator approval. Legacy offers with no `price_unit_seconds` remain per-second
+for historical decoding, but must not be left active in the DGX Spark catalog.
+When changing an offer, issue a new generation; a quote signed under the old
+price cannot become an order after repricing.
+
 `PaymentRefund` is an explicit provider request. Operators and adapters must not
 reinterpret it as a new checkout. Capacity remains reserved until the signed
 `Refunded` callback completes compensation, preventing unpaid reuse or a false

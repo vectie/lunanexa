@@ -16,6 +16,7 @@ pub(all) suberror MachineCommerceError {
   InvalidTransition(String)
   QuoteExpired
   QuoteIntegrityFailed
+  QuotePriceChanged
   PriceMismatch
   CapacityUnavailable
 } derive(Debug, Eq)
@@ -80,10 +81,12 @@ pub extend MachineOfferingState with ToJson::{to_json}
 ///|
 pub extend MachineOfferingState with FromJson::{from_json}
 
-///| A sellable machine SKU. `unit_price` is the price for one offering unit
+///| A sellable machine SKU. `unit_price` is the price for one pricing unit.
+
+///| Legacy offerings omit `price_unit_seconds` and price each second.
 
 ///|
-/// for one second; `billing_quantum_seconds` controls quote rounding.
+/// `billing_quantum_seconds` controls quote rounding.
 pub(all) struct MachineOffering {
   offering_id : String
   sku : String
@@ -96,6 +99,7 @@ pub(all) struct MachineOffering {
   cpu_count : Int64
   meter : String
   unit_price : @commercial.FixedMoney
+  price_unit_seconds : Int64?
   billing_quantum_seconds : Int64
   minimum_duration_seconds : Int64
   maximum_duration_seconds : Int64
