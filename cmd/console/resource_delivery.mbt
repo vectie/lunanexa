@@ -43,7 +43,15 @@ fn resource_delivery_command(
         }
         let mut memory_mib = 2147483647
         for node in selected {
-          memory_mib = Int::min(memory_mib, node.total_memory_mib - 4096)
+          guard node.memory_measured &&
+            node.free_memory_mib >= 36864 &&
+            node.total_memory_mib >= 49152 else {
+            raise Failure("refresh measured free memory before reserving")
+          }
+          memory_mib = Int::min(
+            memory_mib,
+            Int::min(node.total_memory_mib - 16384, node.free_memory_mib - 4096),
+          )
         }
         let request_body : @ui.ResourceReservationRequest = {
           reservation_id: panel.reservation_id,
