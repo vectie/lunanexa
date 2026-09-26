@@ -648,19 +648,17 @@ extern "js" fn open_desktop_client(
   launch_uri : String,
   client_id : String,
   handoff_code : String,
+  controls : Bool,
 ) -> Unit =
-  #| (launchUri, clientId, handoffCode) => {
+  #| (launchUri, clientId, handoffCode, controls) => {
   #|   const fragment = new URLSearchParams({
   #|     lunanexa_client_id: clientId,
   #|     lunanexa_handoff: handoffCode,
+  #|     lunanexa_control: controls ? '1' : '0',
   #|   }).toString();
   #|   const target = `${launchUri}${launchUri.includes("#") ? "&" : "#"}${fragment}`;
   #|   globalThis.location.assign(target);
   #| }
-
-///|
-extern "js" fn navigate_to_workspace_control(uri : String) -> Unit =
-  #| (uri) => globalThis.location.assign(uri)
 
 ///|
 extern "js" fn request_promise(
@@ -1589,7 +1587,7 @@ fn machine_order_action_command(
 }
 
 ///|
-async fn launch_desktop_client(model : AppModel) -> String {
+async fn launch_desktop_client(model : AppModel, controls : Bool) -> String {
   guard model.portal.desktop_client is Some(client) else {
     raise Failure("desktop workspace integration is not configured")
   }
@@ -1622,7 +1620,12 @@ async fn launch_desktop_client(model : AppModel) -> String {
     launch.handoff_expires_unix_ms <= current_unix_ms() {
     raise Failure("controller returned an invalid desktop handoff")
   }
-  open_desktop_client(launch.launch_uri, launch.client_id, launch.handoff_code)
+  open_desktop_client(
+    launch.launch_uri,
+    launch.client_id,
+    launch.handoff_code,
+    controls,
+  )
   launch.display_name
 }
 
@@ -1632,7 +1635,7 @@ fn desktop_client_command(
   emit : @rabbita.Emit[AppMessage],
 ) -> @rabbita.Cmd {
   @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
-    try launch_desktop_client(model) catch {
+    try launch_desktop_client(model, false) catch {
       error =>
         Failed(
           model.portal.locale,
@@ -1650,11 +1653,23 @@ fn desktop_client_command(
 
 ///|
 fn workspace_control_command(
-  uri : String,
+  model : AppModel,
   emit : @rabbita.Emit[AppMessage],
 ) -> @rabbita.Cmd {
-  @rabbita.perform(_ => emit(Outcome(WorkspaceControlsOpened)), fn() noraise {
-    navigate_to_workspace_control(uri)
+  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+    try launch_desktop_client(model, true) catch {
+      error =>
+        Failed(
+          model.portal.locale,
+          portal_copy(
+            model.portal.locale,
+            "Unable to open WebIDE controls: \{error.to_string()}",
+            "无法打开 WebIDE 管理页：\{error.to_string()}",
+          ),
+        )
+    } noraise {
+      _ => WorkspaceControlsOpened
+    }
   })
 }
 
@@ -4675,6 +4690,7 @@ fn update(
           "/workbench/?demo=1",
           "demo-client",
           "lnxc_" + "d".repeat(64),
+          false,
         )
         (
           {
@@ -4699,7 +4715,7 @@ fn update(
     }
     Portal(ManageWebIde(uri)) => {
       let next = model.portal.update(ManageWebIde(uri))
-      ({ ..model, portal: next, }, workspace_control_command(uri, emit))
+      ({ ..model, portal: next, }, workspace_control_command(model, emit))
     }
     Portal(RefreshDesktopStatus) => {
       let next = { ..model, portal: model.portal.update(RefreshDesktopStatus), }

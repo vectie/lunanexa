@@ -317,6 +317,7 @@ fn delivery_workspace_command(
         launch.launch_uri,
         launch.client_id,
         launch.handoff_code,
+        false,
       )
       DesktopClientLaunched(launch.display_name)
     } catch {
