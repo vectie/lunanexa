@@ -4687,8 +4687,9 @@ fn update(
       }
     }
     Portal(ManageWebIde(uri)) => {
+      let next = model.portal.update(ManageWebIde(uri))
       navigate_to_workspace_control(uri)
-      (model, @rabbita.none)
+      ({ ..model, portal: next, }, @rabbita.none)
     }
     Portal(RefreshDesktopStatus) => {
       let next = { ..model, portal: model.portal.update(RefreshDesktopStatus), }

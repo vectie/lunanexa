@@ -1167,7 +1167,18 @@ pub fn EnterpriseState::update(
         success_message: None,
         error_message: None,
       }
-    ManageWebIde(_) => self
+    ManageWebIde(_) =>
+      {
+        ..self,
+        success_message: Some(
+          copy(
+            self.locale,
+            "Opening workspace controls…",
+            "正在打开工作台管理页…",
+          ),
+        ),
+        error_message: None,
+      }
     RefreshDesktopStatus =>
       { ..self, loading: true, success_message: None, error_message: None, }
     MarkNotificationRead(_, _) => self

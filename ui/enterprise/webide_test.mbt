@@ -91,6 +91,10 @@ test "personal MoonDesk exposes a stop control without stopping the shared model
     Some("http://198.51.100.5:5002/workspace-control"),
   )
   assert_false(rendered.contains("target=\"_blank\""))
+  let opening = state.update(
+    @enterprise.ManageWebIde("http://198.51.100.5:5002/workspace-control"),
+  )
+  assert_eq(opening.success_message, Some("Opening workspace controls…"))
 }
 
 ///|
