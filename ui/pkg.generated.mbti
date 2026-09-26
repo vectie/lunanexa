@@ -124,6 +124,8 @@ pub fn template_runtime_name_valid(String) -> Bool
 
 pub fn template_signature_reference_valid(String) -> Bool
 
+pub fn undertaking_allocation_available(ResourceDeliveryPanel) -> Bool
+
 pub fn view(ConsoleState) -> @html.Html
 
 // Errors
@@ -749,6 +751,7 @@ pub(all) struct NodeRow {
   node_id : String
   state : @contracts.NodeState
   architecture : String
+  accelerators : Array[@contracts.AcceleratorInventory]
   total_memory_mib : Int
   free_memory_mib : Int
   used_memory_mib : Int
@@ -976,6 +979,8 @@ pub(all) enum ResourceDeliveryMessage {
   ToggleResourceNode(String)
   ConfirmResourceIdle
   ReserveResources
+  SelectUndertakingOrder(String)
+  AllocateUndertaking
 } derive(Eq)
 pub fn ResourceDeliveryMessage::equal(Self, Self) -> Bool
 pub fn ResourceDeliveryMessage::not_equal(Self, Self) -> Bool
@@ -984,6 +989,8 @@ pub(all) struct ResourceDeliveryPanel {
   leases : Array[ResourceLeaseOption]
   reservations : Array[ResourceReservationRow]
   deliveries : Array[ResourceDeliveryRow]
+  undertaking_orders : Array[UndertakingAllocationRow]
+  selected_undertaking_order : String
   selected_lease : String
   selected_nodes : Array[String]
   confirmed_idle : Bool
@@ -992,6 +999,7 @@ pub(all) struct ResourceDeliveryPanel {
   reservation_starts_ms : Int64
   loaded : Bool
   error : String?
+  checked_unix_ms : Int64
 } derive(Eq)
 pub fn ResourceDeliveryPanel::equal(Self, Self) -> Bool
 pub fn ResourceDeliveryPanel::not_equal(Self, Self) -> Bool
@@ -1209,6 +1217,19 @@ pub fn UiAccountState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonD
 pub fn UiAccountState::not_equal(Self, Self) -> Bool
 pub fn UiAccountState::to_json(Self) -> Json
 pub fn UiAccountState::to_repr(Self) -> @debug.Repr
+
+pub(all) struct UndertakingAllocationRow {
+  order_id : String
+  organization_id : String
+  purchaser_subject_ref : String
+  node_count : Int64
+  expires_unix_ms : Int64?
+  status : String
+  node_ids : Array[String]
+} derive(Eq, @json.FromJson)
+pub fn UndertakingAllocationRow::equal(Self, Self) -> Bool
+pub fn UndertakingAllocationRow::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn UndertakingAllocationRow::not_equal(Self, Self) -> Bool
 
 pub(all) struct UserAccessRow {
   user_id : String

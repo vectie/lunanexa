@@ -30,10 +30,14 @@ async fn ApiService::delivery_binding(
     reservation.state == Reserved &&
     reservation.request.tenant_ref == authority.tenant_ref &&
     reservation.request.organization_id == authority.organization_id &&
-    reservation.request.lease_id == operation.intent.lease_id &&
-    reservation.request.authority_ref == operation.intent.authorization_ref &&
-    reservation.request.starts_unix_ms <= @async.now() &&
-    reservation.request.expires_unix_ms > @async.now() else {
+    self.delivery_reservation_authorized(
+      reservation,
+      authority.tenant_ref,
+      authority.organization_id,
+      operation.intent.lease_id,
+      operation.intent.authorization_ref,
+      @async.now(),
+    ) else {
     return (None, Some(denied))
   }
   guard self.workspace_directory is Some(directory) else {

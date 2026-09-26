@@ -1389,6 +1389,7 @@ fn cluster_poll_test_row(
     node_id,
     state,
     architecture: "dgx-spark",
+    accelerators: [],
     total_memory_mib: 131072,
     free_memory_mib: 65536,
     used_memory_mib: 65536,

@@ -21,6 +21,7 @@ async test "journal survives restart and resumes without skipping steps" {
     lease_id: "lease-demo",
     identity_receipt: "oidc-verified-demo",
     expires_unix_ms: 200000L,
+    enterprise_gpu_capabilities: None,
   }
   let first = @onboarding.AccessOnboardingStore::open(path)
   for stage in 0..<4 {
@@ -93,6 +94,31 @@ async test "journal survives restart and resumes without skipping steps" {
 }
 
 ///|
+test "pre-upgrade access intents remain text-only" {
+  let legacy : Json = {
+    "operation_id": "access-legacy",
+    "fingerprint": "legacy-fingerprint",
+    "requested_by": "operator-demo",
+    "account_id": "account-demo",
+    "subject_ref": "subject-demo",
+    "identity_issuer": "https://identity.example",
+    "identity_subject_sha256": "sha256:" + "a".repeat(64),
+    "display_name": "Demo User",
+    "email": "demo@example.com",
+    "organization_id": "org-demo",
+    "tenant_ref": "tenant-demo",
+    "membership_id": "membership-demo",
+    "user_id": "user-demo",
+    "grant_id": "grant-demo",
+    "lease_id": "lease-demo",
+    "identity_receipt": "oidc-verified-demo",
+    "expires_unix_ms": "200000",
+  }
+  let decoded : @onboarding.AccessOnboardingIntent = @json.from_json(legacy)
+  assert_eq(decoded.enterprise_gpu_capabilities, None)
+}
+
+///|
 async test "journal rejects conflicting replay and terminal conflict is visible" {
   let temp = @fs.tmpdir(prefix="lunanexa-onboarding-conflict-")
   defer @fs.rmdir(temp, recursive=true)
@@ -115,6 +141,7 @@ async test "journal rejects conflicting replay and terminal conflict is visible"
     lease_id: "lease-demo",
     identity_receipt: "oidc-verified-demo",
     expires_unix_ms: 200000L,
+    enterprise_gpu_capabilities: None,
   }
   ignore(store.begin(intent, 1000L))
   try store.begin({ ..intent, tenant_ref: "tenant-other", }, 1001L) catch {
@@ -161,6 +188,7 @@ async test "PostgreSQL journal survives a store restart" {
     lease_id: "lease-pg-\{suffix}",
     identity_receipt: "oidc-pg-\{suffix}",
     expires_unix_ms: now + 86400000L,
+    enterprise_gpu_capabilities: None,
   }
   ignore(first.begin(intent, now))
   ignore(first.advance(intent.operation_id, AccountReady, now + 1L))

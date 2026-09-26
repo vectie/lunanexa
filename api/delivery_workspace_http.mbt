@@ -144,9 +144,14 @@ async fn ApiService::handle_workspace_delivery(
     reservation.state == Reserved &&
     reservation.request.tenant_ref == authority.tenant_ref &&
     reservation.request.organization_id == authority.organization_id &&
-    reservation.request.lease_id == authorization.lease.lease_id &&
-    reservation.request.starts_unix_ms <= now &&
-    reservation.request.expires_unix_ms > now &&
+    self.delivery_reservation_authorized(
+      reservation,
+      authority.tenant_ref,
+      authority.organization_id,
+      authorization.lease.lease_id,
+      candidates[0].intent.authorization_ref,
+      now,
+    ) &&
     reservation.request.node_ids.get(0) is Some(node_id) else {
     return api_error(
       404, "WorkspacePlacementUnavailable", "no unique active workspace placement is available",

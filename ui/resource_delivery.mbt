@@ -47,10 +47,23 @@ pub(all) struct ResourceDeliveryRow {
 } derive(Eq, FromJson)
 
 ///|
+pub(all) struct UndertakingAllocationRow {
+  order_id : String
+  organization_id : String
+  purchaser_subject_ref : String
+  node_count : Int64
+  expires_unix_ms : Int64?
+  status : String
+  node_ids : Array[String]
+} derive(Eq, FromJson)
+
+///|
 pub(all) struct ResourceDeliveryPanel {
   leases : Array[ResourceLeaseOption]
   reservations : Array[ResourceReservationRow]
   deliveries : Array[ResourceDeliveryRow]
+  undertaking_orders : Array[UndertakingAllocationRow]
+  selected_undertaking_order : String
   selected_lease : String
   selected_nodes : Array[String]
   confirmed_idle : Bool
@@ -59,6 +72,7 @@ pub(all) struct ResourceDeliveryPanel {
   reservation_starts_ms : Int64
   loaded : Bool
   error : String?
+  checked_unix_ms : Int64
 } derive(Eq)
 
 ///|
@@ -68,6 +82,8 @@ pub(all) enum ResourceDeliveryMessage {
   ToggleResourceNode(String)
   ConfirmResourceIdle
   ReserveResources
+  SelectUndertakingOrder(String)
+  AllocateUndertaking
 } derive(Eq)
 
 ///|
@@ -76,6 +92,8 @@ pub fn default_resource_delivery_panel() -> ResourceDeliveryPanel {
     leases: [],
     reservations: [],
     deliveries: [],
+    undertaking_orders: [],
+    selected_undertaking_order: "",
     selected_lease: "",
     selected_nodes: [],
     confirmed_idle: false,
@@ -84,6 +102,7 @@ pub fn default_resource_delivery_panel() -> ResourceDeliveryPanel {
     loading: false,
     loaded: false,
     error: None,
+    checked_unix_ms: 0L,
   }
 }
 
@@ -96,8 +115,15 @@ pub fn ResourceDeliveryPanel::update(
     return self
   }
   match message {
-    RefreshResources | ReserveResources =>
+    RefreshResources | ReserveResources | AllocateUndertaking =>
       { ..self, loading: true, error: None, }
+    SelectUndertakingOrder(value) =>
+      {
+        ..self,
+        selected_undertaking_order: value,
+        selected_nodes: [],
+        confirmed_idle: false,
+      }
     SelectResourceLease(value) =>
       {
         ..self,
@@ -126,6 +152,53 @@ pub fn resource_reservation_available(panel : ResourceDeliveryPanel) -> Bool {
   panel.confirmed_idle &&
   !panel.selected_nodes.is_empty() &&
   panel.leases.any(lease => lease.key == panel.selected_lease)
+}
+
+///|
+pub fn undertaking_allocation_available(panel : ResourceDeliveryPanel) -> Bool {
+  guard panel.undertaking_orders
+    .iter()
+    .find_first(row => {
+      row.order_id == panel.selected_undertaking_order &&
+      (
+        row.status == "ReadyForAllocation" ||
+        row.status == "ActivatingAccess" ||
+        row.status == "ReadyForNodes"
+      )
+    })
+    is Some(order) else {
+    return false
+  }
+  !panel.loading &&
+  panel.confirmed_idle &&
+  panel.selected_nodes.length().to_int64() == order.node_count
+}
+
+///|
+fn undertaking_allocation_status(
+  locale : @i18n.Locale,
+  status : String,
+) -> String {
+  match status {
+    "AwaitingApprovalOrEvidence" =>
+      localized(
+        locale, "Awaiting signed approval or payment review", "待签署审批或到账核验",
+      )
+    "ReadyForAllocation" =>
+      localized(locale, "Ready to allocate", "可下发整机")
+    "ActivatingAccess" =>
+      localized(locale, "Activating access", "正在开通权限")
+    "ReadyForNodes" =>
+      localized(
+        locale, "Access active; select nodes", "权限已开通，待下发整机",
+      )
+    "Allocated" => localized(locale, "Allocated", "已下发")
+    "AuthorityEnded" =>
+      localized(locale, "Authority ended", "授权已失效，等待回收")
+    "Releasing" =>
+      localized(locale, "Releasing resources", "正在回收资源")
+    _ => localized(locale, "Order not ready", "订单尚未就绪")
+  }
 }
 
 ///|
@@ -174,6 +247,167 @@ fn resource_delivery_view(
       Some(error) => @html.p(attrs=@html.Attrs::build().role("alert"), error)
       None => @html.nothing
     },
+    @html.h3(
+      localized(state.locale, "Undertaking allocation", "承诺函整机下发"),
+    ),
+    @html.p(
+      localized(
+        state.locale,
+        "After the signed undertaking, manager approval and full offline-payment review, select exactly the quoted number of idle nodes. Access activation may take time; the same action can be continued safely.",
+        "承诺函签署、甲方审批及线下足额到账核验完成后，选择与报价台数一致的空闲节点。权限激活可能需要等待；可安全继续同一操作。",
+      ),
+    ),
+    if panel.loaded && panel.undertaking_orders.is_empty() {
+      @html.p(
+        localized(
+          state.locale,
+          "No undertaking order has been submitted yet.",
+          "暂无已提交的承诺函订单。",
+        ),
+      )
+    } else if panel.loaded {
+      @html.div(class="form-grid", [
+        @html.label(
+          for_="undertaking-allocation-order",
+          localized(state.locale, "Undertaking order", "承诺函订单"),
+        ),
+        @html.select(
+          id="undertaking-allocation-order",
+          disabled=panel.loading,
+          on_change=text_command(emit, value => {
+            ResourceDelivery(SelectUndertakingOrder(value))
+          }),
+          [
+            @html.option(
+              value="",
+              selected=panel.selected_undertaking_order == "",
+              localized(state.locale, "Choose an order", "选择订单"),
+            ),
+            ..panel.undertaking_orders.map(row => {
+              @html.option(
+                value=row.order_id,
+                selected=row.order_id == panel.selected_undertaking_order,
+                "\{row.organization_id} · \{row.order_id} · \{row.node_count} " +
+                localized(state.locale, "nodes", "台") +
+                " · " +
+                undertaking_allocation_status(state.locale, row.status),
+              )
+            }),
+          ],
+        ),
+        match
+          panel.undertaking_orders
+          .iter()
+          .find_first(row => row.order_id == panel.selected_undertaking_order) {
+          Some(row) =>
+            @html.div([
+              @html.p(
+                undertaking_allocation_status(state.locale, row.status) +
+                " · \{row.node_count} " +
+                localized(state.locale, "nodes required", "台机器"),
+              ),
+              @html.p(
+                localized(
+                  state.locale,
+                  "Order authority expires: ",
+                  "订单授权截止：",
+                ) +
+                row.expires_unix_ms.map_or("—", value => {
+                  @contractdoc.format_unix_ms_beijing(value)
+                }),
+              ),
+              if row.status == "Allocated" {
+                @html.p(
+                  localized(
+                    state.locale,
+                    "Assigned nodes: ",
+                    "已下发节点：",
+                  ) +
+                  row.node_ids.join(", "),
+                )
+              } else {
+                @html.nothing
+              },
+            ])
+          None => @html.nothing
+        },
+        @html.div(
+          class="record-actions",
+          state.nodes.map(node => {
+            let occupied = panel.reservations.any(row => {
+              row.state != "Released" &&
+              row.request.node_ids.contains(node.node_id)
+            })
+            let available = node.state == Active &&
+              node.workloads == 0 &&
+              !occupied
+            @html.button(
+              type_="button",
+              class="quiet-button",
+              disabled=panel.loading || !available,
+              attrs=@html.Attrs::build().aria_pressed(
+                panel.selected_nodes.contains(node.node_id).to_string(),
+              ),
+              on_click=command(
+                emit,
+                ResourceDelivery(ToggleResourceNode(node.node_id)),
+              ),
+              node.node_id +
+              (if available {
+                ""
+              } else {
+                localized(state.locale, " · unavailable", " · 不可预留")
+              }),
+            )
+          }),
+        ),
+        @html.p(
+          localized(
+            state.locale,
+            "Confirm host-native and Kubernetes tasks are stopped; 0% GPU utilization alone is not proof of idleness.",
+            "确认宿主机和 Kubernetes 任务均已停止；GPU 0% 利用率不代表机器空闲。",
+          ),
+        ),
+        @html.button(
+          type_="button",
+          class="quiet-button",
+          disabled=panel.loading,
+          attrs=@html.Attrs::build().aria_pressed(
+            panel.confirmed_idle.to_string(),
+          ),
+          on_click=command(emit, ResourceDelivery(ConfirmResourceIdle)),
+          if panel.confirmed_idle {
+            localized(
+              state.locale,
+              "Idle review confirmed",
+              "已确认所选节点空闲",
+            )
+          } else {
+            localized(
+              state.locale,
+              "Confirm selected nodes are idle",
+              "确认所选节点空闲",
+            )
+          },
+        ),
+        @html.button(
+          type_="button",
+          class="primary-button",
+          disabled=!undertaking_allocation_available(panel),
+          on_click=command(emit, ResourceDelivery(AllocateUndertaking)),
+          localized(
+            state.locale,
+            "Allocate selected nodes",
+            "下发所选整机",
+          ),
+        ),
+      ])
+    } else {
+      @html.nothing
+    },
+    @html.h3(
+      localized(state.locale, "Other resource grants", "其他资源授权"),
+    ),
     if panel.loaded && panel.leases.is_empty() {
       @html.p(
         localized(
@@ -352,6 +586,12 @@ pub extend ResourceDeliveryRow with Eq::{equal, not_equal}
 
 ///|
 pub extend ResourceDeliveryRow with @json.FromJson::{from_json}
+
+///|
+pub extend UndertakingAllocationRow with Eq::{equal, not_equal}
+
+///|
+pub extend UndertakingAllocationRow with @json.FromJson::{from_json}
 
 ///|
 pub extend ResourceDeliveryPanel with Eq::{equal, not_equal}

@@ -65,6 +65,8 @@ pub(all) struct AccessOnboardingIntent {
   lease_id : String
   identity_receipt : String
   expires_unix_ms : Int64
+  /// Missing in older journal snapshots: those remain text-only.
+  enterprise_gpu_capabilities : Bool?
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|

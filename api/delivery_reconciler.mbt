@@ -713,17 +713,19 @@ pub async fn ApiService::reconcile_deliveries(self : ApiService) -> Unit {
             }
         }
     }
-    if operation.stage != Stopping &&
-      (
-        !authorized ||
-        !reservation.map_or(false, value => {
-          value.state == Reserved &&
-          value.request.tenant_ref == operation.intent.tenant_id &&
-          value.request.organization_id == operation.intent.organization_id &&
-          value.request.lease_id == operation.intent.lease_id &&
-          value.request.expires_unix_ms > now
-        })
-      ) {
+    let reservation_active = match reservation {
+      Some(value) =>
+        self.delivery_reservation_authorized(
+          value,
+          operation.intent.tenant_id,
+          operation.intent.organization_id,
+          operation.intent.lease_id,
+          operation.intent.authorization_ref,
+          now,
+        )
+      None => false
+    }
+    if operation.stage != Stopping && (!authorized || !reservation_active) {
       operation = deliveries.stop(
         operation.operation_id,
         operation.generation,

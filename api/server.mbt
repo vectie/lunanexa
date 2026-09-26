@@ -3329,6 +3329,14 @@ async fn ApiService::dispatch_with_transport(
   if resource_reservation_path(path) {
     return self.handle_resource_reservation(verb, path, headers, body)
   }
+  if undertaking_allocation_path(path) {
+    return self.handle_undertaking_allocation(verb, headers, body)
+  }
+  if undertaking_member_workspace_path(path) {
+    return self.handle_undertaking_member_workspace(
+      verb, headers, allow_asserted_subject,
+    )
+  }
   if path.has_prefix("/v1/workspace-delivery/") {
     return self.handle_workspace_delivery(verb, path, headers, body)
   }

@@ -84,6 +84,7 @@ fn access_onboarding_intent(
     lease_id: "lease-\{fingerprint}",
     identity_receipt: "oidc-verified-\{fingerprint}",
     expires_unix_ms: now + request.duration_ms(),
+    enterprise_gpu_capabilities: None,
   }
 }
 
@@ -446,6 +447,20 @@ async fn ApiService::execute_webide_access_package(
   let lease_id = intent.lease_id
   let identity_receipt = intent.identity_receipt
   let expires = intent.expires_unix_ms
+  let selected_capabilities : Array[@workspace.WorkspaceCapability] = if intent.enterprise_gpu_capabilities ==
+    Some(true) {
+    [TextGenerate, EmbeddingCreate, ImageGenerate, VideoGenerate, AudioGenerate]
+  } else {
+    [TextGenerate]
+  }
+  let lease_capabilities : Array[@workspace.CapabilityLimit] = selected_capabilities.map(capability => {
+      capability,
+      max_concurrent_requests: 2,
+      max_requests_per_hour: 100,
+      max_input_units_per_request: 65536,
+      max_output_units_per_request: 8192,
+    },
+  )
   match
     accounts.views().iter().find_first(value => value.account_id == account_id) {
     Some(existing) => {
@@ -728,6 +743,14 @@ async fn ApiService::execute_webide_access_package(
         existing.tenant_ref != intent.tenant_ref ||
         existing.access != Developer ||
         existing.expires_unix_ms <= now ||
+        (
+          intent.enterprise_gpu_capabilities == Some(true) &&
+          !lease_capabilities.all(expected => {
+            existing.limits.capabilities.any(actual => {
+              actual.capability == expected.capability
+            })
+          })
+        ) ||
         (existing.state != Requested && existing.state != Active) {
         return api_error(
           409, "AccessPackageConflict", "the derived workspace lease is unavailable",
@@ -746,15 +769,7 @@ async fn ApiService::execute_webide_access_package(
             limits: {
               max_active_sessions: 2,
               max_session_duration_ms: 3600000L,
-              capabilities: [
-                {
-                  capability: TextGenerate,
-                  max_concurrent_requests: 2,
-                  max_requests_per_hour: 100,
-                  max_input_units_per_request: 65536,
-                  max_output_units_per_request: 8192,
-                },
-              ],
+              capabilities: lease_capabilities,
             },
             starts_unix_ms: now,
             expires_unix_ms: expires,

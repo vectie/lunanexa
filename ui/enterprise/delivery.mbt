@@ -49,6 +49,18 @@ pub(all) struct DeliveryOptions {
 } derive(Eq, FromJson)
 
 ///|
+pub(all) struct CompanyWorkspaceStatus {
+  status : String
+  expires_unix_ms : Int64?
+} derive(Eq, FromJson)
+
+///|
+pub extend CompanyWorkspaceStatus with Eq::{equal, not_equal}
+
+///|
+pub extend CompanyWorkspaceStatus with FromJson::{from_json}
+
+///|
 /// Returned once by the delivery-bound access endpoint. Never persisted in
 /// browser storage or included in progress polling responses.
 pub(all) struct DeliveryApiAccess {
@@ -67,6 +79,7 @@ pub(all) struct DeliveryPanel {
   operations : Array[DeliveryView]
   external_model : ExternalModelServiceView?
   options : DeliveryOptions
+  company_workspace : CompanyWorkspaceStatus?
   reservation_id : String
   template_choice : String
   idempotency_key : String
@@ -83,6 +96,7 @@ pub(all) struct DeliveryPanel {
 ///|
 pub(all) enum DeliveryMessage {
   Refresh
+  ActivateCompanyWorkspace
   SelectReservation(String)
   SelectTemplate(String)
   Start
@@ -105,6 +119,7 @@ pub fn default_delivery_panel() -> DeliveryPanel {
     operations: [],
     external_model: None,
     options: { reservations: [], templates: [], },
+    company_workspace: None,
     reservation_id: "",
     template_choice: "",
     idempotency_key: "",
@@ -212,6 +227,7 @@ pub fn DeliveryPanel::update(
         external_start_confirmation: false,
       }
     Refresh
+    | ActivateCompanyWorkspace
     | Retry(_)
     | ConfirmStop(_)
     | ConfirmStopExternal
@@ -266,6 +282,63 @@ fn delivery_stage_label(stage : String, locale : @i18n.Locale) -> String {
 }
 
 ///|
+fn delivery_stage_guidance(
+  operation : DeliveryView,
+  locale : @i18n.Locale,
+) -> String {
+  match operation.stage {
+    "Reserving" =>
+      copy(
+        locale, "Checking your authorized whole-node allocation. No service is ready yet.",
+        "正在检查已授权的整机资源；服务尚未就绪。",
+      )
+    "PreparingModel" =>
+      if operation.cache_hit {
+        copy(
+          locale, "Verified local model cache is being reused.", "正在复用已验证的本地模型缓存。",
+        )
+      } else {
+        copy(
+          locale, "Model files are being prepared. Transfer progress appears below when measured.",
+          "正在准备模型文件；有实测数据时将在下方显示传输进度。",
+        )
+      }
+    "LoadingModel" =>
+      copy(
+        locale, "The model is loading; readiness still needs a runtime check.", "模型正在加载；仍需通过运行时就绪检查。",
+      )
+    "StartingWorkspace" =>
+      copy(
+        locale, "The application is starting; wait for a usable workspace or API response.",
+        "应用正在启动；请等待工作区或 API 真正可用。",
+      )
+    "Ready" =>
+      copy(
+        locale, "The required service checks passed. Use a permitted client entry point when available.",
+        "所需服务检查已通过。可通过已授权的客户端入口使用服务。",
+      )
+    "Failed" =>
+      if operation.can_manage {
+        copy(
+          locale, "Review the failure code below, then retry this same operation.",
+          "查看下方失败代码后，可重试同一次交付操作。",
+        )
+      } else {
+        copy(
+          locale, "Review the failure code below and contact your administrator.",
+          "查看下方失败代码，并联系管理员。",
+        )
+      }
+    "Stopping" =>
+      copy(
+        locale, "Access is closing while workloads stop. Saved files follow the published retention policy.",
+        "访问正在关闭，工作负载正在停止；已保存文件按公布的保留策略处理。",
+      )
+    _ => ""
+  }
+}
+
+///|
 fn delivery_kind_label(kind : String) -> String {
   match kind {
     "Workspace" => "PaaS"
@@ -273,6 +346,184 @@ fn delivery_kind_label(kind : String) -> String {
     "GpuContainer" => "IaaS"
     _ => kind
   }
+}
+
+///|
+fn delivery_overview_destination(kind : String) -> EnterpriseRoute {
+  match kind {
+    "GpuContainer" => MachineAccess
+    "Workspace" => DesktopIde
+    _ => Models
+  }
+}
+
+///|
+/// The overview intentionally projects only organization-scoped operation
+/// evidence. Node identities and operator-only capacity are not exposed here.
+fn delivery_overview(
+  panel : DeliveryPanel,
+  locale : @i18n.Locale,
+  emit : @rabbita.Emit[EnterpriseMessage]?,
+) -> @rabbita.Html {
+  let ready = panel.operations.count_if(operation => operation.stage == "Ready")
+  let preparing = panel.operations.count_if(operation => {
+    operation.stage == "Reserving" ||
+    operation.stage == "PreparingModel" ||
+    operation.stage == "LoadingModel" ||
+    operation.stage == "StartingWorkspace" ||
+    operation.stage == "Stopping"
+  })
+  let failed = panel.operations.count_if(operation => {
+    operation.stage == "Failed"
+  })
+  let priority = panel.operations
+    .iter()
+    .find_first(operation => operation.stage == "Failed")
+  let current = match priority {
+    Some(value) => Some(value)
+    None =>
+      match
+        panel.operations
+        .iter()
+        .find_first(operation => {
+          operation.stage == "Reserving" ||
+          operation.stage == "PreparingModel" ||
+          operation.stage == "LoadingModel" ||
+          operation.stage == "StartingWorkspace" ||
+          operation.stage == "Stopping"
+        }) {
+        Some(value) => Some(value)
+        None =>
+          panel.operations
+          .iter()
+          .find_first(operation => operation.stage == "Ready")
+      }
+  }
+  @html.section(
+    class="service-status-overview",
+    attrs=@html.Attrs::build().aria_labelledby("service-status-title"),
+    [
+      @html.div(class="section-heading", [
+        @html.div([
+          @html.p(
+            class="eyebrow",
+            copy(locale, "Your services", "您的服务"),
+          ),
+          @html.h2(
+            id="service-status-title",
+            copy(locale, "Service status", "服务状态"),
+          ),
+          @html.p(
+            copy(
+              locale, "Status for your selected organization. Open a service for progress and next steps.",
+              "显示当前所选组织的服务状态；打开服务可查看进度和下一步。",
+            ),
+          ),
+        ]),
+        @html.button(
+          type_="button",
+          class="quiet-button",
+          on_click=command(emit, Navigate(Models)),
+          copy(locale, "View services", "查看服务"),
+        ),
+      ]),
+      if !panel.loaded && panel.error is Some(_) {
+        @html.p(
+          attrs=@html.Attrs::build().role("alert"),
+          copy(
+            locale, "Service status is unavailable. Open Services to retry.", "服务状态暂不可用。打开服务页面可重试。",
+          ),
+        )
+      } else if !panel.loaded {
+        @html.p(
+          attrs=@html.Attrs::build().role("status"),
+          copy(
+            locale, "Checking service status…", "正在查询服务状态…",
+          ),
+        )
+      } else if panel.operations.is_empty() {
+        @html.p(
+          copy(
+            locale, "No dedicated service has been started for this organization.",
+            "此组织尚未启动专属服务。",
+          ),
+        )
+      } else {
+        @html.div(class="service-status-content", [
+          @html.dl(class="service-status-counts", [
+            @html.div([
+              @html.dt(copy(locale, "Ready", "可使用")),
+              @html.dd(ready.to_string()),
+            ]),
+            @html.div([
+              @html.dt(copy(locale, "In progress", "进行中")),
+              @html.dd(preparing.to_string()),
+            ]),
+            @html.div([
+              @html.dt(copy(locale, "Needs action", "需要处理")),
+              @html.dd(failed.to_string()),
+            ]),
+          ]),
+          match current {
+            Some(operation) =>
+              @html.div(class="service-status-current", [
+                @html.strong(
+                  "\{delivery_kind_label(operation.kind)} · \{operation.template_id}",
+                ),
+                @html.span(
+                  attrs=@html.Attrs::build().role("status").aria_live("polite"),
+                  delivery_stage_label(operation.stage, locale),
+                ),
+                @html.p(
+                  if operation.stage == "Failed" {
+                    copy(
+                      locale, "The service did not become ready. Open its details for the failure code and retry action.",
+                      "服务尚未就绪。打开详情可查看失败原因代码和重试操作。",
+                    )
+                  } else if operation.stage == "Ready" {
+                    copy(
+                      locale, "This service is ready for the permitted client action.",
+                      "此服务已就绪，可执行获授权的客户端操作。",
+                    )
+                  } else {
+                    copy(
+                      locale, "The controller is still reconciling this service. You can leave this page and return later.",
+                      "控制器仍在协调此服务；您可以离开页面，稍后返回。",
+                    )
+                  },
+                ),
+                @html.button(
+                  type_="button",
+                  class="quiet-button",
+                  on_click=command(
+                    emit,
+                    Navigate(delivery_overview_destination(operation.kind)),
+                  ),
+                  copy(locale, "Open service details", "打开服务详情"),
+                ),
+              ])
+            None =>
+              @html.p(
+                copy(
+                  locale, "No active service requires attention.", "当前没有需要处理的活动服务。",
+                ),
+              )
+          },
+        ])
+      },
+      if panel.loaded && panel.error is Some(_) {
+        @html.p(
+          attrs=@html.Attrs::build().role("alert"),
+          copy(
+            locale, "The last refresh failed; shown status may be out of date.",
+            "最近一次刷新失败，显示的状态可能已过期。",
+          ),
+        )
+      } else {
+        @html.nothing
+      },
+    ],
+  )
 }
 
 ///|
@@ -314,6 +565,45 @@ fn delivery_panel_view(
         "选择已授权资源和已发布模板。停止服务不会删除您的工作文件。",
       ),
     ),
+    match panel.company_workspace {
+      Some(workspace) if workspace.status == "NeedsActivation" =>
+        @html.section(class="record-card", [
+          @html.h3(
+            copy(locale, "Activate my workspace", "开通我的个人工作区"),
+          ),
+          @html.p(
+            copy(
+              locale, "Your company already has approved machines. Activate your own bounded workspace before starting an application or model API; colleagues' files remain separate.",
+              "企业机器已下发。先开通您自己的限期工作区，再启动应用或模型 API；同事的文件和聊天不会共用。",
+            ),
+          ),
+          @html.button(
+            type_="button",
+            class="primary-button",
+            disabled=panel.loading,
+            on_click=command(emit, Delivery(ActivateCompanyWorkspace)),
+            copy(locale, "Activate my access", "开通我的权限"),
+          ),
+        ])
+      Some(workspace) if workspace.status == "Ready" =>
+        @html.p(
+          attrs=@html.Attrs::build().role("status"),
+          copy(
+            locale, "My workspace is active until ", "我的工作区权限有效至 ",
+          ) +
+          workspace.expires_unix_ms.map_or("—", value => {
+            @contractdoc.format_unix_ms_beijing(value)
+          }),
+        )
+      Some(workspace) if workspace.status == "NoCompanyMachines" =>
+        @html.p(
+          copy(
+            locale, "No approved undertaking machines have been assigned to this organization yet.",
+            "此企业尚无已审核并下发的承诺函机器。",
+          ),
+        )
+      _ => @html.nothing
+    },
     if panel.loading {
       @html.p(
         attrs=@html.Attrs::build().role("status").aria_live("polite"),
@@ -570,6 +860,14 @@ fn delivery_panel_view(
                 delivery_stage_label(operation.stage, locale)
               },
             ),
+            if delivery_stage_guidance(operation, locale) != "" {
+              @html.p(
+                class="delivery-next-step",
+                delivery_stage_guidance(operation, locale),
+              )
+            } else {
+              @html.nothing
+            },
             @html.p(
               if operation.kind == "ModelApi" {
                 copy(

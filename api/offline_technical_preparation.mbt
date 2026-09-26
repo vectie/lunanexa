@@ -88,6 +88,7 @@ async fn ApiService::prepare_technical_workspace(
           lease_id: "technical-lease-" + fingerprint,
           identity_receipt: account.identity_receipt,
           expires_unix_ms: expires,
+          enterprise_gpu_capabilities: None,
         },
         now,
       )

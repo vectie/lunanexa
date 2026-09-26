@@ -87,6 +87,9 @@ async fn ApiService::reservation_authorized(
   if reservation.request.expires_unix_ms <= now {
     return false
   }
+  if !self.undertaking_reservation_allowed(reservation, now) {
+    return false
+  }
   guard self.workspace_directory is Some(directory) else { return false }
   guard directory.snapshot(now).leases
     .iter()

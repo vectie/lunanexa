@@ -21,6 +21,17 @@ fn delivery_command(
       try {
         let panel = model.portal.deliveries
         match action {
+          Some(ActivateCompanyWorkspace) =>
+            ignore(
+              request(
+                "POST",
+                model.endpoint,
+                "/v1/portal/self/undertaking-workspace",
+                model.token,
+                model.subject_ref,
+                body="{}",
+              ),
+            )
           Some(Start) => {
             guard @enterprise_ui.selected_delivery_template(panel)
               is Some(template) else {
@@ -191,7 +202,28 @@ fn delivery_command(
           Some(_) => external_error
           None => option_error
         }
-        Ok((options, operations, external_model, status_error))
+        let company_workspace : @enterprise_ui.CompanyWorkspaceStatus? = try
+          Some(
+            @json.from_json(
+              @json.parse(
+                request(
+                  "GET",
+                  model.endpoint,
+                  "/v1/portal/self/undertaking-workspace",
+                  model.token,
+                  model.subject_ref,
+                ),
+              ),
+            ),
+          )
+        catch {
+          _ => None
+        } noraise {
+          value => value
+        }
+        Ok(
+          (options, operations, external_model, company_workspace, status_error),
+        )
       } catch {
         _ =>
           Err(
@@ -214,7 +246,8 @@ fn delivery_poll_command(
   if (
       model.portal.route != DesktopIde &&
       model.portal.route != MachineAccess &&
-      model.portal.route != Models
+      model.portal.route != Models &&
+      model.portal.route != Overview
     ) ||
     model.portal.deliveries.error is Some(_) ||
     !model.portal.deliveries.operations.any(operation => {

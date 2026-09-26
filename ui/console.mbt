@@ -25,6 +25,7 @@ pub(all) struct NodeRow {
   node_id : String
   state : @contracts.NodeState
   architecture : String
+  accelerators : Array[@contracts.AcceleratorInventory]
   total_memory_mib : Int
   free_memory_mib : Int
   used_memory_mib : Int
@@ -2461,6 +2462,7 @@ pub fn demo_state() -> ConsoleState {
       node_id: "dgx-spark-01",
       state: Active,
       architecture: "nvidia-gb10",
+      accelerators: [],
       total_memory_mib: 122880,
       free_memory_mib: 81920,
       used_memory_mib: 40960,
@@ -2479,6 +2481,7 @@ pub fn demo_state() -> ConsoleState {
       node_id: "dgx-spark-02",
       state: Active,
       architecture: "nvidia-gb10",
+      accelerators: [],
       total_memory_mib: 122880,
       free_memory_mib: 79872,
       used_memory_mib: 43008,
@@ -2497,6 +2500,7 @@ pub fn demo_state() -> ConsoleState {
       node_id: "dgx-spark-03",
       state: Active,
       architecture: "nvidia-gb10",
+      accelerators: [],
       total_memory_mib: 122880,
       free_memory_mib: 80896,
       used_memory_mib: 41984,
@@ -2515,6 +2519,7 @@ pub fn demo_state() -> ConsoleState {
       node_id: "dgx-spark-04",
       state: Active,
       architecture: "nvidia-gb10",
+      accelerators: [],
       total_memory_mib: 122880,
       free_memory_mib: 79872,
       used_memory_mib: 43008,
@@ -3514,6 +3519,7 @@ fn readiness_blocker_label(locale : @i18n.Locale, code : String) -> String {
 fn overview_view(
   state : ConsoleState,
   emit : @rabbita.Emit[ConsoleMessage]?,
+  now_unix_ms : Int64,
 ) -> @rabbita.Html {
   @html.section(attrs=@html.Attrs::build().aria_labelledby("overview-title"), [
     @html.div(class="overview-grid", [
@@ -3651,9 +3657,10 @@ fn overview_view(
         ]),
       ]),
     ]),
+    fleet_overview(state, now_unix_ms, emit),
     @html.dl(class="stats", [
       stat(
-        localized(state.locale, "Available nodes", "可用节点"),
+        localized(state.locale, "Active nodes", "活跃节点"),
         "\{state.overview.active_nodes}/\{state.overview.total_nodes}",
         if state.overview.total_nodes == 0 {
           localized(state.locale, "Telemetry unavailable", "遥测不可用")
@@ -11996,6 +12003,30 @@ fn console_styles() -> String {
     #|.topology-relationships dd { margin: .3rem 0 0; color: var(--muted); font-size: .67rem; }
     #|.topology-scope-note { margin: 0; padding: 0 1.25rem 1rem; color: var(--muted); font-size: .68rem; }
     #|.node-list { display: grid; gap: .65rem; }
+    #|.fleet-overview { margin: 1.15rem 0; }
+    #|.fleet-overview .section-heading { margin-bottom: .8rem; }
+    #|.fleet-node-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 21rem), 1fr)); gap: .75rem; }
+    #|.fleet-node { display: grid; align-content: start; gap: .65rem; min-width: 0; padding: 1rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface); }
+    #|.fleet-node-unknown, .fleet-node-blocked { border-left: .22rem solid var(--danger); }
+    #|.fleet-node-reserved, .fleet-node-running { border-left: .22rem solid var(--warning); }
+    #|.fleet-node-candidate { border-left: .22rem solid var(--success); }
+    #|.fleet-node-heading { display: flex; justify-content: space-between; align-items: start; gap: .6rem; }
+    #|.fleet-node-heading h3 { margin: 0; overflow-wrap: anywhere; font-size: .9rem; }
+    #|.fleet-node-heading p { margin: .15rem 0 0; font-size: .68rem; }
+    #|.fleet-posture { flex: none; padding: .25rem .5rem; border: 1px solid var(--line); border-radius: 999px; font-size: .68rem; font-weight: 750; }
+    #|.fleet-posture-candidate { color: var(--success); }
+    #|.fleet-posture-reserved, .fleet-posture-running { color: var(--warning); }
+    #|.fleet-posture-unknown, .fleet-posture-blocked { color: var(--danger); }
+    #|.fleet-node-explanation, .fleet-device-note { margin: 0; color: var(--muted-strong); font-size: .73rem; }
+    #|.fleet-node-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; margin: 0; }
+    #|.fleet-node-facts div { min-width: 0; }
+    #|.fleet-node-facts dt { color: var(--muted); font-size: .65rem; }
+    #|.fleet-node-facts dd { margin: .15rem 0 0; overflow-wrap: anywhere; font-size: .75rem; font-weight: 700; }
+    #|.fleet-devices { display: grid; gap: .3rem; }
+    #|.fleet-device { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .1rem .5rem; padding: .45rem .55rem; border: 1px solid var(--line); border-radius: .4rem; font-size: .69rem; }
+    #|.fleet-device strong { overflow-wrap: anywhere; }
+    #|.fleet-device span:last-child { grid-column: 1/-1; color: var(--muted); }
+    #|.fleet-node-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
     #|.node-record { overflow: hidden; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface); box-shadow: var(--shadow-sm); }
     #|.node-record[open] { border-color: color-mix(in srgb, var(--accent) 32%, var(--line)); }
     #|.node-summary { display: grid; grid-template-columns: minmax(11rem, 1.25fr) minmax(7rem, .65fr) minmax(8rem, .75fr) minmax(7rem, .65fr) minmax(11rem, 1fr) auto; align-items: center; gap: 1rem; min-height: 4.6rem; padding: .75rem 1rem; cursor: pointer; list-style: none; }
@@ -12222,7 +12253,7 @@ fn console_view(
   page_read_state : PageReadState,
 ) -> @rabbita.Html {
   let content = match state.route {
-    Overview => overview_view(state, emit)
+    Overview => overview_view(state, emit, now_unix_ms)
     Alerts => alerts_view(state, emit, alerts_window, now_unix_ms)
     Users => users_view(state, emit)
     Leases => leases_view(state, emit)
@@ -12238,7 +12269,32 @@ fn console_view(
           )
         None => @offline_commerce.view(commerce)
       }
-      @html.div([offline_commerce_lifecycle_graph(state), page])
+      @html.div([
+        offline_commerce_lifecycle_graph(state),
+        page,
+        @html.section(class="data-table-panel", [
+          @html.h3(
+            localized(
+              state.locale,
+              "After undertaking approval",
+              "承诺函审批后",
+            ),
+          ),
+          @html.p(
+            localized(
+              state.locale,
+              "Once the signed document and full offline prepayment are verified, allocate the quoted number of whole nodes. The customer then starts IaaS, PaaS or MaaS from the enterprise site.",
+              "签署文件及线下足额到账核验后，下发报价对应台数的整机。客户随后在企业端自助启动 IaaS、PaaS 或 MaaS。",
+            ),
+          ),
+          @html.button(
+            type_="button",
+            class="primary-button",
+            on_click=command(emit, Navigate(Leases)),
+            localized(state.locale, "Allocate machines", "前往整机下发"),
+          ),
+        ]),
+      ])
     }
     ContractDocuments => {
       let documents = { ..state.contract_documents, locale: state.locale, }

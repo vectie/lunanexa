@@ -841,6 +841,28 @@ pub fn demo_state() -> EnterpriseState {
       approved_model_aliases: ["text.default"],
     }),
     self_service: demo_self_service_state(now),
+    deliveries: {
+      ..default_delivery_panel(),
+      loaded: true,
+      operations: [
+        {
+          operation_id: "delivery-demo-container",
+          project_id: "project-vision-lab",
+          kind: "GpuContainer",
+          template_id: "gpu-container",
+          template_version: "v1",
+          node_count: 1,
+          stage: "Ready",
+          generation: 2L,
+          cache_hit: false,
+          transferred_bytes: 0L,
+          total_bytes: None,
+          failure_code: None,
+          expires_at_ms: now + 86400000L,
+          can_manage: false,
+        },
+      ],
+    },
     project_id: "project-vision-lab",
     unix_username: "alice",
     model_ids: "qwen3-32b, bge-m3",
@@ -1746,6 +1768,7 @@ fn overview_view(
   }
   @html.div(class="page-stack", [
     trial_panel,
+    delivery_overview(state.deliveries, state.locale, emit),
     product_choices(state, emit, true),
     @html.section(class="welcome-panel", [
       @html.div([
@@ -3238,11 +3261,16 @@ fn models_view(
     } else {
       @html.div(class="model-grid", cards)
     },
-    if state.deliveries.loaded ||
-      state.deliveries.loading ||
+    if state.deliveries.company_workspace.map_or(false, value => {
+        value.status != "NoCompanyMachines"
+      }) ||
       state.deliveries.error is Some(_) ||
       state.deliveries.external_model is Some(_) ||
-      state.deliveries.operations.any(value => value.kind == "ModelApi") {
+      state.deliveries.operations.any(value => value.kind == "ModelApi") ||
+      (
+        !state.deliveries.options.reservations.is_empty() &&
+        state.deliveries.options.templates.any(value => value.kind == "ModelApi")
+      ) {
       delivery_panel_view(state.deliveries, state.locale, emit, "ModelApi")
     } else {
       @html.nothing
@@ -3686,6 +3714,9 @@ fn desktop_ide_view(
       @html.nothing
     },
     if is_comfyui ||
+      state.deliveries.company_workspace.map_or(false, value => {
+        value.status != "NoCompanyMachines"
+      }) ||
       state.deliveries.operations.any(value => value.kind == "Workspace") ||
       (
         !state.deliveries.options.reservations.is_empty() &&
@@ -4148,6 +4179,17 @@ fn enterprise_view(
     #|.danger-button{min-height:2.75rem;padding:.65rem 1rem;border:1px solid #7f4148;border-radius:.55rem;background:#27151a;color:#ffb2b8;font:inherit;font-weight:750;cursor:pointer}.danger-button:disabled{opacity:.42;cursor:not-allowed}.account-identity,.api-key-panel{padding:1.35rem;border:1px solid var(--line);border-radius:.85rem;background:linear-gradient(145deg,rgba(17,31,41,.96),rgba(10,22,29,.96))}.account-facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.75rem;margin:1.1rem 0}.account-facts>div{min-width:0;padding:.7rem;border:1px solid var(--line);border-radius:.55rem;background:rgba(7,16,22,.5)}.account-facts dt{color:var(--muted);font-size:.68rem}.account-facts dd{margin:.2rem 0 0}.role-list,.api-key-actions{display:flex;flex-wrap:wrap;gap:.5rem}.account-state-active,.api-key-state-active{color:var(--mint)}.account-state-inactive,.api-key-state-expired{color:var(--amber)}.api-key-state-revoked{color:#ffadb3}.rotation-note{display:flex;gap:.65rem;padding:.8rem;border-left:3px solid var(--amber);background:rgba(241,198,108,.06);color:var(--muted)}.rotation-note strong{color:var(--amber)}.api-key-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem}.api-key-card{padding:1rem;border:1px solid var(--line);border-radius:.75rem;background:var(--panel)}.api-key-card-heading{display:flex;justify-content:space-between;gap:1rem}.api-key-card h3{margin:0}.secondary{color:var(--muted);font-size:.7rem}.api-key-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.api-key-actions{justify-content:flex-end}.account-dialog{max-height:calc(100vh - 2rem);overflow:auto}.account-form{display:grid;gap:.8rem}.account-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem}.account-form .field select{width:100%;min-height:44px;padding:.6rem;border:1px solid #35505f;border-radius:.5rem;background:#09151c;color:var(--ink);font:inherit}.scope-picker{display:flex;flex-wrap:wrap;gap:.5rem;border:1px solid var(--line);border-radius:.55rem;padding:.75rem}.scope-picker legend{padding:0 .35rem;color:var(--muted)}.scope-toggle{min-height:44px;padding:.55rem .75rem;border:1px solid var(--line);border-radius:.5rem;background:var(--panel2);color:var(--ink);font:inherit}.scope-toggle.is-selected{border-color:var(--mint2);background:rgba(126,224,189,.1);color:var(--mint)}.one-time-secret{padding:1rem;border:1px solid var(--mint2);border-radius:.55rem;background:#06100d;color:#a8f4d5;white-space:pre-wrap;overflow-wrap:anywhere}.confirmation-scope{padding:.7rem;border:1px solid var(--line);border-radius:.5rem}@media(max-width:52rem){.account-facts,.api-key-list,.account-form-grid{grid-template-columns:1fr}.account-access-page .section-heading{align-items:stretch;flex-direction:column}.api-key-actions>*{width:100%}}@media(max-width:32rem){.account-dialog .dialog-actions>*{width:100%}}
   let provider_styles =
     #|.section-actions{display:flex;align-items:center;gap:.55rem}.compact-button{min-height:44px;padding:.5rem .75rem}.external-action{display:inline-flex;align-items:center;justify-content:center;text-align:center;text-decoration:none}.provider-actions{min-width:min(18rem,100%)}.provider-state-success{color:var(--mint)}.provider-state-error{color:#ffadb3}.provider-state-pending{color:var(--amber)}.provider-state-active{color:#a9d8ff}.checkout-panel,.provider-history{padding:1.35rem;border:1px solid var(--line);border-radius:.85rem;background:linear-gradient(145deg,rgba(17,31,41,.96),rgba(10,22,29,.96))}.checkout-panel h3,.provider-history h3{margin:0}.checkout-summary{display:grid;grid-template-columns:minmax(0,1fr) minmax(15rem,.38fr);gap:1rem;margin-top:1rem;padding:1rem;border:1px solid rgba(126,224,189,.25);border-radius:.75rem;background:rgba(126,224,189,.04)}.checkout-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem;margin:0}.checkout-facts>div{min-width:0}.checkout-facts dt{color:var(--muted);font-size:.68rem}.checkout-facts dd{margin:.2rem 0 0}.checkout-total{font-size:1.45rem;font-weight:850;color:var(--mint)}.checkout-action{display:flex;flex-direction:column;align-items:stretch;justify-content:center;gap:.5rem}.checkout-action small,.provider-request-row p,.provider-request-row>small,.provider-loading{color:var(--muted)}.provider-request-list{display:grid;gap:.7rem;margin-top:1rem}.provider-request-row{display:grid;gap:.65rem;padding:1rem;border:1px solid var(--line);border-radius:.7rem;background:var(--panel)}.provider-request-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem}.provider-request-heading strong,.provider-request-heading span{display:block}.provider-request-row p{margin:0}.provider-request-row .external-action{justify-self:start}@media(max-width:52rem){.provider-section-heading,.section-actions,.checkout-panel .section-heading,.provider-request-heading{align-items:stretch;flex-direction:column}.checkout-summary,.checkout-facts{grid-template-columns:1fr}.provider-actions{min-width:0}.provider-request-row .external-action{justify-self:stretch}}@media(max-width:32rem){.section-actions>*{width:100%}}
+  let service_status_styles =
+    #|.service-status-overview{display:grid;gap:1rem;padding:1.25rem;border:1px solid var(--line);border-radius:.85rem;background:var(--panel)}
+    #|.service-status-overview .section-heading{align-items:start}.service-status-overview .section-heading p:last-child{max-width:48rem;color:var(--muted)}
+    #|.service-status-content{display:grid;grid-template-columns:minmax(13rem,.8fr) minmax(0,1.2fr);gap:1rem;align-items:start}
+    #|.service-status-counts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem;margin:0}
+    #|.service-status-counts div{min-width:0;padding:.7rem;border:1px solid var(--line);border-radius:.55rem;background:var(--panel2)}
+    #|.service-status-counts dt{color:var(--muted);font-size:.67rem}.service-status-counts dd{margin:.2rem 0 0;font-size:1.45rem;font-weight:800}
+    #|.service-status-current{display:grid;justify-items:start;gap:.35rem;min-width:0;padding:.85rem;border-left:3px solid var(--mint2);background:rgba(126,224,189,.06)}
+    #|.service-status-current strong{overflow-wrap:anywhere}.service-status-current span{color:var(--mint)}.service-status-current p{margin:.15rem 0 .4rem;color:var(--muted)}
+    #|@media(max-width:52rem){.service-status-overview .section-heading{align-items:stretch;flex-direction:column}.service-status-content{grid-template-columns:1fr}}
+    #|@media(max-width:32rem){.service-status-counts{grid-template-columns:1fr 1fr}}
   let success_notice = match state.success_message {
     Some(value) =>
       @html.p(
@@ -4170,6 +4212,7 @@ fn enterprise_view(
     @html.style_tag(stylesheet),
     @html.style_tag(account_styles),
     @html.style_tag(provider_styles),
+    @html.style_tag(service_status_styles),
     @html.style_tag(self_service_styles()),
     @html.style_tag(
       ".confirmation-dialog{max-height:calc(100dvh - 2rem);overflow:auto}.first-call-guide pre{white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%;font-size:.75rem}.copy-detail{display:inline-flex;flex-wrap:wrap;align-items:center;gap:.5rem}.copy-detail .quiet-button{min-height:44px}.quota-track{display:block;height:.55rem;background:#223743;min-width:8rem;border-radius:.3rem;overflow:hidden}.quota-fill{display:block;height:100%;background:#7ee0bd}.quota-warning .quota-fill{background:#f1c66c}",
