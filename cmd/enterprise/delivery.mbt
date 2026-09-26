@@ -139,47 +139,53 @@ fn delivery_command(
               ),
             )
         }
+        // The external model belongs to MaaS. A failed model-control probe
+        // must not hide IaaS inventory or personal PaaS controls.
         let (external_model, external_error) : (
           @enterprise_ui.ExternalModelServiceView?,
           String?,
-        ) = try
-          (
-            Some(
-              @json.from_json(
-                @json.parse(
-                  request(
-                    "GET",
-                    model.endpoint,
-                    "/v1/portal/self/external-model-service",
-                    model.token,
-                    model.subject_ref,
+        ) = if model.portal.route == Models {
+          try
+            (
+              Some(
+                @json.from_json(
+                  @json.parse(
+                    request(
+                      "GET",
+                      model.endpoint,
+                      "/v1/portal/self/external-model-service",
+                      model.token,
+                      model.subject_ref,
+                    ),
                   ),
                 ),
               ),
-            ),
-            None,
-          )
-        catch {
-          error if error.to_string().contains("HTTP 404 NotFound") =>
-            (None, None)
-          error =>
-            (
-              panel.external_model.map(service => {
-                ..service,
-                state: "Unavailable",
-                ready: false,
-                can_stop: false,
-              }),
-              Some(
-                portal_copy(
-                  model.portal.locale,
-                  "Shared model status unavailable: \{error.to_string()}",
-                  "企业共享模型状态暂不可用：\{error.to_string()}",
-                ),
-              ),
+              None,
             )
-        } noraise {
-          value => value
+          catch {
+            error if error.to_string().contains("HTTP 404 NotFound") =>
+              (None, None)
+            error =>
+              (
+                panel.external_model.map(service => {
+                  ..service,
+                  state: "Unavailable",
+                  ready: false,
+                  can_stop: false,
+                }),
+                Some(
+                  portal_copy(
+                    model.portal.locale,
+                    "Shared model status unavailable: \{error.to_string()}",
+                    "企业共享模型状态暂不可用：\{error.to_string()}",
+                  ),
+                ),
+              )
+          } noraise {
+            value => value
+          }
+        } else {
+          (panel.external_model, None)
         }
         let status_error = match external_error {
           Some(_) => external_error
