@@ -89,6 +89,52 @@ test "delivery progress renders truthful cache status and stop confirmation with
 }
 
 ///|
+test "enterprise overview shows scoped service status and recovery route" {
+  let state = @enterprise.default_state(100L)
+  let panel = {
+    ..state.deliveries,
+    loaded: true,
+    operations: [
+      {
+        operation_id: "delivery-failed",
+        project_id: "project-a",
+        kind: "Workspace",
+        template_id: "h3",
+        template_version: "1",
+        node_count: 2,
+        stage: "Failed",
+        generation: 3L,
+        cache_hit: false,
+        transferred_bytes: 0L,
+        total_bytes: None,
+        failure_code: Some("ModelLoadFailed"),
+        expires_at_ms: 99999L,
+        can_manage: true,
+      },
+    ],
+  }
+  let overview = @enterprise.render({
+    ..state,
+    route: Overview,
+    locale: English,
+    deliveries: panel,
+  })
+  assert_true(overview.contains("Service status"))
+  assert_true(overview.contains("Needs action"))
+  assert_true(overview.contains("Open service details"))
+  assert_false(overview.contains("node-1"))
+  assert_false(overview.contains("gpu-0"))
+  let unavailable = @enterprise.render({
+    ..state,
+    route: Overview,
+    locale: English,
+    deliveries: { ..state.deliveries, error: Some("network"), },
+  })
+  assert_true(unavailable.contains("Service status is unavailable"))
+  assert_false(unavailable.contains("No dedicated service"))
+}
+
+///|
 test "expired delivery does not offer retry or stop" {
   let state = @enterprise.default_state(100L)
   let panel = {
@@ -304,6 +350,42 @@ test "personal MoonDesk hides exclusive-delivery setup until it is relevant" {
   })
   assert_true(machine.contains("GPU container deliveries"))
   assert_true(machine.contains("Request resources"))
+}
+
+///|
+test "company machines prompt each colleague to activate their own workspace" {
+  let state = @enterprise.demo_state()
+  let panel = {
+    ..state.deliveries,
+    loaded: true,
+    company_workspace: Some({
+      status: "NeedsActivation",
+      expires_unix_ms: Some(200000L),
+    }),
+  }
+  assert_true(
+    @enterprise.render({
+      ..state,
+      locale: ChineseSimplified,
+      route: Models,
+      deliveries: panel,
+    }).contains("开通我的个人工作区"),
+  )
+  assert_true(panel.update(ActivateCompanyWorkspace).loading)
+  assert_false(
+    @enterprise.render({
+      ..state,
+      locale: ChineseSimplified,
+      route: Models,
+      deliveries: {
+        ..panel,
+        company_workspace: Some({
+          status: "Ready",
+          expires_unix_ms: Some(200000L),
+        }),
+      },
+    }).contains("开通我的权限"),
+  )
 }
 
 ///|

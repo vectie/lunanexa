@@ -1027,6 +1027,7 @@ fn build_node_rows(
           heartbeat.state
         },
         architecture: architecture(heartbeat),
+        accelerators: heartbeat.inventory.accelerators.copy(),
         total_memory_mib,
         free_memory_mib: (total_memory_mib - used_memory_mib).max(0),
         used_memory_mib,
@@ -5049,6 +5050,12 @@ fn update_live(
         next.console.route,
         emit,
       )
+      let (scheduled, resources) = if scheduled.console.route == Overview &&
+        !scheduled.demo_mode {
+        resource_delivery_read(scheduled, emit)
+      } else {
+        (scheduled, @rabbita.none)
+      }
       (
         scheduled,
         @rabbita.batch([
@@ -5063,6 +5070,7 @@ fn update_live(
             cluster_poll_delay_command(cluster_generation, emit)
           },
           deferred,
+          resources,
         ]),
       )
     }
@@ -5279,21 +5287,34 @@ fn update_live(
         !model.console.operator_authenticated {
         (model, @rabbita.none)
       } else {
-        (
-          {
-            ..model,
-            console: {
-              ..model.console,
-              nodes,
-              storage_nodes,
-              overview: {
-                ..model.console.overview,
-                active_nodes: nodes.count_if(node => node.state == Active),
-                total_nodes: nodes.length(),
-              },
+        let next = {
+          ..model,
+          console: {
+            ..model.console,
+            nodes,
+            storage_nodes,
+            overview: {
+              ..model.console.overview,
+              active_nodes: nodes.count_if(node => node.state == Active),
+              total_nodes: nodes.length(),
             },
           },
-          cluster_poll_delay_command(generation, emit),
+        }
+        let (next, resources) = if next.console.route == Overview &&
+          !next.demo_mode &&
+          !next.console.resource_delivery.loading &&
+          current_unix_ms() - next.console.resource_delivery.checked_unix_ms >=
+          30000L {
+          resource_delivery_read(next, emit)
+        } else {
+          (next, @rabbita.none)
+        }
+        (
+          next,
+          @rabbita.batch([
+            cluster_poll_delay_command(generation, emit),
+            resources,
+          ]),
         )
       }
     Outcome(ClusterPollFailed(generation, unauthorized)) =>
@@ -5664,6 +5685,7 @@ fn update_live(
           {
             ..loaded,
             selected_lease: panel.selected_lease,
+            selected_undertaking_order: panel.selected_undertaking_order,
             selected_nodes: panel.selected_nodes,
             confirmed_idle: panel.confirmed_idle,
             reservation_id: panel.reservation_id,
@@ -5672,7 +5694,16 @@ fn update_live(
         Err(error) => { ..panel, loading: false, error: Some(error), }
       }
       (
-        { ..model, console: { ..model.console, resource_delivery, }, },
+        {
+          ..model,
+          console: {
+            ..model.console,
+            resource_delivery: {
+              ..resource_delivery,
+              checked_unix_ms: current_unix_ms(),
+            },
+          },
+        },
         @rabbita.none,
       )
     }
@@ -5683,6 +5714,10 @@ fn update_live(
       }
       if message == ReserveResources &&
         !@ui.resource_reservation_available(panel) {
+        return (model, @rabbita.none)
+      }
+      if message == AllocateUndertaking &&
+        !@ui.undertaking_allocation_available(panel) {
         return (model, @rabbita.none)
       }
       let updated = panel.update(message)
@@ -5701,10 +5736,15 @@ fn update_live(
         console: { ..model.console, resource_delivery: updated, },
       }
       match message {
-        RefreshResources | ReserveResources =>
+        RefreshResources | ReserveResources | AllocateUndertaking =>
           (
             next,
-            resource_delivery_command(next, message == ReserveResources, emit),
+            resource_delivery_command(
+              next,
+              message == ReserveResources,
+              message == AllocateUndertaking,
+              emit,
+            ),
           )
         _ => (next, @rabbita.none)
       }
@@ -5732,10 +5772,11 @@ fn update_live(
           )
         _ => (scheduled, @rabbita.none)
       }
-      let resources = if route == Leases && !model.demo_mode {
-        resource_delivery_command(previewed, false, emit)
+      let (previewed, resources) = if (route == Leases || route == Overview) &&
+        !model.demo_mode {
+        resource_delivery_read(previewed, emit)
       } else {
-        @rabbita.none
+        (previewed, @rabbita.none)
       }
       (previewed, @rabbita.batch([deferred, preview, resources]))
     }

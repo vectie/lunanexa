@@ -321,17 +321,34 @@ async fn ApiService::handle_delivery(
     })
   let reservations = []
   for value in reservation_candidates {
+    if !self.undertaking_reservation_allowed(value, now) {
+      continue
+    }
+    let company_allocation = value.request.reservation_id.has_prefix(
+      "undertaking-resource-",
+    )
     let authorized = try {
-      ignore(
-        directory.authorize_subject_for_tenant_lease(
-          subject,
-          value.request.tenant_ref,
-          value.request.lease_id,
-          Developer,
-          now,
-          grant_id=value.request.authority_ref,
-        ),
-      )
+      if company_allocation {
+        ignore(
+          directory.authorize_subject_for_tenant(
+            subject,
+            value.request.tenant_ref,
+            Developer,
+            now,
+          ),
+        )
+      } else {
+        ignore(
+          directory.authorize_subject_for_tenant_lease(
+            subject,
+            value.request.tenant_ref,
+            value.request.lease_id,
+            Developer,
+            now,
+            grant_id=value.request.authority_ref,
+          ),
+        )
+      }
       true
     } catch {
       _ => false
@@ -345,6 +362,10 @@ async fn ApiService::handle_delivery(
     None => []
   }
   if verb == Get && path == "/v1/portal/self/delivery-options" {
+    let undertaking_orders = match self.offline_commerce_store {
+      Some(commerce) => commerce.snapshot().orders
+      None => []
+    }
     let templates : Array[Json] = []
     for template in model_templates {
       if !latest_delivery_template(template, model_templates) {
@@ -381,10 +402,19 @@ async fn ApiService::handle_delivery(
     return json_reply(200, {
       "reservations": reservations
       .map(value => {
+        let undertaking_order = undertaking_orders
+          .iter()
+          .find_first(order => {
+            value.request.reservation_id ==
+            "undertaking-resource-\{undertaking_allocation_fingerprint(order.order_id)}" &&
+            order.organization_id == view.membership.organization_id
+          })
         (
           {
             "reservation_id": value.request.reservation_id,
-            "label": value.request.authority_ref,
+            "label": undertaking_order.map_or(value.request.authority_ref, order => {
+              "承诺函订单 · \{order.order_id}"
+            }),
             "node_count": value.request.node_ids.length().to_json(),
             "expires_at_ms": value.request.expires_unix_ms.to_json(),
           } : Json)
@@ -424,6 +454,7 @@ async fn ApiService::handle_delivery(
         false,
       )
     }
+    let mut capability : @workspace.WorkspaceCapability? = None
     let model_digest = if request.kind == GpuContainer {
       guard self.published_gpu_container_offering() is Some(offering) &&
         offering.template_id == request.template_id &&
@@ -453,16 +484,44 @@ async fn ApiService::handle_delivery(
           false,
         )
       }
+      capability = workspace_capability(template.capability)
+      if capability is None {
+        return api_error(
+          409, "CapabilityUnavailable", "the selected model has no workspace capability",
+          false,
+        )
+      }
       Some(template.artifact.digest)
     }
-    let authorization = directory.authorize_subject_for_tenant_lease(
-      subject,
-      view.membership.tenant_ref,
-      reservation.request.lease_id,
-      Developer,
-      now,
-      grant_id=reservation.request.authority_ref,
-    )
+    let authorization = if reservation.request.reservation_id.has_prefix(
+        "undertaking-resource-",
+      ) {
+      match capability {
+        Some(value) =>
+          directory.authorize_subject_for_tenant_capability(
+            subject,
+            view.membership.tenant_ref,
+            value,
+            now,
+          )
+        None =>
+          directory.authorize_subject_for_tenant(
+            subject,
+            view.membership.tenant_ref,
+            Developer,
+            now,
+          )
+      }
+    } else {
+      directory.authorize_subject_for_tenant_lease(
+        subject,
+        view.membership.tenant_ref,
+        reservation.request.lease_id,
+        Developer,
+        now,
+        grant_id=reservation.request.authority_ref,
+      )
+    }
     let expiry = authorization.lease.expires_unix_ms
       .min(reservation.request.expires_unix_ms)
       .min(authorization.access_grant.expires_unix_ms)
@@ -472,7 +531,7 @@ async fn ApiService::handle_delivery(
           tenant_id: view.membership.tenant_ref,
           organization_id: view.membership.organization_id,
           project_id: request.project_id,
-          authorization_ref: reservation.request.authority_ref,
+          authorization_ref: authorization.access_grant.grant_id,
           lease_id: authorization.lease.lease_id,
           idempotency_key: request.idempotency_key,
           kind: request.kind,

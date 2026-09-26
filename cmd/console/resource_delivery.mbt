@@ -1,7 +1,26 @@
 ///|
+fn resource_delivery_read(
+  model : AppModel,
+  emit : @rabbita.Emit[AppMessage],
+) -> (AppModel, @rabbita.Cmd) {
+  if model.console.resource_delivery.loading {
+    return (model, @rabbita.none)
+  }
+  let next = {
+    ..model,
+    console: {
+      ..model.console,
+      resource_delivery: { ..model.console.resource_delivery, loading: true, },
+    },
+  }
+  (next, resource_delivery_command(next, false, false, emit))
+}
+
+///|
 fn resource_delivery_command(
   model : AppModel,
   reserve : Bool,
+  allocate_undertaking : Bool,
   emit : @rabbita.Emit[AppMessage],
 ) -> @rabbita.Cmd {
   @rabbita.perform(result => emit(ResourcesLoaded(model.credential, result)), async fn() noraise {
@@ -54,6 +73,53 @@ fn resource_delivery_command(
           ),
         )
       }
+      if allocate_undertaking {
+        guard panel.undertaking_orders
+          .iter()
+          .find_first(row => row.order_id == panel.selected_undertaking_order)
+          is Some(order) &&
+          panel.confirmed_idle &&
+          panel.selected_nodes.length().to_int64() == order.node_count else {
+          raise Failure("select the exact approved undertaking node count")
+        }
+        let body : Json = {
+          "order_id": order.order_id,
+          "node_ids": panel.selected_nodes.to_json(),
+          "readiness_confirmation": "allocate-idle-nodes:\{order.order_id}",
+        }
+        for _ in 0..<20 {
+          let response = request(
+            "POST",
+            model.endpoint,
+            "/v1/undertaking-allocations",
+            model.credential,
+            body=body.stringify(),
+          )
+          let decoded = try @json.parse(response) catch {
+            _ => Json::null()
+          } noraise {
+            value => value
+          }
+          let still_activating = match decoded {
+            { "status": String("ActivatingAccess"), .. } => true
+            _ => false
+          }
+          if !still_activating {
+            break
+          }
+          @async.sleep(3000)
+        }
+      }
+      let undertaking_orders : Array[@ui.UndertakingAllocationRow] = @json.from_json(
+        parse_console_json(
+          request(
+            "GET",
+            model.endpoint,
+            "/v1/undertaking-allocations",
+            model.credential,
+          ),
+        ),
+      )
       let reservations : Array[@ui.ResourceReservationRow] = @json.from_json(
         parse_console_json(
           request(
@@ -134,6 +200,7 @@ fn resource_delivery_command(
         ..@ui.default_resource_delivery_panel(),
         reservations,
         deliveries,
+        undertaking_orders,
         leases,
         loaded: true,
       })

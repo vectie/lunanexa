@@ -17,6 +17,7 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
         node_id: "node-1",
         state: Active,
         architecture: "nvidia-gb10",
+        accelerators: [],
         total_memory_mib: 122880,
         free_memory_mib: 80000,
         used_memory_mib: 42880,
@@ -595,6 +596,55 @@ test "node telemetry says not reported instead of printing an unmeasured zero" {
   })
   assert_true(chinese.contains("未上报"))
   assert_true(chinese.contains("CPU 利用率"))
+}
+
+///|
+test "fleet overview distinguishes allocation evidence from placement candidates" {
+  let base = { ..console_state(Overview), exclusive_node_leases: [], }
+  let node = {
+    ..base.nodes[0],
+    workloads: 0,
+    accelerators: [
+      {
+        device_id: "gpu-0",
+        architecture: "nvidia-gb10",
+        memory_total_mib: 122880,
+        memory_free_mib: 81920,
+        healthy: true,
+      },
+    ],
+  }
+  let unknown = @ui.render({ ..base, nodes: [node], })
+  assert_true(unknown.contains("Node status wall"))
+  assert_true(unknown.contains("Allocation unknown"))
+  assert_true(unknown.contains("gpu-0"))
+  assert_true(unknown.contains("Unified memory device"))
+  let candidate = @ui.render({
+    ..base,
+    nodes: [node],
+    resource_delivery: { ..base.resource_delivery, loaded: true, },
+  })
+  assert_true(candidate.contains("Candidate for preflight"))
+  assert_false(candidate.contains("Available for deployment"))
+  let leased = @ui.render({
+    ..base,
+    nodes: [node],
+    exclusive_node_leases: [
+      {
+        lease_id: "lease-1",
+        node_id: "node-1",
+        subject_ref: "subject-1",
+        unix_username: "user-1",
+        expires_at: "later",
+        state: "Sanitizing",
+        generation: 1L,
+      },
+    ],
+    resource_delivery: { ..base.resource_delivery, loaded: true, },
+  })
+  assert_true(leased.contains("Exclusive lease"))
+  assert_true(leased.contains("Sanitizing"))
+  assert_false(leased.contains("Candidate for preflight"))
 }
 
 ///|

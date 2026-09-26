@@ -410,6 +410,7 @@ priv enum AppMessage {
         @enterprise_ui.DeliveryOptions,
         Array[@enterprise_ui.DeliveryView],
         @enterprise_ui.ExternalModelServiceView?,
+        @enterprise_ui.CompanyWorkspaceStatus?,
         String?,
       ),
       String,
@@ -3919,7 +3920,8 @@ fn update(
         (
           model.portal.route != DesktopIde &&
           model.portal.route != MachineAccess &&
-          model.portal.route != Models
+          model.portal.route != Models &&
+          model.portal.route != Overview
         ) ||
         model.portal.deliveries.loading {
         return (model, @rabbita.none)
@@ -3935,12 +3937,13 @@ fn update(
       }
       let panel = model.portal.deliveries
       let deliveries = match result {
-        Ok((options, operations, external_model, error)) =>
+        Ok((options, operations, external_model, company_workspace, error)) =>
           {
             ..panel,
             options,
             operations,
             external_model,
+            company_workspace,
             loaded: true,
             loading: false,
             error,
@@ -4027,7 +4030,7 @@ fn update(
         contract_poll_generation: model.contract_poll_generation + 1L,
       }
       match route {
-        DesktopIde | MachineAccess | Models if !model.demo_mode => {
+        Overview | DesktopIde | MachineAccess | Models if !model.demo_mode => {
           let next = { ..next, portal: next.portal.update(Delivery(Refresh)), }
           (next, delivery_command(next, None, emit))
         }
@@ -5853,12 +5856,23 @@ fn update(
         Some(packet) => start_contract_poll(next, packet, emit)
         None => (next, @rabbita.none)
       }
+      let (next, delivery_refresh) = if next.portal.route == Overview &&
+        !next.demo_mode {
+        let refreshed = {
+          ..next,
+          portal: next.portal.update(Delivery(Refresh)),
+        }
+        (refreshed, delivery_command(refreshed, None, emit))
+      } else {
+        (next, @rabbita.none)
+      }
       (
         next,
         @rabbita.batch([
           machine_clock_command(next, emit),
           machine_commerce_command(next, emit),
           poll,
+          delivery_refresh,
         ]),
       )
     }

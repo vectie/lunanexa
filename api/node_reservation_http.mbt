@@ -115,6 +115,9 @@ async fn ApiService::handle_resource_reservation(
   self.resource_mutex.acquire()
   defer self.resource_mutex.release()
   let assignments = self.store.assignments()
+  let telemetry_samples = self.telemetry.map_or([], telemetry => {
+    telemetry.snapshot().samples
+  })
   let legacy = match self.exclusive_lease_store {
     Some(leases) => leases.leases()
     None => []
@@ -135,6 +138,16 @@ async fn ApiService::handle_resource_reservation(
       !heartbeat.inventory.taints.is_empty() ||
       !heartbeat.inventory.accelerators.any(accelerator => accelerator.healthy) ||
       host.memory_total_mib < request.memory_mib_per_node.to_int64() + 4096L ||
+      self.telemetry.map_or(false, _ => {
+        observed_available_memory_mib(
+          telemetry_samples,
+          heartbeat.node_id,
+          now,
+          self.global_settings.control_timing.heartbeat_timeout_ms,
+        ).map_or(true, available => {
+          available.to_int64() < request.memory_mib_per_node.to_int64() + 4096L
+        })
+      }) ||
       request.gpu_memory_mib_per_node > request.memory_mib_per_node ||
       assignments.any(assignment => assignment.node_id == heartbeat.node_id) ||
       legacy.any(value => {

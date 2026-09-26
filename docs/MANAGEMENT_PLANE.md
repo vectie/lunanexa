@@ -96,6 +96,26 @@ audited controller path. The production profile has no manual scale route, no
 autoscaler, and no batch scheduler. Each deployment owns exactly one assignment
 on the machine held by its exclusive lease.
 
+## Monitoring surfaces
+
+The operator overview presents a fleet status wall from node heartbeats,
+bounded telemetry, exclusive leases, and whole-node reservation records. It
+shows last reported device inventory and distinguishes an active allocation,
+managed workload, maintenance state, stale heartbeat, and a node that can only
+be considered for controller preflight. Low utilization alone never means a
+node is available. If reservation evidence is missing, stale, or unreadable,
+the wall withholds the candidate label. Missing or unhealthy accelerator
+inventory also withholds it. Operators can open node evidence and
+the durable alert center from the wall.
+
+The enterprise overview reads only the selected organization's delivery
+operations. It shows service readiness, work in progress, failures, and a link
+to the corresponding service details. Customers see the current durable stage,
+measured transfer progress when available, and the next permitted action;
+they do not receive node identities, device telemetry, placement choices, or
+operator-only alert details. Both sites project controller-owned state rather
+than synthesizing readiness from a running container or an opened handoff.
+
 ## Installation boundary
 
 Installing LunaNexa and deploying a model service are separate operations.

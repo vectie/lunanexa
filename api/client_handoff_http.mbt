@@ -233,7 +233,13 @@ async fn ApiService::handle_client_handoff(
             organization_id=redeemed.organization_id,
           )
         None => false
-      })
+      }) ||
+      self.has_active_organization_allocation(
+        redeemed.tenant_ref,
+        redeemed.organization_id,
+        redeemed.subject_ref,
+        now,
+      )
     let (_, delivery_denied) = self.delivery_binding({
       key_id: redeemed.api_key_id,
       tenant_ref: redeemed.tenant_ref,
@@ -323,6 +329,12 @@ async fn ApiService::handle_client_handoff(
     (Get, "/v1/portal/self/client" | "/v1/portal/self/clients") => {
       let now = @async.now()
       let contract_ready = self.private_cloud_workspace_access ||
+        self.has_active_organization_allocation(
+          portal_view.membership.tenant_ref,
+          portal_view.membership.organization_id,
+          subject_ref,
+          now,
+        ) ||
         (match self.contract_document_store {
           Some(contracts) =>
             self.has_effective_rental_authority(
@@ -475,6 +487,12 @@ async fn ApiService::handle_client_handoff(
         None => None
       }
       guard (self.private_cloud_workspace_access && paid_order is None) ||
+        self.has_active_organization_allocation(
+          portal_view.membership.tenant_ref,
+          portal_view.membership.organization_id,
+          subject_ref,
+          now,
+        ) ||
         (
           self.contract_document_store is Some(contract_store) &&
           self.has_effective_rental_authority(
@@ -542,10 +560,14 @@ async fn ApiService::handle_client_handoff(
               reservation.request.tenant_ref == operation.intent.tenant_id &&
               reservation.request.organization_id ==
               operation.intent.organization_id &&
-              reservation.request.lease_id == operation.intent.lease_id &&
-              reservation.request.authority_ref ==
-              operation.intent.authorization_ref &&
-              reservation.request.expires_unix_ms > now &&
+              self.delivery_reservation_authorized(
+                reservation,
+                operation.intent.tenant_id,
+                operation.intent.organization_id,
+                operation.intent.lease_id,
+                operation.intent.authorization_ref,
+                now,
+              ) &&
               self.deployment_store is Some(catalog) &&
               catalog.template({
                 template_id: operation.intent.template_id,

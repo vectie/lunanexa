@@ -73,9 +73,14 @@ async fn ApiService::handle_delivery_access_key(
     reservation.state == Reserved &&
     reservation.request.tenant_ref == operation.intent.tenant_id &&
     reservation.request.organization_id == operation.intent.organization_id &&
-    reservation.request.lease_id == operation.intent.lease_id &&
-    reservation.request.authority_ref == operation.intent.authorization_ref &&
-    reservation.request.expires_unix_ms > now &&
+    self.delivery_reservation_authorized(
+      reservation,
+      operation.intent.tenant_id,
+      operation.intent.organization_id,
+      operation.intent.lease_id,
+      operation.intent.authorization_ref,
+      now,
+    ) &&
     catalog.template({
       template_id: operation.intent.template_id,
       version: operation.intent.template_version,
