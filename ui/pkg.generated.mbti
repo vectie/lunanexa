@@ -751,6 +751,7 @@ pub(all) struct NodeRow {
   node_id : String
   state : @contracts.NodeState
   architecture : String
+  usage_pool : String
   accelerators : Array[@contracts.AcceleratorInventory]
   total_memory_mib : Int
   free_memory_mib : Int

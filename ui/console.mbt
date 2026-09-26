@@ -25,6 +25,7 @@ pub(all) struct NodeRow {
   node_id : String
   state : @contracts.NodeState
   architecture : String
+  usage_pool : String
   accelerators : Array[@contracts.AcceleratorInventory]
   total_memory_mib : Int
   free_memory_mib : Int
@@ -2462,6 +2463,7 @@ pub fn demo_state() -> ConsoleState {
       node_id: "dgx-spark-01",
       state: Active,
       architecture: "nvidia-gb10",
+      usage_pool: "enterprise-dedicated",
       accelerators: [],
       total_memory_mib: 122880,
       free_memory_mib: 81920,
@@ -2481,6 +2483,7 @@ pub fn demo_state() -> ConsoleState {
       node_id: "dgx-spark-02",
       state: Active,
       architecture: "nvidia-gb10",
+      usage_pool: "enterprise-dedicated",
       accelerators: [],
       total_memory_mib: 122880,
       free_memory_mib: 79872,
@@ -2500,6 +2503,7 @@ pub fn demo_state() -> ConsoleState {
       node_id: "dgx-spark-03",
       state: Active,
       architecture: "nvidia-gb10",
+      usage_pool: "enterprise-dedicated",
       accelerators: [],
       total_memory_mib: 122880,
       free_memory_mib: 80896,
@@ -2519,6 +2523,7 @@ pub fn demo_state() -> ConsoleState {
       node_id: "dgx-spark-04",
       state: Active,
       architecture: "nvidia-gb10",
+      usage_pool: "enterprise-dedicated",
       accelerators: [],
       total_memory_mib: 122880,
       free_memory_mib: 79872,

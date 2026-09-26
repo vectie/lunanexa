@@ -1,4 +1,29 @@
 ///|
+fn resource_delivery_error(locale : @i18n.Locale, detail : String) -> String {
+  if detail.contains("NodeUnavailable") {
+    console_copy(
+      locale, "Selected machines are not idle or lack fresh free-memory evidence. Stop their running workloads, wait for telemetry, then refresh.",
+      "所选机器仍被占用或缺少最新可用内存数据。请先停止运行任务，等待监测更新后刷新。",
+    )
+  } else if detail.contains("UndertakingNotReady") {
+    console_copy(
+      locale, "This order still needs a valid signed undertaking, manager approval and full prepayment review, or its term has ended.",
+      "该订单仍缺有效承诺函签署、甲方审批或足额到账核验，或租期已结束。",
+    )
+  } else if detail.contains("AllocationConflict") {
+    console_copy(
+      locale, "This order already has a different or releasing machine allocation. Refresh the order before retrying.",
+      "该订单已有不同的机器分配或正在回收。请刷新订单后重试。",
+    )
+  } else {
+    console_copy(
+      locale, "Unable to update resource delivery. Refresh authorization and node occupancy before retrying; no workload was stopped by this action.",
+      "无法更新资源交付。请刷新授权和节点占用后重试；此操作不会停止已有任务。",
+    )
+  }
+}
+
+///|
 fn resource_delivery_read(
   model : AppModel,
   emit : @rabbita.Emit[AppMessage],
@@ -213,14 +238,8 @@ fn resource_delivery_command(
         loaded: true,
       })
     } catch {
-      _ =>
-        Err(
-          console_copy(
-            model.console.locale,
-            "Unable to update resource delivery. Refresh authorization and node occupancy before retrying; no workload was stopped by this action.",
-            "无法更新资源交付。请刷新授权和节点占用后重试；此操作不会停止已有任务。",
-          ),
-        )
+      error =>
+        Err(resource_delivery_error(model.console.locale, error.to_string()))
     }
   })
 }

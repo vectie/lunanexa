@@ -76,6 +76,7 @@ async test "undertaking node preflight rejects live host-native memory pressure"
       labels: {
         "lunanexa.io/host-cpu-count": "20",
         "lunanexa.io/host-memory-mib": "131072",
+        "lunanexa.io/usage-pool": "enterprise-dedicated",
       },
       accelerators: [
         {
@@ -122,6 +123,21 @@ async test "undertaking node preflight rejects live host-native memory pressure"
   })
   assert_true(
     service.undertaking_idle_capacity([heartbeat.node_id], now + 1L) is Some(_),
+  )
+  durable.put_heartbeat({
+    ..heartbeat,
+    inventory: {
+      ..heartbeat.inventory,
+      labels: {
+        "lunanexa.io/host-cpu-count": "20",
+        "lunanexa.io/host-memory-mib": "131072",
+        "lunanexa.io/usage-pool": "trial",
+      },
+    },
+  })
+  assert_eq(
+    service.undertaking_idle_capacity([heartbeat.node_id], now + 1L),
+    None,
   )
 }
 

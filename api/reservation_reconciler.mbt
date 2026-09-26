@@ -90,6 +90,12 @@ async fn ApiService::reservation_authorized(
   if !self.undertaking_reservation_allowed(reservation, now) {
     return false
   }
+  // The signed undertaking owns this whole-node allocation for the company.
+  // Revoking the purchaser's personal WebIDE lease must not reclaim machines
+  // still authorized for the other company members.
+  if reservation.request.reservation_id.has_prefix("undertaking-resource-") {
+    return true
+  }
   guard self.workspace_directory is Some(directory) else { return false }
   guard directory.snapshot(now).leases
     .iter()
@@ -98,11 +104,13 @@ async fn ApiService::reservation_authorized(
     return false
   }
   try {
-    let authorization = directory.authorize_subject_for_tenant(
+    let authorization = directory.authorize_subject_for_tenant_lease(
       lease.subject_ref,
       reservation.request.tenant_ref,
+      reservation.request.lease_id,
       Developer,
       now,
+      grant_id=reservation.request.authority_ref,
     )
     authorization.lease.lease_id == reservation.request.lease_id &&
     authorization.access_grant.grant_id == reservation.request.authority_ref

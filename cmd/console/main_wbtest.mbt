@@ -1389,6 +1389,7 @@ fn cluster_poll_test_row(
     node_id,
     state,
     architecture: "dgx-spark",
+    usage_pool: "enterprise-dedicated",
     accelerators: [],
     total_memory_mib: 131072,
     free_memory_mib: 65536,
@@ -1404,6 +1405,17 @@ fn cluster_poll_test_row(
     active_assignment: "deployment-1",
     last_seen: "Just now",
   }
+}
+
+///|
+test "resource delivery errors explain the actionable node blocker" {
+  assert_eq(
+    resource_delivery_error(
+      @i18n.Locale::ChineseSimplified,
+      "HTTP 409 NodeUnavailable",
+    ),
+    "所选机器仍被占用或缺少最新可用内存数据。请先停止运行任务，等待监测更新后刷新。",
+  )
 }
 
 ///|

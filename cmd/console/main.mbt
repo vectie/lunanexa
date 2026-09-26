@@ -1027,6 +1027,9 @@ fn build_node_rows(
           heartbeat.state
         },
         architecture: architecture(heartbeat),
+        usage_pool: heartbeat.inventory.labels
+        .get("lunanexa.io/usage-pool")
+        .unwrap_or(""),
         accelerators: heartbeat.inventory.accelerators.copy(),
         total_memory_mib,
         free_memory_mib: (total_memory_mib - used_memory_mib).max(0),

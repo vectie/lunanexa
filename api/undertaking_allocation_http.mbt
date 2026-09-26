@@ -108,6 +108,8 @@ async fn ApiService::undertaking_idle_capacity(
       self.global_settings.control_timing.heartbeat_timeout_ms &&
       heartbeat.running_deployments.is_empty() &&
       heartbeat.inventory.taints.is_empty() &&
+      heartbeat.inventory.labels.get(machine_usage_pool_label) ==
+      Some(machine_enterprise_pool) &&
       heartbeat.inventory.accelerators.any(accelerator => accelerator.healthy) &&
       @node.inventory_host_resources(heartbeat.inventory) is Some(host) &&
       observed_available_memory_mib(
@@ -285,10 +287,19 @@ async fn ApiService::undertaking_allocation_view(
       }
     Some(value) if value.state == Draining => "Releasing"
     _ =>
-      if ready_packet is None {
+      if order.state == Cancelled ||
+        order.state == Expired ||
+        order.state == Rejected ||
+        order.state == Revoked ||
+        order.state == ReversalPending ||
+        order.state == ReversalManualIntervention {
+        "OrderClosed"
+      } else if order.expires_unix_ms <= now {
+        "OrderExpired"
+      } else if ready_packet is None {
         "AwaitingApprovalOrEvidence"
       } else if active_term is None {
-        "OrderNotReady"
+        "LeaseTermUnavailable"
       } else if order.state == FulfillmentPending {
         "ActivatingAccess"
       } else if order.state == Fulfilled {

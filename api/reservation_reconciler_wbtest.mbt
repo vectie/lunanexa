@@ -97,3 +97,116 @@ async test "reservation host enforces full node set and releases only after clai
   assert_eq(taints["spark-a"], [])
   assert_eq(taints["spark-b"], [])
 }
+
+///|
+async test "reservation reconciliation keeps the exact lease when a subject has older access" {
+  let root = @fs.tmpdir(prefix="reservation-exact-lease-")
+  defer @fs.rmdir(root, recursive=true)
+  let now = @async.now()
+  let directory = @directory.FileWorkspaceDirectory::open(
+    "\{root}/workspace.json",
+    now_unix_ms=now,
+  )
+  ignore(
+    directory.create_user({
+      version: @workspace.contract_version,
+      user_id: "user-a",
+      subject_ref: "subject-a",
+      display_name: "Subject A",
+      email: "subject@example.invalid",
+      state: UserActive,
+      created_unix_ms: now - 1000L,
+      last_active_unix_ms: None,
+      identity_receipt: "identity-a",
+    }),
+  )
+  let limit : @workspace.CapabilityLimit = {
+    capability: TextGenerate,
+    max_concurrent_requests: 1,
+    max_requests_per_hour: 20,
+    max_input_units_per_request: 4096,
+    max_output_units_per_request: 1024,
+  }
+  for suffix in ["old", "order"] {
+    ignore(
+      directory.issue_access_grant(
+        {
+          version: @workspace.contract_version,
+          grant_id: "grant-\{suffix}",
+          user_id: "user-a",
+          tenant_ref: "tenant-a",
+          access: Developer,
+          starts_unix_ms: now - 1000L,
+          expires_unix_ms: now + 60000L,
+          state: GrantActive,
+          policy_receipt: "test-\{suffix}",
+        },
+        now,
+      ),
+    )
+    ignore(
+      directory.issue_lease(
+        {
+          version: @workspace.contract_version,
+          lease_id: "lease-\{suffix}",
+          tenant_ref: "tenant-a",
+          subject_ref: "subject-a",
+          access: Developer,
+          limits: {
+            max_active_sessions: 1,
+            max_session_duration_ms: 60000L,
+            capabilities: [limit],
+          },
+          starts_unix_ms: now - 1000L,
+          expires_unix_ms: now + 60000L,
+          state: Active,
+          policy_receipt: "test-\{suffix}",
+        },
+        now,
+      ),
+    )
+  }
+  let durable = @store.FileStore::open("\{root}/state.json")
+  let runtime = @runtimes.OpenAiTextRuntime::new(
+    "http://127.0.0.1:1/v1/responses",
+    "runtime-secret",
+    "runtime-v1",
+    "sha256:" + "b".repeat(64),
+    "sha256:" + "a".repeat(64),
+    allow_http_loopback=true,
+  )
+  let base = ApiService::new(
+    durable, runtime, "operator-token", "inference-token", "node-token", "0.1.0",
+  )
+  let service = { ..base, workspace_directory: Some(directory), }
+  let reservation : @scheduler.NodeReservation = {
+    request: {
+      reservation_id: "personal-reservation",
+      idempotency_key: "personal-reservation",
+      tenant_ref: "tenant-a",
+      organization_id: "org-a",
+      authority_ref: "grant-order",
+      lease_id: "lease-order",
+      node_ids: ["node-a"],
+      starts_unix_ms: now - 1000L,
+      expires_unix_ms: now + 60000L,
+      memory_mib_per_node: 32768,
+      gpu_memory_mib_per_node: 32768,
+      max_concurrency_per_node: 1,
+    },
+    state: Reserved,
+    generation: 1L,
+    updated_unix_ms: now,
+    services: [],
+  }
+  assert_true(service.reservation_authorized(reservation, now))
+  assert_false(
+    service.reservation_authorized(
+      {
+        ..reservation,
+        request: { ..reservation.request, authority_ref: "grant-other", },
+      },
+      now,
+    ),
+  )
+}

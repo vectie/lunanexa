@@ -5,6 +5,7 @@ test "fleet posture requires fresh reservation evidence before showing a candida
     node_id: "node-a",
     state: Active,
     architecture: "nvidia-gb10",
+    usage_pool: "enterprise-dedicated",
     accelerators: [
       {
         device_id: "gpu-0",
@@ -38,6 +39,12 @@ test "fleet posture requires fresh reservation evidence before showing a candida
   }
   let (fresh_tone, _, _) = fleet_node_posture(known, node, 50000L)
   assert_eq(fresh_tone, "candidate")
+  let pressured = { ..node, total_memory_mib: 122880, free_memory_mib: 9000, }
+  let (pressured_tone, pressured_label, _) = fleet_node_posture(
+    known, pressured, 50000L,
+  )
+  assert_eq(pressured_tone, "blocked")
+  assert_eq(pressured_label, "Host memory pressured")
   let (stale_tone, _, _) = fleet_node_posture(known, node, 62000L)
   assert_eq(stale_tone, "unknown")
   let unavailable = {
