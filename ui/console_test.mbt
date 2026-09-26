@@ -17,6 +17,7 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
         node_id: "node-1",
         state: Active,
         architecture: "nvidia-gb10",
+        usage_pool: "enterprise-dedicated",
         accelerators: [],
         total_memory_mib: 122880,
         free_memory_mib: 80000,

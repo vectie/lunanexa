@@ -187,6 +187,7 @@ fn resource_node_selectable(
     row.state != "Released" && row.request.node_ids.contains(node.node_id)
   })
   node.state == Active &&
+  (!undertaking || node.usage_pool == "enterprise-dedicated") &&
   node.memory_measured &&
   node.workloads == 0 &&
   !occupied &&
@@ -200,6 +201,25 @@ fn resource_node_selectable(
 }
 
 ///|
+fn undertaking_node_unavailable_reason(
+  locale : @i18n.Locale,
+  node : NodeRow,
+) -> String {
+  if node.usage_pool != "enterprise-dedicated" {
+    localized(locale, "outside enterprise pool", "非企业专属池")
+  } else if !node.memory_measured {
+    localized(locale, "memory not measured", "内存未上报")
+  } else if node.free_memory_mib.to_int64() * 4L <
+    node.total_memory_mib.to_int64() * 3L {
+    localized(locale, "insufficient free memory", "可用内存不足")
+  } else if node.workloads > 0 {
+    localized(locale, "workload running", "仍有工作负载")
+  } else {
+    localized(locale, "not available", "不可预留")
+  }
+}
+
+///|
 fn undertaking_allocation_status(
   locale : @i18n.Locale,
   status : String,
@@ -208,6 +228,18 @@ fn undertaking_allocation_status(
     "AwaitingApprovalOrEvidence" =>
       localized(
         locale, "Awaiting signed approval or payment review", "待签署审批或到账核验",
+      )
+    "OrderClosed" =>
+      localized(
+        locale, "Order closed; create a new order", "订单已关闭，需重新下单",
+      )
+    "OrderExpired" =>
+      localized(
+        locale, "Order expired; create a new order", "订单已到期，需重新下单",
+      )
+    "LeaseTermUnavailable" =>
+      localized(
+        locale, "Lease term is not active", "租期未开始或已结束",
       )
     "ReadyForAllocation" =>
       localized(locale, "Ready to allocate", "可下发整机")
@@ -278,8 +310,8 @@ fn resource_delivery_view(
     @html.p(
       localized(
         state.locale,
-        "After the signed undertaking, manager approval and full offline-payment review, select exactly the quoted number of idle nodes. Access activation may take time; the same action can be continued safely.",
-        "承诺函签署、甲方审批及线下足额到账核验完成后，选择与报价台数一致的空闲节点。权限激活可能需要等待；可安全继续同一操作。",
+        "After the signed undertaking, manager approval and full offline-payment review, select exactly the quoted number of idle enterprise-pool nodes. Trial nodes remain untouched. Access activation may take time; the same action can be continued safely.",
+        "承诺函签署、甲方审批及线下足额到账核验完成后，从企业专属池选择与报价台数一致的空闲节点；试用节点不参与下发。权限激活可能需要等待；可安全继续同一操作。",
       ),
     ),
     if panel.loaded && panel.undertaking_orders.is_empty() {
@@ -379,7 +411,7 @@ fn resource_delivery_view(
               (if available {
                 ""
               } else {
-                localized(state.locale, " · unavailable", " · 不可预留")
+                " · " + undertaking_node_unavailable_reason(state.locale, node)
               }),
             )
           }),

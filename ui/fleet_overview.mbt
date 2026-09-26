@@ -105,6 +105,26 @@ fn fleet_node_posture(
       ),
     )
   }
+  if !node.memory_measured {
+    return (
+      "unknown",
+      localized(locale, "Memory not measured", "内存未实测"),
+      localized(
+        locale, "Host free memory is not measured; placement cannot be inferred from GPU utilization.",
+        "未取得宿主机可用内存实测值；不能凭 GPU 利用率判断可放置容量。",
+      ),
+    )
+  }
+  if node.total_memory_mib >= 49152 && node.free_memory_mib < 32768 {
+    return (
+      "blocked",
+      localized(locale, "Host memory pressured", "宿主内存紧张"),
+      localized(
+        locale, "Less than 32 GiB is currently available; inspect running host and container tasks before allocating.",
+        "当前可用内存不足 32 GiB；分配前请检查宿主机及容器中的运行任务。",
+      ),
+    )
+  }
   if !state.resource_delivery.loaded ||
     state.resource_delivery.error is Some(_) ||
     (
@@ -166,7 +186,15 @@ fn fleet_node_card(
         @html.h3(node.node_id),
         @html.p(
           class="secondary",
-          architecture_label(state.locale, node.architecture),
+          architecture_label(state.locale, node.architecture) +
+          " · " +
+          (match node.usage_pool {
+            "trial" => localized(state.locale, "Trial pool", "试用池")
+            "enterprise-dedicated" =>
+              localized(state.locale, "Enterprise pool", "企业专属池")
+            _ =>
+              localized(state.locale, "Pool unclassified", "资源池未分类")
+          }),
         ),
       ]),
       @html.span(class="fleet-posture fleet-posture-\{tone}", posture),
