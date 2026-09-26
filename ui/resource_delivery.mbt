@@ -175,6 +175,31 @@ pub fn undertaking_allocation_available(panel : ResourceDeliveryPanel) -> Bool {
 }
 
 ///|
+/// A selectable node needs measured free memory, not merely an idle GPU.
+/// Undertakings allocate the whole Spark and therefore use the stricter
+/// whole-host threshold enforced by the controller.
+fn resource_node_selectable(
+  node : NodeRow,
+  reservations : Array[ResourceReservationRow],
+  undertaking : Bool,
+) -> Bool {
+  let occupied = reservations.any(row => {
+    row.state != "Released" && row.request.node_ids.contains(node.node_id)
+  })
+  node.state == Active &&
+  node.memory_measured &&
+  node.workloads == 0 &&
+  !occupied &&
+  node.total_memory_mib >= 49152 &&
+  node.free_memory_mib >= 36864 &&
+  (
+    !undertaking ||
+    node.free_memory_mib.to_int64() * 4L >=
+    node.total_memory_mib.to_int64() * 3L
+  )
+}
+
+///|
 fn undertaking_allocation_status(
   locale : @i18n.Locale,
   status : String,
@@ -334,13 +359,11 @@ fn resource_delivery_view(
         @html.div(
           class="record-actions",
           state.nodes.map(node => {
-            let occupied = panel.reservations.any(row => {
-              row.state != "Released" &&
-              row.request.node_ids.contains(node.node_id)
-            })
-            let available = node.state == Active &&
-              node.workloads == 0 &&
-              !occupied
+            let available = resource_node_selectable(
+              node,
+              panel.reservations,
+              true,
+            )
             @html.button(
               type_="button",
               class="quiet-button",
@@ -450,13 +473,11 @@ fn resource_delivery_view(
         @html.div(
           class="record-actions",
           state.nodes.map(node => {
-            let occupied = panel.reservations.any(row => {
-              row.state != "Released" &&
-              row.request.node_ids.contains(node.node_id)
-            })
-            let available = node.state == Active &&
-              node.workloads == 0 &&
-              !occupied
+            let available = resource_node_selectable(
+              node,
+              panel.reservations,
+              false,
+            )
             @html.button(
               type_="button",
               class="quiet-button",
