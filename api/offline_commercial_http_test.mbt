@@ -192,6 +192,38 @@ async test "offline commerce self route derives tenant and isolates purchasers" 
   // The customer's tier request travels on the order; it is a request, not a
   // price, so the operator still freezes the quote.
   assert_eq(secure_order.requested_undertaking_term, Some("week"))
+  let yearly = service.handle(
+    Post,
+    "/v1/offline-commerce/self/orders",
+    subject_a,
+    (
+      {
+        "order_id": "order-http-year",
+        "idempotency_key": "idem-http-year",
+        "project_id": "project-a",
+        "selected_service_code": "exclusive-dgx",
+        "selected_sla_code": "standard",
+        "requested_undertaking_term": "year",
+        "expires_unix_ms": (now + 396L * 86400000L).to_json(),
+      } : Json).stringify(),
+  )
+  assert_eq(yearly.status, 201)
+  let excessive = service.handle(
+    Post,
+    "/v1/offline-commerce/self/orders",
+    subject_a,
+    (
+      {
+        "order_id": "order-http-overlong",
+        "idempotency_key": "idem-http-overlong",
+        "project_id": "project-a",
+        "selected_service_code": "exclusive-dgx",
+        "selected_sla_code": "standard",
+        "requested_undertaking_term": "year",
+        "expires_unix_ms": (now + 397L * 86400000L).to_json(),
+      } : Json).stringify(),
+  )
+  assert_eq(excessive.status, 400)
   let unknown_tier = service.handle(
     Post,
     "/v1/offline-commerce/self/orders",

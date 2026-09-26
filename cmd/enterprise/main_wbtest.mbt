@@ -1,4 +1,12 @@
 ///|
+test "undertaking order authority covers the selected rental term" {
+  let now = 1800000000000L
+  assert_eq(offline_order_expiry(now, "year"), now + 396L * 86400000L)
+  assert_eq(offline_order_expiry(now, "month"), now + 61L * 86400000L)
+  assert_eq(offline_order_expiry(now, ""), now + 30L * 86400000L)
+}
+
+///|
 test "personal MoonDesk catalog decodes the live string-encoded handoff lifetime" {
   let payload =
     $|[{"client_id":"desktop-workspace","display_name":"MoonDesk / MoonCode","launch_uri":"http://106.39.18.146:5003/connect","handoff_lifetime_ms":"120000","contract_ready":true,"workspace_ready":true,"models_ready":true,"ready":true,"blocker_codes":[],"approved_model_aliases":["glm-5.3.flash"],"handoffs":[]}]

@@ -237,6 +237,11 @@ fn undertaking_allocation_status(
       localized(
         locale, "Order expired; create a new order", "订单已到期，需重新下单",
       )
+    "OrderTermMismatch" =>
+      localized(
+        locale, "Order authority ends before the signed rental term; create a new order",
+        "订单授权截止早于已签租期结束；需重新下单",
+      )
     "LeaseTermUnavailable" =>
       localized(
         locale, "Lease term is not active", "租期未开始或已结束",

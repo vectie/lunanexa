@@ -56,25 +56,30 @@ fn undertaking_allocation_packet(
 }
 
 ///|
+fn undertaking_allocation_end(packet : @contractdoc.ContractPacket) -> Int64? {
+  guard packet.value("lease.end_date") is Some(end) &&
+    @contractdoc.calendar_date_days(end) is Some(last_day) else {
+    return None
+  }
+  // The undertaking's calendar dates are Beijing dates, not UTC dates.
+  Some((last_day + 1L) * 86400000L - 28800000L)
+}
+
+///|
 fn undertaking_allocation_expiry(
   order : @offline.CommercialOrder,
   packet : @contractdoc.ContractPacket,
   now : Int64,
 ) -> Int64? {
   guard packet.value("lease.start_date") is Some(start) &&
-    packet.value("lease.end_date") is Some(end) &&
     @contractdoc.calendar_date_days(start) is Some(first_day) &&
-    @contractdoc.calendar_date_days(end) is Some(last_day) &&
-    first_day * 86400000L <= now &&
-    last_day >= first_day else {
+    undertaking_allocation_end(packet) is Some(expires) &&
+    first_day * 86400000L - 28800000L <= now &&
+    expires > now &&
+    order.expires_unix_ms >= expires else {
     return None
   }
-  let expires = Int64::min(order.expires_unix_ms, (last_day + 1L) * 86400000L)
-  if expires > now {
-    Some(expires)
-  } else {
-    None
-  }
+  Some(expires)
 }
 
 ///|
@@ -298,6 +303,10 @@ async fn ApiService::undertaking_allocation_view(
         "OrderExpired"
       } else if ready_packet is None {
         "AwaitingApprovalOrEvidence"
+      } else if ready_packet
+        .bind(undertaking_allocation_end)
+        .map_or(false, end => order.expires_unix_ms < end) {
+        "OrderTermMismatch"
       } else if active_term is None {
         "LeaseTermUnavailable"
       } else if order.state == FulfillmentPending {

@@ -345,7 +345,9 @@ test "order details distinguish requested lease term from draft validity" {
   })
   assert_true(customer.contains("申请租期与档位"))
   assert_true(customer.contains("1 天 · 49 元"))
-  assert_true(customer.contains("订单有效期至（非租期）"))
+  assert_true(
+    customer.contains("订单授权截止（须覆盖完整租期）"),
+  )
 }
 
 ///|
