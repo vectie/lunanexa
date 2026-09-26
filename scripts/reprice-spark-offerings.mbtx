@@ -1,0 +1,136 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/http",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/core/string",
+}
+
+///|
+async fn catalog(
+  base : String,
+  headers : Map[@http.CaseInsensitiveString, String],
+) -> Json {
+  let (response, body) = @http.get(
+    base + "/v1/machine-commerce/operator/snapshot",
+    headers~,
+  )
+  guard response.code == 200 else {
+    fail("machine catalog read failed with HTTP \{response.code}")
+  }
+  @json.parse(body.text())
+}
+
+///|
+fn catalog_arrays(value : Json) -> (Array[Json], Array[Json]) raise {
+  guard value is { "offerings": Array(offerings), "orders": Array(orders), .. } else {
+    fail("invalid machine catalog snapshot")
+  }
+  (offerings, orders)
+}
+
+///|
+fn matching_offering(offerings : Array[Json], id : String) -> Json raise {
+  guard offerings
+    .iter()
+    .find_first(value => {
+      value is Object(fields) &&
+      fields.get("offering_id") == Some(Json::string(id))
+    })
+    is Some(offering) else {
+    fail("Spark offering is missing: \{id}")
+  }
+  offering
+}
+
+///|
+fn daily_price(offering : Json) -> Bool {
+  guard offering is Object(fields) &&
+    fields.get("unit_price") is Some(Object(price)) else {
+    return false
+  }
+  price.get("minor_units") == Some(Json::string("4900")) &&
+  fields.get("price_unit_seconds") == Some(Json::string("86400")) &&
+  fields.get("billing_quantum_seconds") == Some(Json::string("86400")) &&
+  fields.get("minimum_duration_seconds") == Some(Json::string("86400"))
+}
+
+///|
+fn reprice(offering : Json, id : String) -> Json raise {
+  guard offering is Object(fields) &&
+    fields.get("kind") == Some(Json::string("BareMachine")) &&
+    fields.get("state") == Some(Json::string("OfferingActive")) &&
+    fields.get("unit_price") is Some(Object(price)) &&
+    price.get("currency") == Some(Json::string("CNY")) &&
+    price.get("scale").map_or(false, fn(value) { value.stringify() == "2" }) &&
+    price.get("minor_units") == Some(Json::string("2")) &&
+    fields
+    .get("price_unit_seconds")
+    .map_or(true, value => value == Json::null()) &&
+    fields.get("generation") is Some(String(generation)) else {
+    fail("unexpected prior Spark price; refusing to overwrite \{id}")
+  }
+  price["minor_units"] = Json::string("4900")
+  fields["price_unit_seconds"] = Json::string("86400")
+  fields["billing_quantum_seconds"] = Json::string("86400")
+  fields["minimum_duration_seconds"] = Json::string("86400")
+  fields["generation"] = Json::string(
+    (@string.parse_int64(generation) + 1L).to_string(),
+  )
+  fields["updated_unix_ms"] = Json::string(@async.now().to_string())
+  offering
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, mode, base] &&
+    (mode == "check" || mode == "apply") &&
+    (base.has_prefix("http://10.43.") || base.has_prefix("http://127.0.0.1:")) else {
+    fail(
+      "usage: reprice-spark-offerings.mbtx check|apply INTERNAL_CLUSTER_IP_BASE",
+    )
+  }
+  guard @env.get_env_var("PRICE_OPERATOR_TOKEN") is Some(token) &&
+    token.length() >= 32 else {
+    fail("PRICE_OPERATOR_TOKEN is required")
+  }
+  let headers : Map[@http.CaseInsensitiveString, String] = {
+    "Authorization": "Bearer \{token}",
+    "Content-Type": "application/json",
+  }
+  let (offerings, orders) = catalog_arrays(catalog(base, headers))
+  guard orders.is_empty() else {
+    fail("existing machine orders require a separate price migration review")
+  }
+  for id in ["offer-dgx-spark-01", "offer-dgx-spark-02", "offer-dgx-spark-03"] {
+    let offering = matching_offering(offerings, id)
+    if daily_price(offering) {
+      println("already CNY 49/day: \{id}")
+      continue
+    }
+    let updated = reprice(offering, id)
+    if mode == "check" {
+      println("would change \{id} to CNY 49/day")
+    } else {
+      let (response, _) = @http.post(
+        base + "/v1/machine-commerce/operator/offerings",
+        updated,
+        headers~,
+      )
+      guard response.code == 201 || response.code == 200 else {
+        fail("offering update failed for \{id}: HTTP \{response.code}")
+      }
+      println("updated \{id} to CNY 49/day")
+    }
+  }
+  if mode == "apply" {
+    let (confirmed, _) = catalog_arrays(catalog(base, headers))
+    for id in ["offer-dgx-spark-01", "offer-dgx-spark-02", "offer-dgx-spark-03"] {
+      guard daily_price(matching_offering(confirmed, id)) else {
+        fail("post-update readback did not confirm CNY 49/day for \{id}")
+      }
+    }
+    println("all three Spark offers confirmed at CNY 49/day")
+  }
+}
