@@ -53,6 +53,25 @@ async fn reply(
 }
 
 ///|
+async fn reply_unauthorized(
+  request : @http.Request,
+  connection : @http.ServerConnection,
+) -> Unit {
+  let message = "Launch this workspace again from your portal."
+  if request.path.has_prefix("/api/") {
+    connection.send_response(
+      401,
+      "WebIDE",
+      extra_headers=response_headers("application/json; charset=utf-8"),
+    )
+    connection.write_string(({ "message": message } : Json).stringify())
+    connection.end_response()
+  } else {
+    reply(connection, 401, message)
+  }
+}
+
+///|
 fn Bridge::browser_cookie(
   self : Bridge,
   value : String,
@@ -499,7 +518,7 @@ pub async fn Bridge::handle(
     }
   } catch {
     BridgeError::Unauthorized | BridgeError::InvalidGrant =>
-      reply(connection, 401, "Launch this workspace again from your portal.")
+      reply_unauthorized(request, connection)
     BridgeError::RequestTooLarge =>
       reply(connection, 413, "Workspace request exceeds its size limit.")
     BridgeError::CapacityExceeded =>

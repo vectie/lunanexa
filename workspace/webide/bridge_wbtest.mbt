@@ -406,6 +406,18 @@ async test "real HTTP bridge keeps credentials private, isolates workspaces and 
     }
     let (anonymous, _) = @http.get(origin + "/queue")
     assert_eq(anonymous.code, 401)
+    let (api_denied, api_denied_body) = @http.get(
+      origin + "/api/mooncode/sessions?format=listing",
+    )
+    assert_eq(api_denied.code, 401)
+    assert_eq(
+      header(api_denied.headers, "content-type"),
+      Some("application/json; charset=utf-8"),
+    )
+    assert_eq(
+      @json.parse(api_denied_body.text()),
+      ({ "message": "Launch this workspace again from your portal." } : Json),
+    )
     let (alice_cookie, _) = launch_test(origin, "lnxc_alice")
     let (bob_cookie, _) = launch_test(origin, "lnxc_bob")
     assert_eq(redeemed.length(), 2)
