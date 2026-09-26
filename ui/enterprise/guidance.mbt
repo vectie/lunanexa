@@ -78,6 +78,12 @@ pub fn friendly_failure(
     enterprise_copy(locale, AnExecutedMachineAgreementIsRequired)
   } else if raw.contains("MachineTermsUnavailable") {
     enterprise_copy(locale, PublishedMachineTermsAreRequired)
+  } else if raw.contains("MachineOrderAccessDenied") ||
+    raw.contains("lease requester role is required") {
+    @i18n.copy(
+      locale, "This account needs the LeaseRequester role in the selected organization to request a machine quote. Ask your organization administrator.",
+      "当前账户需要所选企业的“租用申请人”权限才能查看机器报价，请联系企业管理员。",
+    )
   } else if raw.contains("PortalAccessDenied") || raw.contains("403") {
     enterprise_copy(locale, ThisAccountLacksPermissionForThis)
   } else if raw.contains("401") {
