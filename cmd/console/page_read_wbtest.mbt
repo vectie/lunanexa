@@ -52,7 +52,7 @@ test "deferred page loading and errors never masquerade as empty leases" {
   assert_false(loading.contains("No compute or workspace leases"))
   let (failed, _) = update_live(
     pending,
-    Outcome(DeferredReadFailed(AccessReads)),
+    Outcome(DeferredReadFailed(AccessReads, false)),
     emit,
   )
   assert_true(console_page_read_state(failed) is Failed)

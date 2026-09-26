@@ -1658,8 +1658,10 @@ test "cluster poll failure retries quietly and stops on authorization loss" {
     Outcome(ClusterPollFailed(5L, true)),
     emit,
   )
-  assert_true(unauthorized == model)
-  assert_eq(unauthorized.console.error_message, None)
+  assert_false(unauthorized.console.operator_authenticated)
+  assert_eq(unauthorized.credential, "")
+  assert_eq(unauthorized.audit_credential, "")
+  assert_true(unauthorized.console.error_message is Some(_))
   let (stale, _) = update_live(
     model,
     Outcome(ClusterPollFailed(4L, false)),
@@ -1938,7 +1940,7 @@ test "page-scoped reads map routes to groups and load each group once" {
   // visit retries it.
   let (failed, _) = update_live(
     returned,
-    Outcome(DeferredReadFailed(AuditReads)),
+    Outcome(DeferredReadFailed(AuditReads, false)),
     emit,
   )
   assert_false(failed.console_read_groups.contains(AuditReads))
@@ -1947,6 +1949,16 @@ test "page-scoped reads map routes to groups and load each group once" {
   assert_true(failed.console.operator_authenticated)
   assert_eq(failed.credential, "operator-token")
   assert_true(deferred_read_pending(failed, Audit) is Some(AuditReads))
+
+  let (expired, _) = update_live(
+    returned,
+    Outcome(DeferredReadFailed(AuditReads, true)),
+    emit,
+  )
+  assert_false(expired.console.operator_authenticated)
+  assert_eq(expired.credential, "")
+  assert_eq(expired.console_read_groups.length(), 0)
+  assert_true(expired.console.error_message is Some(_))
 
   // The read-only demo snapshot never schedules a controller read.
   let demo = { ..deferred_read_test_model(Audit), demo_mode: true, }

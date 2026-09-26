@@ -1621,7 +1621,11 @@ fn deferred_read_command(
         ),
       )
     catch {
-      _ => DeferredReadFailed(group)
+      error =>
+        DeferredReadFailed(
+          group,
+          http_status_is(error, 401) || http_status_is(error, 403),
+        )
     } noraise {
       value => value
     }
@@ -2521,7 +2525,7 @@ priv enum LoadOutcome {
   ClusterPolled(Int64, Array[@ui.NodeRow], Array[@ui.StorageNodeRow])
   ClusterPollFailed(Int64, Bool)
   DeferredReadLoaded(@i18n.Locale, ConsoleReadGroup, ConsoleGroupRead)
-  DeferredReadFailed(ConsoleReadGroup)
+  DeferredReadFailed(ConsoleReadGroup, Bool)
   ModelAdopted(@i18n.Locale, String, String)
   StreamComplete(Array[@ui.StreamEventView])
   ActionFailed(@i18n.Locale, String)
@@ -4152,6 +4156,32 @@ fn cluster_poll_request_command(
 }
 
 ///|
+fn console_session_lost(model : AppModel) -> AppModel {
+  {
+    ..model,
+    credential: "",
+    audit_credential: "",
+    csrf_token: "",
+    login_password: "",
+    model_import_poll_generation: model.model_import_poll_generation + 1L,
+    cluster_poll_generation: model.cluster_poll_generation + 1L,
+    console_read_groups: Map([]),
+    console: {
+      ..model.console,
+      loading: false,
+      operator_authenticated: false,
+      error_message: Some(
+        console_copy(
+          model.console.locale,
+          "Your operator session expired. Sign in again to refresh this page.",
+          "运维会话已过期，请重新登录后刷新此页面。",
+        ),
+      ),
+    },
+  }
+}
+
+///|
 fn update_live(
   model : AppModel,
   message : AppMessage,
@@ -5268,9 +5298,10 @@ fn update_live(
       }
     Outcome(ClusterPollFailed(generation, unauthorized)) =>
       if generation != model.cluster_poll_generation ||
-        !model.console.operator_authenticated ||
-        unauthorized {
+        !model.console.operator_authenticated {
         (model, @rabbita.none)
+      } else if unauthorized {
+        (console_session_lost(model), @rabbita.none)
       } else {
         (model, cluster_poll_delay_command(generation, emit))
       }
@@ -5324,7 +5355,12 @@ fn update_live(
         }
       }
     }
-    Outcome(DeferredReadFailed(group)) => {
+    Outcome(DeferredReadFailed(group, unauthorized)) => {
+      if unauthorized &&
+        model.console.operator_authenticated &&
+        model.console_read_groups.contains(group) {
+        return (console_session_lost(model), @rabbita.none)
+      }
       // Preserve the session, but never present failed reads as empty records.
       // The absent group projects to a visible retry state on the current page.
       let groups = model.console_read_groups.copy()
