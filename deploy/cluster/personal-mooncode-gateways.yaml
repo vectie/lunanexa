@@ -67,7 +67,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: gateway
-          image: lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/acceptance/webide-runtime@sha256:cb4ff0913d926dbd734b419dae7ebc98f47c516fc26dbd52654e77d315cbce61
+          image: lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/acceptance/webide-runtime@sha256:18434a065d00cad5fbc1bb26e735aa99e28d0ade1646dc55d7ec50719121cd6e
           imagePullPolicy: IfNotPresent
           ports:
             - {name: http, containerPort: 8082, hostIP: 192.168.2.175, hostPort: 5002}
@@ -127,7 +127,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: gateway
-          image: lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/acceptance/webide-runtime@sha256:cb4ff0913d926dbd734b419dae7ebc98f47c516fc26dbd52654e77d315cbce61
+          image: lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/acceptance/webide-runtime@sha256:18434a065d00cad5fbc1bb26e735aa99e28d0ade1646dc55d7ec50719121cd6e
           imagePullPolicy: IfNotPresent
           ports:
             - {name: http, containerPort: 8082, hostIP: 192.168.2.175, hostPort: 5003}
