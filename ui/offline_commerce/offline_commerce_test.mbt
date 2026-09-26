@@ -333,6 +333,22 @@ test "both sides render the undertaking's tiers from the one list" {
 }
 
 ///|
+test "order details distinguish requested lease term from draft validity" {
+  let order = {
+    ..offline_order(Draft),
+    requested_undertaking_term: Some("day"),
+  }
+  let customer = @offline_commerce.render({
+    ..@offline_commerce.default_state(ChineseSimplified, CustomerCommerce),
+    orders: [order],
+    selected_order_id: Some(order.order_id),
+  })
+  assert_true(customer.contains("申请租期与档位"))
+  assert_true(customer.contains("1 天 · 49 元"))
+  assert_true(customer.contains("订单有效期至（非租期）"))
+}
+
+///|
 test "opening an order adopts the tier the customer asked for" {
   let base = @offline_commerce.default_state(English, OperatorCommerce)
   let requested = {

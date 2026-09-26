@@ -29,6 +29,7 @@ test "one-click connection shows model-first progress and never claims client co
   let ready = { ..@enterprise.demo_state(), route: DesktopIde, }
   let before = @enterprise.render(ready)
   assert_true(before.contains("One-click connection"))
+  assert_true(before.contains("Refresh model and access"))
   assert_true(before.contains("aria-label=\"Connection progress\""))
   assert_true(before.contains("aria-valuenow=\"25\""))
   let issuing = ready.update(LaunchDesktopClient)
@@ -53,6 +54,11 @@ test "one-click connection shows model-first progress and never claims client co
     desktop_client: Some({ ..client, models_ready: false, ready: false, }),
   }
   assert_true(@enterprise.render(blocked).contains("aria-valuenow=\"0\""))
+  let refreshing = blocked.update(RefreshDesktopStatus)
+  assert_true(refreshing.loading)
+  assert_true(
+    @enterprise.render(refreshing).contains("Checking model and access"),
+  )
   assert_true(
     @enterprise.render(blocked).contains("Waiting for a serving model"),
   )

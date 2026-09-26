@@ -4682,6 +4682,14 @@ fn update(
         ({ ..model, portal: next, }, desktop_client_command(model, emit))
       }
     }
+    Portal(RefreshDesktopStatus) => {
+      let next = { ..model, portal: model.portal.update(RefreshDesktopStatus), }
+      if model.demo_mode {
+        ({ ..next, portal: { ..next.portal, loading: false, }, }, @rabbita.none)
+      } else {
+        (next, load_command(next, emit))
+      }
+    }
     Portal(MarkNotificationRead(notification_id, generation)) =>
       if model.demo_mode {
         let notifications = [

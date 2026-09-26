@@ -1475,8 +1475,32 @@ fn order_detail(
             @html.dt(copy(state.locale, "Project", "项目")),
             @html.dd(order.project_id),
           ]),
+          match order.requested_undertaking_term {
+            Some(term) =>
+              match @offline.undertaking_term_tier(term) {
+                Some(tier) =>
+                  @html.div([
+                    @html.dt(
+                      copy(
+                        state.locale,
+                        "Requested rental tier",
+                        "申请租期与档位",
+                      ),
+                    ),
+                    @html.dd(undertaking_tier_label(state.locale, tier)),
+                  ])
+                None => @html.nothing
+              }
+            None => @html.nothing
+          },
           @html.div([
-            @html.dt(copy(state.locale, "Expires", "到期时间")),
+            @html.dt(
+              copy(
+                state.locale,
+                "Order valid until (not the rental term)",
+                "订单有效期至（非租期）",
+              ),
+            ),
             @html.dd(order_expiry_label(state.locale, order.expires_unix_ms)),
           ]),
           @html.div([

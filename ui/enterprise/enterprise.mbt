@@ -257,6 +257,7 @@ pub(all) enum EnterpriseMessage {
   SubmitPaymentCheckout
   SubmitLease
   LaunchDesktopClient
+  RefreshDesktopStatus
   SelectWebIde(String)
   SelectWebIdeOrder(String)
   Delivery(DeliveryMessage)
@@ -1165,6 +1166,8 @@ pub fn EnterpriseState::update(
         success_message: None,
         error_message: None,
       }
+    RefreshDesktopStatus =>
+      { ..self, loading: true, success_message: None, error_message: None, }
     MarkNotificationRead(_, _) => self
     SetNotificationEmail(_, _) =>
       { ..self, loading: true, success_message: None, error_message: None, }
@@ -3307,7 +3310,10 @@ fn webide_orders(state : EnterpriseState) -> Array[SelfServiceOrderView] {
 }
 
 ///|
-fn desktop_connect_progress_view(state : EnterpriseState) -> @rabbita.Html {
+fn desktop_connect_progress_view(
+  state : EnterpriseState,
+  emit : @rabbita.Emit[EnterpriseMessage]?,
+) -> @rabbita.Html {
   let client = state.desktop_client
   let model_ready = client.map_or(false, value => value.models_ready)
   let access_ready = client.map_or(false, value => value.workspace_ready)
@@ -3370,6 +3376,25 @@ fn desktop_connect_progress_view(state : EnterpriseState) -> @rabbita.Html {
     @html.p(
       attrs=@html.Attrs::build().role("status").aria_live("polite"),
       status,
+    ),
+    @html.button(
+      type_="button",
+      class="quiet-button",
+      disabled=state.loading,
+      on_click=command(emit, RefreshDesktopStatus),
+      if state.loading {
+        copy(
+          state.locale,
+          "Checking model and access…",
+          "正在检查模型与权限…",
+        )
+      } else {
+        copy(
+          state.locale,
+          "Refresh model and access",
+          "刷新模型与权限状态",
+        )
+      },
     ),
     @html.span(
       class="quota-track",
@@ -3645,7 +3670,7 @@ fn desktop_ide_view(
       },
     ]),
     if !is_comfyui {
-      desktop_connect_progress_view(state)
+      desktop_connect_progress_view(state, emit)
     } else {
       @html.nothing
     },
