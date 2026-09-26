@@ -236,11 +236,31 @@ async fn Bridge::workspace_controls(
   connection : @http.ServerConnection,
 ) -> Unit {
   let headers = response_headers("text/html; charset=utf-8")
-  headers["content-security-policy"] = "default-src 'none'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
+  let nonce = random_token()
+  headers["content-security-policy"] = "default-src 'none'; script-src 'nonce-\{nonce}'; connect-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'"
   connection.send_response(200, "OK", extra_headers=headers)
   connection.write_string(
     if self.stop is Some(_) {
-      "<!doctype html><html lang=\"zh-CN\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>管理工作台</title><main><h1>管理我的工作台</h1><p>停止仅关闭当前账户的运行容器；已保存的工作文件不会删除。重新打开时请从用户门户再次点击「打开工作台」。</p><form method=\"post\" action=\"/workspace-control/stop\"><button type=\"submit\">确认停止工作台</button></form><p><a href=\"/\">返回工作台</a></p></main></html>"
+      let page =
+        $|<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>管理工作台</title>
+      $|<main><h1>管理我的工作台</h1><p>停止仅关闭当前账户的运行容器；已保存的工作文件不会删除。重新打开时请从用户门户再次点击「打开工作台」。</p><button type="button" id="stop">确认停止工作台</button><p role="status" id="status"></p><p><a href="/">返回工作台</a></p></main>
+      $|<script nonce="\{nonce}">
+      $|document.getElementById('stop').addEventListener('click', async () => {
+      $|  const button = document.getElementById('stop');
+      $|  const status = document.getElementById('status');
+      $|  button.disabled = true;
+      $|  status.textContent = '正在停止工作台…';
+      $|  try {
+      $|    const response = await fetch('/workspace-control/stop', {method:'POST', credentials:'same-origin'});
+      $|    if (!response.ok) throw new Error(String(response.status));
+      $|    document.open(); document.write(await response.text()); document.close();
+      $|  } catch (_) {
+      $|    status.textContent = '停止失败。请刷新页面后重试，或联系管理员。';
+      $|    button.disabled = false;
+      $|  }
+      $|});
+      $|</script></html>
+      page
     } else {
       "<!doctype html><html lang=\"zh-CN\"><meta charset=\"utf-8\"><title>管理工作台</title><main><h1>暂不可停止</h1><p>这个工作台尚未接入受管停止能力，请联系管理员。</p><p><a href=\"/\">返回工作台</a></p></main></html>"
     },
