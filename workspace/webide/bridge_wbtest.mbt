@@ -272,6 +272,8 @@ async fn launch_test(origin : String, code : String) -> (String, String) {
   })
   assert_eq(page.code, 200)
   assert_true(content.text().contains("lunanexa_handoff"))
+  assert_true(content.text().contains("lunanexa_control"))
+  assert_true(content.text().contains("controls ? '/workspace-control' : '/'"))
   assert_false(content.text().contains("lnx_test_secret"))
   let challenge = page.cookies[0]
   assert_true(content.text().contains("nonce=\"\{challenge.value}\""))

@@ -120,6 +120,7 @@ async fn Bridge::connect_page(
     $|<script nonce="\{nonce}">
     $|const fragment = new URLSearchParams(location.hash.slice(1));
     $|const code = fragment.get('lunanexa_handoff');
+    $|const controls = fragment.get('lunanexa_control') === '1';
     $|history.replaceState(null, '', '/connect');
     $|async function connect() {
     $|  if (!code) throw new Error();
@@ -127,7 +128,7 @@ async fn Bridge::connect_page(
     $|    headers:{'Content-Type':'application/json','X-WebIDE-CSRF':'\{nonce}'},
     $|    body:JSON.stringify({handoff_code:code})});
     $|  if (!response.ok) throw new Error();
-    $|  location.replace('/');
+    $|  location.replace(controls ? '/workspace-control' : '/');
     $|}
     $|connect().catch(() => {document.getElementById('status').textContent='工作台连接失败。请确认权限和服务状态，然后从用户门户重新启动。';});
     $|</script></html>
@@ -243,23 +244,23 @@ async fn Bridge::workspace_controls(
     if self.stop is Some(_) {
       let page =
         $|<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>管理工作台</title>
-      $|<main><h1>管理我的工作台</h1><p>停止仅关闭当前账户的运行容器；已保存的工作文件不会删除。重新打开时请从用户门户再次点击「打开工作台」。</p><button type="button" id="stop">确认停止工作台</button><p role="status" id="status"></p><p><a href="/">返回工作台</a></p></main>
-      $|<script nonce="\{nonce}">
-      $|document.getElementById('stop').addEventListener('click', async () => {
-      $|  const button = document.getElementById('stop');
-      $|  const status = document.getElementById('status');
-      $|  button.disabled = true;
-      $|  status.textContent = '正在停止工作台…';
-      $|  try {
-      $|    const response = await fetch('/workspace-control/stop', {method:'POST', credentials:'same-origin'});
-      $|    if (!response.ok) throw new Error(String(response.status));
-      $|    document.open(); document.write(await response.text()); document.close();
-      $|  } catch (_) {
-      $|    status.textContent = '停止失败。请刷新页面后重试，或联系管理员。';
-      $|    button.disabled = false;
-      $|  }
-      $|});
-      $|</script></html>
+        $|<main><h1>管理我的工作台</h1><p>停止仅关闭当前账户的运行容器；已保存的工作文件不会删除。重新打开时请从用户门户再次点击「打开工作台」。</p><button type="button" id="stop">确认停止工作台</button><p role="status" id="status"></p><p><a href="/">返回工作台</a></p></main>
+        $|<script nonce="\{nonce}">
+        $|document.getElementById('stop').addEventListener('click', async () => {
+        $|  const button = document.getElementById('stop');
+        $|  const status = document.getElementById('status');
+        $|  button.disabled = true;
+        $|  status.textContent = '正在停止工作台…';
+        $|  try {
+        $|    const response = await fetch('/workspace-control/stop', {method:'POST', credentials:'same-origin'});
+        $|    if (!response.ok) throw new Error(String(response.status));
+        $|    document.open(); document.write(await response.text()); document.close();
+        $|  } catch (_) {
+        $|    status.textContent = '停止失败。请刷新页面后重试，或联系管理员。';
+        $|    button.disabled = false;
+        $|  }
+        $|});
+        $|</script></html>
       page
     } else {
       "<!doctype html><html lang=\"zh-CN\"><meta charset=\"utf-8\"><title>管理工作台</title><main><h1>暂不可停止</h1><p>这个工作台尚未接入受管停止能力，请联系管理员。</p><p><a href=\"/\">返回工作台</a></p></main></html>"
