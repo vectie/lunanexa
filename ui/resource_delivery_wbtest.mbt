@@ -41,4 +41,11 @@ test "resource chooser hides memory-pressured and unmeasured Sparks" {
     ),
     "订单已关闭，需重新下单",
   )
+  assert_eq(
+    undertaking_allocation_status(
+      @i18n.Locale::ChineseSimplified,
+      "OrderTermMismatch",
+    ),
+    "订单授权截止早于已签租期结束；需重新下单",
+  )
 }

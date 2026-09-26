@@ -1583,10 +1583,15 @@ async fn ApiService::handle_offline_commerce(
         )
       }
       let now = @async.now()
+      let maximum_days = if intent.requested_undertaking_term == Some("year") {
+        396L
+      } else {
+        366L
+      }
       if intent.expires_unix_ms < now + 300000L ||
-        intent.expires_unix_ms > now + 31622400000L {
+        intent.expires_unix_ms > now + maximum_days * 86400000L {
         return api_error(
-          400, "InvalidExpiry", "order expiry must be between five minutes and 366 days",
+          400, "InvalidExpiry", "order expiry must be between five minutes and the selected term limit",
           false,
         )
       }

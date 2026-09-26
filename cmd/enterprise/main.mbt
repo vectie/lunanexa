@@ -2292,6 +2292,16 @@ async fn redeem_machine_credential(
 }
 
 ///|
+fn offline_order_expiry(now : Int64, requested_term : String) -> Int64 {
+  match @offline.undertaking_term_days(requested_term) {
+    // Allow time for quotation, signing and review without consuming the
+    // purchased term. The signed Beijing end date remains the hard limit.
+    Some(days) => now + (days + 31L) * 86400000L
+    None => now + 2592000000L
+  }
+}
+
+///|
 async fn create_offline_order(model : AppModel) -> @offline.CommercialOrder {
   let commerce = model.portal.offline_commerce
   let requested_term = commerce.undertaking_term.trim().to_owned()
@@ -2301,7 +2311,7 @@ async fn create_offline_order(model : AppModel) -> @offline.CommercialOrder {
     project_id: commerce.project_id.trim().to_owned(),
     selected_service_code: commerce.service_code.trim().to_owned(),
     selected_sla_code: commerce.sla_code.trim().to_owned(),
-    expires_unix_ms: current_unix_ms() + 2592000000L,
+    expires_unix_ms: offline_order_expiry(current_unix_ms(), requested_term),
     requested_undertaking_term: match
       @offline.undertaking_term_tier(requested_term) {
       Some(_) => Some(requested_term)

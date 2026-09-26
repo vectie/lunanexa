@@ -120,6 +120,67 @@ async test "contract packets persist drafts and audit no raw values" {
 }
 
 ///|
+async test "undertaking master lease follows Beijing calendar boundaries" {
+  let directory = @fs.tmpdir(prefix="lunanexa-undertaking-beijing-")
+  defer @fs.rmdir(directory, recursive=true)
+  let store = @store.ContractDocumentStore::open(directory + "/contracts.json")
+  let packet : @contractdoc.ContractPacket = {
+    ..@contractdoc.new_packet(
+      @contractdoc.undertaking_manifest(),
+      "undertaking-beijing",
+      "undertaking-beijing-key",
+      "tenant-beijing",
+      "org-beijing",
+      "subject-beijing",
+      "order-beijing",
+      None,
+      [MasterLease],
+      1000L,
+    ),
+    state: Effective,
+    values: [
+      { field_id: "lease.start_date", value: "2026-09-16", },
+      { field_id: "lease.end_date", value: "2026-09-16", },
+    ],
+  }
+  ignore(store.create_packet(packet, packet.subject_ref))
+  let start = @contractdoc.calendar_date_days("2026-09-16").unwrap() * 86400000L -
+    28800000L
+  assert_false(
+    store.has_effective_master_lease(
+      packet.tenant_ref,
+      packet.subject_ref,
+      start - 1L,
+    ),
+  )
+  assert_true(
+    store.has_effective_master_lease(
+      packet.tenant_ref,
+      packet.subject_ref,
+      start,
+    ),
+  )
+  assert_true(
+    store.has_effective_master_lease(
+      packet.tenant_ref,
+      packet.subject_ref,
+      start + 86400000L - 1L,
+    ),
+  )
+  assert_false(
+    store.has_effective_master_lease(
+      packet.tenant_ref,
+      packet.subject_ref,
+      start + 86400000L,
+    ),
+  )
+  assert_eq(
+    store.governance_dashboard(packet.tenant_ref, start).next_expiry_unix_ms,
+    Some(start + 86400000L),
+  )
+}
+
+///|
 async test "governance projections gate access and survive restart" {
   let directory = @fs.tmpdir(prefix="lunanexa-contract-governance-")
   let path = "\{directory}/contracts.json"

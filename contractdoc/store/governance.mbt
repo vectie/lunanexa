@@ -42,6 +42,22 @@ fn utc_year(now_unix_ms : Int64) -> Int {
 }
 
 ///|
+fn undertaking_beijing_term_active(
+  packet : @contractdoc.ContractPacket,
+  now_unix_ms : Int64,
+) -> Bool {
+  guard packet.value("lease.start_date") is Some(start) &&
+    packet.value("lease.end_date") is Some(end) &&
+    @contractdoc.calendar_date_days(start) is Some(first_day) &&
+    @contractdoc.calendar_date_days(end) is Some(last_day) else {
+    return false
+  }
+  let beijing_ms = now_unix_ms + 28800000L
+  first_day * 86400000L <= beijing_ms &&
+  beijing_ms < (last_day + 1L) * 86400000L
+}
+
+///|
 /// The access authority is deliberately derived from the same durable packet
 /// store that owns the contract. A packet that is merely generated, suspended
 /// in a future version, or expired cannot authorize a credential.
@@ -60,24 +76,15 @@ pub async fn ContractDocumentStore::has_effective_master_lease(
       packet.subject_ref == subject_ref &&
       packet.state == Effective &&
       packet.active_forms.contains(MasterLease) &&
-      (
-        !@contractdoc.is_undertaking_template(packet.template_id) ||
-        (
-          packet
-          .value("lease.start_date")
-          .map_or(false, start => {
-            @contractdoc.days_until(start, now_unix_ms).map_or(false, days => {
-              days <= 0L
-            })
-          }) &&
-          packet.value("lease.end_date") is Some(_)
-        )
-      ) &&
-      (match packet.value("lease.end_date") {
-        Some(end_date) =>
-          @contractdoc.days_until(end_date, now_unix_ms) is Some(days) &&
-          days >= 0L
-        None => true
+      (if @contractdoc.is_undertaking_template(packet.template_id) {
+        undertaking_beijing_term_active(packet, now_unix_ms)
+      } else {
+        match packet.value("lease.end_date") {
+          Some(end_date) =>
+            @contractdoc.days_until(end_date, now_unix_ms) is Some(days) &&
+            days >= 0L
+          None => true
+        }
       })
     })
   self.mutex.release()
@@ -755,7 +762,13 @@ pub async fn ContractDocumentStore::governance_dashboard(
       Some(value) =>
         match @contractdoc.calendar_date_days(value) {
           Some(days) => {
-            let candidate = days * 86400000L
+            let candidate = if @contractdoc.is_undertaking_template(
+                packet.template_id,
+              ) {
+              (days + 1L) * 86400000L - 28800000L
+            } else {
+              days * 86400000L
+            }
             if candidate >= now_unix_ms &&
               (
                 next_expiry is None ||

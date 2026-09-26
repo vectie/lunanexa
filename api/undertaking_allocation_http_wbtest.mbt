@@ -16,7 +16,8 @@ async test "undertaking allocation requires exact live signed approval and full 
       registered_unix_ms: 4000L,
     }),
   }
-  let now = @contractdoc.calendar_date_days("2026-09-16").unwrap() * 86400000L
+  let now = @contractdoc.calendar_date_days("2026-09-16").unwrap() * 86400000L -
+    28800000L
   assert_true(
     undertaking_allocation_packet(order, [effective], snapshot, now) is Some(_),
   )
@@ -52,6 +53,19 @@ async test "undertaking allocation requires exact live signed approval and full 
   )
   assert_eq(
     undertaking_allocation_expiry(order, effective, now),
+    Some(now + 86400000L),
+  )
+  assert_eq(undertaking_allocation_expiry(order, effective, now - 1L), None)
+  assert_eq(
+    undertaking_allocation_expiry(
+      { ..order, expires_unix_ms: now + 86400000L - 1L, },
+      effective,
+      now,
+    ),
+    None,
+  )
+  assert_eq(
+    undertaking_allocation_expiry(order, effective, now + 86400000L - 1L),
     Some(now + 86400000L),
   )
   assert_eq(

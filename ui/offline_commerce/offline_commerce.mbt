@@ -1497,8 +1497,8 @@ fn order_detail(
             @html.dt(
               copy(
                 state.locale,
-                "Order valid until (not the rental term)",
-                "订单有效期至（非租期）",
+                "Order authority deadline (must cover the rental term)",
+                "订单授权截止（须覆盖完整租期）",
               ),
             ),
             @html.dd(order_expiry_label(state.locale, order.expires_unix_ms)),
@@ -1633,8 +1633,8 @@ fn create_order_form(
           class="field-help",
           copy(
             state.locale,
-            "The fixed undertaking tariff. The operator freezes the quote at this tier; the generated document states its rental dates.",
-            "承诺函固定档位。运营方按此档位冻结报价，生成的文件中会写明实际租期。",
+            "The fixed undertaking tariff. The draft allows 31 days for signing and review before the selected rental term; the signed dates must fit within its authority deadline.",
+            "承诺函固定档位。草稿在所选租期外预留 31 天签署审批时间；签署租期须在订单授权截止前结束。",
           ),
         ),
       ]),
