@@ -4686,15 +4686,8 @@ fn update(
         ({ ..model, portal: next, }, desktop_client_command(model, emit))
       }
     }
-    Portal(ManageWebIde) => {
-      match model.portal.desktop_client {
-        Some(client) =>
-          match @enterprise_ui.personal_webide_control_uri(client) {
-            Some(uri) => navigate_to_workspace_control(uri)
-            None => ()
-          }
-        None => ()
-      }
+    Portal(ManageWebIde(uri)) => {
+      navigate_to_workspace_control(uri)
       (model, @rabbita.none)
     }
     Portal(RefreshDesktopStatus) => {

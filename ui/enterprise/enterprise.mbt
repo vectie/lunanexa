@@ -257,7 +257,7 @@ pub(all) enum EnterpriseMessage {
   SubmitPaymentCheckout
   SubmitLease
   LaunchDesktopClient
-  ManageWebIde
+  ManageWebIde(String)
   RefreshDesktopStatus
   SelectWebIde(String)
   SelectWebIdeOrder(String)
@@ -1167,7 +1167,7 @@ pub fn EnterpriseState::update(
         success_message: None,
         error_message: None,
       }
-    ManageWebIde => self
+    ManageWebIde(_) => self
     RefreshDesktopStatus =>
       { ..self, loading: true, success_message: None, error_message: None, }
     MarkNotificationRead(_, _) => self
@@ -3655,11 +3655,11 @@ fn desktop_ide_view(
         )
       },
       match state.desktop_client {
-        Some(client) if personal_webide_control_uri(client) is Some(_) =>
+        Some(client) if personal_webide_control_uri(client) is Some(url) =>
           @html.button(
             type_="button",
             class="quiet-button external-action",
-            on_click=command(emit, ManageWebIde),
+            on_click=command(emit, ManageWebIde(url)),
             copy(
               state.locale,
               "Manage / stop my WebIDE",
