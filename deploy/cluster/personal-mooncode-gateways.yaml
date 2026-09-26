@@ -31,7 +31,7 @@ data:
     }
   desktop-container.json: |
     {
-      "image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/acceptance/moondesk-hosted@sha256:c91f29fd14b965cad07a2492881ce604e6764e6c43c038030965be1b8a63e10a",
+      "image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/acceptance/moondesk-hosted@sha256:bbaed9862ec2a3e47e586f093f4503af108e701ae9c034d8c9431137264ce9ae",
       "command": ["/usr/local/bin/moondesk"],
       "args": ["serve", "/workspace", "--ui", "/opt/moondesk/ui", "--host", "0.0.0.0", "--port", "8188"],
       "port": 8188,

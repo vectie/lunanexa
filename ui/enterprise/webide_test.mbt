@@ -86,7 +86,11 @@ test "personal MoonDesk exposes a stop control without stopping the shared model
     rendered.contains("管理／停止我的 WebIDE") ||
     rendered.contains("Manage / stop my WebIDE"),
   )
-  assert_true(rendered.contains("http://198.51.100.5:5002/workspace-control"))
+  assert_eq(
+    @enterprise.personal_webide_control_uri(desktop),
+    Some("http://198.51.100.5:5002/workspace-control"),
+  )
+  assert_false(rendered.contains("target=\"_blank\""))
 }
 
 ///|

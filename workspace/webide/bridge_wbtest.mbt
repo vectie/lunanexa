@@ -323,6 +323,8 @@ async test "workspace owner stops only their own running WebIDE from its authent
     })
     assert_eq(controls.code, 200)
     assert_true(page.text().contains("确认停止工作台"))
+    assert_true(page.text().contains("fetch('/workspace-control/stop'"))
+    assert_true(page.text().contains("停止失败。请刷新页面后重试"))
     let (wrong_origin, _) = @http.post(
       origin + "/workspace-control/stop",
       Json::null(),

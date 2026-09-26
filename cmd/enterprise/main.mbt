@@ -658,6 +658,10 @@ extern "js" fn open_desktop_client(
   #| }
 
 ///|
+extern "js" fn navigate_to_workspace_control(uri : String) -> Unit =
+  #| (uri) => globalThis.location.assign(uri)
+
+///|
 extern "js" fn request_promise(
   verb : String,
   url : String,
@@ -4681,6 +4685,17 @@ fn update(
       } else {
         ({ ..model, portal: next, }, desktop_client_command(model, emit))
       }
+    }
+    Portal(ManageWebIde) => {
+      match model.portal.desktop_client {
+        Some(client) =>
+          match @enterprise_ui.personal_webide_control_uri(client) {
+            Some(uri) => navigate_to_workspace_control(uri)
+            None => ()
+          }
+        None => ()
+      }
+      (model, @rabbita.none)
     }
     Portal(RefreshDesktopStatus) => {
       let next = { ..model, portal: model.portal.update(RefreshDesktopStatus), }
