@@ -1112,6 +1112,19 @@ fn machine_offering_view(
   value : @machinecommerce.MachineOfferingView,
 ) -> @enterprise_ui.SelfServiceOfferingView {
   let offering = value.offering
+  let price_summary = match offering.price_unit_seconds {
+    Some(86400L) =>
+      if offering.unit_price.currency == "CNY" && offering.unit_price.scale == 2 {
+        "¥" +
+        @contractdoc.format_cny_minor_units(offering.unit_price.minor_units) +
+        " / 天"
+      } else {
+        machine_money(offering.unit_price) + " / 天"
+      }
+    Some(seconds) =>
+      machine_money(offering.unit_price) + " / " + seconds.to_string() + " 秒"
+    None => machine_money(offering.unit_price) + " / second"
+  }
   {
     offering_id: offering.offering_id,
     kind: machine_product(offering.kind),
@@ -1122,7 +1135,7 @@ fn machine_offering_view(
     regions: [offering.region],
     minimum_duration_hours: (offering.minimum_duration_seconds / 3600L).to_int(),
     maximum_duration_hours: (offering.maximum_duration_seconds / 3600L).to_int(),
-    price_summary: machine_money(offering.unit_price) + " / second",
+    price_summary,
     allowed_model_template_refs: offering.allowed_model_template_refs,
     available: value.availability.capacity_available > 0L,
   }
