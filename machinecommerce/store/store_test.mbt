@@ -13,6 +13,7 @@ fn persisted_test_offering(now : Int64) -> @machinecommerce.MachineOffering {
     meter: "exclusive-node-second",
     unit_price: { minor_units: 1L, currency: "CNY", scale: 2, },
     billing_quantum_seconds: 60L,
+    price_unit_seconds: None,
     minimum_duration_seconds: 60L,
     maximum_duration_seconds: 86400L,
     capacity_total: 1L,

@@ -766,6 +766,7 @@ fn mock_machine_offering(
       meter: "machine-second",
       unit_price: { minor_units: 2L, currency: "CNY", scale: 2, },
       billing_quantum_seconds: 3600L,
+      price_unit_seconds: None,
       minimum_duration_seconds: 86400L,
       maximum_duration_seconds: 2592000L,
       capacity_total: 2L,
@@ -899,6 +900,22 @@ test "mock machine responses map inventory compensation and checkout without nod
   assert_eq(mapped.state, "Submitted")
   assert_eq(mapped.provider, "provider-test")
   assert_eq(mapped.action_url, Some("https://pay.example.test/checkout"))
+}
+
+///|
+test "daily machine offer displays the CNY 49 day price" {
+  let raw = mock_machine_offering(BareMachine)
+  let daily = {
+    ..raw,
+    offering: {
+      ..raw.offering,
+      unit_price: { minor_units: 4900L, currency: "CNY", scale: 2, },
+      price_unit_seconds: Some(86400L),
+      billing_quantum_seconds: 86400L,
+    },
+  }
+  let view = machine_offering_view(daily)
+  assert_eq(view.price_summary, "¥49.00 / 天")
 }
 
 ///|

@@ -92,6 +92,21 @@ fn billed_seconds(duration_seconds : Int64, quantum : Int64) -> Int64 {
 }
 
 ///|
+fn quoted_price_minor_units(
+  offering : MachineOffering,
+  duration_seconds : Int64,
+  quantity : Int64,
+) -> Int64 raise MachineCommerceError {
+  let seconds = billed_seconds(
+    duration_seconds,
+    offering.billing_quantum_seconds,
+  )
+  let price_unit_seconds = offering.price_unit_seconds.unwrap_or(1L)
+  let units = checked_multiply(seconds / price_unit_seconds, quantity)
+  checked_multiply(units, offering.unit_price.minor_units)
+}
+
+///|
 pub fn MachineCommerceStore::new(
   signing_secret : String,
 ) -> MachineCommerceStore raise MachineCommerceError {
@@ -391,14 +406,10 @@ pub fn MachineCommerceStore::create_quote(
       }
     }
   }
-  let seconds = billed_seconds(
+  let subtotal_minor = quoted_price_minor_units(
+    offering,
     intent.duration_seconds,
-    offering.billing_quantum_seconds,
-  )
-  let unit_count = checked_multiply(seconds, intent.quantity)
-  let subtotal_minor = checked_multiply(
-    unit_count,
-    offering.unit_price.minor_units,
+    intent.quantity,
   )
   let subtotal : @commercial.FixedMoney = {
     minor_units: subtotal_minor,
@@ -481,6 +492,15 @@ pub fn MachineCommerceStore::create_order(
   }
   if !self.verify_quote(quote) {
     raise QuoteIntegrityFailed
+  }
+  guard self.offerings.get(quote.offering_id) is Some(offering) &&
+    offering.state == OfferingActive &&
+    offering.kind == quote.offering_kind &&
+    offering.meter == quote.meter &&
+    offering.unit_price == quote.unit_price &&
+    quoted_price_minor_units(offering, quote.duration_seconds, quote.quantity) ==
+    quote.total.minor_units else {
+    raise QuotePriceChanged
   }
   let order : MachineOrder = {
     order_id: intent.order_id,

@@ -74,6 +74,12 @@ pub fn validate_offering(
     offering.memory_mib <= 0L ||
     offering.cpu_count <= 0L ||
     offering.billing_quantum_seconds <= 0L ||
+    offering.billing_quantum_seconds > 31536000L ||
+    offering.price_unit_seconds.map_or(false, unit => {
+      unit <= 0L ||
+      unit > offering.billing_quantum_seconds ||
+      offering.billing_quantum_seconds % unit != 0L
+    }) ||
     offering.minimum_duration_seconds <= 0L ||
     offering.maximum_duration_seconds < offering.minimum_duration_seconds ||
     offering.maximum_duration_seconds > 31536000L ||
