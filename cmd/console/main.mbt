@@ -2407,6 +2407,72 @@ fn node_rows_with_lease_holders(
 }
 
 ///|
+/// Keep the selected packet and its editable values together when another
+/// party changes a contract. A grouped refresh may return a different first
+/// packet, whose draft must never be shown under the retained selection.
+fn merge_contract_read(
+  current : @contract_documents.ContractDocumentsState,
+  incoming : @contract_documents.ContractDocumentsState,
+  locale : @i18n.Locale,
+) -> @contract_documents.ContractDocumentsState {
+  let matches_tenant = (packet : @contractdoc.ContractPacket) => {
+    current.selected_tenant_ref.map_or(true, tenant => {
+      packet.tenant_ref == tenant
+    })
+  }
+  let selected = match current.selected_packet_id {
+    Some(id) =>
+      incoming.packets
+      .iter()
+      .find_first(packet => packet.packet_id == id && matches_tenant(packet))
+    None => None
+  }
+  let selected = match selected {
+    Some(_) => selected
+    None => incoming.packets.iter().find_first(matches_tenant)
+  }
+  let selected = match selected {
+    Some(_) => selected
+    None if current.selected_tenant_ref is Some(_) => None
+    None => incoming.packets.get(0)
+  }
+  let unchanged = selected.map_or(false, packet => {
+    current.packets.any(previous => {
+      previous.packet_id == packet.packet_id &&
+      previous.revision == packet.revision
+    })
+  })
+  {
+    ..incoming,
+    locale,
+    selected_tenant_ref: match selected {
+      Some(packet) => Some(packet.tenant_ref)
+      None => current.selected_tenant_ref
+    },
+    search_query: current.search_query,
+    selected_packet_id: selected.map(packet => packet.packet_id),
+    selected_form: match selected {
+      Some(packet) if unchanged &&
+        current.selected_form.map_or(false, form => {
+          packet.active_forms.contains(form)
+        }) => current.selected_form
+      Some(packet) => packet.active_forms.get(0)
+      None => None
+    },
+    draft_values: if unchanged {
+      current.draft_values
+    } else {
+      selected.map_or([], packet => packet.values.copy())
+    },
+    preview: if unchanged {
+      current.preview
+    } else {
+      None
+    },
+  }
+}
+
+///|
 /// Merge one deferred read into the console state. Only the fields owned by
 /// that read group change; every other field is carried over untouched. A
 /// counter that is a direct projection of the group's own rows (the open-alert
@@ -2466,24 +2532,11 @@ fn merge_console_group_read(
     GroupContracts(payload) =>
       {
         ..current,
-        contract_documents: {
-          ..payload.documents,
-          locale: current.locale,
-          selected_tenant_ref: current.contract_documents.selected_tenant_ref,
-          search_query: current.contract_documents.search_query,
-          selected_packet_id: if current.contract_documents.selected_packet_id
-            is None {
-            payload.documents.selected_packet_id
-          } else {
-            current.contract_documents.selected_packet_id
-          },
-          selected_form: if current.contract_documents.selected_form is None {
-            payload.documents.selected_form
-          } else {
-            current.contract_documents.selected_form
-          },
-          preview: current.contract_documents.preview,
-        },
+        contract_documents: merge_contract_read(
+          current.contract_documents,
+          payload.documents,
+          current.locale,
+        ),
       }
     GroupCommerce(payload) =>
       {
@@ -8610,7 +8663,7 @@ fn update_live(
         "/v1/offline-commerce/operator/generation-requests",
         action.to_json().stringify(),
         "Verified document generation was requested.",
-        "已请求生成并验证文档。",
+        "已提交文档生成请求，等待派发与验证。",
         emit,
       )
       ({ ..model, console: { ..model.console, loading: true, }, }, cmd)

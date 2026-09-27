@@ -50,6 +50,26 @@ fn evidence() -> @offline_commerce.OfflineArtifactSummary {
 }
 
 ///|
+test "undertaking order directs generation to the linked contract packet" {
+  let undertaking = {
+    ..offline_order(PendingInternalApproval),
+    requested_undertaking_term: Some("day"),
+  }
+  let html = @offline_commerce.render({
+    ..@offline_commerce.default_state(ChineseSimplified, OperatorCommerce),
+    orders: [undertaking],
+    selected_order_id: Some(undertaking.order_id),
+  })
+  assert_true(
+    html.contains(
+      "承诺函订单请先到「合同资料」填齐字段并申请生成",
+    ),
+  )
+  assert_false(html.contains("生成合同可编辑源文件"))
+  assert_false(html.contains("生成可打印合同"))
+}
+
+///|
 test "terminal customer orders do not promise a future activation notification" {
   for
     status in [
@@ -450,8 +470,13 @@ test "the readiness panel lists every gate and every blocker code verbatim" {
   })
   assert_true(html.contains("Offline commerce readiness"))
   assert_true(html.contains("OfflineCommerceAdaptersPending"))
-  assert_true(html.contains("Adapters pending"))
-  // The refusal an operator will actually meet is stated plainly.
+  assert_true(html.contains("Readiness diagnostics pending"))
+  assert_true(
+    html.contains(
+      "Historical success and retry diagnostics do not by themselves block a new order",
+    ),
+  )
+  // Missing required capabilities still fail closed with an explicit code.
   assert_true(html.contains("503 OfflineCommerceNotReady"))
   for
     capability in [

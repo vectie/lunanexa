@@ -1206,6 +1206,52 @@ test "contract tab and field changes schedule one generation-fenced preview" {
 }
 
 ///|
+test "contract refresh never borrows another packet's draft values" {
+  let base = @ui.demo_state().contract_documents
+  let first = base.packets[0]
+  let second = base.packets[1]
+  let old_draft : Array[@contractdoc.ContractFieldValue] = [
+    { field_id: "lease.start_date", value: "2026-09-22", },
+  ]
+  let new_values : Array[@contractdoc.ContractFieldValue] = [
+    { field_id: "lease.start_date", value: "2026-09-28", },
+  ]
+  let selected = {
+    ..base,
+    selected_tenant_ref: Some(second.tenant_ref),
+    selected_packet_id: Some(second.packet_id),
+    draft_values: old_draft,
+  }
+  let incoming = {
+    ..base,
+    packets: [
+      first,
+      { ..second, revision: second.revision + 1L, values: new_values, },
+    ],
+    selected_packet_id: Some(first.packet_id),
+    draft_values: first.values,
+  }
+  let merged = merge_contract_read(selected, incoming, @i18n.default_locale())
+  assert_eq(merged.selected_packet_id, Some(second.packet_id))
+  assert_eq(merged.draft_values, new_values)
+  assert_eq(merged.preview, None)
+  let same_revision = merge_contract_read(
+    selected,
+    base,
+    @i18n.default_locale(),
+  )
+  assert_eq(same_revision.draft_values, old_draft)
+  let empty_tenant = merge_contract_read(
+    selected,
+    { ..base, packets: [{ ..first, tenant_ref: "tenant-other", }], },
+    @i18n.default_locale(),
+  )
+  assert_eq(empty_tenant.selected_tenant_ref, Some(second.tenant_ref))
+  assert_eq(empty_tenant.selected_packet_id, None)
+  assert_eq(empty_tenant.draft_values.length(), 0)
+}
+
+///|
 test "contract approval and governance controls route through the operator shell" {
   let approval : @contractdoc.ContractApproval = {
     approval_id: "approval-shell-1",

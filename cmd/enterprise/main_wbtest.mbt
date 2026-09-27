@@ -7,6 +7,19 @@ test "undertaking order authority covers the selected rental term" {
 }
 
 ///|
+test "cancel notice distinguishes an unfulfilled order from access revocation" {
+  assert_eq(
+    offline_cancellation_notice(@i18n.ChineseSimplified, Cancelled),
+    "订单已在履约前取消；没有开通访问权限。",
+  )
+  assert_true(
+    offline_cancellation_notice(@i18n.ChineseSimplified, ReversalPending).contains(
+      "权益授权方确认前",
+    ),
+  )
+}
+
+///|
 test "personal MoonDesk catalog decodes the live string-encoded handoff lifetime" {
   let payload =
     $|[{"client_id":"desktop-workspace","display_name":"MoonDesk / MoonCode","launch_uri":"http://203.0.113.10:5003/connect","handoff_lifetime_ms":"120000","contract_ready":true,"workspace_ready":true,"models_ready":true,"ready":true,"blocker_codes":[],"approved_model_aliases":["glm-5.3.flash"],"handoffs":[]}]

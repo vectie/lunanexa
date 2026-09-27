@@ -961,6 +961,13 @@ async test "generation claims fence stale order state and exhaust bounded retrie
     .worker_readiness_blockers(400000L)
     .contains("ReadinessOfflineWorkRetryExhausted"),
   )
+  let current = reopened.order("org-a", "order-generation-fencing")
+  ignore(reopened.cancel_order(current.order_id, current.generation, 400001L))
+  assert_false(
+    reopened
+    .worker_readiness_blockers(400002L)
+    .contains("ReadinessOfflineWorkRetryExhausted"),
+  )
   @fs.remove(path)
 }
 

@@ -1312,6 +1312,29 @@ async fn ApiService::handle_offline_commerce(
           guard self.offline_readiness_gate(required, server_now) is None else {
             return self.offline_readiness_gate(required, server_now).unwrap()
           }
+          if (
+              request.kind == EditableContractDocx ||
+              request.kind == PrintReadyContractPdf
+            ) &&
+            template is Some(document_template) &&
+            @contractdoc.is_undertaking_template(document_template.template_id) {
+            guard store.snapshot().orders
+              .iter()
+              .find_first(order => order.order_id == request.order_id)
+              is Some(order) &&
+              self.contract_document_store is Some(documents) &&
+              offline_generation_packet(
+                documents.packets_for_subject(order.purchaser_subject_ref),
+                order,
+                document_template,
+              )
+              is Some(_) else {
+              return api_error(
+                409, "GenerationInputsMissing", "complete the linked undertaking packet and request generation there first",
+                false,
+              )
+            }
+          }
           json_reply(
             202,
             store

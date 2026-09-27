@@ -537,6 +537,23 @@ fn portal_copy(
 }
 
 ///|
+fn offline_cancellation_notice(
+  locale : @i18n.Locale,
+  state : @offline.OfflineOrderState,
+) -> String {
+  if state == Cancelled {
+    portal_copy(
+      locale, "Order cancelled before fulfillment; no access was activated.", "订单已在履约前取消；没有开通访问权限。",
+    )
+  } else {
+    portal_copy(
+      locale, "Access revocation requested. Active access remains tracked until entitlement authority confirmation.",
+      "已请求撤销访问；在权益授权方确认前仍会持续跟踪有效访问。",
+    )
+  }
+}
+
+///|
 /// The portal's user-facing failure text. Every `Failed` outcome below builds its
 /// message by interpolating the transport `Show` of the error, because
 /// `friendly_failure` tells one refusal from another by looking for the status
@@ -5949,11 +5966,7 @@ fn update(
               selected_order_id: Some(order.order_id),
               loading: false,
               success_message: Some(
-                portal_copy(
-                  model.portal.locale,
-                  "Cancellation accepted. Active access remains tracked until entitlement authority confirmation.",
-                  "已接受取消请求；有效访问将继续跟踪，直至权益授权方确认。",
-                ),
+                offline_cancellation_notice(model.portal.locale, order.state),
               ),
               error_message: None,
             },

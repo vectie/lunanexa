@@ -708,7 +708,9 @@ fn readiness_panel(state : OfflineCommerceState) -> @rabbita.Html {
           if ready {
             copy(locale, "Ready", "已就绪")
           } else {
-            copy(locale, "Adapters pending", "适配器待就绪")
+            copy(
+              locale, "Readiness diagnostics pending", "就绪诊断待处理",
+            )
           },
         ),
         @html.code("\{Repr(state.readiness_status)}"),
@@ -723,8 +725,8 @@ fn readiness_panel(state : OfflineCommerceState) -> @rabbita.Html {
         )
       } else {
         copy(
-          locale, "Initiating actions are refused with 503 OfflineCommerceNotReady until every gate passes.",
-          "在全部闸门通过之前，发起类操作将被拒绝，返回 503 OfflineCommerceNotReady。",
+          locale, "Each action checks its required capabilities and live worker heartbeats. Historical success and retry diagnostics do not by themselves block a new order; missing required capabilities return 503 OfflineCommerceNotReady.",
+          "每项操作分别检查所需能力和实时派发器心跳。历史成功记录及旧任务重试诊断不会单独阻止新订单；缺少必需能力时返回 503 OfflineCommerceNotReady。",
         )
       },
     ),
@@ -1155,22 +1157,35 @@ fn operator_actions(
   }
   if order.state == PendingInternalApproval ||
     order.state == PendingOfflineExecution {
-    for
-      kind in [
-        @offline.DocumentArtifactKind::EditableContractDocx,
-        QuoteScheduleXlsx,
-        PrintReadyContractPdf,
-      ] {
+    if order.requested_undertaking_term is Some(_) {
       actions.push(
-        @html.button(
-          type_="button",
-          class="secondary-action",
-          disabled=state.loading,
-          on_click=command(emit, RequestGeneration(order.order_id, kind)),
-          copy(state.locale, "Generate ", "生成") +
-          artifact_kind_label(state.locale, kind),
+        @html.p(
+          class="field-help",
+          copy(
+            state.locale,
+            "For an undertaking, complete its fields and request generation in Contract documents first. This order cannot generate a contract from an unfinished packet.",
+            "承诺函订单请先到「合同资料」填齐字段并申请生成；资料包未完成时，不能在这里直接生成合同。",
+          ),
         ),
       )
+    } else {
+      for
+        kind in [
+          @offline.DocumentArtifactKind::EditableContractDocx,
+          QuoteScheduleXlsx,
+          PrintReadyContractPdf,
+        ] {
+        actions.push(
+          @html.button(
+            type_="button",
+            class="secondary-action",
+            disabled=state.loading,
+            on_click=command(emit, RequestGeneration(order.order_id, kind)),
+            copy(state.locale, "Generate ", "生成") +
+            artifact_kind_label(state.locale, kind),
+          ),
+        )
+      }
     }
   }
   if order.state == PendingOfflineExecution {

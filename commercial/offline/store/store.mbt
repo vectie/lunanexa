@@ -2347,6 +2347,42 @@ pub async fn OfflineCommerceStore::worker_readiness_blockers(
   self.mutex.acquire()
   let health = self.worker_health
   let claims = sorted_values(self.work_claims)
+  let exhausted_current_work = claims.any(claim => {
+    if claim.completed_unix_ms is Some(_) || claim.attempt < 5 {
+      return false
+    }
+    match claim.worker_kind {
+      ArtifactDispatcher =>
+        sorted_values(self.generation_requests).any(request => {
+          artifact_work_id(request.request_id) == claim.work_id &&
+          !self.artifacts.contains(request.artifact_id) &&
+          self.orders
+          .get(request.order_id)
+          .map_or(false, order => {
+            order.generation == claim.expected_order_generation
+          })
+        })
+      EntitlementDispatcher =>
+        sorted_values(self.entitlement_activations).any(activation => {
+          activation_work_id(activation.activation_id) == claim.work_id &&
+          activation.state == EntitlementActivationRequested &&
+          self.orders
+          .get(activation.order_id)
+          .map_or(false, order => {
+            order.generation == claim.expected_order_generation
+          })
+        }) ||
+        sorted_values(self.reversals).any(reversal => {
+          reversal_work_id(reversal.reversal_id) == claim.work_id &&
+          reversal.state == ReversalRequested &&
+          self.orders
+          .get(reversal.order_id)
+          .map_or(false, order => {
+            order.generation == claim.expected_order_generation
+          })
+        })
+    }
+  })
   self.mutex.release()
   let blockers = []
   let recent = (value : Int64?) => {
@@ -2381,7 +2417,7 @@ pub async fn OfflineCommerceStore::worker_readiness_blockers(
     health.reconciler_failure_code is Some(_) {
     blockers.push("ReadinessOfflineReconcilerDegraded")
   }
-  if claims.any(claim => claim.completed_unix_ms is None && claim.attempt >= 5) {
+  if exhausted_current_work {
     blockers.push("ReadinessOfflineWorkRetryExhausted")
   }
   blockers

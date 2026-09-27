@@ -162,6 +162,37 @@ fn bridge_result(
 }
 
 ///|
+async test "undertaking generation endpoint rejects an unfinished packet before queuing work" {
+  let dir = @fs.tmpdir(prefix="offline-contract-unfinished-")
+  defer @fs.rmdir(dir, recursive=true)
+  let (service, commerce, _, _) = contract_bridge_fixture(dir)
+  let manifest = @contractdoc.undertaking_ofl_manifest()
+  let request : @offline.ArtifactGenerationRequest = {
+    request_id: "unfinished-undertaking-request",
+    order_id: "undertaking-order",
+    organization_id: "org-a",
+    artifact_id: "unfinished-undertaking-artifact",
+    kind: EditableContractDocx,
+    template_id: manifest.template_id,
+    template_version: manifest.template_version,
+    locale: "zh-CN",
+    expected_object_ref: "s3://technical/unfinished.docx",
+    input_snapshot_sha256: manifest.sha256,
+    requested_by: "operator",
+    requested_unix_ms: @async.now(),
+  }
+  let reply = service.handle(
+    Post,
+    "/v1/offline-commerce/operator/generation-requests",
+    { "Authorization": "Bearer operator-token" },
+    request.to_json().stringify(),
+  )
+  assert_eq(reply.status, 409, msg=reply.body)
+  assert_true(reply.body.contains("GenerationInputsMissing"))
+  assert_eq(commerce.snapshot().generation_requests.length(), 0)
+}
+
+///|
 async test "MoonEdit generate queues frozen pair and recovers packet commit after callback and restart" {
   let dir = @fs.tmpdir(prefix="offline-contract-bridge-")
   defer @fs.rmdir(dir, recursive=true)

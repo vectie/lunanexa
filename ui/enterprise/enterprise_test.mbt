@@ -909,7 +909,7 @@ test "terms unavailable keeps catalog visible but blocks clickwrap ordering" {
 }
 
 ///|
-test "bare GPU self-service pricing is distinguished from undertaking tariff" {
+test "bare GPU self-service shows the published 49 yuan daily tariff" {
   let state = @enterprise.demo_state()
   let html = @enterprise.render({
     ..state,
@@ -920,9 +920,7 @@ test "bare GPU self-service pricing is distinguished from undertaking tariff" {
       step: Capacity,
     },
   })
-  assert_true(
-    html.contains("The undertaking rental route has its own quoted tariff"),
-  )
+  assert_true(html.contains("¥49.00 / 天"))
 }
 
 ///|
