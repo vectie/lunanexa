@@ -199,9 +199,13 @@ pub async fn ApiService::reconcile_expiring_contracts(
     } else {
       None
     }
-    let remaining = match end_date {
-      Some(value) => @contractdoc.days_until(value, now_unix_ms)
-      None => None
+    let remaining = if @contractdoc.is_undertaking_template(packet.template_id) {
+      undertaking_days_until_end_beijing(packet, now_unix_ms)
+    } else {
+      match end_date {
+        Some(value) => @contractdoc.days_until(value, now_unix_ms)
+        None => None
+      }
     }
     guard end_date is Some(end_date_value) && remaining is Some(days_remaining) else {
       continue

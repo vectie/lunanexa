@@ -90,10 +90,7 @@ async fn ApiService::offline_execution_undertaking_allowed(
     }
     guard packet.state == Effective &&
       packet.execution is Some(execution) &&
-      packet.value("lease.start_date") is Some(start) &&
-      packet.value("lease.end_date") is Some(end) &&
-      @contractdoc.days_until(start, now).map_or(false, days => days <= 0L) &&
-      @contractdoc.days_until(end, now).map_or(false, days => days >= 0L) else {
+      undertaking_term_active_beijing(packet, now) else {
       return false
     }
     return undertaking_evidence_valid(

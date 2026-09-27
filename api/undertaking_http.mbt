@@ -49,6 +49,38 @@ fn undertaking_quote_matches(
 }
 
 ///|
+/// Undertaking dates are Beijing calendar dates. Every access and fulfillment
+/// gate must use the same boundary as whole-node allocation.
+fn undertaking_term_active_beijing(
+  packet : @contractdoc.ContractPacket,
+  now : Int64,
+) -> Bool {
+  guard now > 0L &&
+    packet.value("lease.start_date") is Some(start) &&
+    packet.value("lease.end_date") is Some(end) &&
+    @contractdoc.calendar_date_days(start) is Some(first_day) &&
+    @contractdoc.calendar_date_days(end) is Some(last_day) else {
+    return false
+  }
+  let beijing_now = now + 28800000L
+  first_day * 86400000L <= beijing_now &&
+  beijing_now < (last_day + 1L) * 86400000L
+}
+
+///|
+fn undertaking_days_until_end_beijing(
+  packet : @contractdoc.ContractPacket,
+  now : Int64,
+) -> Int64? {
+  guard now > 0L &&
+    packet.value("lease.end_date") is Some(end) &&
+    @contractdoc.calendar_date_days(end) is Some(last_day) else {
+    return None
+  }
+  Some(last_day - (now + 28800000L) / 86400000L)
+}
+
+///|
 /// Reads existing scanned and independently reviewed evidence; a browser
 /// string, payment obligation or approval checkbox cannot stand in for it.
 fn undertaking_evidence_valid(
@@ -138,10 +170,7 @@ async fn ApiService::has_effective_rental_authority(
     guard organization_id == Some(packet.organization_id) &&
       self.offline_commerce_store is Some(commerce) &&
       packet.execution is Some(execution) &&
-      packet.value("lease.start_date") is Some(start) &&
-      packet.value("lease.end_date") is Some(end) &&
-      @contractdoc.days_until(start, now).map_or(false, days => days <= 0L) &&
-      @contractdoc.days_until(end, now).map_or(false, days => days >= 0L) else {
+      undertaking_term_active_beijing(packet, now) else {
       continue
     }
     if undertaking_evidence_valid(
@@ -177,10 +206,7 @@ async fn ApiService::undertaking_fulfillment_allowed(
     }
     guard packet.state == Effective &&
       packet.execution is Some(execution) &&
-      packet.value("lease.start_date") is Some(start) &&
-      packet.value("lease.end_date") is Some(end) &&
-      @contractdoc.days_until(start, now).map_or(false, days => days <= 0L) &&
-      @contractdoc.days_until(end, now).map_or(false, days => days >= 0L) &&
+      undertaking_term_active_beijing(packet, now) &&
       self.offline_commerce_store is Some(commerce) else {
       return false
     }

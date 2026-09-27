@@ -101,6 +101,21 @@ fn undertaking_test_packet() -> @contractdoc.ContractPacket raise {
 }
 
 ///|
+test "undertaking access and expiry use Beijing day boundaries" {
+  let packet = undertaking_test_packet()
+  let day = @contractdoc.calendar_date_days("2026-09-16").unwrap()
+  let starts = day * 86400000L - 28800000L
+  let expires = starts + 86400000L
+  assert_false(undertaking_term_active_beijing(packet, starts - 1L))
+  assert_true(undertaking_term_active_beijing(packet, starts))
+  assert_true(undertaking_term_active_beijing(packet, expires - 1L))
+  assert_false(undertaking_term_active_beijing(packet, expires))
+  assert_eq(undertaking_days_until_end_beijing(packet, starts), Some(0L))
+  assert_eq(undertaking_days_until_end_beijing(packet, expires), Some(-1L))
+  assert_eq(undertaking_allocation_end(packet), Some(expires))
+}
+
+///|
 fn undertaking_test_artifact(
   id : String,
   kind : @offline.DocumentArtifactKind,
