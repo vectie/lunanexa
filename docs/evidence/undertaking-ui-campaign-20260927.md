@@ -100,3 +100,14 @@
 **新发现的硬堵点**：Spark `.178` 的 Kubernetes 节点代理生产配置是 `LUNANEXA_EXCLUSIVE_LEASES_ENABLED=0`；主机没有 `/usr/libexec/lunanexa-lease-helper`、sudoers 规则、`lunanexa` 服务账户或运行中的 host-systemd agent。这与[独占租约设计](/Users/kq/Workspace/lunanexa/docs/EXCLUSIVE_NODE_LEASES.md)中「Kubernetes DaemonSet 故意禁用此工作流，须经主机 systemd 或已验证的特权 adapter」的说明一致。主机上 `ceshi` 账户不存在，也没有该用户进程。控制器能进入 `Provisioning`，但节点无法产生 `Active` 所需的签名 helper 证据；dispatcher 因而保留 `EntitlementActivationRequested`。该缺口属于实际 IaaS 交付基础设施未部署，不是只差一个 UI 按钮。未安装并验证 Kubernetes/containerd 受管特权 adapter 前，不能宣称 fb2c 的 IaaS、PaaS、MaaS 租赁链路通过。
 
 网站探针：公网 `/mana/`、`/user/`、`/docs/` 与既有 ComfyUI `:5005` 均返回 200；四台 Spark Kubernetes 节点仍为 `Ready`。这只验证入口存活，不等于下发机器或模型调用成功。
+
+## 22:46 收尾：阻止下一张假交付租约
+
+本次 `.178` 机器授权于 21:29:04、CeShi Developer 授权于 22:29 到期，均未续开。到期后再次读取持久层，`fb2c-exclusive-20260927` 仍为 `Expiring`（generation 3），缺少节点清理回执；`.178` 继续隔离，不可标为已释放或再分配。宿主机未出现 `ceshi` 账户；企业侧没有获得机器访问。
+
+源代码现要求创建独占租约前存在覆盖目标节点且未过期的 helper 实测证据，核验开通、撤销、清理和隔离四项能力。管理端直接创建和企业租约审批在无证据时返回 `MachineHelperUnavailable`；付费裸机调度会暂缓分配。已占用节点仍优先返回原有 `409 NodeUnavailable`，不会被新的 `503` 掩盖。这只阻止未来形成同类卡死租约，不会伪造当前 fb2c 的清理回执。
+
+- 两次独立提交 `cff66b5`、`256710a` 已推送 GitHub 与 GitLab `main`；其他工作区改动未纳入。
+- 管理节点 Linux 临时源码树的相关测试 `12/12`、完整 API 测试 `191/191` 通过；本地 `nodelease` 测试 `22/22`，`moon check api --target native --deny-warn` 通过。原生全 API 测试在 macOS 编译过久已中止，不能计作通过；Linux 结果是本轮发布门禁。
+- 新控制器镜像从旧生产摘要 `sha256:72639f80d33bf59404c9e2a03409f4a8418948b885754aeaaf8e8c18fed6ad52` 派生，推送并从内部 registry 重新拉取验证，新摘要为 `sha256:f2bf38e3930dfef1d5c56051ecdec15ee0eeb483ab160901c631ce03b932c189`。仅替换 Deployment 中 `control` 容器，rollout 后 `1/1 Ready`，内部 `/health` 返回 200；`/mana/`、`/user/`、`/docs/`、ComfyUI `:5005` 公网探针均为 200。节点 agent 和 `.176/.177` 试用负载未改。
+- 真实 IaaS 交付、PaaS/MaaS 自助启停以及清理释放**仍未通过**。下一步必须在 Kubernetes/containerd 形态下安装并物理验证特权 helper/凭据签发适配，令节点给出真实 provision/revoke/sanitize 回执，再在新的限时授权下重测；不能只把节点代理开关从 `0` 改成 `1`。
