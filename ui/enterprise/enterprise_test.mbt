@@ -29,6 +29,24 @@ test "enterprise portal separates customer requests from operator assignment" {
 }
 
 ///|
+test "returning to orders does not replay an obsolete success notice" {
+  let state = @enterprise.demo_state()
+  let with_notice = {
+    ..state,
+    offline_commerce: {
+      ..state.offline_commerce,
+      success_message: Some("Draft order created"),
+    },
+  }
+  let reopened = with_notice.update(Navigate(OfflineCommerce))
+  assert_eq(reopened.offline_commerce.success_message, None)
+  assert_eq(
+    reopened.offline_commerce.orders,
+    with_notice.offline_commerce.orders,
+  )
+}
+
+///|
 test "company administrator can invite members in UI without sharing a WebIDE" {
   let state = @enterprise.demo_state()
   let html = @enterprise.render({ ..state, route: AccountAccess, })

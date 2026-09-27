@@ -49,3 +49,30 @@ test "resource chooser hides memory-pressured and unmeasured Sparks" {
     "订单授权截止早于已签租期结束；需重新下单",
   )
 }
+
+///|
+test "unsigned undertaking shows a pending signed term rather than a missing order deadline" {
+  let base = demo_state()
+  let order : UndertakingAllocationRow = {
+    order_id: "order-unsigned",
+    organization_id: "organization-test",
+    purchaser_subject_ref: "subject-test",
+    node_count: 1L,
+    expires_unix_ms: None,
+    status: "AwaitingApprovalOrEvidence",
+    node_ids: [],
+  }
+  let html = render({
+    ..base,
+    locale: ChineseSimplified,
+    route: Leases,
+    resource_delivery: {
+      ..base.resource_delivery,
+      loaded: true,
+      undertaking_orders: [order],
+      selected_undertaking_order: order.order_id,
+    },
+  })
+  assert_true(html.contains("已签租期结束：尚未签署"))
+  assert_false(html.contains("订单授权截止：—"))
+}

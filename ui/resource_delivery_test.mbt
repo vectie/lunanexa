@@ -47,14 +47,14 @@ test "undertaking allocation only enables exact quoted node count after review" 
     ..empty,
     undertaking_orders: [order],
     selected_undertaking_order: "order-a",
-    selected_nodes: ["spark-a", "spark-b"],
+    undertaking_selected_nodes: ["spark-a", "spark-b"],
   }
   assert_false(@ui.undertaking_allocation_available(panel))
-  let reviewed = panel.update(ConfirmResourceIdle)
+  let reviewed = panel.update(ConfirmUndertakingIdle)
   assert_true(@ui.undertaking_allocation_available(reviewed))
   assert_false(
     @ui.undertaking_allocation_available(
-      reviewed.update(ToggleResourceNode("spark-b")),
+      reviewed.update(ToggleUndertakingNode("spark-b")),
     ),
   )
   assert_false(
@@ -72,4 +72,24 @@ test "undertaking allocation only enables exact quoted node count after review" 
   assert_false(
     @ui.undertaking_allocation_available(reviewed.update(AllocateUndertaking)),
   )
+}
+
+///|
+test "undertaking and generic reservation choices never bleed across workflows" {
+  let empty = @ui.default_resource_delivery_panel()
+  let selected = empty.update(ToggleUndertakingNode("spark-a"))
+  assert_eq(selected.undertaking_selected_nodes, ["spark-a"])
+  assert_eq(selected.selected_nodes, [])
+  let reviewed = selected.update(ConfirmUndertakingIdle)
+  assert_true(reviewed.undertaking_confirmed_idle)
+  assert_false(reviewed.confirmed_idle)
+  let generic = reviewed.update(ToggleResourceNode("spark-b"))
+  assert_eq(generic.undertaking_selected_nodes, ["spark-a"])
+  assert_eq(generic.selected_nodes, ["spark-b"])
+  assert_true(generic.undertaking_confirmed_idle)
+  assert_false(generic.confirmed_idle)
+  let switched = generic.update(SelectUndertakingOrder("order-b"))
+  assert_eq(switched.undertaking_selected_nodes, [])
+  assert_false(switched.undertaking_confirmed_idle)
+  assert_eq(switched.selected_nodes, ["spark-b"])
 }

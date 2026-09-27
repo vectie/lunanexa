@@ -64,6 +64,8 @@ pub(all) struct ResourceDeliveryPanel {
   deliveries : Array[ResourceDeliveryRow]
   undertaking_orders : Array[UndertakingAllocationRow]
   selected_undertaking_order : String
+  undertaking_selected_nodes : Array[String]
+  undertaking_confirmed_idle : Bool
   selected_lease : String
   selected_nodes : Array[String]
   confirmed_idle : Bool
@@ -81,6 +83,8 @@ pub(all) enum ResourceDeliveryMessage {
   SelectResourceLease(String)
   ToggleResourceNode(String)
   ConfirmResourceIdle
+  ToggleUndertakingNode(String)
+  ConfirmUndertakingIdle
   ReserveResources
   SelectUndertakingOrder(String)
   AllocateUndertaking
@@ -94,6 +98,8 @@ pub fn default_resource_delivery_panel() -> ResourceDeliveryPanel {
     deliveries: [],
     undertaking_orders: [],
     selected_undertaking_order: "",
+    undertaking_selected_nodes: [],
+    undertaking_confirmed_idle: false,
     selected_lease: "",
     selected_nodes: [],
     confirmed_idle: false,
@@ -121,8 +127,8 @@ pub fn ResourceDeliveryPanel::update(
       {
         ..self,
         selected_undertaking_order: value,
-        selected_nodes: [],
-        confirmed_idle: false,
+        undertaking_selected_nodes: [],
+        undertaking_confirmed_idle: false,
       }
     SelectResourceLease(value) =>
       {
@@ -143,6 +149,20 @@ pub fn ResourceDeliveryPanel::update(
         reservation_id: "",
       }
     ConfirmResourceIdle => { ..self, confirmed_idle: !self.confirmed_idle, }
+    ToggleUndertakingNode(value) =>
+      {
+        ..self,
+        undertaking_selected_nodes: if self.undertaking_selected_nodes.contains(
+            value,
+          ) {
+          self.undertaking_selected_nodes.filter(node => node != value)
+        } else {
+          [..self.undertaking_selected_nodes, value]
+        },
+        undertaking_confirmed_idle: false,
+      }
+    ConfirmUndertakingIdle =>
+      { ..self, undertaking_confirmed_idle: !self.undertaking_confirmed_idle, }
   }
 }
 
@@ -170,8 +190,8 @@ pub fn undertaking_allocation_available(panel : ResourceDeliveryPanel) -> Bool {
     return false
   }
   !panel.loading &&
-  panel.confirmed_idle &&
-  panel.selected_nodes.length().to_int64() == order.node_count
+  panel.undertaking_confirmed_idle &&
+  panel.undertaking_selected_nodes.length().to_int64() == order.node_count
 }
 
 ///|
@@ -371,12 +391,13 @@ fn resource_delivery_view(
               @html.p(
                 localized(
                   state.locale,
-                  "Order authority expires: ",
-                  "订单授权截止：",
+                  "Signed rental term ends: ",
+                  "已签租期结束：",
                 ) +
-                row.expires_unix_ms.map_or("—", value => {
-                  @contractdoc.format_unix_ms_beijing(value)
-                }),
+                row.expires_unix_ms.map_or(
+                  localized(state.locale, "not signed yet", "尚未签署"),
+                  value => @contractdoc.format_unix_ms_beijing(value),
+                ),
               ),
               if row.status == "Allocated" {
                 @html.p(
@@ -406,11 +427,13 @@ fn resource_delivery_view(
               class="quiet-button",
               disabled=panel.loading || !available,
               attrs=@html.Attrs::build().aria_pressed(
-                panel.selected_nodes.contains(node.node_id).to_string(),
+                panel.undertaking_selected_nodes
+                .contains(node.node_id)
+                .to_string(),
               ),
               on_click=command(
                 emit,
-                ResourceDelivery(ToggleResourceNode(node.node_id)),
+                ResourceDelivery(ToggleUndertakingNode(node.node_id)),
               ),
               node.node_id +
               (if available {
@@ -433,10 +456,10 @@ fn resource_delivery_view(
           class="quiet-button",
           disabled=panel.loading,
           attrs=@html.Attrs::build().aria_pressed(
-            panel.confirmed_idle.to_string(),
+            panel.undertaking_confirmed_idle.to_string(),
           ),
-          on_click=command(emit, ResourceDelivery(ConfirmResourceIdle)),
-          if panel.confirmed_idle {
+          on_click=command(emit, ResourceDelivery(ConfirmUndertakingIdle)),
+          if panel.undertaking_confirmed_idle {
             localized(
               state.locale,
               "Idle review confirmed",

@@ -932,6 +932,9 @@ pub fn EnterpriseState::update(
       }
     }
     Navigate(route) => {
+      let offline_commerce = self.offline_commerce.update(
+        @offline_commerce.OfflineCommerceMessage::ClearNotice,
+      )
       let dedicated = if route == AccountAccess {
         self.self_service.order.filter(order => {
           order.kind == DedicatedMaaS && order.status == ActiveOrder
@@ -944,6 +947,7 @@ pub fn EnterpriseState::update(
           {
             ..self,
             route,
+            offline_commerce,
             api_key_issue_draft: {
               ..self.api_key_issue_draft,
               display_name: "Dedicated · \{order.order_id}",
@@ -954,7 +958,14 @@ pub fn EnterpriseState::update(
             success_message: None,
             error_message: None,
           }
-        None => { ..self, route, success_message: None, error_message: None, }
+        None =>
+          {
+            ..self,
+            route,
+            offline_commerce,
+            success_message: None,
+            error_message: None,
+          }
       }
     }
     LocaleChanged(locale) =>

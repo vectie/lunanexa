@@ -979,6 +979,8 @@ pub(all) enum ResourceDeliveryMessage {
   SelectResourceLease(String)
   ToggleResourceNode(String)
   ConfirmResourceIdle
+  ToggleUndertakingNode(String)
+  ConfirmUndertakingIdle
   ReserveResources
   SelectUndertakingOrder(String)
   AllocateUndertaking
@@ -992,6 +994,8 @@ pub(all) struct ResourceDeliveryPanel {
   deliveries : Array[ResourceDeliveryRow]
   undertaking_orders : Array[UndertakingAllocationRow]
   selected_undertaking_order : String
+  undertaking_selected_nodes : Array[String]
+  undertaking_confirmed_idle : Bool
   selected_lease : String
   selected_nodes : Array[String]
   confirmed_idle : Bool

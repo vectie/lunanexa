@@ -5742,6 +5742,8 @@ fn update_live(
             ..loaded,
             selected_lease: panel.selected_lease,
             selected_undertaking_order: panel.selected_undertaking_order,
+            undertaking_selected_nodes: panel.undertaking_selected_nodes,
+            undertaking_confirmed_idle: panel.undertaking_confirmed_idle,
             selected_nodes: panel.selected_nodes,
             confirmed_idle: panel.confirmed_idle,
             reservation_id: panel.reservation_id,

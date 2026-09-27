@@ -111,13 +111,14 @@ fn resource_delivery_command(
           .iter()
           .find_first(row => row.order_id == panel.selected_undertaking_order)
           is Some(order) &&
-          panel.confirmed_idle &&
-          panel.selected_nodes.length().to_int64() == order.node_count else {
+          panel.undertaking_confirmed_idle &&
+          panel.undertaking_selected_nodes.length().to_int64() ==
+          order.node_count else {
           raise Failure("select the exact approved undertaking node count")
         }
         let body : Json = {
           "order_id": order.order_id,
-          "node_ids": panel.selected_nodes.to_json(),
+          "node_ids": panel.undertaking_selected_nodes.to_json(),
           "readiness_confirmation": "allocate-idle-nodes:\{order.order_id}",
         }
         for _ in 0..<20 {
