@@ -238,6 +238,21 @@ test "empty and corrective states tell users what happens next" {
 }
 
 ///|
+test "customer can create another order after a canceled order" {
+  let customer = @offline_commerce.render({
+    ..@offline_commerce.default_state(English, CustomerCommerce),
+    orders: [offline_order(Cancelled)],
+  })
+  assert_true(customer.contains("Create another order"))
+  assert_true(customer.contains("Create draft order"))
+  let operator = @offline_commerce.render({
+    ..@offline_commerce.default_state(English, OperatorCommerce),
+    orders: [offline_order(Cancelled)],
+  })
+  assert_false(operator.contains("Create another order"))
+}
+
+///|
 test "consequential actions require explicit evidence confirmation" {
   let base = {
     ..@offline_commerce.default_state(English, OperatorCommerce),
