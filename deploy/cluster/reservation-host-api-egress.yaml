@@ -1,0 +1,30 @@
+# The controller's reservation host uses its projected ServiceAccount token to
+# observe and fence the four enrolled Spark nodes through kubernetes.default.svc.
+# RBAC separately limits node get/patch to those names and permits pod listing.
+# Keep this policy additive: the base controller policy is managed separately.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lunanexa-reservation-host-api-egress
+  namespace: lunanexa
+spec:
+  podSelector:
+    matchLabels:
+      app: lunanexa-control
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.43.0.1/32
+      ports:
+        - protocol: TCP
+          port: 443
+    # k3s service NAT can apply policy after rewriting to the control-plane
+    # endpoint; permit only that endpoint, not the management subnet.
+    - to:
+        - ipBlock:
+            cidr: 192.0.2.175/32
+      ports:
+        - protocol: TCP
+          port: 6443

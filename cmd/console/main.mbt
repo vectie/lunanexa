@@ -7845,6 +7845,8 @@ fn update_live(
         "invite-user" => ("POST", "/v1/workspace/users", false)
         "grant-access" => ("POST", "/v1/workspace/access-grants", false)
         "create-compute-lease" => ("POST", "/v1/workspace/leases", false)
+        "reserve-exclusive-lease" =>
+          ("POST", "/v1/exclusive-node-leases", false)
         "publish-assignment" => ("PUT", "/v1/assignments", false)
         "invoke-workload" => ("POST", "/v1/workloads", true)
         "record-benchmark" => ("POST", "/v1/benchmarks", false)

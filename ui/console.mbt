@@ -10677,6 +10677,15 @@ fn policies_view(
                 ),
               ),
               @html.option(
+                value="reserve-exclusive-lease",
+                selected=state.operation_name == "reserve-exclusive-lease",
+                localized(
+                  state.locale,
+                  "Reserve exclusive machine lease",
+                  "预留独占机器租约",
+                ),
+              ),
+              @html.option(
                 value="publish-assignment",
                 selected=state.operation_name == "publish-assignment",
                 localized(

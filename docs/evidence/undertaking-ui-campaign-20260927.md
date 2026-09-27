@@ -80,3 +80,23 @@
 保存与自动预览并发时曾出现一次旧修订号 `StaleContractRevision`，前端现于保存成功后按新修订号重新请求预览。Web 镜像 `sha256:c10e9307255a63c0a50cfee241c13abbec1cfbbda8b9bb4fab91652fbab07d1e` 已部署至管理端和企业端，并复验上述状态与预览；部署快照位于 `/tmp/lunanexa-contract-draft-rollout-yV5bCy`。JS 测试 655/655 和 native `moon check --deny-warn` 通过。
 
 **签署前必须核对**：草稿乙方现为「企业专属云 WebIDE 验收（测试）」而非经确认的工商登记名称，且拟定租期是当天起算。用户表示愿意亲自完成真实签署和付款，但在取得真实乙方名称、签署日期并生成最终可下载文件前，不应把这份草稿作为有效签约或付款依据。完整下发和启停释放链路仍待这些真实材料和管理审核完成。
+
+## 20:29 起：fb2c 限时技术验收授权与状态
+
+用户另行确认本次仅对 `fb2c` 订单执行技术验收：为现有 CeShi 账户开通最多 2 小时 Developer 权限，将空闲 Spark `.178` 最多 1 小时独占预留给该企业；到期撤销与清理。签章、付款、发票均记录为**未核验／未支付**，不标记商业履约。这项确认不接受合同，不构成付款证明，也不延长订单租期。`user_authorization_ref` 使用本文件路径，仅作为该精确订单、账户与期限的技术授权记录。
+
+管理 UI 已完成 `grant-fb2c-20260927`（Developer，至 2026-09-27 22:29 北京时间）及 `lease-fb2c-20260927`（工作区，原定至 21:29 北京时间）。在「租约 → 整机资源交付」勾选 `.178` 并点击「预留所选整机」后，调度器生成 `reservation-7f7e62df-6ffd-4737-ab23-d7869edff5d8`，但这**不是**承诺函技术豁免要求的独占机器租约。为避免双重占用，已通过管理 UI 结束上述工作区租约；资源预留进入 `Draining`，尚未显示 `Released`。此时节点监控的独占租约仍为「未分配」，企业端也没有机器权限。不能把这些中间状态算作已交付。
+
+后续查明 `Draining` 的根因：`lunanexa-control` 的 Kubernetes RBAC 已准许对四台 Spark 的节点 get/patch 和 pod list，但 NetworkPolicy 未准许控制器到 `kubernetes.default.svc` API 的出站连接。增补精确指向 `10.43.0.1:443` 与其 k3s NAT 后端 `192.0.2.175:6443` 的出站规则后，原预留自动从 `Draining` 变为 `Released`；管理 UI 已刷新确认。没有触碰 `.176/.177` 的试用负载。
+
+| 顺序 | 公网 UI 按钮与状态 | 核验结论 |
+| --- | --- | --- |
+| 34 | 管理端「策略 → 类型化运维操作 → 预留独占机器租约 → 验证并提交」 | 新增了缺失的操作入口，创建 `.178` 的 `fb2c-exclusive-20260927`，限定同一 CeShi subject，至 21:29:04；「租约」页显示「已预留」。这才是独占机器租约，而不是调度器预留。 |
+| 35 | 管理端「线下商务 → fb2c → 审阅本订单测试豁免 → 根据此证据确认」 | 状态版本 4、显示「未签署 · 未付款」、绑定上述独占租约和授权文档；没有伪造合同、付款、发票或商业审核。 |
+| 36 | 管理端「开通限时测试权限 → 根据此证据确认」 | 订单进入 `FulfillmentPending`；双端尚未有机器入口，不能算已交付。独占租约随后从「已预留」变为「正在开通」（`Provisioning`）。 |
+| 37 | 企业端「我的机器」 | 仍显示 0 条访问记录，状态与管理端开通中一致，未错误给出 SSH 入口。 |
+| 38 | 管理端「租约 → 终止并清理… → 确认操作」 | 在发现节点侧能力缺口后提前停止未完成的测试开通；界面显示「故障关闭式清理」，机器保持不可用直至真实清理证据返回。 |
+
+**新发现的硬堵点**：Spark `.178` 的 Kubernetes 节点代理生产配置是 `LUNANEXA_EXCLUSIVE_LEASES_ENABLED=0`；主机没有 `/usr/libexec/lunanexa-lease-helper`、sudoers 规则、`lunanexa` 服务账户或运行中的 host-systemd agent。这与[独占租约设计](/Users/kq/Workspace/lunanexa/docs/EXCLUSIVE_NODE_LEASES.md)中「Kubernetes DaemonSet 故意禁用此工作流，须经主机 systemd 或已验证的特权 adapter」的说明一致。主机上 `ceshi` 账户不存在，也没有该用户进程。控制器能进入 `Provisioning`，但节点无法产生 `Active` 所需的签名 helper 证据；dispatcher 因而保留 `EntitlementActivationRequested`。该缺口属于实际 IaaS 交付基础设施未部署，不是只差一个 UI 按钮。未安装并验证 Kubernetes/containerd 受管特权 adapter 前，不能宣称 fb2c 的 IaaS、PaaS、MaaS 租赁链路通过。
+
+网站探针：公网 `/mana/`、`/user/`、`/docs/` 与既有 ComfyUI `:5005` 均返回 200；四台 Spark Kubernetes 节点仍为 `Ready`。这只验证入口存活，不等于下发机器或模型调用成功。
