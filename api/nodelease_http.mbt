@@ -535,6 +535,13 @@ async fn ApiService::handle_exclusive_lease_management(
           409, "NodeUnavailable", "exclusive lease node is not enrolled", false,
         )
       }
+      let now = @async.now()
+      if !self.machine_helper_ready_for_node(intent.node_id, now) {
+        return api_error(
+          503, "MachineHelperUnavailable", "node-side exclusive lease provision, revoke and sanitization have not been verified for this node",
+          true,
+        )
+      }
       if self.scheduler is Some(scheduler) &&
         scheduler.node_is_reserved(intent.node_id) {
         return api_error(
@@ -677,5 +684,19 @@ async fn ApiService::handle_exclusive_lease_management(
         false,
       )
     _ => api_error(404, "NotFound", "route was not found", false)
+  }
+}
+
+///|
+fn ApiService::machine_helper_ready_for_node(
+  self : ApiService,
+  node_id : String,
+  now_unix_ms : Int64,
+) -> Bool {
+  match self.machine_helper_adapter_evidence {
+    Some(evidence) =>
+      @nodelease.machine_helper_adapter_evidence_ready(evidence, now_unix_ms) &&
+      evidence.covered_node_ids.contains(node_id)
+    None => false
   }
 }

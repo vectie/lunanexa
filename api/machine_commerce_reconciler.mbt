@@ -151,7 +151,10 @@ async fn ApiService::machine_bare_node(
   let reserved_managed_nodes = self.machine_reserved_managed_nodes()
   candidates
   .iter()
-  .find_first(node_id => !reserved_managed_nodes.contains(node_id))
+  .find_first(node_id => {
+    !reserved_managed_nodes.contains(node_id) &&
+    self.machine_helper_ready_for_node(node_id, now_unix_ms)
+  })
 }
 
 ///| Starts provisioning only after the payment callback has durably reserved

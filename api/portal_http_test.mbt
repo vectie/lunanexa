@@ -22,7 +22,7 @@ async test "enterprise user signs, requests, and operator assigns exactly one no
     "\{directory}/exclusive.json",
     "lease-secret",
   )
-  let service = @api.ApiService::new(
+  let unverified_service = @api.ApiService::new(
       durable, runtime, "operator-token", "inference-token", "node-token", "0.1.0",
     )
     .with_portal_store(portal_store)
@@ -34,6 +34,9 @@ async test "enterprise user signs, requests, and operator assigns exactly one no
       "https://provider.example",
     )
     .with_exclusive_lease_store(exclusive_store)
+  let service = unverified_service.with_machine_helper_adapter_evidence(
+    verified_lease_helper_for_node_a(),
+  )
   let operator = { "Authorization": "Bearer operator-token" }
   let tenant = {
     "Authorization": "Bearer inference-token",
@@ -158,19 +161,27 @@ async test "enterprise user signs, requests, and operator assigns exactly one no
   let request : @portal.EnterpriseLeaseRequest = @json.from_json(
     @json.parse(submitted.body),
   )
+  let review : @portal.LeaseReview = {
+    request_id: "request-a",
+    expected_generation: request.generation,
+    decision: Approve,
+    node_id: Some("node-a"),
+    evidence_receipt: "operator:approved:a",
+  }
+  let unavailable = unverified_service.handle(
+    Post,
+    "/v1/portal/operator/lease-reviews",
+    operator,
+    review.to_json().stringify(),
+  )
+  assert_eq(unavailable.status, 503)
+  assert_true(unavailable.body.contains("MachineHelperUnavailable"))
+  assert_eq(exclusive_store.leases().length(), 0)
   let approved = service.handle(
     Post,
     "/v1/portal/operator/lease-reviews",
     operator,
-    @portal.LeaseReview::{
-      request_id: "request-a",
-      expected_generation: request.generation,
-      decision: Approve,
-      node_id: Some("node-a"),
-      evidence_receipt: "operator:approved:a",
-    }
-    .to_json()
-    .stringify(),
+    review.to_json().stringify(),
   )
   assert_eq(approved.status, 200)
   let final_request : @portal.EnterpriseLeaseRequest = @json.from_json(

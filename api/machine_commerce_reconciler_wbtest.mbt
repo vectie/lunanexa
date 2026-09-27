@@ -29,6 +29,25 @@ priv struct TestMachineOrderRequest {
 } derive(ToJson)
 
 ///|
+fn verified_machine_commerce_helper() -> @nodelease.MachineHelperAdapterReadinessEvidence {
+  let now = @async.now()
+  {
+    version: @nodelease.helper_adapter_readiness_contract_version,
+    adapter_id: "test-machine-helper",
+    node_scope: "test-machine-fleet",
+    covered_node_ids: ["physical-node-a"],
+    evidence_ref: "test-machine-helper-drill",
+    checked_unix_ms: now,
+    expires_unix_ms: now + 600000L,
+    provision_verified: true,
+    revoke_verified: true,
+    sanitize_verified: true,
+    quarantine_verified: true,
+    signature: "0000000000000000000000000000000000000000000000000000000000000000",
+  }
+}
+
+///|
 fn machine_dedicated_template() -> @deployment.ModelServiceTemplate {
   {
     template_id: "text-small",
@@ -494,6 +513,7 @@ async test "settled bare order provisions internally without leaking its node" {
       durable, runtime, "operator-token", "inference-token", "node-token", "0.1.0",
     )
     .with_exclusive_lease_store(leases)
+    .with_machine_helper_adapter_evidence(verified_machine_commerce_helper())
     .with_lease_helper_receipt_secret(
       "machine-test-helper-receipt-key-more-than-32-bytes",
     )
@@ -506,6 +526,11 @@ async test "settled bare order provisions internally without leaking its node" {
       "provider-adapter-token-more-than-32-bytes", "provider-a", "sandbox", "https://provider.example",
     )
   let service = { ..configured, commercial_store: commercial, }
+  let unverified_service = { ..service, machine_helper_adapter_evidence: None, }
+  assert_eq(
+    unverified_service.machine_bare_node(base_offering, @async.now()),
+    None,
+  )
   let customer_headers = {
     "Authorization": "Bearer inference-token",
     "X-LunaNexa-Subject": "subject-a",

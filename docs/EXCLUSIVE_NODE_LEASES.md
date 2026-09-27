@@ -180,6 +180,15 @@ not runnable inside its least-privileged pod; use the documented host-systemd
 layout or supply and physically verify a separate privileged adapter before
 enabling exclusive leases.
 
+The management API and enterprise approval flow reject new exclusive leases
+with `MachineHelperUnavailable`, while the paid bare-machine reconciler defers
+provisioning, unless current adapter-readiness evidence covers
+the requested node and verifies provisioning, revocation, sanitization and
+quarantine. A registered node and a healthy heartbeat alone do not prove that
+an IaaS machine can be delivered. Existing leases remain fenced until their
+node-side cleanup receipts are verified; losing adapter evidence does not
+release a node.
+
 The leased account must not have write access outside its dedicated home and
 rootless runtime storage. Production hosts must enforce that with filesystem
 permissions and a reviewed per-user temporary-directory/mount namespace policy;

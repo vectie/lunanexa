@@ -2,6 +2,25 @@
 let lease_helper_test_secret = "lease-helper-test-receipt-secret-more-than-thirty-two-bytes"
 
 ///|
+fn verified_lease_helper_for_node_a() -> @nodelease.MachineHelperAdapterReadinessEvidence {
+  let now = @async.now()
+  {
+    version: @nodelease.helper_adapter_readiness_contract_version,
+    adapter_id: "test-host-helper",
+    node_scope: "test-node-a",
+    covered_node_ids: ["node-a"],
+    evidence_ref: "test-helper-drill",
+    checked_unix_ms: now,
+    expires_unix_ms: now + 600000L,
+    provision_verified: true,
+    revoke_verified: true,
+    sanitize_verified: true,
+    quarantine_verified: true,
+    signature: "0000000000000000000000000000000000000000000000000000000000000000",
+  }
+}
+
+///|
 fn exclusive_lease_intent(now : Int64) -> @nodelease.ExclusiveNodeLeaseIntent {
   {
     version: @nodelease.contract_version,
@@ -46,12 +65,24 @@ async test "exclusive lease reserves only the named node and fences managed work
     "\{directory}/exclusive-leases.json",
     "lease-signing-secret",
   )
-  let service = @api.ApiService::with_control_plane(
+  let unverified_service = @api.ApiService::with_control_plane(
     durable, registry, enrollment, scheduler, telemetry, runtime, "operator-token",
     "inference-token", "node-token", "0.1.0",
   ).with_exclusive_lease_store(lease_store)
   let operator_headers = { "Authorization": "Bearer operator-token" }
   let now = @async.now()
+  let unavailable = unverified_service.handle(
+    Post,
+    "/v1/exclusive-node-leases",
+    operator_headers,
+    exclusive_lease_intent(now).to_json().stringify(),
+  )
+  assert_eq(unavailable.status, 503)
+  assert_true(unavailable.body.contains("MachineHelperUnavailable"))
+  assert_eq(lease_store.leases().length(), 0)
+  let service = unverified_service.with_machine_helper_adapter_evidence(
+    verified_lease_helper_for_node_a(),
+  )
   let reserved = service.handle(
     Post,
     "/v1/exclusive-node-leases",
@@ -130,6 +161,7 @@ async test "exclusive lease activation is generation fenced and rejects raw cred
       durable, runtime, "operator-token", "inference-token", "node-token", "0.1.0",
     )
     .with_exclusive_lease_store(lease_store)
+    .with_machine_helper_adapter_evidence(verified_lease_helper_for_node_a())
     .with_lease_helper_receipt_secret(lease_helper_test_secret)
   let headers = { "Authorization": "Bearer operator-token" }
   let now = @async.now()
@@ -731,6 +763,7 @@ async test "exclusive lease also blocks one-click deployment planning" {
     .with_deployment_store(deployments, available_secret_refs=["runtime-token"])
     .with_assignment_signing_secret("assignment-secret")
     .with_exclusive_lease_store(lease_store)
+    .with_machine_helper_adapter_evidence(verified_lease_helper_for_node_a())
   let headers = { "Authorization": "Bearer operator-token" }
   let registered = service.handle(
     Post,
