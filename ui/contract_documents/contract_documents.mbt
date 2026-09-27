@@ -2713,11 +2713,12 @@ fn customer_governance_status(
     value.status == Pending || value.status == Approved
   })
   let expiry = packet.value("lease.end_date")
-  let countdown = contract_expiry_countdown(
-    state.locale,
-    expiry,
-    state.now_unix_ms,
-  )
+  let effective = packet.state == Effective
+  let countdown = if effective {
+    contract_expiry_countdown(state.locale, expiry, state.now_unix_ms)
+  } else {
+    copy(state.locale, "Not in effect", "尚未生效")
+  }
   let approval_label = fn(
     status : @contractdoc.ContractApprovalStatus,
   ) -> String {
@@ -2783,16 +2784,26 @@ fn customer_governance_status(
           ),
         ]),
         @html.div(class="contract-expiry-card", [
-          @html.span(copy(state.locale, "Contract expiry", "合同到期")),
+          @html.span(
+            if effective {
+              copy(state.locale, "Contract expiry", "合同到期")
+            } else {
+              copy(state.locale, "Planned rental end", "拟定租期结束")
+            },
+          ),
           @html.strong(countdown),
           @html.small(
             match expiry {
               Some(date) =>
-                copy(
-                  state.locale,
-                  "\{date} · UTC calendar date",
-                  "\{date} · UTC 日历日期",
-                )
+                if effective {
+                  copy(
+                    state.locale,
+                    "\{date} · UTC calendar date",
+                    "\{date} · UTC 日历日期",
+                  )
+                } else {
+                  date
+                }
               None => "—"
             },
           ),

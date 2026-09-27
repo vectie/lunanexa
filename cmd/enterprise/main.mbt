@@ -6076,7 +6076,9 @@ fn update(
           },
         },
       }
-      start_contract_poll(next, packet, emit)
+      // A field edit may have scheduled a preview against the old revision.
+      // Invalidate that request and render the saved revision immediately.
+      schedule_contract_preview(next, next.portal.contract_documents, 0, emit)
     }
     Outcome(ContractApprovalNudged) =>
       (

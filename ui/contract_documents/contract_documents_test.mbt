@@ -847,6 +847,26 @@ test "customer sees approval progress obligations and expiry without operator ac
 }
 
 ///|
+test "unsigned draft does not claim its planned end is an active contract expiry" {
+  let draft = {
+    ..packet(InformationDraft),
+    values: [{ field_id: "lease.end_date", value: "2026-09-28", }],
+  }
+  let html = @contract_documents.render({
+    ..@contract_documents.default_state(ChineseSimplified),
+    manifest: Some(@contractdoc.youthpolicy_remote_lease_manifest()),
+    packets: [draft],
+    selected_packet_id: Some(draft.packet_id),
+    now_unix_ms: @contractdoc.calendar_date_days("2026-09-27").unwrap() *
+    86400000L,
+  })
+  assert_true(html.contains("拟定租期结束"))
+  assert_true(html.contains("尚未生效"))
+  assert_false(html.contains("合同到期 剩余"))
+  assert_false(html.contains("2026-09-28 · UTC 日历日期"))
+}
+
+///|
 test "operator portfolio switcher scopes tenants and searches durable identifiers" {
   let packet_a = packet(Effective)
   let packet_b : @contractdoc.ContractPacket = {
