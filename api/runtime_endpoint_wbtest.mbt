@@ -138,12 +138,15 @@ async fn exercise_runtime_route_discovery(
   )
   assert_eq(configured.media.unwrap().runtime.reconcile(), (0, 1))
   assert_eq(jobs.get(job.job_id, owner).state, Queued)
+  let replacement_now = @async.now()
   service.store.put_heartbeat({
     ..current,
+    timestamp_unix_ms: replacement_now,
     runtime_endpoints: Some([
       {
         ..endpoint,
         instance_id: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        observed_unix_ms: replacement_now,
       },
     ]),
   })

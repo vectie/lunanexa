@@ -535,18 +535,18 @@ async fn ApiService::handle_exclusive_lease_management(
           409, "NodeUnavailable", "exclusive lease node is not enrolled", false,
         )
       }
-      let now = @async.now()
-      if !self.machine_helper_ready_for_node(intent.node_id, now) {
-        return api_error(
-          503, "MachineHelperUnavailable", "node-side exclusive lease provision, revoke and sanitization have not been verified for this node",
-          true,
-        )
-      }
       if self.scheduler is Some(scheduler) &&
         scheduler.node_is_reserved(intent.node_id) {
         return api_error(
           409, "NodeUnavailable", "node belongs to an exclusive resource reservation",
           false,
+        )
+      }
+      let now = @async.now()
+      if !self.machine_helper_ready_for_node(intent.node_id, now) {
+        return api_error(
+          503, "MachineHelperUnavailable", "node-side exclusive lease provision, revoke and sanitization have not been verified for this node",
+          true,
         )
       }
       let accepted = try leases.issue(intent, @async.now()) catch {
