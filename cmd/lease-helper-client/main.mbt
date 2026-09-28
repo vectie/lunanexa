@@ -62,6 +62,28 @@ fn expected_action(args : Array[String]) -> @nodelease.LeaseAgentAction? {
 }
 
 ///|
+fn helper_invocation(
+  helper_args : Array[String],
+  host_root : String?,
+) -> (String, Array[String]) raise {
+  match host_root {
+    None | Some("") =>
+      (
+        "/usr/bin/sudo",
+        [
+          "--non-interactive", "/usr/libexec/lunanexa-lease-helper", ..helper_args,
+        ],
+      )
+    Some("/host") =>
+      (
+        "/usr/sbin/chroot",
+        ["/host", "/usr/libexec/lunanexa-lease-helper", ..helper_args],
+      )
+    Some(_) => raise Failure::Failure("lease helper host root must be /host")
+  }
+}
+
+///|
 async fn main {
   let args = @env.args()
   guard expected_action(args) is Some(action) &&
@@ -70,9 +92,13 @@ async fn main {
     raise Failure::Failure("lease helper client rejected unsafe arguments")
   }
   let helper_args = args[1:].to_owned()
+  let (program, invoked_args) = helper_invocation(
+    helper_args,
+    @env.get_env_var("LUNANEXA_LEASE_HELPER_HOST_ROOT"),
+  )
   let (status, stdout) = @process.collect_stdout(
-    "/usr/bin/sudo",
-    ["--non-interactive", "/usr/libexec/lunanexa-lease-helper", ..helper_args],
+    program,
+    invoked_args,
     extra_env={
       "PATH": "/usr/sbin:/usr/bin:/sbin:/bin",
       "HOME": "/var/lib/lunanexa",

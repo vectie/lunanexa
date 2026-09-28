@@ -246,6 +246,11 @@ async fn execute_lease_action(
   let (status, stdout) = @process.collect_stdout(
     helper,
     args,
+    extra_env={
+      "LUNANEXA_LEASE_HELPER_HOST_ROOT": @env.get_env_var(
+        "LUNANEXA_LEASE_HELPER_HOST_ROOT",
+      ).unwrap_or(""),
+    },
     inherit_env=false,
   )
   if status != 0 {
@@ -287,7 +292,12 @@ async fn flush_lease_observation(
       (true, false)
     }
   } catch {
-    _ => (true, false)
+    error => {
+      println(
+        "node agent: exclusive lease observation transport failed: \{error.to_string()}",
+      )
+      (true, false)
+    }
   }
 }
 
@@ -302,6 +312,27 @@ async fn reconcile_exclusive_lease(
   receipt_stale_after_ms : Int64,
 ) -> Unit {
   let now = @async.now()
+  // A remote Expiring/Draining directive can move the guard out of its
+  // receipt-bearing local state. Deliver that signed receipt before applying
+  // another copy of the directive, including after an agent restart.
+  let (had_pending_before_fetch, accepted_before_fetch) = flush_lease_observation(
+    base, node_id, token, lease_guard,
+  )
+  if had_pending_before_fetch {
+    persist_lease_guard(state_path, lease_guard)
+    if !accepted_before_fetch {
+      let pending_action = lease_guard.pending_helper_action()
+      let stale = @nodelease.helper_receipt_timestamp_unverified(
+          pending_action,
+          lease_guard.snapshot().last_receipt,
+        )
+        .map(timestamp => now - timestamp >= receipt_stale_after_ms)
+        .unwrap_or(false)
+      if !stale {
+        return
+      }
+    }
+  }
   let mut control_available = true
   let mut action = try {
     let (response, body) = @http.get(
@@ -881,7 +912,8 @@ async fn reconcile_once(
 
 ///|
 async fn main {
-  if @env.args().length() == 2 && @env.args()[1] == "--inspect-host-resources" {
+  let args = @env.args()
+  if args.length() == 2 && args[1] == "--inspect-host-resources" {
     println(
       ToJson::to_json(@node_agent.collect_linux_host_resources()).stringify(),
     )
@@ -903,6 +935,37 @@ async fn main {
   let token = host_secret(
     "LUNANEXA_NODE_TOKEN", "LUNANEXA_NODE_TOKEN_PATH", "/etc/lunanexa/node-token",
   )
+  if args.length() == 2 && args[1] == "--lease-only" {
+    if @env.get_env_var("LUNANEXA_EXCLUSIVE_LEASES_ENABLED") != Some("1") {
+      raise Failure::Failure(
+        "lease-only node process requires exclusive leases enabled",
+      )
+    }
+    let lease_state_path = @env.get_env_var("LUNANEXA_LEASE_STATE_PATH").unwrap_or(
+      "lunanexa-exclusive-lease-agent.json",
+    )
+    let lease_guard = load_lease_guard(lease_state_path, node_id)
+    let lease_helper = @env.get_env_var("LUNANEXA_LEASE_HELPER").unwrap_or(
+      "/usr/libexec/lunanexa-lease-helper-client",
+    )
+    while true {
+      reconcile_exclusive_lease(
+        base,
+        node_id,
+        token,
+        lease_helper,
+        lease_guard,
+        lease_state_path,
+        global_settings.control_timing.lease_receipt_stale_after_ms,
+      ) catch {
+        error =>
+          println(
+            "LunaNexa lease-only reconciliation failed: \{error.to_string()}",
+          )
+      }
+      @async.sleep(global_settings.control_timing.node_reconcile_interval_ms)
+    }
+  }
   let certificate_path = @env.get_env_var("LUNANEXA_NODE_CERTIFICATE_PATH").unwrap_or(
     "lunanexa-node-certificate.json",
   )

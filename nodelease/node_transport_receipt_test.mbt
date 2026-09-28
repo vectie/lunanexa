@@ -162,3 +162,43 @@ test "node lease carries only exact controller-authorized helper actions" {
     None,
   )
 }
+
+///|
+test "revoked access authorizes host sanitization before cleanup observation" {
+  let lease : @nodelease.ExclusiveNodeLease = {
+    intent: {
+      version: @nodelease.contract_version,
+      idempotency_key: "request-sanitize-transport",
+      lease_id: "lease-sanitize-transport",
+      node_id: "node-a",
+      subject_ref: "subject-a",
+      unix_username: "tenant_a",
+      access_credential_ref: "ssh-cert:lease-sanitize-transport",
+      starts_unix_ms: 1000L,
+      expires_unix_ms: 9000L,
+    },
+    state: RevokingAccess,
+    generation: 5L,
+    created_unix_ms: 1000L,
+    updated_unix_ms: 1100L,
+    evidence_receipt: "controller:revoked",
+    authority_receipt: "controller-only-authority-secret",
+  }
+  let helper_secret = "root-helper-authorization-secret-more-than-32-bytes"
+  let envelope = @nodelease.node_transport_lease_with_helper_authorizations(
+    lease, "node-a", "node-a-credential", helper_secret, 2000L,
+  )
+  let sanitize = @nodelease.LeaseAgentAction::SanitizeLease(
+    lease_id="lease-sanitize-transport",
+    username="tenant_a",
+    generation=5L,
+  )
+  let authorization = @nodelease.helper_authorization_from_transport_lease(
+    envelope, sanitize, 2000L,
+  ).unwrap()
+  assert_true(
+    @nodelease.valid_helper_authorization(
+      sanitize, authorization, helper_secret, 2000L,
+    ),
+  )
+}

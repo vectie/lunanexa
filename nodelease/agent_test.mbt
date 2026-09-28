@@ -179,6 +179,10 @@ test "offline expiry revocation is durable and waits for controller fencing" {
   }
   assert_eq(pending.action, "revoke")
   assert_true(lease_guard.tick(2100L) is NoAction)
+  // A repeated same-generation directive must not discard signed cleanup
+  // evidence before its transport succeeds.
+  assert_true(lease_guard.observe_remote(Some(active), 2101L) is NoAction)
+  assert_true(lease_guard.pending_observation(2102L) is Some(_))
   let restored = @nodelease.LeaseAgentGuard::from_snapshot(
     lease_guard.snapshot(),
   )

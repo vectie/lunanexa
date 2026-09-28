@@ -96,7 +96,9 @@ pub fn node_transport_lease_with_helper_authorizations(
           _ => None
         }
       SanitizeLease(..) =>
-        if lease.state == Sanitizing || lease.state == Completed {
+        if lease.state == RevokingAccess ||
+          lease.state == Sanitizing ||
+          lease.state == Completed {
           Some(issued_unix_ms)
         } else {
           None

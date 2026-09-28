@@ -31,10 +31,15 @@ while [ $# -gt 0 ]; do
 done
 
 AGENT="$SOURCE/_build/native/release/build/vectie/lunanexa/cmd/node/node.exe"
+[ -x "$AGENT" ] || AGENT="$SOURCE/_build/native/release/build/cmd/node/node.exe"
 [ -x "$AGENT" ] || { echo "no agent binary at $AGENT; build cmd/node first" >&2; exit 1; }
+LEASE_CLIENT="$SOURCE/_build/native/release/build/vectie/lunanexa/cmd/lease-helper-client/lease-helper-client.exe"
+[ -x "$LEASE_CLIENT" ] || LEASE_CLIENT="$SOURCE/_build/native/release/build/cmd/lease-helper-client/lease-helper-client.exe"
+[ -x "$LEASE_CLIENT" ] || { echo "no lease helper client at $LEASE_CLIENT; build cmd/lease-helper-client first" >&2; exit 1; }
 if [ -z "$PROXY" ]; then
   for candidate in \
     "$SOURCE/_build/native/release/build/vectie/lunanexa/cmd/loopback-proxy/loopback-proxy.exe" \
+    "$SOURCE/_build/native/release/build/cmd/loopback-proxy/loopback-proxy.exe" \
     "$HOME/lunanexa-loopback-proxy-arm64" \
     "$HOME/lunanexa-loopback-proxy"; do
     [ -x "$candidate" ] && PROXY="$candidate" && break
@@ -47,12 +52,14 @@ case "$WORK" in
   ""|/|"$HOME"|"$SOURCE") echo "unsafe image work directory: $WORK" >&2; exit 2 ;;
 esac
 rm -rf "$WORK"
-mkdir -p "$ROOT"/usr/local/bin "$ROOT"/usr/bin "$ROOT"/lib/aarch64-linux-gnu \
+mkdir -p "$ROOT"/usr/local/bin "$ROOT"/usr/bin "$ROOT"/usr/sbin "$ROOT"/lib/aarch64-linux-gnu \
   "$ROOT"/usr/lib/aarch64-linux-gnu "$ROOT"/etc/ssl/certs "$ROOT"/data/models \
   "$ROOT"/var/lib/lunanexa "$WORK"/oci/blobs/sha256
 
 install -m 0755 "$AGENT" "$ROOT/usr/local/bin/lunanexa-node"
 install -m 0755 "$PROXY" "$ROOT/usr/local/bin/lunanexa-loopback-proxy"
+install -m 0755 "$LEASE_CLIENT" "$ROOT/usr/local/bin/lunanexa-lease-helper-client"
+install -m 0755 /usr/sbin/chroot "$ROOT/usr/sbin/chroot"
 install -m 0755 /usr/bin/nvidia-smi "$ROOT/usr/bin/nvidia-smi"
 
 # The agent measures the GPUs it owns through nvidia-smi and the NVML library.
