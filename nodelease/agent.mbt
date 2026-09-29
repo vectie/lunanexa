@@ -174,9 +174,11 @@ pub fn LeaseAgentGuard::observe_remote(
       // The controller can repeat a directive while an observation is in
       // flight. Keep the helper receipt until it is acknowledged instead of
       // letting tick() replace its receipt-bearing state.
-      if (self.snapshot.state == SanitizationPending ||
-        self.snapshot.state == Sanitized ||
-        self.snapshot.state == QuarantinedAgent) &&
+      if (
+          self.snapshot.state == SanitizationPending ||
+          self.snapshot.state == Sanitized ||
+          self.snapshot.state == QuarantinedAgent
+        ) &&
         self.pending_observation(now_unix_ms) is Some(_) {
         return NoAction
       }
