@@ -112,6 +112,15 @@ profile has one active WebIDE identity; switching or logging out closes its old
 gateway session. Sessions are ephemeral and fail closed after a gateway restart;
 workflows and uploaded/generated files remain in the workspace volume.
 
+Hosted MoonRobo is a third customer WebIDE profile. It runs MoonRobo's native
+Rabbita cockpit and HTTP host in a pinned, CPU-only personal application image
+on the workspace-host role. LunaNexa owns the lease-bound launch gateway,
+isolation, storage and health probe, while MoonRobo owns its robot contract and
+safety decisions. The shared hosted profile has no physical bridge, SDK or
+robot device access; it must not be placed into managed inference node
+assignments. A physical robot runtime needs separate qualification and
+authority outside this hosted WebIDE profile.
+
 Authorization outages fail closed for HTTP, WebSocket and model access, but
 are not revocation evidence. A transient transport failure, rate limit or
 unexpected controller response must not invalidate a still-unexpired browser

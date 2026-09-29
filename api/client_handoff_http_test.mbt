@@ -268,8 +268,14 @@ async fn check_workspace_handoff(private_cloud : Bool) -> Unit {
     launch_uri: "https://creative.example.invalid/connect",
     public_api_base_url: "https://moongate.example.invalid/v1",
   }
+  let robo_config = {
+    ..desktop_config,
+    client_id: "moonrobo",
+    display_name: "MoonRobo",
+    launch_uri: "https://robot.example.invalid/connect",
+  }
   let service = service.with_client_launch_catalog([
-    desktop_config, comfy_config,
+    desktop_config, comfy_config, robo_config,
   ])
   let blocked_local = service.with_client_launch_catalog([
     { ..desktop_config, client_id: "desktop-workspace", },
@@ -341,8 +347,9 @@ async fn check_workspace_handoff(private_cloud : Bool) -> Unit {
   guard @json.parse(catalog.body) is Array(clients) else {
     fail("expected WebIDE catalog")
   }
-  assert_eq(clients.length(), 2)
+  assert_eq(clients.length(), 3)
   assert_true(catalog.body.contains("ComfyUI"))
+  assert_true(catalog.body.contains("MoonRobo"))
   assert_false(catalog.body.contains("api_secret"))
   assert_eq(
     service.handle(Get, "/v1/portal/self/clients", Map([]), "").status,
@@ -485,6 +492,42 @@ async fn check_workspace_handoff(private_cloud : Bool) -> Unit {
     fail("missing provider binding")
   }
   assert_eq(comfy_api, comfy_config.public_api_base_url)
+  let robo_issued = service.handle(
+    Post,
+    "/v1/portal/self/client-handoffs",
+    enterprise_headers,
+    (
+      {
+        "request_id": "robo-request-1",
+        "client_id": "moonrobo",
+        "project_id": "project-client",
+        "allowed_models": ["text.default"],
+      } : Json).stringify(),
+  )
+  assert_eq(robo_issued.status, 201)
+  guard @json.parse(robo_issued.body)
+    is { "handoff_code": String(robo_code), "launch_uri": String(robo_uri), .. } else {
+    fail("expected MoonRobo bridge handoff")
+  }
+  assert_eq(robo_uri, robo_config.launch_uri)
+  assert_eq(
+    service.handle(
+      Post,
+      "/v1/client-handoffs:redeem",
+      Map([]),
+      ({ "client_id": "comfyui", "handoff_code": robo_code } : Json).stringify(),
+    ).status,
+    403,
+  )
+  assert_eq(
+    service.handle(
+      Post,
+      "/v1/client-handoffs:redeem",
+      Map([]),
+      ({ "client_id": "moonrobo", "handoff_code": robo_code } : Json).stringify(),
+    ).status,
+    200,
+  )
   assert_eq(
     service.handle(
       Post,

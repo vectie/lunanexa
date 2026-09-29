@@ -26,6 +26,7 @@ pub extend ExclusivePlacement with Debug::{to_repr}
 /// The adapter runs as UID 1000; its HOME and work directory are persistent.
 pub(all) struct ExclusiveContainer {
   image : String
+  companion_image : String?
   command : Array[String]
   args : Array[String]
   port : Int
@@ -102,6 +103,10 @@ fn WorkspaceHost::place_container(
   }
   pod["initContainers"] = []
   if !pinned_image(container.image) ||
+    (
+      grant.client_id == "moontown" &&
+      !pinned_image(container.companion_image.unwrap_or(""))
+    ) ||
     container.port < 1024 ||
     container.port > 65535 ||
     container.cpu_millis < 100 ||
@@ -122,6 +127,28 @@ fn WorkspaceHost::place_container(
   ]
   let private_mounts : Array[Json] = []
   let private_env : Array[Json] = []
+  if grant.client_id == "moontown" {
+    let service_name = resource_name(@webide.workspace_id(grant))
+    app_env.push({ "name": "MOONSUITE_ROOT", "value": "/workspace" })
+    app_env.push({ "name": "MOONTOWN_HOSTED_WEBIDE", "value": "true" })
+    app_env.push({
+      "name": "MOONTOWN_MOONGATE_MODEL",
+      "value": grant.allowed_models.get(0).unwrap_or(""),
+    })
+    app_env.push({
+      "name": "MOONTOWN_HOSTED_SERVICE_HOST",
+      "value": "\{service_name}.\{self.config.namespace_name}.svc.cluster.local:8188",
+    })
+    app_env.push({ "name": "MOONTOWN_DESKTOP_BIND", "value": "0.0.0.0:17842" })
+    app_env.push({
+      "name": "MOONTOWN_DESKTOP_STATIC_ROOT",
+      "value": "/opt/moontown/ui",
+    })
+    app_env.push({
+      "name": "MOONTOWN_OPERATOR_POLICY_PATH",
+      "value": "/opt/moontown/assets/templates/operator-request-policy.json",
+    })
+  }
   if grant.client_id == "desktop-workspace" {
     // MoonDesk verifies the MoonClaw PID recorded in its shared workspace.
     // These companion containers belong to one user's isolated pod.
@@ -212,15 +239,32 @@ fn WorkspaceHost::place_container(
       ..private_mounts,
     ],
     "ports": [{ "name": "workspace", "containerPort": container.port }],
-    "readinessProbe": {
-      "exec": {
-        "command": [
-          "/usr/bin/bash",
-          "-c",
-          "exec 3<>/dev/tcp/127.0.0.1/" + container.port.to_string(),
-        ],
-      },
-      "periodSeconds": 5,
+    "readinessProbe": if grant.client_id == "moonrobo" ||
+      grant.client_id == "moontown" {
+      (
+        {
+          "httpGet": {
+            "path": if grant.client_id == "moontown" {
+              "/health"
+            } else {
+              "/__moonrobo_health"
+            },
+            "port": container.port,
+          },
+          "periodSeconds": 5,
+        } : Json)
+    } else {
+      (
+        {
+          "exec": {
+            "command": [
+              "/usr/bin/bash",
+              "-c",
+              "exec 3<>/dev/tcp/127.0.0.1/" + container.port.to_string(),
+            ],
+          },
+          "periodSeconds": 5,
+        } : Json)
     },
   }
   guard pod.get("containers") is Some(Array(containers)) else {
@@ -311,6 +355,149 @@ fn WorkspaceHost::place_container(
               "/usr/bin/bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8090",
             ],
           },
+          "periodSeconds": 5,
+        },
+      },
+    ]
+  } else if grant.client_id == "moontown" {
+    let token_env : Json = {
+      "name": "MOONGATE_CONTROL_TOKEN",
+      "valueFrom": {
+        "secretKeyRef": {
+          "name": resource_name(@webide.workspace_id(grant)),
+          "key": "moongate-control-token",
+        },
+      },
+    }
+    [
+      {
+        "name": "moongate",
+        "image": container.companion_image.unwrap_or(""),
+        "imagePullPolicy": "IfNotPresent",
+        "command": ["/usr/local/bin/moongate"],
+        "args": ["start", "--host", "127.0.0.1", "--port", "15721"],
+        "workingDir": "/workspace",
+        "env": [
+          { "name": "HOME", "value": "/workspace" },
+          { "name": "MOONSUITE_WORKSPACE_ROOT", "value": "/workspace" },
+          token_env,
+        ],
+        "securityContext": security_context(),
+        "resources": {
+          "requests": { "cpu": "100m", "memory": "256Mi" },
+          "limits": { "cpu": "1000m", "memory": "1024Mi" },
+        },
+        "volumeMounts": [
+          { "name": "workspace", "mountPath": "/workspace" },
+          { "name": "tmp", "mountPath": "/tmp" },
+        ],
+        "readinessProbe": {
+          "exec": {
+            "command": [
+              "/usr/bin/bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/15721",
+            ],
+          },
+          "periodSeconds": 5,
+        },
+      },
+      {
+        "name": "moonclaw",
+        "image": container.companion_image.unwrap_or(""),
+        "imagePullPolicy": "IfNotPresent",
+        "command": ["/usr/local/bin/moonclaw"],
+        "args": ["daemon", "--port", "8090", "--serve", "/workspace"],
+        "workingDir": "/workspace",
+        "env": [
+          { "name": "HOME", "value": "/workspace" },
+          { "name": "MOONSUITE_WORKSPACE_ROOT", "value": "/workspace" },
+          {
+            "name": "MOONCLAW_HOSTED_MODEL_ALIAS",
+            "value": grant.allowed_models.get(0).unwrap_or(""),
+          },
+          token_env,
+        ],
+        "securityContext": security_context(),
+        "resources": {
+          "requests": { "cpu": "200m", "memory": "512Mi" },
+          "limits": { "cpu": "2000m", "memory": "2048Mi" },
+        },
+        "volumeMounts": [
+          { "name": "workspace", "mountPath": "/workspace" },
+          { "name": "tmp", "mountPath": "/tmp" },
+        ],
+        "readinessProbe": {
+          "exec": {
+            "command": [
+              "/usr/bin/bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8090",
+            ],
+          },
+          "periodSeconds": 5,
+        },
+      },
+      {
+        "name": "moonclaw-gateway",
+        "image": container.companion_image.unwrap_or(""),
+        "imagePullPolicy": "IfNotPresent",
+        "command": ["/usr/local/bin/moonclaw"],
+        "args": [
+          "gateway", "start", "--port", "18123", "--cwd", "/workspace", "--home",
+          "/workspace",
+        ],
+        "workingDir": "/workspace",
+        "env": [
+          { "name": "HOME", "value": "/workspace" },
+          { "name": "MOONSUITE_WORKSPACE_ROOT", "value": "/workspace" },
+        ],
+        "securityContext": security_context(),
+        "resources": {
+          "requests": { "cpu": "200m", "memory": "512Mi" },
+          "limits": { "cpu": "2000m", "memory": "2048Mi" },
+        },
+        "volumeMounts": [
+          { "name": "workspace", "mountPath": "/workspace" },
+          { "name": "tmp", "mountPath": "/tmp" },
+        ],
+        "readinessProbe": {
+          "exec": {
+            "command": [
+              "/usr/bin/bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/18123",
+            ],
+          },
+          "periodSeconds": 5,
+        },
+      },
+      {
+        "name": "miniapp",
+        "image": container.image,
+        "imagePullPolicy": "IfNotPresent",
+        "command": ["/usr/local/bin/moontown-miniapp"],
+        "workingDir": "/workspace",
+        "env": [
+          { "name": "HOME", "value": "/workspace" },
+          { "name": "MOONSUITE_ROOT", "value": "/workspace" },
+          { "name": "MOONTOWN_MINIAPP_BIND", "value": "0.0.0.0:18191" },
+          {
+            "name": "MOONTOWN_MINIAPP_SESSION_TOKEN",
+            "valueFrom": {
+              "secretKeyRef": {
+                "name": resource_name(@webide.workspace_id(grant)),
+                "key": "moontown-miniapp-session-token",
+              },
+            },
+          },
+        ],
+        "securityContext": security_context(),
+        "resources": {
+          "requests": { "cpu": "100m", "memory": "256Mi" },
+          "limits": { "cpu": "1000m", "memory": "1024Mi" },
+        },
+        "volumeMounts": [
+          { "name": "workspace", "mountPath": "/workspace" },
+          { "name": "tmp", "mountPath": "/tmp" },
+        ],
+        "ports": [{ "name": "miniapp", "containerPort": 18191 }],
+        "readinessProbe": {
+          "httpGet": { "path": "/miniapp/health", "port": 18191 },
           "periodSeconds": 5,
         },
       },

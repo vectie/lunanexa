@@ -510,7 +510,7 @@ extern "js" fn demo_contract_preview_promise(
   template_id : String,
 ) -> @js.Promise =
   #| async templateId => {
-  #|   const path = templateId === "youthpolicy-device-undertaking-ofl-v2" ? "/assets/contracts/youthpolicy/undertaking-ofl-v2/moonleaf-preview-template.v2.json" : templateId === "youthpolicy-device-undertaking-v1" ? "/assets/contracts/youthpolicy/undertaking-v1/moonleaf-preview-template.v1.json" : "/assets/contracts/youthpolicy/v1/moonleaf-preview-template.v1.json";
+  #|   const path = templateId === "youthpolicy-device-undertaking-ofl-v2" ? "/mana/assets/contracts/youthpolicy/undertaking-ofl-v2/moonleaf-preview-template.v2.json" : templateId === "youthpolicy-device-undertaking-v1" ? "/mana/assets/contracts/youthpolicy/undertaking-v1/moonleaf-preview-template.v1.json" : "/mana/assets/contracts/youthpolicy/v1/moonleaf-preview-template.v1.json";
   #|   const response = await fetch(path, {
   #|     method: "GET",
   #|     headers: { "Accept": "application/json" },
@@ -9876,7 +9876,7 @@ fn login_view(
             "overflow: hidden", "flex-shrink: 0", "width: 3.5rem", "height: 3.5rem",
           ],
           [
-            @html.img(src="/assets/platform-logo-light.png", alt="", style=[
+            @html.img(src="/mana/assets/platform-logo-light.png", alt="", style=[
               "display: block", "width: 100%", "height: 100%", "object-fit: contain",
               "transform: scale(1.22)", "transform-origin: center",
             ]),

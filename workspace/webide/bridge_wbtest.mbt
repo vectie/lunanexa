@@ -12,6 +12,36 @@ fn test_config(origin : String) -> BridgeConfig {
 }
 
 ///|
+async test "shared-domain MoonDesk handoff never sends browser to root paths" {
+  let server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
+  defer server.close()
+  let origin = "http://\{server.addr}"
+  let bridge = Bridge::new(
+    { ..test_config(origin), client_id: "desktop-workspace", },
+    _ => { ..test_grant("alice"), client_id: "desktop-workspace", },
+    _ => true,
+    (_, _) => {
+      http_url: "http://127.0.0.1:8189",
+      websocket_url: "ws://127.0.0.1:8189",
+    },
+    public_base_path="/moondesk",
+  )
+  @async.with_task_group <| group => {
+    group.spawn_bg(no_wait=true, allow_failure=true, () => {
+      server.run_forever((request, body, connection) => {
+        bridge.handle(request, body, connection)
+      })
+    })
+    let (response, content) = @http.get(origin + "/connect")
+    assert_eq(response.code, 200)
+    assert_true(content.text().contains("'/moondesk/connect'"))
+    assert_true(content.text().contains("'/moondesk/workspace-control'"))
+    assert_true(content.text().contains("'/moondesk/'"))
+    assert_true(response.cookies[0].name.contains("desktop-workspace"))
+  }
+}
+
+///|
 test "session capabilities use operating system entropy" {
   let first = random_token()
   let second = random_token()
@@ -39,6 +69,36 @@ test "model-free terminal grants require explicit bridge profile" {
   assert_false(
     make(true).valid_grant({ ..grant, expires_unix_ms: 0L, }, @async.now()),
   )
+}
+
+///|
+test "shared platform workspace paths are product-specific" {
+  let origin = "https://example.test"
+  let make = (client_id : String, base : String) => {
+    Bridge::new(
+      { ..test_config(origin), client_id, },
+      _ => { ..test_grant("alice"), client_id, },
+      _ => true,
+      (_, _) => {
+        http_url: "http://127.0.0.1:8189",
+        websocket_url: "ws://127.0.0.1:8189",
+      },
+      public_base_path=base,
+    )
+  }
+  assert_eq(make("comfyui", "/comfyui").public_base_path, "/comfyui")
+  assert_eq(
+    make("desktop-workspace", "/moondesk").public_base_path,
+    "/moondesk",
+  )
+  assert_eq(make("moonrobo", "/moonrobo").public_base_path, "/moonrobo")
+  assert_eq(make("moontown", "/moontown").public_base_path, "/moontown")
+  try make("comfyui", "/moondesk") catch {
+    BridgeError::InvalidConfiguration => ()
+    _ => fail("wrong error for cross-product path")
+  } noraise {
+    _ => fail("cross-product path was accepted")
+  }
 }
 
 ///|
@@ -72,7 +132,10 @@ test "workspace identities include every authority dimension without delimiter c
   assert_false(workspace_id(first).contains("alice"))
   assert_false(workspace_id(first).contains("secret"))
   let desktop = { ..first, client_id: "desktop-workspace", }
+  let town = { ..first, client_id: "moontown", }
   assert_true(workspace_id(desktop) != workspace_id(first))
+  assert_true(workspace_id(town) != workspace_id(first))
+  assert_true(workspace_id(town) != workspace_id(desktop))
   assert_true(workspace_storage_id(desktop) != workspace_storage_id(first))
   assert_true(
     workspace_storage_id(desktop) !=
@@ -89,6 +152,26 @@ test "personal desktop routes never turn another client into an open proxy" {
     allowed_path(Get, "/api/mooncode/sessions", client_id="desktop-workspace"),
   )
   assert_false(allowed_path(Get, "/api/mooncode/sessions"))
+  assert_true(allowed_path(Get, "/api/cockpit/snapshot", client_id="moonrobo"))
+  assert_true(
+    allowed_path(Post, "/api/moonrobo/bootstrap", client_id="moonrobo"),
+  )
+  assert_true(allowed_path(Get, "/assets/index.js", client_id="moonrobo"))
+  assert_true(
+    allowed_path(Get, "/tilemap/actors/avatar.png", client_id="moontown"),
+  )
+  assert_true(allowed_path(Post, "/miniapp/auth/visitor", client_id="moontown"))
+  for
+    path in [
+      "/api/runtime/supervisor/start", "/api/intents/execute", "/api/moonrobo/gateway/command",
+      "/api/moonbook/task-messages/task-1/execute-sidecar", "/api/moonbook/task-messages/task-1/execute",
+    ] {
+    assert_false(allowed_path(Post, path, client_id="moonrobo"))
+  }
+  assert_false(allowed_path(Post, "/api/moonrobo/bootstrap"))
+  assert_false(allowed_path(Get, "/api/cockpit/snapshot", client_id="unknown"))
+  assert_false(allowed_path(Get, "/api/../secret", client_id="moonrobo"))
+  assert_false(allowed_path(Get, "/../workspace", client_id="moontown"))
   assert_false(
     allowed_path(Get, "/api/../secrets", client_id="desktop-workspace"),
   )

@@ -882,22 +882,22 @@ evidence is current.
 
 ### Desktop WebIDE one-click integration
 
-Multiple approved WebIDEs (for example a code editor and a hosted ComfyUI
-launch bridge) may coexist. Set `LUNANEXA_CLIENT_LAUNCH_CATALOG_JSON` to an
+Multiple approved WebIDEs (MoonDesk, ComfyUI, MoonRobo, and MoonTown) may coexist. Set
+`LUNANEXA_CLIENT_LAUNCH_CATALOG_JSON` to an
 array of `ClientLaunchConfig` objects; the first entry remains the legacy
 `GET /v1/portal/self/client` default. The portal uses authenticated
 `GET /v1/portal/self/clients` to select one client. IDs are unique, the catalog
 is bounded to 32 entries, and each client's handoff/redemption uses its own
 deployment-owned launch and API URLs. Unknown/removed clients fail closed.
 
-Example configuration shape (placeholders, not a running ComfyUI service):
+Example configuration shape (placeholders, not running services):
 
 ```json
 [
   {
     "client_id": "desktop-workspace",
     "display_name": "Desktop WebIDE",
-    "launch_uri": "http://127.0.0.1:4188/?mode=mooncode",
+    "launch_uri": "https://platform.example/moondesk/connect",
     "public_api_base_url": "https://gateway.example/v1",
     "handoff_lifetime_ms": 120000,
     "maximum_requests": 100000
@@ -905,13 +905,50 @@ Example configuration shape (placeholders, not a running ComfyUI service):
   {
     "client_id": "comfyui",
     "display_name": "ComfyUI",
-    "launch_uri": "https://creative.example/connect",
+    "launch_uri": "https://platform.example/comfyui/connect",
+    "public_api_base_url": "https://gateway.example/v1",
+    "handoff_lifetime_ms": 120000,
+    "maximum_requests": 100000
+  },
+  {
+    "client_id": "moonrobo",
+    "display_name": "MoonRobo",
+    "launch_uri": "https://platform.example/moonrobo/connect",
+    "public_api_base_url": "https://gateway.example/v1",
+    "handoff_lifetime_ms": 120000,
+    "maximum_requests": 100000
+  },
+  {
+    "client_id": "moontown",
+    "display_name": "MoonTown",
+    "launch_uri": "https://platform.example/moontown/connect",
     "public_api_base_url": "https://gateway.example/v1",
     "handoff_lifetime_ms": 120000,
     "maximum_requests": 100000
   }
 ]
 ```
+
+On a shared platform origin, no product owns `/`: MoonDesk uses
+`/moondesk/`, managed ComfyUI uses `/comfyui/`, MoonRobo uses `/moonrobo/`,
+MoonTown uses `/moontown/`,
+and the portal, management console and docs retain `/user/`, `/mana/` and
+`/docs/`. Set `LUNANEXA_WEBIDE_PUBLIC_BASE_PATH` to the matching product
+prefix and strip that prefix at the ingress before forwarding to its private
+WebIDE gateway. The origin setting still contains only scheme, host and port.
+For a `comfyui` WebIDE gateway, omitting `LUNANEXA_WEBIDE_PUBLIC_BASE_PATH`
+defaults to `/comfyui`; an explicit different prefix is rejected at startup.
+Publish its portal launch URI as `/comfyui/connect` and route both
+`/comfyui` and `/comfyui/` through that gateway when adding a managed
+instance. Multiple tenant instances need tenant-aware authorization and
+upstream selection behind this one product prefix, not competing root routes.
+The ComfyUI frontend image must be built/configured for this base path: asset,
+API, upload/download and WebSocket URLs must resolve below `/comfyui/`.
+Before publishing a managed instance, test its editor, queue, progress socket,
+template loading and result download through the public path; a healthy pod
+alone is not proof that the prefixed browser UI works.
+An independently deployed ComfyUI instance such as the existing `:5005`
+trial is outside this shared-origin rule; it is not silently repointed.
 
 Do not set the ComfyUI launch URI to its raw `8188` listener: it must be a
 qualified single-use handoff bridge with workspace isolation, lease-aware HTTP
@@ -920,6 +957,81 @@ existing access prerequisites, not runtime/process health. See
 [managed media generation](MEDIA_GENERATION.md) for the separate hosted-client
 and physical media-runtime acceptance gates. No production catalog entry is
 automatically added by this change.
+
+MoonRobo uses its existing native `serve` host and Rabbita cockpit from
+`../moonrobo`; LunaNexa does not import MoonRobo source. Its catalog launch URI
+also points at a dedicated WebIDE gateway, never the raw MoonRobo port. Run one
+CPU-only, pinned MoonRobo image and persistent RoboBook volume per subject,
+organization and project on the workspace-host role. A representative
+`LUNANEXA_WEBIDE_CONTAINER_FILE` is:
+
+```json
+{
+  "image": "registry.example/moonrobo@sha256:<approved-digest>",
+  "command": ["/usr/local/bin/moonrobo"],
+  "args": ["serve", "/workspace/robobook", "/opt/moonrobo/ui", "0.0.0.0", "5290", "127.0.0.1", "5391"],
+  "port": 5290,
+  "cpu_millis": 1000,
+  "memory_mib": 2048,
+  "gpu": false
+}
+```
+
+The approved image must contain MoonRobo's native binary and built
+`ui/rabbita-cockpit/dist` at the selected UI path. The deployment must prepare
+each user's RoboBook under `/workspace/robobook`. Set
+`LUNANEXA_WEBIDE_CLIENT_ID=moonrobo`,
+`LUNANEXA_WEBIDE_REQUIRE_EXCLUSIVE=false`, and a dedicated HTTPS
+`LUNANEXA_WEBIDE_PUBLIC_ORIGIN` matching the catalog launch origin. Its native
+`/__moonrobo_health` route is the pod readiness probe. The gateway performs the
+same single-use redemption, per-request lease check and session isolation as
+the other WebIDEs; it forwards MoonRobo HTTP routes only to that user's private
+pod. The hosted profile has no GPU, hardware SDK, bridge sidecar, or robot
+device access. Physical robot operation requires a separately qualified
+MoonRobo runtime and authority path outside the shared hosted workspace.
+The MoonRobo source now uses `moonbitlang/x@0.5.5`. On 2026-09-29 its native
+release build, 560 native tests, and a `/moonrobo/` Vite build passed locally.
+That does not imply a live image: build the portable image described in
+`../moonrobo/deploy/README.md`, record its immutable digest, and perform the
+gateway/browser acceptance above before enabling a production catalog entry.
+
+MoonTown is likewise a personal, CPU-only workspace. Its per-subject Pod has
+the MoonTown desktop and miniapp, a companion MoonClaw/MoonGate image, and a
+model proxy whose allowed alias comes from that subject's grant. The catalog
+entry is only published after the images are pinned, the gateway and workspace
+service account are configured, and the `/moontown/` browser path passes a
+real handoff/chat test. Never publish the private workspace Pod directly.
+`deploy/examples/hosted-moontown.yaml.tpl` is a portable gateway/ingress
+template: provide the required `NAMESPACE`, `CONTROLLER_NAMESPACE`,
+`MOONGATE_NAMESPACE`, `COMFY_IMAGE`, `MODEL_PROXY_IMAGE`, `STORAGE_CLASS`,
+`STORAGE_ACCESS_MODE`, `CONTROLLER_ORIGIN`, `MOONGATE_ORIGIN`,
+`PUBLIC_ORIGIN`, `PUBLIC_HOST`, `PUBLIC_TLS_SECRET`, `TRUST_CONFIG_MAP`,
+`CONTROLLER_PORT`, `MOONGATE_PORT`, `MOONTOWN_IMAGE`,
+`MOONCLAW_MOONGATE_IMAGE`, `WEBIDE_GATEWAY_IMAGE`, `WEBIDE_SERVICE_ACCOUNT`,
+`WORKSPACE_NODE_LABEL_KEY`, `WORKSPACE_NODE_LABEL_VALUE`, `INGRESS_NAMESPACE`,
+`INGRESS_POD_LABEL_KEY`, and `INGRESS_POD_LABEL_VALUE`. Render with
+`envsubst` into ignored `deploy/local/` after copying and editing
+`deploy/examples/hosted-moontown.env.example` there. For example:
+
+```sh
+mkdir -p deploy/local
+cp deploy/examples/hosted-moontown.env.example deploy/local/hosted-moontown.env
+# Edit the copy with the target cluster's approved values and pinned digests.
+. deploy/local/hosted-moontown.env
+envsubst < deploy/examples/hosted-moontown.yaml.tpl > deploy/local/hosted-moontown.yaml
+kubectl apply --dry-run=client -f deploy/local/hosted-moontown.yaml
+```
+
+Inspect the rendered YAML to confirm that all example digests and placeholders
+were replaced; only then apply it to the intended cluster. The example contains
+no live cluster address, credential,
+account ID or baked image digest. Keep the rendered file and live secrets out
+of Git. Compose it with the platform's WebIDE egress policy: the gateway needs
+DNS, Kubernetes API, controller and only its private workspace endpoints; do
+not apply a workspace-only egress deny rule that blocks grant redemption.
+MoonTown's own `scripts/package-hosted-webide.mbtx` packages its
+native desktop, miniapp and UI into a Linux amd64 OCI image; package the
+MoonClaw/MoonGate companion independently rather than embedding a model.
 
 Set these controller values in the production overlay:
 

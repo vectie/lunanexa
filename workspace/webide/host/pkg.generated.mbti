@@ -28,6 +28,7 @@ pub fn HostError::to_repr(Self) -> @debug.Repr
 // Types and methods
 pub(all) struct ExclusiveContainer {
   image : String
+  companion_image : String?
   command : Array[String]
   args : Array[String]
   port : Int

@@ -1591,7 +1591,7 @@ fn navigation(
           "overflow: hidden", "flex-shrink: 0", "width: 3.5rem", "height: 3.5rem",
         ],
         [
-          @html.img(src="/assets/platform-logo-light.png", alt="", style=[
+          @html.img(src="/user/assets/platform-logo-light.png", alt="", style=[
             "display: block", "width: 100%", "height: 100%", "object-fit: contain",
             "transform: scale(1.22)", "transform-origin: center",
           ]),
@@ -3333,7 +3333,11 @@ pub fn webide_launch_selection(
 
 ///|
 pub fn personal_webide_control_uri(client : EnterpriseDesktopClient) -> String? {
-  if client.client_id != "desktop-workspace" ||
+  if (
+      client.client_id != "desktop-workspace" &&
+      client.client_id != "moonrobo" &&
+      client.client_id != "moontown"
+    ) ||
     !client.launch_uri.has_suffix("/connect") {
     return None
   }
@@ -3387,11 +3391,25 @@ fn desktop_connect_progress_view(
         "模型与权限已检查，正在签发一次性连接…",
       )
     ClientOpened =>
-      copy(
-        state.locale,
-        "Handoff issued. Continue in MoonDesk to see redemption and MoonGate progress.",
-        "一次性交接已签发。请在 MoonDesk 查看核销与 MoonGate 接通进度。",
-      )
+      if client.map_or(false, value => value.client_id == "moonrobo") {
+        copy(
+          state.locale,
+          "Handoff issued. Continue in MoonRobo to see connection progress.",
+          "一次性交接已签发。请在 MoonRobo 查看连接进度。",
+        )
+      } else if client.map_or(false, value => value.client_id == "moontown") {
+        copy(
+          state.locale,
+          "Handoff issued. Continue in your personal MoonTown workspace.",
+          "一次性交接已签发。请在个人 MoonTown 工作空间继续。",
+        )
+      } else {
+        copy(
+          state.locale,
+          "Handoff issued. Continue in MoonDesk to see redemption and MoonGate progress.",
+          "一次性交接已签发。请在 MoonDesk 查看核销与 MoonGate 接通进度。",
+        )
+      }
     ConnectFailed =>
       copy(
         state.locale,
@@ -3502,7 +3520,15 @@ fn desktop_connect_progress_view(
         [
           @html.span("4"),
           @html.strong(
-            copy(state.locale, "MoonGate and Code", "MoonGate 与 Code"),
+            if client.map_or(false, value => value.client_id == "moonrobo") {
+              copy(state.locale, "MoonRobo cockpit", "MoonRobo 控制台")
+            } else if client.map_or(false, value => {
+                value.client_id == "moontown"
+              }) {
+              copy(state.locale, "MoonTown workspace", "MoonTown 工作空间")
+            } else {
+              copy(state.locale, "MoonGate and Code", "MoonGate 与 Code")
+            },
           ),
         ],
       ),
@@ -3561,8 +3587,8 @@ fn desktop_ide_view(
   } else if !models_ready {
     copy(
       state.locale,
-      "A model must be deployed and serving before MoonDesk / MoonCode can open.",
-      "请先部署并验证至少一个可调用模型，然后再打开 MoonDesk / MoonCode。",
+      "A model must be deployed and serving before \{name} can open.",
+      "请先部署并验证至少一个可调用模型，然后再打开 \{name}。",
     )
   } else if state.webide_order_id is Some(_) &&
     webide_launch_selection(state) is None {

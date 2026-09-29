@@ -91,7 +91,7 @@ range under the same provider-neutral policy.
 
 ## One-click desktop WebIDE handoff
 
-The enterprise portal now supports one deployment-owned desktop client without
+The enterprise portal supports a deployment-owned catalog of clients without
 coupling LunaNexa source to a particular WebIDE product. The production flow is:
 
 1. the portal verifies the enterprise subject, Developer role, effective
@@ -127,6 +127,29 @@ This directory is a LunaNexa authorization adapter, not a production identity
 provider. Production ingress must authenticate the human and assert the mapped
 opaque subject. LunaNexa never stores the upstream password, client
 certificate, editor credential or application credential.
+
+### Hosted MoonRobo cockpit
+
+The `moonrobo` catalog entry selects a personal, CPU-only Rabbita cockpit.
+Its approved image runs MoonRobo's native `serve` command with a persistent
+RoboBook root and built UI assets. LunaNexa owns only the handoff, private
+gateway, lease checks, pod placement and storage; the MoonRobo repository owns
+robot routes and their safety rules. The gateway forwards the selected user's
+HTTP routes to that user's private pod and probes `/__moonrobo_health` before
+marking the pod ready. No bridge sidecar or physical SDK is installed in this
+hosted profile. The gateway also rejects physical supervisor launch,
+sidecar execution and direct intent execution routes in this profile.
+
+For UI-to-UI acceptance, sign in as two Developer subjects in the same
+organization, select MoonRobo in each portal, and open each cockpit through a
+single-use handoff. Verify each sees only their own RoboBook, the readiness
+page identifies the absent physical runtime, and physical execution remains
+blocked. Stop and reopen one cockpit; its saved work must return without
+changing the other subject's pod or volume. End its lease and verify both HTTP
+and any WebSocket access fail closed, then restart the gateway and verify no
+old browser session is restored. The cluster isolation scan must still show no
+MoonRobo image, RoboBook, bridge or application credential in managed inference
+node assignments.
 
 ## HTTP authority
 

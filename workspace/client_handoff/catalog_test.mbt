@@ -14,7 +14,21 @@ test "WebIDE catalog validates all bridges and rejects duplicate identities" {
     display_name: "ComfyUI",
     launch_uri: "https://creative.example/connect",
   }
-  assert_true(@client_handoff.valid_client_launch_catalog([desktop, comfy]))
+  let robo = {
+    ..desktop,
+    client_id: "moonrobo",
+    display_name: "MoonRobo",
+    launch_uri: "https://robot.example/connect",
+  }
+  let town = {
+    ..desktop,
+    client_id: "moontown",
+    display_name: "MoonTown",
+    launch_uri: "https://platform.example/moontown/connect",
+  }
+  assert_true(
+    @client_handoff.valid_client_launch_catalog([desktop, comfy, robo, town]),
+  )
   assert_false(@client_handoff.valid_client_launch_catalog([]))
   assert_false(@client_handoff.valid_client_launch_catalog([desktop, desktop]))
   assert_false(

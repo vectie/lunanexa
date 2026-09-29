@@ -137,6 +137,67 @@ test "ComfyUI is selectable beside code WebIDE without weakening readiness" {
 }
 
 ///|
+test "MoonRobo is a selectable personal WebIDE with its own controls" {
+  let demo = @enterprise.demo_state()
+  guard demo.desktop_client is Some(desktop) else {
+    fail("missing demo client")
+  }
+  let robo = {
+    ..desktop,
+    client_id: "moonrobo",
+    display_name: "MoonRobo",
+    launch_uri: "https://robot.example/connect",
+    ready: true,
+  }
+  let selected = {
+    ..demo,
+    route: DesktopIde,
+    desktop_clients: [desktop, robo],
+  }.update(SelectWebIde("moonrobo"))
+  assert_eq(selected.desktop_client, Some(robo))
+  assert_true(@enterprise.webide_launch_selection(selected) is Some(_))
+  let rendered = @enterprise.render(selected)
+  assert_true(rendered.contains("Open MoonRobo"))
+  assert_true(rendered.contains("MoonRobo cockpit"))
+  assert_true(rendered.contains("Manage / stop my WebIDE"))
+  assert_eq(
+    @enterprise.personal_webide_control_uri(robo),
+    Some("https://robot.example/workspace-control"),
+  )
+  assert_false(rendered.contains("ComfyUI needs an active GPU delivery"))
+}
+
+///|
+test "MoonTown is a selectable personal WebIDE with a named launch and stop path" {
+  let demo = @enterprise.demo_state()
+  guard demo.desktop_client is Some(desktop) else {
+    fail("missing demo client")
+  }
+  let town = {
+    ..desktop,
+    client_id: "moontown",
+    display_name: "MoonTown",
+    launch_uri: "https://platform.example/moontown/connect",
+    ready: true,
+  }
+  let selected = {
+    ..demo,
+    route: DesktopIde,
+    desktop_clients: [desktop, town],
+  }.update(SelectWebIde("moontown"))
+  assert_eq(selected.desktop_client, Some(town))
+  assert_true(@enterprise.webide_launch_selection(selected) is Some(_))
+  let rendered = @enterprise.render(selected)
+  assert_true(rendered.contains("Open MoonTown"))
+  assert_true(rendered.contains("MoonTown workspace"))
+  assert_true(rendered.contains("Manage / stop my WebIDE"))
+  assert_eq(
+    @enterprise.personal_webide_control_uri(town),
+    Some("https://platform.example/moontown/workspace-control"),
+  )
+}
+
+///|
 test "legacy shared local MoonDesk cannot issue another user's one-click launch" {
   let demo = @enterprise.demo_state()
   guard demo.desktop_client is Some(client) else { fail("missing demo client") }

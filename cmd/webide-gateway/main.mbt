@@ -27,6 +27,21 @@ async fn main {
       observation_token~,
     )
     let client_id = required("LUNANEXA_WEBIDE_CLIENT_ID")
+    let public_base_path = @env.get_env_var("LUNANEXA_WEBIDE_PUBLIC_BASE_PATH").unwrap_or(
+      if client_id == "comfyui" {
+        "/comfyui"
+      } else if client_id == "moontown" {
+        "/moontown"
+      } else {
+        ""
+      },
+    )
+    if client_id == "comfyui" && public_base_path != "/comfyui" {
+      raise Failure("Hosted ComfyUI requires /comfyui public base path")
+    }
+    if client_id == "moontown" && public_base_path != "/moontown" {
+      raise Failure("Hosted MoonTown requires /moontown public base path")
+    }
     let expected_subject = if client_id == "desktop-workspace" {
       required("LUNANEXA_WEBIDE_SUBJECT_REF")
     } else {
@@ -39,15 +54,27 @@ async fn main {
           @json.parse(@fs.read_file(path).text()),
         )
         if !require_exclusive &&
-          (client_id != "desktop-workspace" || runtime.gpu) {
-          raise Failure("Hosted workspace requires a CPU-only desktop profile")
+          (
+            (client_id != "desktop-workspace" &&
+            client_id != "moonrobo" &&
+            client_id != "moontown") ||
+            runtime.gpu
+          ) {
+          raise Failure(
+            "Hosted workspace requires a CPU-only approved client profile",
+          )
         }
         Some(runtime)
       }
       None => None
     }
-    if client_id == "desktop-workspace" && container is None {
-      raise Failure("Hosted MoonDesk requires an isolated container image")
+    if (client_id == "desktop-workspace" ||
+      client_id == "moonrobo" ||
+      client_id == "moontown") &&
+      container is None {
+      raise Failure(
+        "Hosted personal WebIDE requires an isolated container image",
+      )
     }
     let bridge = @webide.Bridge::new(
       {
@@ -80,6 +107,7 @@ async fn main {
         host.provision(id, grant, container?)
       },
       allow_model_free_workspace=require_exclusive && container is Some(_),
+      public_base_path~,
       allow_insecure_public_http=@env.get_env_var(
           "LUNANEXA_WEBIDE_ALLOW_INSECURE_PUBLIC_HTTP",
         ) ==

@@ -25,6 +25,16 @@ pub(all) struct ExternalModelServiceView {
 } derive(Eq, FromJson)
 
 ///|
+fn public_maas_chat_endpoint() -> String {
+  let origin = browser_public_origin()
+  "\{origin}/user/v1/chat/completions"
+}
+
+///|
+extern "js" fn browser_public_origin() -> String =
+  #| () => globalThis.location?.origin || ""
+
+///|
 pub(all) struct DeliveryReservationOption {
   reservation_id : String
   label : String
@@ -711,8 +721,21 @@ fn delivery_panel_view(
                   "企业共享模型。停止后所有成员将无法调用；个人 WebIDE 工作文件不受影响。",
                 ),
               ),
+              @html.p(class="mono", "POST " + public_maas_chat_endpoint()),
+              @html.p(
+                copy(
+                  locale, "Use an API key from this enterprise. The endpoint uses this site's HTTPS port (443 or 8443).",
+                  "使用本企业的 API 密钥；接口沿用当前网站的 HTTPS 端口（443 或 8443）。",
+                ),
+              ),
             ]),
             @html.div(class="record-actions", [
+              @html.button(
+                type_="button",
+                class="quiet-button",
+                on_click=command(emit, CopyDetail(public_maas_chat_endpoint())),
+                copy(locale, "Copy API endpoint", "复制 API 接口地址"),
+              ),
               if service.can_stop &&
                 (service.state == "Running" || service.state == "Partial") {
                 @html.button(

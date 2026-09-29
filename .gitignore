@@ -16,6 +16,8 @@
 # Runtime state never belongs in source control.
 /state/
 /artifacts/
+/output/pdf/
+/output/credentials/
 /_artifacts/
 /benchmarks/results/
 /deploy/local/

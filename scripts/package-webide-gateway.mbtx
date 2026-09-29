@@ -1,3 +1,4 @@
+///|
 import {
   "moonbitlang/async",
   "moonbitlang/async/fs",
@@ -7,37 +8,42 @@ import {
   "moonbitlang/core/string",
 }
 
-async fn output(program : String, args : Array[String]) -> String {
+///|
+async fn command(program : String, args : Array[String]) -> String {
   let result = @shell.Cmd(program, args).output()
   result.check()
   result.stdout().trim().to_owned()
 }
 
-async fn digest(path : String) -> String {
-  output("sha256sum", [path]).split(" ").next().unwrap().to_owned()
+///|
+async fn file_digest(path : String) -> String {
+  command("sha256sum", [path]).split(" ").next().unwrap().to_owned()
 }
 
-async fn bytes(path : String) -> Int {
-  @string.parse_int(output("stat", ["-c", "%s", path]))
+///|
+async fn file_size(path : String) -> Int {
+  @string.parse_int(command("stat", ["-c", "%s", path]))
 }
 
-async fn blob(root : String, name : String, value : Json) -> Json {
+///|
+async fn json_blob(root : String, name : String, value : Json) -> Json {
   let path = root + "/" + name
   @fs.write_file(path, value.stringify(), create_mode=CreateNew)
-  let hash = digest(path)
-  let size = bytes(path)
+  let hash = file_digest(path)
+  let size = file_size(path)
   @fs.rename(path, root + "/blobs/sha256/" + hash)
   { "digest": "sha256:" + hash, "size": size }
 }
 
+///|
 async fn main {
-  guard @env.args() is [_, base, binary, root, image, revision] else {
-    fail("Usage: package-webide-gateway.mbtx BASE_OCI_TAR LINUX_BINARY NEW_OUTPUT IMAGE REVISION")
+  guard @env.args() is [_, base, binary, root, image] else {
+    fail(
+      "Usage: package-webide-gateway.mbtx BASE_OCI_TAR LINUX_BINARY NEW_WORK_DIR IMAGE_TAG",
+    )
   }
-  guard output("uname", ["-m"]) == "x86_64" &&
-    revision.length() >= 7 && revision.length() <= 40 &&
-    revision.all(c => c is ('0'..='9' | 'a'..='f')) else {
-    fail("Expected Linux amd64 and a commit revision")
+  guard command("uname", ["-m"]) == "x86_64" else {
+    fail("Package the gateway on its Linux amd64 host")
   }
   @fs.mkdir(root, permission=0o700)
   @shell.Cmd("tar", ["-xf", base, "-C", root]).run()
@@ -45,20 +51,48 @@ async fn main {
   guard index is { "manifests": [{ "digest": String(manifest_hash), .. }], .. } else {
     fail("Expected single-platform OCI base")
   }
-  let manifest = @json.parse(@fs.read_file(root + "/blobs/sha256/" + manifest_hash.strip_prefix("sha256:").unwrap().to_owned()).text())
-  guard manifest is Object(fields) && manifest is {
-    "config": { "digest": String(config_hash), .. }, "layers": Array(layers), ..
-  } else { fail("Invalid OCI manifest") }
-  let config = @json.parse(@fs.read_file(root + "/blobs/sha256/" + config_hash.strip_prefix("sha256:").unwrap().to_owned()).text())
-  guard config is {
-    "architecture": "amd64", "os": "linux", "config": Object(runtime),
-    "rootfs": { "diff_ids": Array(diffs), .. }, ..
-  } else { fail("Expected Linux amd64 rootfs") }
+  let manifest = @json.parse(
+    @fs.read_file(
+      root +
+      "/blobs/sha256/" +
+      manifest_hash.strip_prefix("sha256:").unwrap().to_owned(),
+    ).text(),
+  )
+  guard manifest is Object(fields) &&
+    manifest
+    is {
+      "config": { "digest": String(config_hash), .. },
+      "layers": Array(layers),
+      ..
+    } else {
+    fail("Invalid OCI manifest")
+  }
+  let config = @json.parse(
+    @fs.read_file(
+      root +
+      "/blobs/sha256/" +
+      config_hash.strip_prefix("sha256:").unwrap().to_owned(),
+    ).text(),
+  )
+  guard config
+    is {
+      "architecture": "amd64",
+      "os": "linux",
+      "config": Object(runtime),
+      "rootfs": { "diff_ids": Array(diffs), .. },
+      ..
+    } else {
+    fail("Expected Linux amd64 base")
+  }
   let layer = root + "/layer"
   @fs.mkdir(layer + "/usr/local/bin", recursive=true)
-  @shell.Cmd("install", ["-m", "755", binary, layer + "/usr/local/bin/lunanexa-webide-gateway"]).run()
-  // Copy only the binary's host-linked libraries; never copy a service home.
-  for line in output("ldd", [binary]).split("\n") {
+  @shell.Cmd("install", [
+    "-m",
+    "755",
+    binary,
+    layer + "/usr/local/bin/lunanexa-webide-gateway",
+  ]).run()
+  for line in command("ldd", [binary]).split("\n") {
     for part in line.trim().split(" ") {
       if part.has_prefix("/") {
         let path = part.to_owned()
@@ -68,36 +102,69 @@ async fn main {
       }
     }
   }
-  let archive = root + "/gateway-layer.tar"
-  @shell.Cmd("tar", ["--owner=0", "--group=0", "--mode=u+rwX,go+rX", "-C", layer, "-cf", archive, "."]).run()
-  diffs.push(Json::string("sha256:" + digest(archive)))
+  let archive = root + "/webide-gateway-layer.tar"
+  @shell.Cmd("tar", [
+    "--owner=0", "--group=0", "--mode=u+rwX,go+rX", "-C", layer, "-cf", archive,
+    ".",
+  ]).run()
+  diffs.push(Json::string("sha256:" + file_digest(archive)))
   @shell.Cmd("gzip", ["-n", "-k", archive]).run()
-  let hash = digest(archive + ".gz")
-  let size = bytes(archive + ".gz")
+  let hash = file_digest(archive + ".gz")
+  let size = file_size(archive + ".gz")
   @fs.rename(archive + ".gz", root + "/blobs/sha256/" + hash)
-  layers.push({ "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip", "digest": "sha256:" + hash, "size": size })
-  // Docker schema-2 exports need consistent OCI descriptor media types.
-  fields["mediaType"] = Json::string("application/vnd.oci.image.manifest.v1+json")
+  layers.push({
+    "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+    "digest": "sha256:" + hash,
+    "size": size,
+  })
+  fields["mediaType"] = Json::string(
+    "application/vnd.oci.image.manifest.v1+json",
+  )
   for entry in layers {
-    guard entry is Object(layer_fields) else { fail("Invalid layer descriptor") }
-    if layer_fields.get("mediaType") == Some(Json::string("application/vnd.docker.image.rootfs.diff.tar.gzip")) {
-      layer_fields["mediaType"] = Json::string("application/vnd.oci.image.layer.v1.tar+gzip")
+    guard entry is Object(layer_fields) else {
+      fail("Invalid layer descriptor")
+    }
+    if layer_fields.get("mediaType") ==
+      Some(Json::string("application/vnd.docker.image.rootfs.diff.tar.gzip")) {
+      layer_fields["mediaType"] = Json::string(
+        "application/vnd.oci.image.layer.v1.tar+gzip",
+      )
     }
   }
+  // The base image must not decide how the packaged gateway starts.
   runtime["User"] = Json::string("1000:1000")
   runtime["Entrypoint"] = ["/usr/local/bin/lunanexa-webide-gateway"]
   runtime["Cmd"] = []
-  let labels = match runtime.get("Labels") { Some(Object(labels)) => labels; _ => {} }
-  labels["org.opencontainers.image.revision"] = Json::string(revision)
-  runtime["Labels"] = Json::object(labels)
-  guard blob(root, "new-config.json", config) is Object(new_config) else { fail("Invalid descriptor") }
-  new_config["mediaType"] = Json::string("application/vnd.oci.image.config.v1+json")
+  guard json_blob(root, "new-config.json", config) is Object(new_config) else {
+    fail("Invalid config descriptor")
+  }
+  new_config["mediaType"] = Json::string(
+    "application/vnd.oci.image.config.v1+json",
+  )
   fields["config"] = Json::object(new_config)
-  guard blob(root, "new-manifest.json", manifest) is Object(descriptor) else { fail("Invalid descriptor") }
-  descriptor["mediaType"] = Json::string("application/vnd.oci.image.manifest.v1+json")
-  descriptor["annotations"] = { "org.opencontainers.image.ref.name": image, "io.containerd.image.name": image }
+  guard json_blob(root, "new-manifest.json", manifest) is Object(descriptor) else {
+    fail("Invalid manifest descriptor")
+  }
+  descriptor["mediaType"] = Json::string(
+    "application/vnd.oci.image.manifest.v1+json",
+  )
+  descriptor["annotations"] = {
+    "org.opencontainers.image.ref.name": image,
+    "io.containerd.image.name": image,
+  }
   descriptor["platform"] = { "architecture": "amd64", "os": "linux" }
-  @fs.write_file(root + "/index.json", ({ "schemaVersion": 2, "manifests": [Json::object(descriptor)] } : Json).stringify())
-  @shell.Cmd("tar", ["-C", root, "-cf", root + ".oci.tar", "oci-layout", "index.json", "blobs"]).run()
+  @fs.write_file(
+    root + "/index.json",
+    ({ "schemaVersion": 2, "manifests": [Json::object(descriptor)] } : Json).stringify(),
+  )
+  @shell.Cmd("tar", [
+    "-C",
+    root,
+    "-cf",
+    root + ".oci.tar",
+    "oci-layout",
+    "index.json",
+    "blobs",
+  ]).run()
   println(image + " " + descriptor["digest"].stringify())
 }

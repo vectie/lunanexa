@@ -75,10 +75,19 @@ pub fn Bridge::new(
   provision : async (String, Grant) -> Backend,
   allow_insecure_public_http? : Bool = false,
   allow_model_free_workspace? : Bool = false,
+  public_base_path? : String = "",
   stop? : (async (String) -> Unit)? = None,
 ) -> Bridge raise BridgeError {
+  let expected_base_path = match config.client_id {
+    "desktop-workspace" => "/moondesk"
+    "moonrobo" => "/moonrobo"
+    "moontown" => "/moontown"
+    "comfyui" => "/comfyui"
+    _ => ""
+  }
   if !valid_atom(config.client_id) ||
     !valid_origin(config.public_origin, allow_insecure_public_http~) ||
+    (public_base_path != "" && public_base_path != expected_base_path) ||
     config.maximum_sessions < 1 ||
     config.maximum_sessions > 10000 ||
     config.maximum_request_bytes < 1024 ||
@@ -94,6 +103,7 @@ pub fn Bridge::new(
   {
     allow_model_free_workspace,
     config,
+    public_base_path,
     redeem,
     authorize,
     provision,
@@ -210,7 +220,9 @@ fn Bridge::cookie_name(self : Bridge, challenge : Bool) -> String {
   } else {
     ""
   }) +
-  (if challenge { "webide-connect" } else { "webide-session" })
+  "webide-" +
+  self.config.client_id +
+  (if challenge { "-connect" } else { "-session" })
 }
 
 ///|
@@ -244,7 +256,25 @@ fn allowed_path(
   } else {
     route
   }
-  if client_id == "desktop-workspace" {
+  if client_id == "moonrobo" &&
+    verb == Post &&
+    (
+      [
+        "/runtime/supervisor/launch", "/runtime/supervisor/start", "/intents/execute",
+        "/moonrobo/gateway/command", "/moontown/tasks/observe-run",
+      ].contains(route) ||
+      (
+        route.has_prefix("/moonbook/task-messages/") &&
+        (route.has_suffix("/execute-sidecar") || route.has_suffix("/execute"))
+      )
+    ) {
+    // Hosted MoonRobo has no physical bridge or SDK. Keep physical dispatch
+    // outside the browser gateway even if an image accidentally ships one.
+    return false
+  }
+  if client_id == "desktop-workspace" ||
+    client_id == "moonrobo" ||
+    client_id == "moontown" {
     // The entire application is confined to the caller's own pod and PVC.
     // Keep the common traversal checks above and never expose a generic
     // gateway to any other client profile.

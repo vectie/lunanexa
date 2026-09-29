@@ -12362,7 +12362,7 @@ fn console_view(
               "overflow: hidden", "flex-shrink: 0", "width: 3.5rem", "height: 3.5rem",
             ],
             [
-              @html.img(src="/assets/platform-logo-light.png", alt="", style=[
+              @html.img(src="/mana/assets/platform-logo-light.png", alt="", style=[
                 "display: block", "width: 100%", "height: 100%", "object-fit: contain",
                 "transform: scale(1.22)", "transform-origin: center",
               ]),

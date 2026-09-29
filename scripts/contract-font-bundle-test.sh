@@ -9,7 +9,7 @@ grep -F '@font-face' assets/fonts/contract-fonts.css >/dev/null
 grep -F 'LunaNexa FangSong GB2312' assets/fonts/contract-fonts.css >/dev/null
 grep -F 'LunaNexa FZ XiaoBiaoSong' assets/fonts/contract-fonts.css >/dev/null
 grep -F 'LunaNexa SimHei' assets/fonts/contract-fonts.css >/dev/null
-grep -F '../assets/fonts/contract-fonts.css' cmd/console/index.html >/dev/null
+grep -F '/mana/assets/fonts/contract-fonts.css' cmd/console/index.html >/dev/null
 grep -F 'assets/fonts/contract-fonts.css' scripts/build-browser-bundles.sh >/dev/null
 grep -F '/assets/fonts/private/*' .gitignore >/dev/null
 moon test cmd/font-inspect --target native --deny-warn --warn-list +73

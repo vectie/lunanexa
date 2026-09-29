@@ -75,6 +75,7 @@ struct AuthorizationFlight {
 pub struct Bridge {
   allow_model_free_workspace : Bool
   config : BridgeConfig
+  public_base_path : String
   redeem : async (String) -> Grant
   authorize : async (Grant) -> Bool
   provision : async (String, Grant) -> Backend

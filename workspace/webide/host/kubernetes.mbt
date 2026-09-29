@@ -71,12 +71,24 @@ pub async fn WorkspaceHost::provision(
   if id != @webide.workspace_id(grant) || !self.authorize(grant) {
     raise HostError::ControllerRejected
   }
-  if grant.client_id == "desktop-workspace" && container is None {
+  if (
+      grant.client_id == "desktop-workspace" ||
+      grant.client_id == "moonrobo" ||
+      grant.client_id == "moontown"
+    ) &&
+    container is None {
     raise HostError::InvalidConfiguration
   }
   if container is Some(runtime) &&
     !self.require_exclusive &&
-    (runtime.gpu || grant.client_id != "desktop-workspace") {
+    (
+      runtime.gpu ||
+      (
+        grant.client_id != "desktop-workspace" &&
+        grant.client_id != "moonrobo" &&
+        grant.client_id != "moontown"
+      )
+    ) {
     raise HostError::ControllerRejected
   }
   let placement = if self.require_exclusive {
@@ -141,6 +153,9 @@ pub async fn WorkspaceHost::provision(
       )
     }
   }
+  if grant.client_id == "moontown" {
+    eprintln("MoonTown workspace resources applied")
+  }
   // Do not invent readiness from successful resource creation. The user's
   // launch finishes only once a real ready replica is reported.
   @async.with_timeout(240000, () => {
@@ -166,6 +181,9 @@ pub async fn WorkspaceHost::provision(
         updated == 1.0 &&
         desired == 1.0 &&
         observed >= generation {
+        if grant.client_id == "moontown" {
+          eprintln("MoonTown workspace deployment available")
+        }
         break
       }
       if grant.expires_unix_ms <= @async.now() {
@@ -176,6 +194,9 @@ pub async fn WorkspaceHost::provision(
   })
   if !self.authorize(grant) {
     raise HostError::ControllerRejected
+  }
+  if grant.client_id == "moontown" {
+    eprintln("MoonTown workspace authority verified")
   }
   let hostname = "\{name}.\{self.config.namespace_name}.svc.cluster.local:8188"
   let backend : @webide.Backend = {

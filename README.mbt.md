@@ -136,7 +136,10 @@ the same-site WebIDE in `cmd/workbench` and a one-click, provider-neutral
 handoff into an administrator-approved desktop WebIDE. All surfaces consume one
 central API and shared contracts. See the
 [enterprise portal guide](docs/ENTERPRISE_PORTAL.md) and
-[workspace guide](docs/WORKSPACES.md). Lepusa packages the same centrally
+[workspace guide](docs/WORKSPACES.md). The approved WebIDE catalog can expose
+personal MoonDesk, MoonRobo and MoonTown workspaces alongside delivery-bound
+ComfyUI; each product remains a separate application in its own pinned image. Lepusa
+packages the same centrally
 hosted interfaces as two downloadable macOS apps—Operator and Enterprise—using
 the release workflow in [the macOS desktop guide](docs/MACOS_DESKTOP.md).
 The initial scoped editor client lives in `extensions/vscode`.

@@ -35,7 +35,7 @@ test "public HTTP workspace deployment requires explicit opt-in and exact IPv4 p
     allow_insecure_public_http=true,
   )
   assert_eq(bridge.config.public_origin, origin)
-  assert_eq(bridge.cookie_name(false), "webide-session")
+  assert_eq(bridge.cookie_name(false), "webide-comfyui-session")
 }
 
 ///|

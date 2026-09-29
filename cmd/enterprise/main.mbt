@@ -611,7 +611,7 @@ extern "js" fn demo_contract_preview_promise(
   template_id : String,
 ) -> @js.Promise =
   #| async templateId => {
-  #|   const path = templateId === "youthpolicy-device-undertaking-ofl-v2" ? "/assets/contracts/youthpolicy/undertaking-ofl-v2/moonleaf-preview-template.v2.json" : templateId === "youthpolicy-device-undertaking-v1" ? "/assets/contracts/youthpolicy/undertaking-v1/moonleaf-preview-template.v1.json" : "/assets/contracts/youthpolicy/v1/moonleaf-preview-template.v1.json";
+  #|   const path = templateId === "youthpolicy-device-undertaking-ofl-v2" ? "/user/assets/contracts/youthpolicy/undertaking-ofl-v2/moonleaf-preview-template.v2.json" : templateId === "youthpolicy-device-undertaking-v1" ? "/user/assets/contracts/youthpolicy/undertaking-v1/moonleaf-preview-template.v1.json" : "/user/assets/contracts/youthpolicy/v1/moonleaf-preview-template.v1.json";
   #|   const response = await fetch(path, {
   #|     method: "GET",
   #|     headers: { "Accept": "application/json" },

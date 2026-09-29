@@ -146,6 +146,7 @@ test "exclusive GPU terminal has persistent HOME and no host authority" {
   let grant = { ..grant, allowed_models: [], }
   let runtime : ExclusiveContainer = {
     image: "registry.test/terminal@sha256:" + "c".repeat(64),
+    companion_image: None,
     command: ["/usr/bin/ttyd"],
     args: ["-p", "7681", "bash"],
     port: 7681,
@@ -193,6 +194,7 @@ test "two company members get separate hosted MoonDesk pods and PVCs" {
   let second = { ..first, subject_ref: "bob", }
   let runtime : ExclusiveContainer = {
     image: "registry.test/moondesk@sha256:" + "d".repeat(64),
+    companion_image: None,
     command: ["/usr/local/bin/moondesk"],
     args: ["serve", "/workspace", "--host", "0.0.0.0", "--port", "4188"],
     port: 4188,
@@ -251,4 +253,119 @@ test "two company members get separate hosted MoonDesk pods and PVCs" {
   }
   assert_true(control.contains("\"workspace_root\":\"/workspace\""))
   assert_false(control.contains(first.api_secret))
+}
+
+///|
+test "hosted MoonRobo has isolated storage and a native health probe" {
+  let config = host_config()
+  let host = WorkspaceHost::new(config)
+  let base = proxy_config(config.controller_origin, config.model_gateway_origin).grant()
+  let alice = { ..base, client_id: "moonrobo", }
+  let bob = { ..alice, subject_ref: "bob", }
+  let runtime : ExclusiveContainer = {
+    image: "registry.test/moonrobo@sha256:" + "d".repeat(64),
+    companion_image: None,
+    command: ["/usr/local/bin/moonrobo"],
+    args: [
+      "serve", "/workspace/robobook", "/opt/moonrobo/ui", "0.0.0.0", "5290", "127.0.0.1",
+      "5391",
+    ],
+    port: 5290,
+    cpu_millis: 1000,
+    memory_mib: 2048,
+    gpu: false,
+  }
+  try host.resources(@webide.workspace_id(alice), alice) catch {
+    HostError::InvalidConfiguration => ()
+    _ => fail("unexpected error")
+  } noraise {
+    _ => fail("MoonRobo without an isolated container was accepted")
+  }
+  let first = host.resources(
+    @webide.workspace_id(alice),
+    alice,
+    container=runtime,
+  )
+  let second = host.resources(@webide.workspace_id(bob), bob, container=runtime)
+  assert_true(first[1].0 != second[1].0)
+  assert_true(first[4].0 != second[4].0)
+  let workload = first[4].1.stringify()
+  assert_true(workload.contains("/__moonrobo_health"))
+  assert_true(workload.contains("\"containerPort\":5290"))
+  assert_false(workload.contains("\"name\":\"moonclaw\""))
+  assert_false(workload.contains("\"name\":\"moongate\""))
+  assert_false(workload.contains("nvidia.com/gpu"))
+  assert_true(first[3].1.stringify().contains("\"targetPort\":5290"))
+}
+
+///|
+test "legacy personal container JSON without companion image remains readable" {
+  let runtime : ExclusiveContainer = {
+    image: "registry.test/moondesk@sha256:" + "d".repeat(64),
+    companion_image: None,
+    command: ["/usr/local/bin/moondesk"],
+    args: [],
+    port: 4188,
+    cpu_millis: 1000,
+    memory_mib: 2048,
+    gpu: false,
+  }
+  let legacy = runtime.to_json()
+  if legacy is Object(fields) {
+    fields.remove("companion_image")
+  }
+  let decoded : ExclusiveContainer = @json.from_json(legacy)
+  assert_eq(decoded.companion_image, None)
+}
+
+///|
+test "hosted MoonTown has per-user storage and a private health probe" {
+  let config = host_config()
+  let host = WorkspaceHost::new(config)
+  let base = proxy_config(config.controller_origin, config.model_gateway_origin).grant()
+  let alice = { ..base, client_id: "moontown", }
+  let bob = { ..alice, subject_ref: "bob", }
+  let runtime : ExclusiveContainer = {
+    image: "registry.test/moontown@sha256:" + "e".repeat(64),
+    companion_image: Some("registry.test/moondesk@sha256:" + "d".repeat(64)),
+    command: ["/usr/local/bin/moontown"],
+    args: [],
+    port: 17842,
+    cpu_millis: 1000,
+    memory_mib: 2048,
+    gpu: false,
+  }
+  try host.resources(@webide.workspace_id(alice), alice) catch {
+    HostError::InvalidConfiguration => ()
+    _ => fail("unexpected error")
+  } noraise {
+    _ => fail("MoonTown without an isolated container was accepted")
+  }
+  let first = host.resources(
+    @webide.workspace_id(alice),
+    alice,
+    container=runtime,
+  )
+  let second = host.resources(@webide.workspace_id(bob), bob, container=runtime)
+  assert_true(first[1].0 != second[1].0)
+  assert_true(first[4].0 != second[4].0)
+  let workload = first[4].1.stringify()
+  assert_true(workload.contains("\"path\":\"/health\""))
+  assert_true(workload.contains("\"containerPort\":17842"))
+  assert_true(workload.contains("MOONTOWN_HOSTED_WEBIDE"))
+  assert_true(workload.contains("MOONTOWN_HOSTED_SERVICE_HOST"))
+  assert_true(workload.contains("MOONTOWN_DESKTOP_STATIC_ROOT"))
+  assert_true(workload.contains("MOONSUITE_ROOT"))
+  assert_true(workload.contains("\"name\":\"miniapp\""))
+  assert_true(workload.contains("MOONTOWN_MINIAPP_SESSION_TOKEN"))
+  assert_true(workload.contains("MOONTOWN_MOONGATE_MODEL"))
+  assert_true(workload.contains("\"name\":\"moonclaw\""))
+  assert_true(workload.contains("\"name\":\"moonclaw-gateway\""))
+  assert_true(workload.contains("\"name\":\"moongate\""))
+  assert_true(workload.contains("registry.test/moondesk@sha256:"))
+  assert_true(workload.contains("/dev/tcp/127.0.0.1/18123"))
+  assert_true(first[3].1.stringify().contains("\"targetPort\":18191"))
+  assert_true(first[2].1.stringify().contains("moongate-control-token"))
+  assert_false(workload.contains("nvidia.com/gpu"))
+  assert_true(first[3].1.stringify().contains("\"targetPort\":17842"))
 }

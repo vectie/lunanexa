@@ -987,8 +987,8 @@ fn enterprise_copy(
       @i18n.copy(locale, "Choose your WebIDE", "选择 WebIDE")
     OpenYourPreferredWorkspaceCreativeWorkflows =>
       @i18n.copy(
-        locale, "Open your preferred workspace. Creative workflows stay in ComfyUI; code stays in your editor.",
-        "选择工作空间：创作流程使用 ComfyUI，代码开发使用编辑器。",
+        locale, "Choose an approved workspace for code, creative workflows, or robot work.",
+        "选择已获批准的工作空间，处理代码、创作流程或机器人工作。",
       )
     ModelSource => @i18n.copy(locale, "Model source", "模型来源")
     AuthorizedSharedModels =>

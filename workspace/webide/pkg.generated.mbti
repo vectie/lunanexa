@@ -41,6 +41,7 @@ pub(all) struct Backend {
 pub struct Bridge {
   allow_model_free_workspace : Bool
   config : BridgeConfig
+  public_base_path : String
   redeem : async (String) -> Grant
   authorize : async (Grant) -> Bool
   provision : async (String, Grant) -> Backend
@@ -51,7 +52,7 @@ pub struct Bridge {
   mutex : @async.Mutex
 }
 pub async fn Bridge::handle(Self, @http.Request, &@io.Reader, @http.ServerConnection) -> Unit
-pub fn Bridge::new(BridgeConfig, async (String) -> Grant, async (Grant) -> Bool, async (String, Grant) -> Backend, allow_insecure_public_http? : Bool, allow_model_free_workspace? : Bool, stop? : (async (String) -> Unit)?) -> Self raise BridgeError
+pub fn Bridge::new(BridgeConfig, async (String) -> Grant, async (Grant) -> Bool, async (String, Grant) -> Backend, allow_insecure_public_http? : Bool, allow_model_free_workspace? : Bool, public_base_path? : String, stop? : (async (String) -> Unit)?) -> Self raise BridgeError
 
 pub(all) struct BridgeConfig {
   client_id : String

@@ -405,6 +405,8 @@ test "shared external GLM stop belongs to company administrator in MaaS" {
   let owner = @enterprise.render({ ..state, route: Models, deliveries: panel, })
   assert_true(owner.contains("Stop GLM service"))
   assert_true(owner.contains("Running on the Spark pair"))
+  assert_true(owner.contains("/user/v1/chat/completions"))
+  assert_true(owner.contains("Copy API endpoint"))
   let confirm = panel.update(RequestStopExternal)
   assert_true(
     @enterprise.render({ ..state, route: Models, deliveries: confirm, }).contains(

@@ -84,6 +84,7 @@ test "delivery profile matches exact published GPU container offering" {
   }
   let runtime : ExclusiveContainer = {
     image: "registry.test/terminal@sha256:" + "c".repeat(64),
+    companion_image: None,
     command: ["ttyd"],
     args: [],
     port: 7681,

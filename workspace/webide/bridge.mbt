@@ -121,16 +121,18 @@ async fn Bridge::connect_page(
   connection.send_response(200, "OK", extra_headers=headers, cookies=[
     self.browser_cookie(nonce, true, 120L),
   ])
-  let app_name = if self.config.client_id == "desktop-workspace" {
-    "MoonDesk"
-  } else {
-    "ComfyUI"
+  let app_name = match self.config.client_id {
+    "desktop-workspace" => "MoonDesk"
+    "moonrobo" => "MoonRobo"
+    "moontown" => "MoonTown"
+    _ => "ComfyUI"
   }
-  let connecting = if self.config.client_id == "desktop-workspace" {
-    "正在连接你的独立 MoonDesk 工作空间…"
-  } else {
+  let connecting = if self.config.client_id == "comfyui" {
     "Connecting your isolated workspace…"
+  } else {
+    "正在连接你的独立 \{app_name} 工作空间…"
   }
+  let base = self.public_base_path
   // The handoff stays in the fragment until this same-origin POST. Remove it
   // before any network action, never reflect provider diagnostics or secrets.
   let page =
@@ -140,14 +142,14 @@ async fn Bridge::connect_page(
     $|const fragment = new URLSearchParams(location.hash.slice(1));
     $|const code = fragment.get('lunanexa_handoff');
     $|const controls = fragment.get('lunanexa_control') === '1';
-    $|history.replaceState(null, '', '/connect');
+    $|history.replaceState(null, '', '\{base}/connect');
     $|async function connect() {
     $|  if (!code) throw new Error();
-    $|  const response = await fetch('/connect', {method:'POST', credentials:'same-origin',
+    $|  const response = await fetch('\{base}/connect', {method:'POST', credentials:'same-origin',
     $|    headers:{'Content-Type':'application/json','X-WebIDE-CSRF':'\{nonce}'},
     $|    body:JSON.stringify({handoff_code:code})});
     $|  if (!response.ok) throw new Error();
-    $|  location.replace(controls ? '/workspace-control' : '/');
+    $|  location.replace(controls ? '\{base}/workspace-control' : '\{base}/');
     $|}
     $|connect().catch(() => {document.getElementById('status').textContent='工作台连接失败。请确认权限和服务状态，然后从用户门户重新启动。';});
     $|</script></html>
@@ -202,6 +204,9 @@ async fn Bridge::connect(
   let id = workspace_id(grant)
   stage = "workspace provisioning"
   let backend = (self.provision)(id, grant)
+  if self.config.client_id == "moontown" {
+    eprintln("MoonTown handoff workspace provisioned")
+  }
   if !(backend.http_url.has_prefix("http://") ||
     backend.http_url.has_prefix("https://")) ||
     !(backend.websocket_url.has_prefix("ws://") ||
@@ -216,6 +221,9 @@ async fn Bridge::connect(
     None => ()
   }
   self.sessions[session] = { grant, backend, }
+  if self.config.client_id == "moontown" {
+    eprintln("MoonTown handoff session stored")
+  }
   connection.send_response(
     204,
     "Connected",
@@ -230,6 +238,9 @@ async fn Bridge::connect(
     ],
   )
   connection.end_response()
+  if self.config.client_id == "moontown" {
+    eprintln("MoonTown handoff response sent")
+  }
 }
 
 ///|
@@ -251,19 +262,37 @@ async fn Bridge::session(self : Bridge, token : String) -> Session {
 }
 
 ///|
+async fn Bridge::moontown_scope_script(
+  _self : Bridge,
+  session : Session,
+  connection : @http.ServerConnection,
+) -> Unit {
+  let headers = response_headers("text/javascript; charset=utf-8")
+  headers["cache-control"] = "no-store"
+  connection.send_response(200, "OK", extra_headers=headers)
+  connection.write_string(
+    "globalThis.__MOONTOWN_ACCOUNT_SCOPE = " +
+    Json::string(workspace_id(session.grant)).stringify() +
+    ";",
+  )
+  connection.end_response()
+}
+
+///|
 async fn Bridge::workspace_controls(
   self : Bridge,
   connection : @http.ServerConnection,
 ) -> Unit {
   let headers = response_headers("text/html; charset=utf-8")
   let nonce = random_token()
+  let base = self.public_base_path
   headers["content-security-policy"] = "default-src 'none'; script-src 'nonce-\{nonce}'; connect-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'"
   connection.send_response(200, "OK", extra_headers=headers)
   connection.write_string(
     if self.stop is Some(_) {
       let page =
         $|<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>管理工作台</title>
-        $|<main><h1>管理我的工作台</h1><p>停止仅关闭当前账户的运行容器；已保存的工作文件不会删除。重新打开时请从用户门户再次点击「打开工作台」。</p><button type="button" id="stop">确认停止工作台</button><p role="status" id="status"></p><p><a href="/">返回工作台</a></p></main>
+        $|<main><h1>管理我的工作台</h1><p>停止仅关闭当前账户的运行容器；已保存的工作文件不会删除。重新打开时请从用户门户再次点击「打开工作台」。</p><button type="button" id="stop">确认停止工作台</button><p role="status" id="status"></p><p><a href="\{base}/">返回工作台</a></p></main>
         $|<script nonce="\{nonce}">
         $|document.getElementById('stop').addEventListener('click', async () => {
         $|  const button = document.getElementById('stop');
@@ -271,7 +300,7 @@ async fn Bridge::workspace_controls(
         $|  button.disabled = true;
         $|  status.textContent = '正在停止工作台…';
         $|  try {
-        $|    const response = await fetch('/workspace-control/stop', {method:'POST', credentials:'same-origin'});
+        $|    const response = await fetch('\{base}/workspace-control/stop', {method:'POST', credentials:'same-origin'});
         $|    if (!response.ok) throw new Error(String(response.status));
         $|    document.open(); document.write(await response.text()); document.close();
         $|  } catch (_) {
@@ -282,7 +311,7 @@ async fn Bridge::workspace_controls(
         $|</script></html>
       page
     } else {
-      "<!doctype html><html lang=\"zh-CN\"><meta charset=\"utf-8\"><title>管理工作台</title><main><h1>暂不可停止</h1><p>这个工作台尚未接入受管停止能力，请联系管理员。</p><p><a href=\"/\">返回工作台</a></p></main></html>"
+      "<!doctype html><html lang=\"zh-CN\"><meta charset=\"utf-8\"><title>管理工作台</title><main><h1>暂不可停止</h1><p>这个工作台尚未接入受管停止能力，请联系管理员。</p><p><a href=\"\{base}/\">返回工作台</a></p></main></html>"
     },
   )
   connection.end_response()
@@ -325,6 +354,9 @@ async fn Bridge::proxy_http(
   body : &@io.Reader,
   connection : @http.ServerConnection,
 ) -> Unit {
+  if self.config.client_id == "moontown" {
+    eprintln("MoonTown HTTP proxy request received")
+  }
   let headers : Map[String, String] = Map([])
   // Never forward browser cookies, Authorization, Host, forwarded identity or
   // hop-by-hop headers. The personal desktop sees only the private gateway's
@@ -335,15 +367,40 @@ async fn Bridge::proxy_http(
       None => ()
     }
   }
-  if self.config.client_id == "desktop-workspace" {
+  let miniapp_request = self.config.client_id == "moontown" &&
+    request.path.has_prefix("/miniapp/")
+  if miniapp_request {
+    for name in ["x-miniapp-session", "x-moondesk-transport-id"] {
+      match header(request.headers, name) {
+        Some(value) => headers[name] = value
+        None => ()
+      }
+    }
+  }
+  if self.config.client_id == "desktop-workspace" ||
+    self.config.client_id == "moonrobo" ||
+    self.config.client_id == "moontown" {
     headers["origin"] = session.backend.http_url
   }
   let payload = read_bounded(body, self.config.maximum_request_bytes)
-  let upstream = @http.Client(session.backend.http_url)
+  if self.config.client_id == "moontown" {
+    headers["content-length"] = payload.length().to_string()
+  }
+  let upstream_origin = if miniapp_request &&
+    session.backend.http_url.has_suffix(":8188") {
+    session.backend.http_url[:session.backend.http_url.length() - 5].to_owned() +
+    ":8189"
+  } else {
+    session.backend.http_url
+  }
+  let upstream = @http.Client(upstream_origin)
   defer upstream.close()
   upstream.request(request.meth, request.path, extra_headers=headers)
   upstream.write(payload)
   let response = upstream.end_request()
+  if self.config.client_id == "moontown" {
+    eprintln("MoonTown HTTP upstream headers received")
+  }
   // Redirects can expose an internal endpoint or move the browser outside the
   // authenticated gateway. ComfyUI's accepted API/static routes don't need them.
   if response.code >= 300 && response.code < 400 && response.code != 304 {
@@ -367,6 +424,9 @@ async fn Bridge::proxy_http(
     }
   }
   connection.end_response()
+  if self.config.client_id == "moontown" {
+    eprintln("MoonTown HTTP proxy response completed")
+  }
 }
 
 ///|
@@ -396,7 +456,9 @@ async fn Bridge::proxy_socket(
   let upstream = @async.with_timeout(self.config.request_timeout_ms, () => {
     @websocket.Conn::connect(
       session.backend.websocket_url + request.path,
-      headers=if self.config.client_id == "desktop-workspace" {
+      headers=if self.config.client_id == "desktop-workspace" ||
+        self.config.client_id == "moonrobo" ||
+        self.config.client_id == "moontown" {
         { "origin": session.backend.http_url }
       } else {
         Map([])
@@ -476,6 +538,11 @@ pub async fn Bridge::handle(
     let session = @async.with_timeout(self.config.request_timeout_ms, () => {
       self.session(token)
     })
+    if self.config.client_id == "moontown" &&
+      request.path == "/platform-scope.js" &&
+      request.meth == Get {
+      return self.moontown_scope_script(session, connection)
+    }
     if request.path == "/workspace-control" && request.meth == Get {
       return self.workspace_controls(connection)
     }
@@ -503,7 +570,11 @@ pub async fn Bridge::handle(
     }
     if request.path.split("?").next() == Some("/ws") ||
       (
-        self.config.client_id == "desktop-workspace" &&
+        (
+          self.config.client_id == "desktop-workspace" ||
+          self.config.client_id == "moonrobo" ||
+          self.config.client_id == "moontown"
+        ) &&
         header(request.headers, "upgrade") == Some("websocket")
       ) {
       if request.meth != Get ||

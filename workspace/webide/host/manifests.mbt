@@ -42,7 +42,12 @@ fn WorkspaceHost::resources(
   container? : ExclusiveContainer,
 ) -> Array[(String, Json)] raise HostError {
   let name = resource_name(id)
-  if grant.client_id == "desktop-workspace" && container is None {
+  if (
+      grant.client_id == "desktop-workspace" ||
+      grant.client_id == "moonrobo" ||
+      grant.client_id == "moontown"
+    ) &&
+    container is None {
     raise InvalidConfiguration
   }
   if container is None && grant.allowed_models.is_empty() {
@@ -125,12 +130,22 @@ fn WorkspaceHost::resources(
   let secret_data : Json = {
     "model-proxy.json": ToJson::to_json(proxy).stringify(),
   }
-  if grant.client_id == "desktop-workspace" && secret_data is Object(fields) {
+  if grant.client_id == "moontown" && secret_data is Object(fields) {
+    fields["moontown-miniapp-session-token"] = @crypto.bytes_to_hex_string(
+      @crypto.sha256(
+        @utf8.encode("moontown-miniapp-session.v1|" + grant.api_secret),
+      ),
+    ).to_json()
+  }
+  if (grant.client_id == "desktop-workspace" || grant.client_id == "moontown") &&
+    secret_data is Object(fields) {
     fields["moongate-control-token"] = @crypto.bytes_to_hex_string(
       @crypto.sha256(
         @utf8.encode("moon-gateway-control.v1|" + grant.api_secret),
       ),
     ).to_json()
+  }
+  if grant.client_id == "desktop-workspace" && secret_data is Object(fields) {
     let instance_id = @crypto.bytes_to_hex_string(
       @crypto.sha256(@utf8.encode("moonclaw-instance.v1|" + id)),
     )[:32].to_owned()
@@ -296,7 +311,12 @@ fn WorkspaceHost::resources(
   if placement is Some(assigned) {
     self.place_exclusive(deployment, grant, assigned, container)
   } else if container is Some(runtime) {
-    if runtime.gpu || grant.client_id != "desktop-workspace" {
+    if runtime.gpu ||
+      (
+        grant.client_id != "desktop-workspace" &&
+        grant.client_id != "moonrobo" &&
+        grant.client_id != "moontown"
+      ) {
       raise InvalidConfiguration
     }
     self.place_container(deployment, grant, runtime)
@@ -305,9 +325,14 @@ fn WorkspaceHost::resources(
     Some(runtime) => {
       let value = service
       if value is Object(root) && root.get("spec") is Some(Object(spec)) {
-        spec["ports"] = [
-          { "name": "workspace", "port": 8188, "targetPort": runtime.port },
-        ]
+        spec["ports"] = if grant.client_id == "moontown" {
+          [
+            { "name": "workspace", "port": 8188, "targetPort": runtime.port },
+            { "name": "miniapp", "port": 8189, "targetPort": 18191 },
+          ]
+        } else {
+          [{ "name": "workspace", "port": 8188, "targetPort": runtime.port }]
+        }
       }
       value
     }
@@ -396,7 +421,14 @@ fn WorkspaceHost::resources(
             },
           },
         ],
-        "ports": [{ "protocol": "TCP", "port": runtime.port }],
+        "ports": if grant.client_id == "moontown" {
+          [
+            { "protocol": "TCP", "port": runtime.port },
+            { "protocol": "TCP", "port": 18191 },
+          ]
+        } else {
+          [{ "protocol": "TCP", "port": runtime.port }]
+        },
       },
     ]
   }
