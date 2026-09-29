@@ -12,11 +12,21 @@ test "expired malformed and absent sessions fail closed" {
 }
 
 ///|
-test "only the Operator manifest receives the pinned transport opt-in" {
-  let source = "{\"identifier\":\"dev.vectie.lunanexa.operator\",\"runtime\":{\"webviews\":[{\"label\":\"operator\",\"initializationScripts\":[]}]}}"
-  let result = desktop_manifest(source)
+test "Operator manifest binds its release origin without a source IP" {
+  let source = "{\"identifier\":\"dev.vectie.lunanexa.operator\",\"runtime\":{\"webviews\":[{\"label\":\"operator\",\"url\":\"https://manage.example.test:8443/console/\",\"initializationScripts\":[]}]}}"
+  let (result, origin) = desktop_manifest(source)
+  assert_eq(origin, "https://manage.example.test:8443")
   assert_true(result.contains(origin + "/console/"))
-  assert_true(result.contains("location.origin !=="))
+  assert_false(result.contains("lunanexa-public-http-origin"))
+  let (http_result, http_origin) = desktop_manifest(
+    source.replace(
+      old="https://manage.example.test:8443",
+      new="http://10.1.2.3:4174",
+    ),
+  )
+  assert_eq(http_origin, "http://10.1.2.3:4174")
+  assert_true(http_result.contains("location.origin !=="))
+  assert_true(http_result.contains("lunanexa-public-http-origin"))
   try desktop_manifest("{}") catch {
     _ => ()
   } noraise {
@@ -33,5 +43,16 @@ test "only the Operator manifest receives the pinned transport opt-in" {
     _ => ()
   } noraise {
     _ => fail("enterprise accepted")
+  }
+  for
+    invalid in [
+      source.replace(old="/console/", new="/other/"),
+      source.replace(old="manage.example.test", new="user@manage.example.test"),
+    ] {
+    try desktop_manifest(invalid) catch {
+      _ => ()
+    } noraise {
+      _ => fail("invalid Operator origin accepted")
+    }
   }
 }

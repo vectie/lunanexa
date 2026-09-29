@@ -25,6 +25,30 @@ async fn main {
     (credential.length() > 0 && credential.length() <= 1024) else {
     fail("A bounded private credential is required on stdin")
   }
+  let operator_origin = @env.get_env_var("LUNANEXA_OPERATOR_ORIGIN")
+    .unwrap_or("")
+    .trim()
+    .to_owned()
+  let authority = if operator_origin.has_prefix("http://") {
+    operator_origin[7:].to_owned()
+  } else if operator_origin.has_prefix("https://") {
+    operator_origin[8:].to_owned()
+  } else {
+    ""
+  }
+  guard (
+      operator_origin.has_prefix("http://") ||
+      operator_origin.has_prefix("https://")
+    ) &&
+    authority != "" &&
+    !authority.contains("/") &&
+    !authority.contains("?") &&
+    !authority.contains("#") &&
+    !authority.contains("@") &&
+    !authority.contains("\\") &&
+    !authority.contains(" ") else {
+    fail("Set LUNANEXA_OPERATOR_ORIGIN to a reviewed HTTP(S) origin")
+  }
   let repo = @shell.Cmd("pwd", []).output().stdout().trim().to_owned()
   let native = repo + "/desktop/native"
   let arch = @shell.Cmd("uname", ["-m"]).output().stdout().trim().to_owned()
@@ -82,7 +106,7 @@ async fn main {
   }
   config["version"] = Json::string("0.2.0")
   config["icon"] = Json::string(icon)
-  window["source"] = { "url": "http://192.0.2.175:4174/console/" }
+  window["source"] = { "url": operator_origin + "/console/" }
   let project = out + "/operator.json"
   @fs.write_file(project, manifest.stringify())
   let staging = out + "/staging"
@@ -107,21 +131,22 @@ async fn main {
     ["-c", "Add :LSMinimumSystemVersion string 13.0", plist],
     repo,
   )
-  // IP-address HTTP is an explicit, fixed LAN deployment choice. The WebView
-  // override applies only to web content; no general NSURLSession exception.
-  run(
-    "/usr/libexec/PlistBuddy",
-    ["-c", "Add :NSAppTransportSecurity dict", plist],
-    repo,
-  )
-  run(
-    "/usr/libexec/PlistBuddy",
-    [
-      "-c", "Add :NSAppTransportSecurity:NSAllowsArbitraryLoadsInWebContent bool true",
-      plist,
-    ],
-    repo,
-  )
+  // Only a deliberately selected HTTP profile needs the WebView exception.
+  if operator_origin.has_prefix("http://") {
+    run(
+      "/usr/libexec/PlistBuddy",
+      ["-c", "Add :NSAppTransportSecurity dict", plist],
+      repo,
+    )
+    run(
+      "/usr/libexec/PlistBuddy",
+      [
+        "-c", "Add :NSAppTransportSecurity:NSAllowsArbitraryLoadsInWebContent bool true",
+        plist,
+      ],
+      repo,
+    )
+  }
   run(
     "/usr/libexec/PlistBuddy",
     [
@@ -141,13 +166,15 @@ async fn main {
   }
   @fs.write_file(
     staging + "/使用说明.txt",
-    "LunaNexa Operator\n\n将应用拖入 Applications。\n预设地址：http://192.0.2.175:4174\n预设用户名：wlc\n" +
+    "LunaNexa Operator\n\n将应用拖入 Applications。\n预设地址：" +
+    operator_origin +
+    "\n预设用户名：wlc\n" +
     (if private_build {
       "此专用包内置管理员凭据，首次打开自动导入钥匙串。不要公开分发：包内密码可被提取。\n"
     } else {
       "首次打开输入平台密码，之后由本机钥匙串自动登录。\n"
     }) +
-    "需要内网或 VPN；此版本使用 HTTP。\n此安装包为本地临时签名版本，尚未经过 Apple 公证。\n",
+    "请确保设备可以访问上述地址。\n此安装包为本地临时签名版本，尚未经过 Apple 公证。\n",
   )
   let releases = out + "/releases"
   if !@fs.exists(releases) {

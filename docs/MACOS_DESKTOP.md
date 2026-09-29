@@ -2,14 +2,16 @@
 
 ## Private Operator auto-login profile
 
-`desktop/native` adds a MoonBit-owned Lepusa runtime for the explicitly approved
-`http://192.0.2.175:4174` Operator deployment, account `wlc`. This is an
-intentional plaintext LAN exception, not a change to Enterprise or public-browser
-authentication. Use only the trusted LAN/VPN: HTTP does not encrypt credentials.
+`desktop/native` adds a MoonBit-owned Lepusa runtime for a release-selected
+Operator origin and account `wlc`. The ordinary build requires
+`LUNANEXA_OPERATOR_ORIGIN`; it never falls back to an example IP. An HTTP
+origin is an explicit plaintext LAN exception, not a change to Enterprise or
+public-browser authentication. Use HTTP only on a trusted LAN/VPN: it does not
+encrypt credentials. HTTPS builds do not enable the WebView HTTP exception.
 The app reads the password from macOS Keychain, exchanges it at `/auth/password`,
 checks live `/v1/auth/self` authority, installs the returned HttpOnly cookie in
-WebKit, then opens the centrally hosted Rabbita console. No password is shipped
-in the app, embedded into JavaScript, or exposed through a native plugin.
+WebKit, then opens the centrally hosted Rabbita console. Ordinary builds ship
+no password, embed none in JavaScript, and expose none through a native plugin.
 
 On a different Mac, configure the password once using the native secure field.
 An unavailable network, locked/denied Keychain, rejected password or revoked
@@ -23,7 +25,8 @@ The application icon uses the existing edge-to-edge pale-blue
 `assets/platform-logo-light.png`, without the dark icon's outer white border.
 
 Build this Apple Silicon profile from the repository root with
-`moon run scripts/build-operator-macos.mbtx`. Output lives under
+`LUNANEXA_OPERATOR_ORIGIN=https://manage.example.com moon run scripts/build-operator-macos.mbtx`.
+Output lives under
 `_build/macos/operator-autologin/releases/`. The DMG contains the app,
 Applications shortcut and first-launch instructions; credentials are provisioned
 on the receiving Mac, not distributed inside the image. This profile is locally
@@ -163,6 +166,7 @@ Supported environment variables:
 | Variable | Ownership | Purpose |
 | --- | --- | --- |
 | `LEPUSA_ROOT` | release admin | Lepusa checkout used to build the native runtime |
+| `LUNANEXA_OPERATOR_ORIGIN` | release admin | Required origin for the private Operator auto-login package |
 | `LUNANEXA_DESKTOP_BASE_URL` | global admin | HTTPS management origin when not passed as argument |
 | `LUNANEXA_DESKTOP_VERSION` | release admin | application/DMG version |
 | `LUNANEXA_MACOS_SIGNING_IDENTITY` | release admin | Developer ID identity; defaults to ad-hoc `-` |

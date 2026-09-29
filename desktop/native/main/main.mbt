@@ -1,7 +1,4 @@
 ///|
-let origin : String = "http://192.0.2.175:4174"
-
-///|
 let username : String = "wlc"
 
 ///|
@@ -16,8 +13,8 @@ extern "c" fn password(service : Bytes, account : Bytes) -> Bytes = "lnx_passwor
 extern "c" fn configure(service : Bytes, account : Bytes) -> Int = "lnx_configure"
 
 ///|
-#borrow(value)
-extern "c" fn install_cookie(value : Bytes) -> Int = "lnx_install_cookie"
+#borrow(value, origin)
+extern "c" fn install_cookie(value : Bytes, origin : Bytes) -> Int = "lnx_install_cookie"
 
 ///|
 #borrow(message)
@@ -38,27 +35,49 @@ fn valid_session(session : Session, now : Int64) -> Bool {
 }
 
 ///|
-// A desktop deployment opt-in, scoped to the pinned management origin only.
+// A desktop deployment opt-in, scoped to the release-selected HTTP origin.
 // This does not grant authority; the ordinary identity session is still required.
-let transport_script : String =
-  #|(() => {
-  #| if (location.origin !== 'http://192.0.2.175:4174') return;
-  #| const apply = () => {
-  #|   if (!document.head) return false;
-  #|   const meta = document.createElement('meta');
-  #|   meta.name = 'lunanexa-public-http-origin';
-  #|   meta.content = location.origin;
-  #|   document.head.prepend(meta);
-  #|   return true;
-  #| };
-  #| if (!apply()) {
-  #|   const observer = new MutationObserver(() => { if (apply()) observer.disconnect(); });
-  #|   observer.observe(document, {childList: true, subtree: true});
-  #| }
-  #|})();
+fn transport_script(origin : String) -> String {
+  let quoted_origin = Json::string(origin).stringify()
+  let script =
+    #|(() => {
+    #| if (location.origin !== __OPERATOR_ORIGIN__) return;
+    #| const apply = () => {
+    #|   if (!document.head) return false;
+    #|   const meta = document.createElement('meta');
+    #|   meta.name = 'lunanexa-public-http-origin';
+    #|   meta.content = location.origin;
+    #|   document.head.prepend(meta);
+    #|   return true;
+    #| };
+    #| if (!apply()) {
+    #|   const observer = new MutationObserver(() => { if (apply()) observer.disconnect(); });
+    #|   observer.observe(document, {childList: true, subtree: true});
+    #| }
+    #|})();
+  script.replace(old="__OPERATOR_ORIGIN__", new=quoted_origin)
+}
 
 ///|
-fn desktop_manifest(text : String) -> String raise {
+fn valid_operator_origin(origin : String) -> Bool {
+  let authority = if origin.has_prefix("https://") {
+    origin[8:].to_owned()
+  } else if origin.has_prefix("http://") {
+    origin[7:].to_owned()
+  } else {
+    return false
+  }
+  authority != "" &&
+  !authority.contains("/") &&
+  !authority.contains("?") &&
+  !authority.contains("#") &&
+  !authority.contains("@") &&
+  !authority.contains("\\") &&
+  !authority.contains(" ")
+}
+
+///|
+fn desktop_manifest(text : String) -> (String, String) raise {
   let parsed = @json.parse(text)
   guard parsed
     is {
@@ -73,19 +92,28 @@ fn desktop_manifest(text : String) -> String raise {
     view.get("label") == Some(Json::string("operator")) else {
     raise Failure("Not an Operator window")
   }
+  guard view.get("url") is Some(String(url)) && url.has_suffix("/console/") else {
+    raise Failure("Operator manifest needs a console URL")
+  }
+  let origin = url[:url.length() - 9].to_owned()
+  guard valid_operator_origin(origin) else {
+    raise Failure("Operator manifest has an invalid origin")
+  }
   // Reuse the live Rabbita UI; neither UI assets nor secrets are forked locally.
   view["url"] = Json::string(origin + "/console/")
   let scripts = match view.get("initializationScripts") {
     Some(Array(scripts)) => scripts
     _ => []
   }
-  scripts.push(Json::string(transport_script))
+  if origin.has_prefix("http://") {
+    scripts.push(Json::string(transport_script(origin)))
+  }
   view["initializationScripts"] = Json::array(scripts)
-  parsed.stringify()
+  (parsed.stringify(), origin)
 }
 
 ///|
-async fn authenticate() -> Unit {
+async fn authenticate(origin : String) -> Unit {
   let mut secret = @utf8.decode(
     password(@utf8.encode(origin), @utf8.encode(username)),
   )
@@ -138,6 +166,7 @@ async fn authenticate() -> Unit {
     }
     guard install_cookie(
         @utf8.encode(response.cookies[0].to_json().stringify()),
+        @utf8.encode(origin),
       ) ==
       0 else {
       raise Failure("无法初始化管理台会话。")
@@ -148,6 +177,13 @@ async fn authenticate() -> Unit {
 ///|
 async fn main {
   let args = @env.args()
+  let mut path = @utf8.decode(resource_manifest())
+  for i in 0..<args.length() {
+    if args[i] == "--manifest" {
+      path = args.get(i + 1).unwrap_or("")
+    }
+  }
+  let (text, origin) = desktop_manifest(@fs.read_file(path).text())
   if args.contains("--configure") {
     guard configure(@utf8.encode(origin), @utf8.encode(username)) == 0 else {
       raise Failure("未能保存到钥匙串。")
@@ -155,23 +191,16 @@ async fn main {
     println("Operator credential saved in this Mac's Keychain.")
     return
   }
-  let mut path = @utf8.decode(resource_manifest())
-  for i in 0..<args.length() {
-    if args[i] == "--manifest" {
-      path = args.get(i + 1).unwrap_or("")
-    }
-  }
-  let text = desktop_manifest(@fs.read_file(path).text())
   let manifest = match @bundled.BundledRuntimeManifest::parse(path, text) {
     Ok(manifest) => manifest
     Err(_) => raise Failure("Invalid desktop manifest")
   }
   for ;; {
-    try authenticate() catch {
+    try authenticate(origin) catch {
       _ => {
         let action = retry_dialog(
           @utf8.encode(
-            "无法连接或登录 192.0.2.175:4174。请检查内网 / VPN、钥匙串权限及账户密码。",
+            "无法连接或登录 \{origin}。请检查网络、钥匙串权限及账户密码。",
           ),
         )
         if action == 0 {

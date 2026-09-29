@@ -96,20 +96,23 @@ MOONBIT_FFI_EXPORT int32_t lnx_retry_dialog(const unsigned char *message) {
     return result == NSAlertFirstButtonReturn ? 1 : result == NSAlertThirdButtonReturn ? 2 : 0;
   }
 }
-MOONBIT_FFI_EXPORT int32_t lnx_install_cookie(const unsigned char *value) {
+MOONBIT_FFI_EXPORT int32_t lnx_install_cookie(const unsigned char *value, const unsigned char *origin) {
   @autoreleasepool {
     if (![NSThread isMainThread]) return 1;
     app();
+    NSURLComponents *url = [NSURLComponents componentsWithString:str(origin)];
+    NSString *host = url.host;
+    if (!host.length || !([url.scheme isEqual:@"http"] || [url.scheme isEqual:@"https"])) return 1;
     NSDictionary *item = [NSJSONSerialization JSONObjectWithData:[str(value) dataUsingEncoding:NSUTF8StringEncoding] options:0 error:NULL];
     if (![item isKindOfClass:NSDictionary.class] || ![item[@"http_only"] boolValue]) return 1;
     NSString *name = item[@"name"], *content = item[@"value"];
     if (![name isKindOfClass:NSString.class] || ![content isKindOfClass:NSString.class] || !name.length || !content.length) return 1;
     // The gateway cookie is host-only. Never accept a provider-chosen domain.
     id domain = item[@"domain"];
-    if (domain && domain != NSNull.null && ![domain isEqual:@"192.0.2.175"]) return 1;
+    if (domain && domain != NSNull.null && ![domain isEqual:host]) return 1;
     NSHTTPCookie *cookie = [NSHTTPCookie cookieWithProperties:@{
       NSHTTPCookieName: name, NSHTTPCookieValue: content,
-      NSHTTPCookieDomain: @"192.0.2.175", NSHTTPCookiePath: @"/",
+      NSHTTPCookieDomain: host, NSHTTPCookiePath: @"/",
       @"HttpOnly": @"TRUE", NSHTTPCookieDiscard: @"TRUE"
     }];
     if (!cookie) return 1;
