@@ -1650,7 +1650,7 @@ async fn main {
       @env.get_env_var("LUNANEXA_GLM_CONTROL_ORIGIN"),
       @env.get_env_var("LUNANEXA_GLM_CONTROL_TOKEN"),
     ) {
-    (Some(origin), Some(raw_token)) if origin == "http://192.0.2.175:5907" &&
+    (Some(origin), Some(raw_token)) if @glmcontrol.valid_origin(origin) &&
       raw_token.trim().length() >= 32 &&
       service.has_external_text_route() => {
       let token = raw_token.trim().to_owned()

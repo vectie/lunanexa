@@ -1500,6 +1500,19 @@ Render a private overlay that replaces:
 - the management/GPU node selectors;
 - any deployment-specific network-policy addresses.
 
+The optional legacy GLM lifecycle adapter is site-specific. If enabled, put
+its reachable `http://` or `https://` origin in the `glm-control-origin` key of
+the `lunanexa-control-config` ConfigMap and provide the existing
+`lunanexa-glm-control` token Secret. Install a host-owned
+`/etc/lunanexa/glm-control.env` for the systemd adapter containing
+`LUNANEXA_GLM_CONTROL_BIND`, `LUNANEXA_GLM_CONTROL_TOKEN_FILE`,
+`LUNANEXA_GLM_HEAD_SSH_TARGET`, `LUNANEXA_GLM_HEAD_CONTAINER`,
+`LUNANEXA_GLM_WORKER_SSH_TARGET`, and `LUNANEXA_GLM_WORKER_CONTAINER`.
+Render the systemd unit's `User`, `Group`, and `WorkingDirectory` for the
+site-owned service account before installing it. Keep the token and site
+targets out of Git. Omit the origin and token when this legacy adapter is not
+deployed.
+
 Review `deploy/admin-settings.example.json` as an operator-owned artifact,
 increment its `generation` for every approved policy change, and place it in
 the `lunanexa-admin-settings` ConfigMap. The same read-only document is mounted

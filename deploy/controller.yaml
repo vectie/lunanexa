@@ -347,7 +347,11 @@ spec:
                   key: external-text-route
                   optional: true
             - name: LUNANEXA_GLM_CONTROL_ORIGIN
-              value: http://192.0.2.175:5907
+              valueFrom:
+                configMapKeyRef:
+                  name: lunanexa-control-config
+                  key: glm-control-origin
+                  optional: true
             - name: LUNANEXA_GLM_CONTROL_TOKEN
               valueFrom:
                 secretKeyRef:

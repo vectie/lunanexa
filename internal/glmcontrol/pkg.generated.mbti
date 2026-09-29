@@ -1,0 +1,13 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/internal/glmcontrol"
+
+// Values
+pub fn valid_origin(String) -> Bool
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits

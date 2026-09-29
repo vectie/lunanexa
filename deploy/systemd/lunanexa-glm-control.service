@@ -8,8 +8,7 @@ Type=simple
 User=cluster-admin
 Group=cluster-admin
 WorkingDirectory=/home/cluster-admin
-Environment=LUNANEXA_GLM_CONTROL_BIND=192.0.2.175:5907
-Environment=LUNANEXA_GLM_CONTROL_TOKEN_FILE=/home/cluster-admin/.config/lunanexa/glm-control-token
+EnvironmentFile=/etc/lunanexa/glm-control.env
 ExecStart=/opt/lunanexa/bin/glm-control.exe
 Restart=on-failure
 RestartSec=3
