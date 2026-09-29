@@ -21,6 +21,10 @@
 /_artifacts/
 /benchmarks/results/
 /deploy/local/
+# Site-rendered launch/ingress overlays stay local; commit templates instead.
+/deploy/cluster/*-patch.json
+/deploy/cluster/*-public.yaml
+/deploy/offline-transfer/public-upload.yaml
 /lunanexa-*.json
 /lunanexa-*.json.*
 
