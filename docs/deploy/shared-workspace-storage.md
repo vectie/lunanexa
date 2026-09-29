@@ -8,9 +8,15 @@ not migrate existing local-path PVCs or make the management disk highly availabl
 
 ## Deployment profile
 
-- Server: management `192.0.2.175`, dedicated `/data/lunanexa-workspaces`; never `/`, `/home`, `/data` itself or the model store.
+- The checked-in `deploy/shared-workspace-storage-profile.json` is an example
+  with documentation addresses, not a deployable site inventory. Copy it to
+  an absolute path outside Git and replace `server`, `controller_node`, and
+  `nodes` with the reviewed site values. The script retains the pinned driver
+  release, image digests, and dedicated export root. It rejects example IPs.
+- Server: the selected management host, dedicated `/data/lunanexa-workspaces`; never `/`, `/home`, `/data` itself or the model store.
 - Existing `/data` capacity observed by main: 7.2 TiB total / about 4.6 TiB free. Inspect it again before installation. The script requires `/data` to be a real mountpoint to avoid filling the root disk.
-- Export clients: exact five management/Spark IPs `.175`–`.179`. `sync,all_squash,anonuid=1000,anongid=1000`, root ownership `1000:1000`, mode `0770`.
+- Export clients: only the exact node IPs in the reviewed site profile (five
+  in the original acceptance campaign). `sync,all_squash,anonuid=1000,anongid=1000`, root ownership `1000:1000`, mode `0770`.
 - StorageClass `lunanexa-workspaces-rwx`; NFS v4.1, hard mounts; one directory per namespace/PVC/PV. Both Kubernetes reclaim policy and CSI deletion behavior retain data.
 - Runtime must select this class, `ReadWriteMany`, and run the workspace with UID/GID/fsGroup 1000. The example claim is not installed automatically; gateway owns namespace and per-workspace claims.
 - CSI is upstream `kubernetes-csi/csi-driver-nfs` v4.13.1 at commit `d1b043ffd67318fa71b4b3d4508707882cf92fdc`, not a custom driver. Controller is management-only. Two architecture-filtered node DaemonSets cover Linux amd64 and arm64, with a dedicated opt-in node label.
@@ -21,10 +27,14 @@ not migrate existing local-path PVCs or make the management disk highly availabl
 From repository root on a machine with MoonBit and curl:
 
 ```text
-moon run scripts/prepare-shared-storage.mbtx prepare /absolute/new/bundle
+LUNANEXA_SHARED_STORAGE_PROFILE=/absolute/private/site-profile.json moon run scripts/prepare-shared-storage.mbtx validate /absolute/new/bundle
+LUNANEXA_SHARED_STORAGE_PROFILE=/absolute/private/site-profile.json moon run scripts/prepare-shared-storage.mbtx prepare /absolute/new/bundle
 ```
 
 Choose a new, nonexistent output directory. This downloads source manifests from the exact upstream commit and indexes by their real digest, verifies Linux amd64/arm64 availability, writes architecture-specific pinned manifests and the narrow exports configuration. Existing generated files are not overwritten.
+`validate` is read-only. `prepare` copies the reviewed site profile into the
+bundle; later cache/import/install modes read that bundled profile, so they
+cannot silently switch to a different local site file.
 
 For an offline image cache, install/use `skopeo` on the designated preparation host, using the administrator's existing package mirror configuration, then:
 

@@ -5,6 +5,7 @@ import {
   "moonbitlang/async/shell",
   "moonbitlang/core/env",
   "moonbitlang/core/json",
+  "moonbitlang/core/string",
 }
 
 ///|
@@ -30,6 +31,92 @@ struct Profile {
   nodes : Array[NodeTarget]
   images : Array[ImagePin]
 } derive(FromJson)
+
+///|
+fn valid_ipv4(value : String) -> Bool {
+  let parts = value.split(".").to_array()
+  if parts.length() != 4 {
+    return false
+  }
+  for part in parts {
+    if part.length() == 0 || part.length() > 3 {
+      return false
+    }
+    for digit in part {
+      if digit < '0' || digit > '9' {
+        return false
+      }
+    }
+    let octet = @string.parse_int(part.to_owned()) catch { _ => -1 }
+    if octet < 0 || octet > 255 {
+      return false
+    }
+  }
+  true
+}
+
+///|
+fn site_ipv4(value : String) -> Bool {
+  valid_ipv4(value) &&
+  !value.has_prefix("192.0.2.") &&
+  !value.has_prefix("198.51.100.") &&
+  !value.has_prefix("203.0.113.") &&
+  !value.has_prefix("198.18.")
+}
+
+///|
+fn valid_node_name(value : String) -> Bool {
+  if value == "" {
+    return false
+  }
+  for char in value {
+    if !char.is_ascii_alphabetic() &&
+      !char.is_ascii_digit() &&
+      char != '-' &&
+      char != '.' {
+      return false
+    }
+  }
+  true
+}
+
+///|
+fn reviewed_profile(profile : Profile, template : Profile) -> Bool {
+  if profile.release != template.release ||
+    profile.commit != template.commit ||
+    profile.export_path != template.export_path ||
+    profile.images.length() != template.images.length() ||
+    !site_ipv4(profile.server) ||
+    !valid_node_name(profile.controller_node) ||
+    profile.nodes.length() == 0 ||
+    !profile.nodes.any(node => {
+      node.name == profile.controller_node && node.ip == profile.server
+    }) {
+    return false
+  }
+  for index in 0..<profile.images.length() {
+    let actual = profile.images[index]
+    let expected = template.images[index]
+    if actual.name != expected.name ||
+      actual.tag != expected.tag ||
+      actual.digest != expected.digest {
+      return false
+    }
+  }
+  for index in 0..<profile.nodes.length() {
+    let node = profile.nodes[index]
+    if !valid_node_name(node.name) || !site_ipv4(node.ip) {
+      return false
+    }
+    for earlier in 0..<index {
+      if node.name == profile.nodes[earlier].name ||
+        node.ip == profile.nodes[earlier].ip {
+        return false
+      }
+    }
+  }
+  true
+}
 
 ///|
 async fn run(program : String, args : Array[String]) -> String {
@@ -72,24 +159,45 @@ async fn main {
   guard @env.args() is [_, mode, output_dir, .. extra] &&
     (
       mode == "prepare" ||
+      mode == "validate" ||
       mode == "cache-images" ||
       mode == "import-images" ||
       mode == "install-server" ||
       mode == "install-driver"
     ) else {
     fail(
-      "Usage: prepare-shared-storage.mbtx prepare|cache-images|import-images|install-server|install-driver OUTPUT_DIR [CRANE_BINARY|CONTAINERD_SOCKET|KUBECONFIG]",
+      "Usage: prepare-shared-storage.mbtx validate|prepare|cache-images|import-images|install-server|install-driver OUTPUT_DIR [CRANE_BINARY|CONTAINERD_SOCKET|KUBECONFIG]",
     )
   }
-  let profile_text = @fs.read_file(
+  let template_text = @fs.read_file(
     "deploy/shared-workspace-storage-profile.json",
   ).text()
+  let template : Profile = @json.from_json(@json.parse(template_text))
+  let profile_path = if mode == "validate" || mode == "prepare" {
+    @env.get_env_var("LUNANEXA_SHARED_STORAGE_PROFILE").unwrap_or("")
+  } else {
+    output_dir + "/profile.json"
+  }
+  guard profile_path.has_prefix("/") else {
+    fail("Supply an absolute site profile path outside Git")
+  }
+  let profile_text = @fs.read_file(profile_path).text()
   let profile : Profile = @json.from_json(@json.parse(profile_text))
-  // This script is intentionally a named deployment profile, not arbitrary root export automation.
-  if profile.export_path != "/data/lunanexa-workspaces" ||
-    profile.server != "192.0.2.175" ||
-    profile.commit != "d1b043ffd67318fa71b4b3d4508707882cf92fdc" {
-    fail("Review the deployment profile before changing its host/export/source")
+  // Site identity may vary, but the reviewed upstream driver and export root may not.
+  guard reviewed_profile(profile, template) else {
+    fail("Invalid site identity or unreviewed driver/export change")
+  }
+  let storageclass = @fs.read_file("deploy/shared-workspace-storage.yaml").text()
+  guard storageclass.contains("server: " + template.server) else {
+    fail("The reviewed StorageClass server placeholder changed")
+  }
+  let rendered_storageclass = storageclass.replace(
+    old="server: " + template.server,
+    new="server: " + profile.server,
+  )
+  if mode == "validate" {
+    println("Site profile validated; no artifacts or host state changed.")
+    return
   }
   if mode == "prepare" {
     @fs.mkdir(output_dir, permission=0o700)
@@ -218,7 +326,7 @@ async fn main {
     }
     @fs.write_file(
       output_dir + "/storageclass.yaml",
-      @fs.read_file("deploy/shared-workspace-storage.yaml"),
+      rendered_storageclass,
       create_mode=CreateNew,
     )
     let exports = profile.export_path +
