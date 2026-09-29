@@ -1,10 +1,14 @@
 [
   {
-    "subject_ref": "example-user-ref",
+    "subject_ref": "example-user-c12264e3112f22266774a3d7",
     "launch_uri": "http://203.0.113.10:5002/connect"
   },
   {
-    "subject_ref": "example-user-ref",
+    "subject_ref": "example-user-696b4fd7861684a4399939b2",
     "launch_uri": "http://203.0.113.10:5003/connect"
+  },
+  {
+    "subject_ref": "example-user-96cd0aef1bbc4bc887883168",
+    "launch_uri": "https://suanli.example.com:8443/moondesk/connect"
   }
 ]

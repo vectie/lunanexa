@@ -3,7 +3,7 @@
 ## 环境与边界
 
 - 公网入口：`https://suanli.example.com:8443/user/` 与 `/mana/`。
-- 用户端以现有 `CeShi@lunanexa.local` 测试账户登录，所选组织为「企业专属云 WebIDE 验收」（`tenant-example`）。管理端以现有 operator 会话登录。
+- 用户端以现有 `CeShi@lunanexa.local` 测试账户登录，所选组织为「企业专属云 WebIDE 验收」（`tenant-example-c`）。管理端以现有 operator 会话登录。
 - 本轮只用浏览器 UI 执行业务操作。新订单 `offline-order-3107c1ec-2e4f-423b-9744-24589e20f044` 是该测试组织的 1 天、1 台、¥49 固定档位；文档包 `contract-17c9fddd-a037-4bc2-ad62-6b9c17e4a40f`。两者均未签署、未付款、未审批通过、未下发节点。后续复测发现错误入队后，订单已由企业端 UI 在履约前取消（状态版本 4）；文档包保留供审计。
 
 ## 逐按钮与双端反馈

@@ -9,7 +9,7 @@ MoonLeaf dependency remains clean archive
 `066efc2f4d8f4acdb2e13aec2a7cd9103fb028db` from the previous receipt.
 Existing `.mooncakes` dependency caches were reused; no uncommitted source was
 included. New directories are management `/home/cluster-admin/release-8f19a95`
-and Spark .176 `/home/gpu-node/release-8f19a95`.
+and Spark .176 `/home/gpu-node-a/release-8f19a95`.
 
 Registry prefix: `lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/`.
 

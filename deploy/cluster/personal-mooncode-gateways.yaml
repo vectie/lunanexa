@@ -31,7 +31,7 @@ data:
     }
   desktop-container.json: |
     {
-      "image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/acceptance/moondesk-hosted@sha256:bbaed9862ec2a3e47e586f093f4503af108e701ae9c034d8c9431137264ce9ae",
+      "image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/acceptance/moondesk-hosted@sha256:959b56e29fb44cb260826b747e5a407d19ef33c5c109b04280b2343d714eadf0",
       "command": ["/usr/local/bin/moondesk"],
       "args": ["serve", "/workspace", "--ui", "/opt/moondesk/ui", "--host", "0.0.0.0", "--port", "8188"],
       "port": 8188,
@@ -74,7 +74,7 @@ spec:
           env:
             - {name: LUNANEXA_WEBIDE_BIND, value: "0.0.0.0:8082"}
             - {name: LUNANEXA_WEBIDE_CLIENT_ID, value: desktop-workspace}
-            - {name: LUNANEXA_WEBIDE_SUBJECT_REF, value: example-user-ref}
+            - {name: LUNANEXA_WEBIDE_SUBJECT_REF, value: example-user-c12264e3112f22266774a3d7}
             - {name: LUNANEXA_WEBIDE_CONFIG_FILE, value: /config/host.json}
             - {name: LUNANEXA_WEBIDE_CONTAINER_FILE, value: /config/desktop-container.json}
             - {name: LUNANEXA_WEBIDE_REQUIRE_EXCLUSIVE, value: "false"}
@@ -134,7 +134,7 @@ spec:
           env:
             - {name: LUNANEXA_WEBIDE_BIND, value: "0.0.0.0:8082"}
             - {name: LUNANEXA_WEBIDE_CLIENT_ID, value: desktop-workspace}
-            - {name: LUNANEXA_WEBIDE_SUBJECT_REF, value: example-user-ref}
+            - {name: LUNANEXA_WEBIDE_SUBJECT_REF, value: example-user-696b4fd7861684a4399939b2}
             - {name: LUNANEXA_WEBIDE_CONFIG_FILE, value: /config/host.json}
             - {name: LUNANEXA_WEBIDE_CONTAINER_FILE, value: /config/desktop-container.json}
             - {name: LUNANEXA_WEBIDE_REQUIRE_EXCLUSIVE, value: "false"}

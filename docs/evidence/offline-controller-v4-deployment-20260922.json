@@ -21,7 +21,7 @@
   "entitlement_authority_evidence_sha256": "65472dc307c6158d6843ac032e07b87a17e4d4405227f1621729e251fa575b86",
   "technical_scope": {
     "order_id": "technical-acceptance-waiver-order-20260922",
-    "purchaser_subject_ref": "example-user-ref",
+    "purchaser_subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
     "authorization_ref": "docs/evidence/offline-technical-waiver-20260922.md",
     "deployment_window_minutes": 50,
     "ordinary_order_policy_changed": false,

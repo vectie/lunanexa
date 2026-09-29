@@ -146,7 +146,7 @@ These tests do not establish completion of the nine-step public UI journey.
    validation and legal-name/address maximum lengths; individual remains optional.
 9. Entered `TEST-ONLY-UI-20260922` as the clearly synthetic registration reference
    and clicked `创建公司`. Success: organization
-   `organization-example`, pending verification. UI explicitly
+   `organization-example-b`, pending verification. UI explicitly
    reports provider unavailable and keeps prepaid machine ordering closed.
 10. Operator: `成本中心` → expand controller connection → enter this visible
     organization ID → `刷新`. Final state confirms one Default cost center and

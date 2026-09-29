@@ -8,9 +8,9 @@ while retaining resource authorization, tenant isolation and automatic expiry.
 Exact scope:
 
 - Order: `offline-order-4e349988-6b8b-4f80-9492-9dab2b40b0cc`
-- Organization: `organization-example`
-- Tenant: `tenant-example`
-- Purchaser: `example-user-ref`
+- Organization: `organization-example-b`
+- Tenant: `tenant-example-b`
+- Purchaser: `example-user-ad4db055b4142193c05052b1`
 - Packet: `contract-1bd438a8-de6c-418f-aaac-3ebd6da48c8a`
 
 This is a technical authorization record, **not** a signature, payment receipt,

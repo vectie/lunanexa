@@ -16,7 +16,7 @@ video generation, and ComfyUI output retrieval.
 - The immutable ComfyUI template is `minimax-h3-fl2va-comfyui@20260923-r2`.
   The node-specific media binding ConfigMap uses that exact version. The
   enterprise catalog hides the superseded `20260923` revision.
-- Spark `spark-example-node` is Ready and was observed idle before the
+- Spark `spark-a004-00000004` is Ready and was observed idle before the
   proposed exclusive test. No FL2VA transfer to its verified node cache or
   successful video response has been recorded yet.
 

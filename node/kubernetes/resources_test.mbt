@@ -8,7 +8,7 @@ fn runtime_settings() -> @kubernetes.RuntimeSettings {
     runtime_port: 8080,
     run_as_user: 1000,
     device_class_name: "gpu.nvidia.com",
-    controller_addresses: ["192.0.2.175"],
+    controller_addresses: ["10.77.0.175"],
     device_plugin_resource: None,
     runtime_class_name: None,
     controller_namespace: None,
@@ -494,11 +494,8 @@ fn environment_value(environment : Array[Json], name : String) -> String? {
 /// which rank it is and takes its isolated network away in favour of the host
 /// fabric. Nothing here is guessed from the peer's side.
 test "a paired runtime renders rank identity, fabric passthrough and a named peer" {
-  let head = paired_assignment(0, "192.0.2.179")
-  let settings = {
-    ..runtime_settings(),
-    fabric_address: Some("192.0.2.178"),
-  }
+  let head = paired_assignment(0, "10.77.0.179")
+  let settings = { ..runtime_settings(), fabric_address: Some("10.77.0.178"), }
   let resources = @kubernetes.render_runtime(
     settings,
     head,
@@ -544,11 +541,11 @@ test "a paired runtime renders rank identity, fabric passthrough and a named pee
   assert_eq(environment_value(environment, "LUNANEXA_WORLD_SIZE"), Some("2"))
   assert_eq(
     environment_value(environment, "LUNANEXA_PEER_ENDPOINT"),
-    Some("192.0.2.179"),
+    Some("10.77.0.179"),
   )
   assert_eq(
     environment_value(environment, "LUNANEXA_HEAD_ENDPOINT"),
-    Some("192.0.2.178"),
+    Some("10.77.0.178"),
   )
   assert_true(
     resources.network_policy
@@ -557,14 +554,14 @@ test "a paired runtime renders rank identity, fabric passthrough and a named pee
         "ingress": [
           {
             "from": [
-              { "ipBlock": { "cidr": "192.0.2.175/32", .. }, .. },
-              { "ipBlock": { "cidr": "192.0.2.179/32", .. }, .. },
+              { "ipBlock": { "cidr": "10.77.0.175/32", .. }, .. },
+              { "ipBlock": { "cidr": "10.77.0.179/32", .. }, .. },
             ],
             ..
           },
         ],
         "egress": [
-          { "to": [{ "ipBlock": { "cidr": "192.0.2.179/32", .. }, .. }], .. },
+          { "to": [{ "ipBlock": { "cidr": "10.77.0.179/32", .. }, .. }], .. },
         ],
         ..
       },
@@ -574,8 +571,8 @@ test "a paired runtime renders rank identity, fabric passthrough and a named pee
 
   // The peer takes its rendezvous point from the head, not from itself.
   let worker = @kubernetes.render_runtime(
-    { ..settings, fabric_address: Some("192.0.2.179"), },
-    paired_assignment(1, "192.0.2.178"),
+    { ..settings, fabric_address: Some("10.77.0.179"), },
+    paired_assignment(1, "10.77.0.178"),
     "/var/lib/lunanexa/models/model",
     head.artifact.digest,
     5L,
@@ -587,7 +584,7 @@ test "a paired runtime renders rank identity, fabric passthrough and a named pee
   )
   assert_eq(
     environment_value(pod_environment(worker.pod), "LUNANEXA_HEAD_ENDPOINT"),
-    Some("192.0.2.178"),
+    Some("10.77.0.178"),
   )
 
   // A node that declares no fabric address cannot host half a pair: the two
@@ -597,7 +594,7 @@ test "a paired runtime renders rank identity, fabric passthrough and a named pee
       { ..settings, fabric_address: None, },
       { ..settings, fabric_address: Some(""), },
       { ..settings, fabric_address: Some("10.1.2.3/8"), },
-      { ..settings, fabric_address: Some("192.0.2.179"), },
+      { ..settings, fabric_address: Some("10.77.0.179"), },
     ] {
     try
       ignore(
@@ -823,7 +820,7 @@ test "the runtime accepts its controller by namespace rather than by address" {
           {
             "from": [
               { .. },
-              { "ipBlock": { "cidr": "192.0.2.175/32", .. }, .. },
+              { "ipBlock": { "cidr": "10.77.0.175/32", .. }, .. },
             ],
             ..
           },

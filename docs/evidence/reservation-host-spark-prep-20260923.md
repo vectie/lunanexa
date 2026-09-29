@@ -11,10 +11,10 @@ All four Kubernetes names match enrolled node IDs:
 
 | IP | Kubernetes/enrolled node |
 | --- | --- |
-| 192.0.2.176 | spark-example-node |
-| 192.0.2.177 | spark-example-node |
-| 192.0.2.178 | spark-example-node |
-| 192.0.2.179 | spark-example-node |
+| 192.0.2.176 | spark-a001-00000001 |
+| 192.0.2.177 | spark-a002-00000002 |
+| 192.0.2.178 | spark-a003-00000003 |
+| 192.0.2.179 | spark-a004-00000004 |
 
 The live cluster returned 36 nonterminal Pods across these four nodes: nine infrastructure identities, one Pod of each identity per node. No unknown/non-infrastructure nonterminal Kubernetes Pods were found on these nodes in this observation. Terminal debug/transfer Pods are ignored by the adapter's existing phase rule, not by extra exemption rules. This inventory does not enumerate arbitrary host processes; existing host-level audits remain required, and the separate GLM NFS container on .178 is intentionally untouched.
 
@@ -57,7 +57,7 @@ absent, ran server dry-run, then created the ClusterRole and ClusterRoleBinding.
 The ConfigMap was created using `create` (not overwrite/apply). Authorization
 checks as `system:serviceaccount:lunanexa:lunanexa-control` returned:
 
-- `patch node/spark-example-node`: yes.
+- `patch node/spark-a001-00000001`: yes.
 - `patch node/ubuntu`: no.
 - `get secrets -n lunanexa`: no.
 

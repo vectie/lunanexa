@@ -17,7 +17,7 @@ spec:
     spec:
       runtimeClassName: nvidia
       nodeSelector:
-        kubernetes.io/hostname: spark-example-node
+        kubernetes.io/hostname: spark-a003-00000003
       securityContext:
         runAsUser: 1000
         runAsGroup: 1000
@@ -107,11 +107,11 @@ spec:
       volumes:
         - name: workspace
           hostPath:
-            path: /home/gpu-node/workspaces/comfyui-z-image-internal
+            path: /home/gpu-node-c/workspaces/comfyui-z-image-internal
             type: Directory
         - name: model-files
           hostPath:
-            path: /home/gpu-node/models/z_image_turbo
+            path: /home/gpu-node-c/models/z_image_turbo
             type: Directory
 ---
 apiVersion: v1

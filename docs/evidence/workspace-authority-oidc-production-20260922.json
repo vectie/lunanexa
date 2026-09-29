@@ -3,7 +3,7 @@
   "scope": "Fresh genuine OIDC qualification account and dedicated administrator-approved workspace; NOT commercial payment or signed-contract fulfillment",
   "identity": {
     "account_id": "account-4464f7644b41a13e27f68a97",
-    "subject_ref": "example-user-ref",
+    "subject_ref": "example-user-8a64afc3f1674d63fc04194d",
     "identity_issuer": "https://203.0.113.10:5006/realms/lunanexa",
     "display_name": "Technical Authority Acceptance",
     "email": "technical-authority-oidc-20260922-townhelper@example.invalid",
@@ -27,7 +27,7 @@
   "user": {
     "version": "lunanexa.workspace.v1",
     "user_id": "trial-user-4464f7644b41a13e27f68a97",
-    "subject_ref": "example-user-ref",
+    "subject_ref": "example-user-8a64afc3f1674d63fc04194d",
     "display_name": "Technical Authority Acceptance",
     "email": "technical-authority-oidc-20260922-townhelper@example.invalid",
     "state": "UserActive",
@@ -49,7 +49,7 @@
     "version": "lunanexa.workspace.v1",
     "lease_id": "technical-authority-oidc-20260922-lease",
     "tenant_ref": "technical-authority-oidc-20260922-tenant",
-    "subject_ref": "example-user-ref",
+    "subject_ref": "example-user-8a64afc3f1674d63fc04194d",
     "access": "Developer",
     "limits": {
       "max_active_sessions": 1,
@@ -71,11 +71,11 @@
   },
   "before": {
     "version": "lunanexa.workspace.v1",
-    "subject_ref": "example-user-ref",
+    "subject_ref": "example-user-8a64afc3f1674d63fc04194d",
     "user": {
       "version": "lunanexa.workspace.v1",
       "user_id": "trial-user-4464f7644b41a13e27f68a97",
-      "subject_ref": "example-user-ref",
+      "subject_ref": "example-user-8a64afc3f1674d63fc04194d",
       "display_name": "Technical Authority Acceptance",
       "email": "technical-authority-oidc-20260922-townhelper@example.invalid",
       "state": "UserActive",
@@ -111,7 +111,7 @@
         "version": "lunanexa.workspace.v1",
         "lease_id": "trial-lease-4464f7644b41a13e27f68a97",
         "tenant_ref": "trial-tenant-4464f7644b41a13e27f68a97",
-        "subject_ref": "example-user-ref",
+        "subject_ref": "example-user-8a64afc3f1674d63fc04194d",
         "access": "Developer",
         "limits": {
           "max_active_sessions": 1,
@@ -135,7 +135,7 @@
         "version": "lunanexa.workspace.v1",
         "lease_id": "technical-authority-oidc-20260922-lease",
         "tenant_ref": "technical-authority-oidc-20260922-tenant",
-        "subject_ref": "example-user-ref",
+        "subject_ref": "example-user-8a64afc3f1674d63fc04194d",
         "access": "Developer",
         "limits": {
           "max_active_sessions": 1,
@@ -164,7 +164,7 @@
     "version": "lunanexa.workspace.v1",
     "lease_id": "technical-authority-oidc-20260922-lease",
     "tenant_ref": "technical-authority-oidc-20260922-tenant",
-    "subject_ref": "example-user-ref",
+    "subject_ref": "example-user-8a64afc3f1674d63fc04194d",
     "access": "Developer",
     "limits": {
       "max_active_sessions": 1,
@@ -186,11 +186,11 @@
   },
   "enabled": {
     "version": "lunanexa.workspace.v1",
-    "subject_ref": "example-user-ref",
+    "subject_ref": "example-user-8a64afc3f1674d63fc04194d",
     "user": {
       "version": "lunanexa.workspace.v1",
       "user_id": "trial-user-4464f7644b41a13e27f68a97",
-      "subject_ref": "example-user-ref",
+      "subject_ref": "example-user-8a64afc3f1674d63fc04194d",
       "display_name": "Technical Authority Acceptance",
       "email": "technical-authority-oidc-20260922-townhelper@example.invalid",
       "state": "UserActive",
@@ -226,7 +226,7 @@
         "version": "lunanexa.workspace.v1",
         "lease_id": "trial-lease-4464f7644b41a13e27f68a97",
         "tenant_ref": "trial-tenant-4464f7644b41a13e27f68a97",
-        "subject_ref": "example-user-ref",
+        "subject_ref": "example-user-8a64afc3f1674d63fc04194d",
         "access": "Developer",
         "limits": {
           "max_active_sessions": 1,
@@ -250,7 +250,7 @@
         "version": "lunanexa.workspace.v1",
         "lease_id": "technical-authority-oidc-20260922-lease",
         "tenant_ref": "technical-authority-oidc-20260922-tenant",
-        "subject_ref": "example-user-ref",
+        "subject_ref": "example-user-8a64afc3f1674d63fc04194d",
         "access": "Developer",
         "limits": {
           "max_active_sessions": 1,
@@ -275,7 +275,7 @@
       "version": "lunanexa.workspace.v1",
       "lease_id": "technical-authority-oidc-20260922-lease",
       "tenant_ref": "technical-authority-oidc-20260922-tenant",
-      "subject_ref": "example-user-ref",
+      "subject_ref": "example-user-8a64afc3f1674d63fc04194d",
       "access": "Developer",
       "limits": {
         "max_active_sessions": 1,
@@ -306,7 +306,7 @@
       "version": "lunanexa.workspace.v1",
       "lease_id": "technical-authority-oidc-20260922-lease",
       "tenant_ref": "technical-authority-oidc-20260922-tenant",
-      "subject_ref": "example-user-ref",
+      "subject_ref": "example-user-8a64afc3f1674d63fc04194d",
       "access": "Developer",
       "limits": {
         "max_active_sessions": 1,
@@ -330,11 +330,11 @@
   },
   "disabled": {
     "version": "lunanexa.workspace.v1",
-    "subject_ref": "example-user-ref",
+    "subject_ref": "example-user-8a64afc3f1674d63fc04194d",
     "user": {
       "version": "lunanexa.workspace.v1",
       "user_id": "trial-user-4464f7644b41a13e27f68a97",
-      "subject_ref": "example-user-ref",
+      "subject_ref": "example-user-8a64afc3f1674d63fc04194d",
       "display_name": "Technical Authority Acceptance",
       "email": "technical-authority-oidc-20260922-townhelper@example.invalid",
       "state": "UserActive",
@@ -370,7 +370,7 @@
         "version": "lunanexa.workspace.v1",
         "lease_id": "trial-lease-4464f7644b41a13e27f68a97",
         "tenant_ref": "trial-tenant-4464f7644b41a13e27f68a97",
-        "subject_ref": "example-user-ref",
+        "subject_ref": "example-user-8a64afc3f1674d63fc04194d",
         "access": "Developer",
         "limits": {
           "max_active_sessions": 1,
@@ -394,7 +394,7 @@
         "version": "lunanexa.workspace.v1",
         "lease_id": "technical-authority-oidc-20260922-lease",
         "tenant_ref": "technical-authority-oidc-20260922-tenant",
-        "subject_ref": "example-user-ref",
+        "subject_ref": "example-user-8a64afc3f1674d63fc04194d",
         "access": "Developer",
         "limits": {
           "max_active_sessions": 1,
@@ -436,7 +436,7 @@
   "revoked_user": {
     "version": "lunanexa.workspace.v1",
     "user_id": "trial-user-4464f7644b41a13e27f68a97",
-    "subject_ref": "example-user-ref",
+    "subject_ref": "example-user-8a64afc3f1674d63fc04194d",
     "display_name": "Technical Authority Acceptance",
     "email": "technical-authority-oidc-20260922-townhelper@example.invalid",
     "state": "UserRevoked",
@@ -445,11 +445,11 @@
   },
   "final_view": {
     "version": "lunanexa.workspace.v1",
-    "subject_ref": "example-user-ref",
+    "subject_ref": "example-user-8a64afc3f1674d63fc04194d",
     "user": {
       "version": "lunanexa.workspace.v1",
       "user_id": "trial-user-4464f7644b41a13e27f68a97",
-      "subject_ref": "example-user-ref",
+      "subject_ref": "example-user-8a64afc3f1674d63fc04194d",
       "display_name": "Technical Authority Acceptance",
       "email": "technical-authority-oidc-20260922-townhelper@example.invalid",
       "state": "UserRevoked",
@@ -485,7 +485,7 @@
         "version": "lunanexa.workspace.v1",
         "lease_id": "trial-lease-4464f7644b41a13e27f68a97",
         "tenant_ref": "trial-tenant-4464f7644b41a13e27f68a97",
-        "subject_ref": "example-user-ref",
+        "subject_ref": "example-user-8a64afc3f1674d63fc04194d",
         "access": "Developer",
         "limits": {
           "max_active_sessions": 1,
@@ -509,7 +509,7 @@
         "version": "lunanexa.workspace.v1",
         "lease_id": "technical-authority-oidc-20260922-lease",
         "tenant_ref": "technical-authority-oidc-20260922-tenant",
-        "subject_ref": "example-user-ref",
+        "subject_ref": "example-user-8a64afc3f1674d63fc04194d",
         "access": "Developer",
         "limits": {
           "max_active_sessions": 1,
@@ -539,7 +539,7 @@
       {
         "version": "lunanexa.workspace.v1",
         "user_id": "trial-user-4464f7644b41a13e27f68a97",
-        "subject_ref": "example-user-ref",
+        "subject_ref": "example-user-8a64afc3f1674d63fc04194d",
         "display_name": "Technical Authority Acceptance",
         "email": "technical-authority-oidc-20260922-townhelper@example.invalid",
         "state": "UserRevoked",
@@ -565,7 +565,7 @@
         "version": "lunanexa.workspace.v1",
         "lease_id": "technical-authority-oidc-20260922-lease",
         "tenant_ref": "technical-authority-oidc-20260922-tenant",
-        "subject_ref": "example-user-ref",
+        "subject_ref": "example-user-8a64afc3f1674d63fc04194d",
         "access": "Developer",
         "limits": {
           "max_active_sessions": 1,

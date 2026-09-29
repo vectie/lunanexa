@@ -5,7 +5,7 @@ async test "controller routes change only after complete runtime cleanup" {
   let supervisor = restore_supervisor(api, checkpoint)
   let changed = {
     ..runtime_settings(),
-    controller_addresses: ["192.0.2.175", "10.42.0.0"],
+    controller_addresses: ["10.77.0.175", "10.42.0.0"],
   }
   let assignment = future_assignment()
   ignore(

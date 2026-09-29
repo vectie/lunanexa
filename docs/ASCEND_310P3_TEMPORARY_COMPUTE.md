@@ -139,7 +139,7 @@ switch and that removing the wrong cable also removed the management path.
 
 The persistent host configuration had combined `eni3` and `eni0` in
 `br-ngfw-in` with STP disabled while also accepting DHCP address
-`192.0.2.10` beside static `192.0.2.175`. Bridge forwarding evidence showed
+`192.0.2.9` beside static `192.0.2.175`. Bridge forwarding evidence showed
 the management router and access node behind `eni3`. A timed, automatically
 reversible Netplan change retained only `eni3`, made `.175` the sole static
 management address and default-route source, and left `eni0` unconfigured.

@@ -13,7 +13,7 @@
 | 角色 | 机器 | 有什么 | 没有什么 |
 | --- | --- | --- | --- |
 | 管理节点 | `192.0.2.175`（`ubuntu`，x86_64，k3s server） | `ctr`、k3s、`~/moon-public/toolchains/moon-linux-amd64`、`~/spark-build/`、`~/lunanexa-cluster-credentials.json` | **docker / podman / nerdctl / buildah / skopeo / buildkit 全部没有**（k3s 用内置 containerd） |
-| 构建 spark | `.176`（`gpu-node`，aarch64） | `~/moon`（arm64 工具链）、`~/src`（节点 agent 源码与 `_build`）、`~/stage` | 连不上 `cli.moonbitlang.cn`，**不能在那里下载工具链** |
+| 构建 spark | `.176`（`gpu-node-a`，aarch64） | `~/moon`（arm64 工具链）、`~/src`（节点 agent 源码与 `_build`）、`~/stage` | 连不上 `cli.moonbitlang.cn`，**不能在那里下载工具链** |
 | 计算 spark | `.177`–`.179` | 运行时 | 同上 |
 
 **k3s 不需要 docker。** 任何时候判断"能不能打镜像"，看 `ctr`（`/usr/local/bin/ctr` 和 `k3s ctr`），
@@ -60,7 +60,7 @@ S k3s ctr -n k8s.io images pull --hosts-dir /var/lib/rancher/k3s/agent/etc/conta
 
 ```sh
 # 节点 agent：回到上一个镜像 tag（注意两个容器共用同一镜像，必须一起改）
-D=lunanexa-node-agent-spark-example-node
+D=lunanexa-node-agent-spark-a001-00000001
 S kubectl -n lunanexa set image deploy/$D \
     node-agent=$REG/lunanexa/node:<上一个tag> \
     control-loopback-proxy=$REG/lunanexa/node:<上一个tag>
@@ -120,8 +120,8 @@ curl -fsSL -o core-latest.tar.gz           https://cli.moonbitlang.com/cores/cor
 # .cn 会挂住，用 .com（仓库 scripts/deploy/stage-moonbit-linux-amd64.sh 用的也是 .com）
 
 # ② 送到 .176，在那里装 + bundle core（core 必须在目标架构上 bundle）
-scp $D/*.tar.gz gpu-node@192.0.2.176:/tmp/
-ssh gpu-node@192.0.2.176 'set -e
+scp $D/*.tar.gz gpu-node-a@192.0.2.176:/tmp/
+ssh gpu-node-a@192.0.2.176 'set -e
   M=$HOME/moon-new; rm -rf $M; mkdir -p $M; rm -rf $M/lib $M/include
   tar xzf /tmp/moonbit-linux-aarch64.tar.gz -C $M; chmod -R u+x $M/bin
   rm -rf $M/lib/core; tar xzf /tmp/core-latest.tar.gz -C $M/lib
@@ -133,12 +133,12 @@ ssh gpu-node@192.0.2.176 'set -e
 
 # ③ 把 registry + credentials 合并进去，再打包（这一步漏了 spark 上一定构建失败）
 tar czf /tmp/moon-deps.tgz -C ~/.moon registry credentials.json
-scp /tmp/moon-deps.tgz gpu-node@192.0.2.176:/tmp/
-ssh gpu-node@192.0.2.176 'set -e; M=$HOME/moon-new; rm -rf $M/registry; tar xzf /tmp/moon-deps.tgz -C $M; tar czf /tmp/arm64-new.tar.gz -C $M .'
+scp /tmp/moon-deps.tgz gpu-node-a@192.0.2.176:/tmp/
+ssh gpu-node-a@192.0.2.176 'set -e; M=$HOME/moon-new; rm -rf $M/registry; tar xzf /tmp/moon-deps.tgz -C $M; tar czf /tmp/arm64-new.tar.gz -C $M .'
 
 # ④ 换到 spark-build（先备份）
 cp -a ~/spark-build/moonbit-linux-aarch64.tar.gz ~/spark-build/moonbit-linux-aarch64.tar.gz.before-<版本>
-ssh gpu-node@192.0.2.176 'cat /tmp/arm64-new.tar.gz' > ~/spark-build/moonbit-linux-aarch64.tar.gz
+ssh gpu-node-a@192.0.2.176 'cat /tmp/arm64-new.tar.gz' > ~/spark-build/moonbit-linux-aarch64.tar.gz
 ls -la ~/spark-build/moonbit-linux-aarch64.tar.gz
 ```
 
@@ -158,16 +158,16 @@ REF=lunanexa/node:$TAGV
 
 # ① 铺源码+工具链到 .176 并在那里构建 cmd/node（不是交叉编译）
 cp -f /tmp/lunanexa-src.tgz ~/lunanexa-src.tar.gz    # 用干净包，见 §1
-bash deploy/cluster/stage-and-build-node.sh 192.0.2.176 gpu-node "$HOME/lunanexa-src.tar.gz"
+bash deploy/cluster/stage-and-build-node.sh 192.0.2.176 gpu-node-a "$HOME/lunanexa-src.tar.gz"
 #   期望最后是 BUILD-OK + node.exe 与 lunanexa-loopback-proxy-arm64 的 ls 输出
 
 # ② 在 .176 上打镜像（读 ~/src 的产物）
-ssh gpu-node@192.0.2.176 "bash -s -- --tag $TAG" < deploy/cluster/build-node-image.sh
+ssh gpu-node-a@192.0.2.176 "bash -s -- --tag $TAG" < deploy/cluster/build-node-image.sh
 #   期望 NODE-IMAGE-OK <tag> <archive> layer=<sha>
 
 # ③ 取回、导入、标记、推送
-TAR=$(ssh gpu-node@192.0.2.176 'ls -t ~/lunanexa-node-*.oci.tar | head -1')
-scp gpu-node@192.0.2.176:$TAR /tmp/node-image.tar
+TAR=$(ssh gpu-node-a@192.0.2.176 'ls -t ~/lunanexa-node-*.oci.tar | head -1')
+scp gpu-node-a@192.0.2.176:$TAR /tmp/node-image.tar
 S k3s ctr -n k8s.io images import --all-platforms --digests /tmp/node-image.tar   # 少 --all-platforms 就报 "image might be filtered out"
 S k3s ctr -n k8s.io images tag --force "$TAG" "$REF"        # 必须按目标名 tag，否则 push 报 not found
 S k3s ctr -n k8s.io images tag --force "$TAG" "docker.io/library/$TAG"
@@ -191,7 +191,7 @@ bash deploy/cluster/one-click.sh --credentials ~/lunanexa-cluster-credentials.js
 
 # ⑥ 验证（两个容器都要在跑）
 S kubectl -n lunanexa get pods | grep node-agent        # 期望 4 × 2/2 Running
-S kubectl -n lunanexa logs deploy/lunanexa-node-agent-spark-example-node -c node-agent --tail=50 | grep -c 'HTTP 400'
+S kubectl -n lunanexa logs deploy/lunanexa-node-agent-spark-a001-00000001 -c node-agent --tail=50 | grep -c 'HTTP 400'
 ```
 
 **新增指标时要一起做的**：`telemetry/telemetry.mbt` 的白名单在**控制面**里。

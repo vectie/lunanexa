@@ -7,10 +7,10 @@ rules:
   - apiGroups: [""]
     resources: [nodes]
     resourceNames:
-      - spark-example-node
-      - spark-example-node
-      - spark-example-node
-      - spark-example-node
+      - spark-a001-00000001
+      - spark-a002-00000002
+      - spark-a003-00000003
+      - spark-a004-00000004
     verbs: [get, patch]
   # Adapter lists all namespaces filtered by one node to detect unknown occupants.
   # Restricting this to known namespaces would hide conflicting workloads.

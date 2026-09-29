@@ -5,10 +5,16 @@ priv struct Target {
 }
 
 ///|
-fn targets() -> Array[Target] {
+fn targets() -> Array[Target] raise {
   [
-    { host: "gpu-node@192.0.2.178", container: "glm53-exl3-head", },
-    { host: "gpu-node@192.0.2.179", container: "glm53-exl3-worker", },
+    {
+      host: required("LUNANEXA_GLM_HEAD_SSH_TARGET"),
+      container: required("LUNANEXA_GLM_HEAD_CONTAINER"),
+    },
+    {
+      host: required("LUNANEXA_GLM_WORKER_SSH_TARGET"),
+      container: required("LUNANEXA_GLM_WORKER_CONTAINER"),
+    },
   ]
 }
 
@@ -161,7 +167,9 @@ async fn main {
     .text()
     .trim()
     .to_owned()
-  if token.length() < 32 || !bind.has_prefix("192.0.2.175:") {
+  if token.length() < 32 ||
+    bind.has_prefix("0.0.0.0:") ||
+    bind.has_prefix("[::]:") {
     raise Failure("invalid GLM control configuration")
   }
   let server = @http.Server(@socket.Addr::parse(bind), reuse_addr=true)

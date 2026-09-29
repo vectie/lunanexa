@@ -10,7 +10,15 @@
   {
     "client_id": "desktop-workspace",
     "display_name": "MoonDesk / MoonCode",
-    "launch_uri": "http://203.0.113.10:5002/connect",
+    "launch_uri": "https://suanli.example.com:8443/moondesk/connect",
+    "public_api_base_url": "https://suanli.example.com:8443/user/v1",
+    "handoff_lifetime_ms": "120000",
+    "maximum_requests": "100000"
+  },
+  {
+    "client_id": "moontown",
+    "display_name": "MoonTown",
+    "launch_uri": "https://suanli.example.com:8443/moontown/connect",
     "public_api_base_url": "https://suanli.example.com:8443/user/v1",
     "handoff_lifetime_ms": "120000",
     "maximum_requests": "100000"

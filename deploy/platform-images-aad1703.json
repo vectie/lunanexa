@@ -25,25 +25,25 @@
   },
   {
     "namespace_name": "lunanexa",
-    "deployment": "lunanexa-node-agent-spark-example-node",
+    "deployment": "lunanexa-node-agent-spark-a001-00000001",
     "container": "node-agent",
     "image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/lunanexa/node@sha256:8a40c6364ac1fd964c4e55c136be3cfc1fb6da87daa0c2b26029472e055fc325"
   },
   {
     "namespace_name": "lunanexa",
-    "deployment": "lunanexa-node-agent-spark-example-node",
+    "deployment": "lunanexa-node-agent-spark-a002-00000002",
     "container": "node-agent",
     "image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/lunanexa/node@sha256:8a40c6364ac1fd964c4e55c136be3cfc1fb6da87daa0c2b26029472e055fc325"
   },
   {
     "namespace_name": "lunanexa",
-    "deployment": "lunanexa-node-agent-spark-example-node",
+    "deployment": "lunanexa-node-agent-spark-a003-00000003",
     "container": "node-agent",
     "image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/lunanexa/node@sha256:8a40c6364ac1fd964c4e55c136be3cfc1fb6da87daa0c2b26029472e055fc325"
   },
   {
     "namespace_name": "lunanexa",
-    "deployment": "lunanexa-node-agent-spark-example-node",
+    "deployment": "lunanexa-node-agent-spark-a004-00000004",
     "container": "node-agent",
     "image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/lunanexa/node@sha256:8a40c6364ac1fd964c4e55c136be3cfc1fb6da87daa0c2b26029472e055fc325"
   },

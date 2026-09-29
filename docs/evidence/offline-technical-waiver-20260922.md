@@ -27,7 +27,7 @@ to a paid commercial order or moved to a different target.
 
 The deployment switch is disabled by default and binds only
 `technical-acceptance-waiver-order-20260922`, purchaser
-`example-user-ref`, this authorization reference, and a finite
+`example-user-3ed6f3f28664d57c66b3dd45`, this authorization reference, and a finite
 expiry. Removing that switch or allowing it to expire cannot block reversal.
 The switch is to be removed again after the isolated live test.
 

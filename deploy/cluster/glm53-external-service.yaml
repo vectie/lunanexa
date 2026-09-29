@@ -30,4 +30,4 @@ endpoints:
       - 192.0.2.178
     conditions:
       ready: true
-    nodeName: spark-example-node
+    nodeName: spark-a003-00000003

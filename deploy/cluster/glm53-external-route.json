@@ -1,7 +1,7 @@
 {
   "model_alias": "glm-5.3.flash",
-  "tenant_ref": "tenant-example",
-  "node_id": "spark-example-node",
+  "tenant_ref": "tenant-example-d",
+  "node_id": "spark-a003-00000003",
   "origin": "http://127.0.0.1:19091",
   "served_model": "GLM-5.3-Flash-EXL3",
   "runtime_version": "vllm-glm53-exl3-e3-20260907",

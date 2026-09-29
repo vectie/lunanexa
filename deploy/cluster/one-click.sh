@@ -79,6 +79,9 @@ done
 
 [ -f "${MANIFEST}" ] || die "no manifest at ${MANIFEST}"
 command -v python3 >/dev/null || die "python3 is required"
+if grep -Eq '(^|[^[:digit:]])(192\.0\.2\.|198\.18\.|203\.0\.113\.)|example\.com' "${MANIFEST}"; then
+  die "example addresses in manifest; provide a reviewed site manifest with --manifest"
+fi
 
 # ---------------------------------------------------------------- credentials
 # Nothing secret lives in the repository or the manifest. Sudo passwords come

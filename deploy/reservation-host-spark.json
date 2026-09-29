@@ -4,10 +4,10 @@
   "ca_file": "/var/run/lunanexa/reservation-host/ca.crt",
   "workload_namespaces": ["lunanexa-managed-runtime", "lunanexa-acceptance-example"],
   "node_names": {
-    "spark-example-node": "spark-example-node",
-    "spark-example-node": "spark-example-node",
-    "spark-example-node": "spark-example-node",
-    "spark-example-node": "spark-example-node"
+    "spark-a001-00000001": "spark-a001-00000001",
+    "spark-a002-00000002": "spark-a002-00000002",
+    "spark-a003-00000003": "spark-a003-00000003",
+    "spark-a004-00000004": "spark-a004-00000004"
   },
   "infrastructure": [
     {"namespace_name":"lunanexa","service_account":"lunanexa-node","label_key":"app","label_value":"lunanexa-node-agent"},

@@ -8,7 +8,7 @@
 
 ## Spark `57f5` recovery
 
-The fourth row of the operator node table is `spark-example-node` (`192.0.2.178`), while the fourth physical Spark is `spark-example-node` (`192.0.2.179`). Kubernetes reported both Ready; only the former's LunaNexa heartbeat was stale. Its node-agent process repeatedly failed cleanup of an already-absent runtime, so reconciliation stopped before heartbeat and telemetry publication.
+The fourth row of the operator node table is `spark-a003-00000003` (`192.0.2.178`), while the fourth physical Spark is `spark-a004-00000004` (`192.0.2.179`). Kubernetes reported both Ready; only the former's LunaNexa heartbeat was stale. Its node-agent process repeatedly failed cleanup of an already-absent runtime, so reconciliation stopped before heartbeat and telemetry publication.
 
 The live node-agent Deployment had an explicit projected-token audience `https://kubernetes.default.svc`. The k3s API returned 401 for that token even before its expiry. Omitting the audience yielded the cluster default (`https://kubernetes.default.svc.cluster.local`, `k3s`); the same API request then returned the expected 404 for the missing runtime resource. The repository's node-agent template already omits this field and now documents why. The three affected live Deployments were converged to that template behavior.
 
@@ -16,7 +16,7 @@ The old online node image also preceded the durable missing-resource cleanup fix
 
 ## One-click model-service smoke
 
-From the operator UI, `Qwen3-0.6B Spark text smoke · v1` was selected, service `qwen3-06b-oneclick-20260923-r2` was submitted, and the UI reported a durable coordinating operation. Placement selected `spark-example-node`; the artifact reached the node and a Kubernetes runtime Pod was created. That Pod failed with `exec /opt/lunaflux/supervisor/lunaflux-supervisor: exec format error`. Registry inspection confirmed that the pinned LunaFlux image digest `sha256:bec873094c71e35bdba5497f8ef42845318ff6af5e8bedc873d89a7558aaecbb` declares `linux/amd64`, as do the other three LunaFlux image digests in this repository. The Spark is arm64. The test operation was explicitly rolled back in the UI; it must not be counted as a successful serving or PaaS launch. A real arm64 LunaFlux release, registry qualification, and new immutable template version are still required before this button can pass end-to-end.
+From the operator UI, `Qwen3-0.6B Spark text smoke · v1` was selected, service `qwen3-06b-oneclick-20260923-r2` was submitted, and the UI reported a durable coordinating operation. Placement selected `spark-a004-00000004`; the artifact reached the node and a Kubernetes runtime Pod was created. That Pod failed with `exec /opt/lunaflux/supervisor/lunaflux-supervisor: exec format error`. Registry inspection confirmed that the pinned LunaFlux image digest `sha256:bec873094c71e35bdba5497f8ef42845318ff6af5e8bedc873d89a7558aaecbb` declares `linux/amd64`, as do the other three LunaFlux image digests in this repository. The Spark is arm64. The test operation was explicitly rolled back in the UI; it must not be counted as a successful serving or PaaS launch. A real arm64 LunaFlux release, registry qualification, and new immutable template version are still required before this button can pass end-to-end.
 
 ## Local validation
 

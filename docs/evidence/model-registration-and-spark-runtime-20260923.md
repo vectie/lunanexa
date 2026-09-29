@@ -34,7 +34,7 @@ rollout. The public and LAN Operator auto-entry origin settings were retained.
 Z-Image's 40.67 GB verified model tree was copied from the data node to the
 Spark 57f5 local disk and all 12 manifest-listed files passed SHA-256 checks.
 The runtime mounts it read-only. Its workspace is separate, writable, and
-persistent at `/home/gpu-node/workspaces/comfyui-z-image-internal`; the PNG was
+persistent at `/home/gpu-node-c/workspaces/comfyui-z-image-internal`; the PNG was
 verified again after a pod replacement. The Spark service is ClusterIP-only:
 it is **not** yet a customer WebIDE session, a MaaS alias, or a public
 ComfyUI route. The customer gateway remains unchanged. Registry approval

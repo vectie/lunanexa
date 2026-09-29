@@ -27,9 +27,9 @@
   },
   "nodes": [
     {
-      "id": "spark-example-node",
+      "id": "spark-a001-00000001",
       "address": "192.0.2.176",
-      "sshUser": "gpu-node",
+      "sshUser": "gpu-node-a",
       "gpuUuid": "GPU-00000001-0001-0001-0001-000000000001",
       "architecture": "nvidia-sm121",
       "usagePool": "trial",
@@ -39,13 +39,13 @@
         "Confidential"
       ],
       "fabricAddress": "198.18.1.10",
-      "fabricPeer": "spark-example-node",
+      "fabricPeer": "spark-a002-00000002",
       "fabricInterface": "enp1s0f1np1"
     },
     {
-      "id": "spark-example-node",
+      "id": "spark-a002-00000002",
       "address": "192.0.2.177",
-      "sshUser": "gpu-node",
+      "sshUser": "gpu-node-b",
       "gpuUuid": "GPU-00000002-0002-0002-0002-000000000002",
       "architecture": "nvidia-sm121",
       "usagePool": "trial",
@@ -54,14 +54,14 @@
       "dataClasses": [
         "Confidential"
       ],
-      "fabricAddress": "198.18.1.10",
-      "fabricPeer": "spark-example-node",
+      "fabricAddress": "198.18.1.11",
+      "fabricPeer": "spark-a001-00000001",
       "fabricInterface": "enp1s0f0np0"
     },
     {
-      "id": "spark-example-node",
+      "id": "spark-a003-00000003",
       "address": "192.0.2.178",
-      "sshUser": "gpu-node",
+      "sshUser": "gpu-node-c",
       "gpuUuid": "GPU-00000003-0003-0003-0003-000000000003",
       "architecture": "nvidia-sm121",
       "usagePool": "enterprise-dedicated",
@@ -72,13 +72,13 @@
         "Confidential"
       ],
       "fabricAddress": "198.18.0.1",
-      "fabricPeer": "spark-example-node",
+      "fabricPeer": "spark-a004-00000004",
       "fabricInterface": "enp1s0f1np1"
     },
     {
-      "id": "spark-example-node",
+      "id": "spark-a004-00000004",
       "address": "192.0.2.179",
-      "sshUser": "gpu-node",
+      "sshUser": "gpu-node-d",
       "gpuUuid": "GPU-00000004-0004-0004-0004-000000000004",
       "architecture": "nvidia-sm121",
       "usagePool": "enterprise-dedicated",
@@ -88,8 +88,8 @@
       "dataClasses": [
         "Confidential"
       ],
-      "fabricAddress": "198.18.0.1",
-      "fabricPeer": "spark-example-node",
+      "fabricAddress": "198.18.0.2",
+      "fabricPeer": "spark-a003-00000003",
       "fabricInterface": "enp1s0f0np0"
     }
   ],

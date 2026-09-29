@@ -168,7 +168,7 @@ test "a paired placement is ready only when both ranks are live" {
     group_id: "service-2-pair",
     rank: 0,
     world_size: 2,
-    peer_endpoint: "198.18.0.1",
+    peer_endpoint: "198.18.0.2",
   }
   let intent : @deployment.ModelServiceIntent = {
     version: @contracts.contract_version,

@@ -9,7 +9,7 @@ data:
       {
         "template_id": "minimax-h3-fl2va-comfyui",
         "template_version": "20260923-r2",
-        "node_id": "spark-example-node",
+        "node_id": "spark-a001-00000001",
         "origin": "",
         "profile": {
           "model": "video.minimax-h3-fl2va",
@@ -26,7 +26,7 @@ data:
       {
         "template_id": "minimax-h3-fl2va-comfyui",
         "template_version": "20260923-r2",
-        "node_id": "spark-example-node",
+        "node_id": "spark-a002-00000002",
         "origin": "",
         "profile": {
           "model": "video.minimax-h3-fl2va",
@@ -43,7 +43,7 @@ data:
       {
         "template_id": "minimax-h3-fl2va-comfyui",
         "template_version": "20260923-r2",
-        "node_id": "spark-example-node",
+        "node_id": "spark-a003-00000003",
         "origin": "",
         "profile": {
           "model": "video.minimax-h3-fl2va",
@@ -60,7 +60,7 @@ data:
       {
         "template_id": "minimax-h3-fl2va-comfyui",
         "template_version": "20260923-r2",
-        "node_id": "spark-example-node",
+        "node_id": "spark-a004-00000004",
         "origin": "",
         "profile": {
           "model": "video.minimax-h3-fl2va",

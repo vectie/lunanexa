@@ -81,9 +81,15 @@ spec:
         - {name: lunanexa-public-user-strip}
         - {name: lunanexa-public-enterprise-prefix}
       services: [{name: lunanexa-identity-gateway-suanli, port: 8081}]
-    - match: Host(`suanli.example.com`) && PathPrefix(`/assets/`)
+    - match: Host(`suanli.example.com`) && PathPrefix(`/mana/assets/`)
       kind: Rule
-      priority: 20
+      priority: 90
+      middlewares: [{name: lunanexa-public-mana-strip}]
+      services: [{name: lunanexa-enterprise, port: 8080}]
+    - match: Host(`suanli.example.com`) && PathPrefix(`/user/assets/`)
+      kind: Rule
+      priority: 90
+      middlewares: [{name: lunanexa-public-user-strip}]
       services: [{name: lunanexa-enterprise, port: 8080}]
   tls:
     secretName: lunanexa-public-suanli-tls

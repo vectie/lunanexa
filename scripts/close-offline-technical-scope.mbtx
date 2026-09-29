@@ -8,7 +8,7 @@ async fn main {
   let controls=containers.filter(c => c is {"name":"control",..})
   guard controls is [{"env":Array(environment),..}] else {fail("Expected one control container")}
   let entries=environment.filter(e => e is {"name":"LUNANEXA_TECHNICAL_ACCEPTANCE_AUTHORIZATION_JSON",..})
-  guard entries is [{"value":String(raw),..}] && @json.parse(raw) is {"order_id":"technical-acceptance-waiver-order-20260922","purchaser_subject_ref":"example-user-ref","user_authorization_ref":"docs/evidence/offline-technical-waiver-20260922.md",..} else {fail("Scope missing or not exact authorized technical order; refusing mutation")}
+  guard entries is [{"value":String(raw),..}] && @json.parse(raw) is {"order_id":"technical-acceptance-waiver-order-20260922","purchaser_subject_ref":"example-user-3ed6f3f28664d57c66b3dd45","user_authorization_ref":"docs/evidence/offline-technical-waiver-20260922.md",..} else {fail("Scope missing or not exact authorized technical order; refusing mutation")}
   @fs.write_file(backup,before.stdout(),create_mode=CreateNew,permission=0o600)
   @shell.Cmd("kubectl",[..k,"set","env","deployment/lunanexa-control","--containers=control","LUNANEXA_TECHNICAL_ACCEPTANCE_AUTHORIZATION_JSON-"]).run()
   @shell.Cmd("kubectl",[..k,"rollout","status","deployment/lunanexa-control","--timeout=120s"]).run()

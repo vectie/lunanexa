@@ -48,10 +48,10 @@
 
 | 节点 | 节点 id | 对端 | 本机 fabric 地址 |
 | --- | --- | --- | --- |
-| 192.0.2.176 | `spark-example-node` | `spark-example-node` | 198.18.1.10 |
-| 192.0.2.177 | `spark-example-node` | `spark-example-node` | 198.18.1.10 |
-| 192.0.2.178 | `spark-example-node` | `spark-example-node` | 198.18.0.1 |
-| 192.0.2.179 | `spark-example-node` | `spark-example-node` | 198.18.0.1 |
+| 192.0.2.176 | `spark-a001-00000001` | `spark-a002-00000002` | 198.18.1.10 |
+| 192.0.2.177 | `spark-a002-00000002` | `spark-a001-00000001` | 198.18.1.11 |
+| 192.0.2.178 | `spark-a003-00000003` | `spark-a004-00000004` | 198.18.0.1 |
+| 192.0.2.179 | `spark-a004-00000004` | `spark-a003-00000003` | 198.18.0.2 |
 
 .176↔.177 的 192.168.100/101 双路是**声明式**的：`/etc/netplan/60-lunanexa-cx7.yaml`
 （`optional: true`）声明了两条地址，netplan 每次启动生成 `netplan-enp1s0f1np1`
@@ -150,8 +150,8 @@ LunaNexa 只承认**一种**多机形态：
 发布**互相指认**的一条标签即可：
 
 ```
-spark-example-node  labels["lunanexa.io/cx7-peer"] = "spark-example-node"
-spark-example-node  labels["lunanexa.io/cx7-peer"] = "spark-example-node"
+spark-a001-00000001  labels["lunanexa.io/cx7-peer"] = "spark-a002-00000002"
+spark-a002-00000002  labels["lunanexa.io/cx7-peer"] = "spark-a001-00000001"
 ```
 
 由此得到本设计的核心定义：

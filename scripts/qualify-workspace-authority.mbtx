@@ -105,7 +105,7 @@ async fn main {
   let reader = session.stdout().trim().to_owned()
   let now = @async.now()
   let prefix = "technical-authority-oidc-20260922"
-  let subject = "example-user-ref"
+  let subject = "example-user-8a64afc3f1674d63fc04194d"
   let lease_id = prefix + "-lease"
   let grant_id = prefix + "-grant"
   let tenant = prefix + "-tenant"

@@ -25,7 +25,7 @@ four Sparks. All four now report the matching LunaFlux runtime name in their
 signed heartbeat. This repairs image availability/placement; it does **not**
 create an evaluation or prove LunaFlux can serve every imported architecture.
 An independent read-only `/v1/deployment-plans` request after convergence
-returned a concrete placement on `spark-example-node` and only one blocker:
+returned a concrete placement on `spark-a004-00000004` and only one blocker:
 `EvaluationNotPassed`.
 
 The H3 video runtime image at `sha256:b0bb860f5d369ff7e89e1e36fb91d416b15cbaad7f5b689f812f099f3a86529c`
@@ -109,7 +109,7 @@ approval, runtime image verification and capacity checks remain in force.
 Absence of evaluation does not create a fake passing result: promotion receipts
 leave `evaluation_id` empty unless a real passed record exists. A read-only
 production plan for `glm53-exl3-text@v2` returned `executable: true`, no
-preflight findings and placement on `spark-example-node` without creating a
+preflight findings and placement on `spark-a001-00000001` without creating a
 deployment. This proves the former `EvaluationNotPassed` blocker is removed;
 it does **not** prove GLM inference succeeds or establish benchmark performance.
 The separate runtime and physical acceptance work remains open.

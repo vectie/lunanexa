@@ -18,7 +18,7 @@ Spark reservation. No password, session token or model weight is recorded here.
    **激活** for `lease-ui-b0cc-exclusive-20260923`; the page reported
    `工作区租约 ... 已激活`. No administrator role was granted.
 3. In **租约 → 整机资源交付**, selected the b0cc enterprise organization (not the
-   same account's trial organization), selected `spark-example-node`, marked
+   same account's trial organization), selected `spark-a001-00000001`, marked
    **确认所选节点无其他任务**, and pressed **预留所选整机**. Prior read-only host and
    Kubernetes inspection had found no business GPU process or running inference
    Pod on that Spark. The Operator page showed **1 台 · Reserved** with the same

@@ -1,5 +1,11 @@
 # 集群形态的一键部署
 
+> 仓库中的 `cluster.json` 和其他带 `example.com`、`192.0.2.0/24`、
+> `198.18.0.0/15` 或 `203.0.113.0/24` 地址的清单均为脱敏样例，不能直接部署。
+> 将现场参数保存在仓库外或被忽略的 `deploy/local/` 下，审核后用
+> `one-click.sh --manifest /path/to/site-cluster.json` 显式传入。脚本会拒绝样例地址。
+> 不要把真实节点 IP、GPU UUID、账户主体或凭据提交到 Git。
+
 这份目录是 LunaNexa **唯一**的集群部署入口。它取代此前散落在管理节点家目录里的一堆
 一次性脚本（`enroll-sparks.py`、`label-sparks.py`、`roll-node-r4*.sh`、`import-r4-local.sh`、
 `switch-cx7-addr.sh`、`rebuild-control-image.py`……），那些脚本里有大量已经过期的副本，
@@ -31,7 +37,7 @@ bash deploy/cluster/one-click.sh --phases preflight
 bash deploy/cluster/one-click.sh
 
 # 只收敛一台节点
-bash deploy/cluster/one-click.sh --phases config,rbac,apply --node spark-example-node
+bash deploy/cluster/one-click.sh --phases config,rbac,apply --node spark-a001-00000001
 
 # 先看会改什么
 bash deploy/cluster/one-click.sh --dry-run
@@ -176,7 +182,7 @@ registry 里因此有 19 个模型 id。它**不做** license 接受、verificat
 
 运行时链现场结果：注册 `sm121` 的 lunaflux 档案 → 注册模板 `glm53-exl3-text:v2`
 （artifact 是 `modelstore://Mia-AiLab/GLM-5.3-Flash-EXL3-TR3-4bpw`）→
-**计划 `executable: true`**，落在 `spark-example-node`。
+**计划 `executable: true`**，落在 `spark-a001-00000001`。
 
 节点上的 `runtimeNames` 现在是**运维声明**（`cluster.json` 里写明），不是节点的实测上报；
 真实部署里这个字段由节点 agent 从宿主机读取。

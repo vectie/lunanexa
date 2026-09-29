@@ -53,10 +53,10 @@ fn validate(target : Target) -> Unit raise {
     ("lunanexa", "lunanexa-workbench", "workbench") => true
     (
       "lunanexa",
-      "lunanexa-node-agent-spark-example-node"
-      | "lunanexa-node-agent-spark-example-node"
-      | "lunanexa-node-agent-spark-example-node"
-      | "lunanexa-node-agent-spark-example-node",
+      "lunanexa-node-agent-spark-a001-00000001"
+      | "lunanexa-node-agent-spark-a002-00000002"
+      | "lunanexa-node-agent-spark-a003-00000003"
+      | "lunanexa-node-agent-spark-a004-00000004",
       "node-agent",
     ) => true
     ("lunanexa-acceptance-example", "webide-gateway", "gateway") => true

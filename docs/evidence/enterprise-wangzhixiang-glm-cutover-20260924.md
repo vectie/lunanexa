@@ -3,7 +3,7 @@
 ## Scope and authority
 
 The operator approved a one-day test for `member-b@example.com` in
-`能源谷青创街区` (`organization-example`). No platform
+`能源谷青创街区` (`organization-example-a`). No platform
 administrator role, contract signature, payment, or exclusive-machine lease
 was issued. The company had already been approved and its founder remains its
 company administrator. This exercise used the existing external GLM route on
@@ -11,7 +11,7 @@ Spark `.178/.179`; the `.176/.177` trial pool was not modified.
 
 ## Cutover and observations
 
-1. The existing account `example-user-ref` received an
+1. The existing account `example-user-696b4fd7861684a4399939b2` received an
    active Developer membership in the company. Its pre-existing workspace
    user `trial-user-c83af2a3503e34aaae05c511` was reused; no duplicate
    identity was created.
@@ -19,7 +19,7 @@ Spark `.178/.179`; the `.176/.177` trial pool was not modified.
    `lease-wangzhixiang-enterprise-20260924` were issued for the company tenant,
    TextGenerate only. Both expire at **2026-09-25 06:10:17 Beijing time**.
 3. The external `glm-5.3.flash` route was moved from the CeShi test tenant to
-   `tenant-example`. The live ConfigMap and this
+   `tenant-example-a`. The live ConfigMap and this
    repository's route file agree. The controller rolled out and was 1/1 Ready.
    The controller-local GLM proxy returned `/health` 200 and advertised the
    pinned `GLM-5.3-Flash-EXL3` model.

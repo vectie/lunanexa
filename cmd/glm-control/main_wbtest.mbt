@@ -1,6 +1,9 @@
 ///|
 test "GLM control validates exact container identity and reports partial pairs" {
-  let target = targets()[0]
+  let target = {
+    host: "gpu-head@example.invalid",
+    container: "glm53-exl3-head",
+  }
   let document : Json = [
     {
       "Id": "a".repeat(64),
@@ -16,7 +19,11 @@ test "GLM control validates exact container identity and reports partial pairs" 
   assert_eq(
     state([
       (target, "a".repeat(64), true),
-      (targets()[1], "b".repeat(64), false),
+      (
+        { host: "gpu-worker@example.invalid", container: "glm53-exl3-worker", },
+        "b".repeat(64),
+        false,
+      ),
     ]),
     "Partial",
   )

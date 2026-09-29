@@ -29,7 +29,7 @@ metadata:
     app.kubernetes.io/part-of: lunanexa-storage-probe
 spec:
   nodeSelector:
-    kubernetes.io/hostname: spark-example-node
+    kubernetes.io/hostname: spark-a001-00000001
   restartPolicy: Never
   automountServiceAccountToken: false
   securityContext:
@@ -73,7 +73,7 @@ metadata:
     app.kubernetes.io/part-of: lunanexa-storage-probe
 spec:
   nodeSelector:
-    kubernetes.io/hostname: spark-example-node
+    kubernetes.io/hostname: spark-a002-00000002
   restartPolicy: Never
   automountServiceAccountToken: false
   securityContext:

@@ -17,10 +17,10 @@ All five nodes were Ready, running Kubernetes v1.34.10+k3s1 and containerd
 
 | Node / IP | Actual GPU process | GPU process accounting | Root filesystem available | Existing model placement |
 | --- | --- | --- | --- | --- |
-| spark-example-node / .176 | H3 FL2VA, PID 940867, vLLM-Omni diffusion worker | 96,461 MiB | 3.0 TiB, 16% used | FL2VA and Ref2VA directories, approximately 135 GiB each; original shared H3 files also present |
-| spark-example-node / .177 | H3 Ref2VA, PID 823489, vLLM-Omni diffusion worker | 93,989 MiB | 3.3 TiB, 7% used | Ref2VA directory approximately 135 GiB |
-| spark-example-node / .178 | VLLM Worker TP0, PID 960357 | 102,154 MiB | 3.3 TiB, 8% used | `/var/lib/lunanexa-models` absent; host inference uses another cache |
-| spark-example-node / .179 | VLLM Worker TP1, PID 1094338 | 102,152 MiB | 3.4 TiB, 4% used | `/var/lib/lunanexa-models` absent; host inference uses another cache |
+| spark-a001-00000001 / .176 | H3 FL2VA, PID 940867, vLLM-Omni diffusion worker | 96,461 MiB | 3.0 TiB, 16% used | FL2VA and Ref2VA directories, approximately 135 GiB each; original shared H3 files also present |
+| spark-a002-00000002 / .177 | H3 Ref2VA, PID 823489, vLLM-Omni diffusion worker | 93,989 MiB | 3.3 TiB, 7% used | Ref2VA directory approximately 135 GiB |
+| spark-a003-00000003 / .178 | VLLM Worker TP0, PID 960357 | 102,154 MiB | 3.3 TiB, 8% used | `/var/lib/lunanexa-models` absent; host inference uses another cache |
+| spark-a004-00000004 / .179 | VLLM Worker TP1, PID 1094338 | 102,152 MiB | 3.4 TiB, 4% used | `/var/lib/lunanexa-models` absent; host inference uses another cache |
 
 These are point-in-time measurements, not guarantees of allocatable space.
 Directory `du` figures must not be summed without checking hard links/shared
@@ -41,8 +41,8 @@ Both Deployments are in namespace `lunanexa`, with 1/1 Ready Pods:
 
 | Deployment | Fixed node | Read-only host model directory | Service |
 | --- | --- | --- | --- |
-| minimaxh3-fl2va | spark-example-node | `/var/lib/lunanexa-models/minimaxh3/minimaxh3/FL2VA` | minimaxh3-fl2va:8000 → 10.42.2.224:8000 |
-| minimaxh3-ref2va | spark-example-node | `/var/lib/lunanexa-models/minimaxh3/minimaxh3/Ref2VA` | minimaxh3-ref2va:8000 → 10.42.3.129:8000 |
+| minimaxh3-fl2va | spark-a001-00000001 | `/var/lib/lunanexa-models/minimaxh3/minimaxh3/FL2VA` | minimaxh3-fl2va:8000 → 10.42.2.224:8000 |
+| minimaxh3-ref2va | spark-a002-00000002 | `/var/lib/lunanexa-models/minimaxh3/minimaxh3/Ref2VA` | minimaxh3-ref2va:8000 → 10.42.3.129:8000 |
 
 Both use tag `lunanexa-cache/vllm-omni-h3:20260914`; the observed running image
 ID is `sha256:c3cbf972d026ba07223135b1d6b603edb980aa3123c1ead1dc918f057f21f4e3`.

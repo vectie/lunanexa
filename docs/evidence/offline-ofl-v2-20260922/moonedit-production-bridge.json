@@ -51,7 +51,7 @@
       "generation_state": "ArtifactGenerated",
       "scan_state": "ScanPassed",
       "review_state": "ReviewNotRequired",
-      "submitted_by": "example-user-ref",
+      "submitted_by": "example-user-1762c252b37af6eca6e7339f",
       "creator_receipt": "moonleaf:9b6a71404bbd93c5c275f4cf407754af2fc9d3323c810146e7af1d56f38c5e66",
       "created_unix_ms": "1790075223134"
     },
@@ -71,7 +71,7 @@
       "generation_state": "ArtifactGenerated",
       "scan_state": "ScanPassed",
       "review_state": "ReviewNotRequired",
-      "submitted_by": "example-user-ref",
+      "submitted_by": "example-user-1762c252b37af6eca6e7339f",
       "creator_receipt": "moonleaf:4226ccd0d5d062f58686721f334d4ae9609fb50a5f1dbd6f2c492336c997d8d8",
       "created_unix_ms": "1790075249257"
     }
@@ -88,7 +88,7 @@
       "locale": "zh-CN",
       "expected_object_ref": "object://contract-documents/6692cf3505efd587463d09c265255b11544a109e1c27edfef67983d296816ff3/contract-de00345f49deb3df8a3b64d326af446c470f19063337e0499fd2cdf2e5cacb52-pdf",
       "input_snapshot_sha256": "sha256:bae42968028bc491455dca0463f4ce16018134bb9a06e90b3b05e88fd8aae117",
-      "requested_by": "example-user-ref",
+      "requested_by": "example-user-1762c252b37af6eca6e7339f",
       "requested_unix_ms": "1790075217699"
     },
     {
@@ -102,7 +102,7 @@
       "locale": "zh-CN",
       "expected_object_ref": "object://contract-documents/6692cf3505efd587463d09c265255b11544a109e1c27edfef67983d296816ff3/contract-de00345f49deb3df8a3b64d326af446c470f19063337e0499fd2cdf2e5cacb52-docx",
       "input_snapshot_sha256": "sha256:bae42968028bc491455dca0463f4ce16018134bb9a06e90b3b05e88fd8aae117",
-      "requested_by": "example-user-ref",
+      "requested_by": "example-user-1762c252b37af6eca6e7339f",
       "requested_unix_ms": "1790075217699"
     }
   ],

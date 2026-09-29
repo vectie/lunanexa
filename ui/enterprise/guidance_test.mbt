@@ -48,11 +48,11 @@ test "friendly failures preserve recovery and never technical secrets" {
       let result = @enterprise.friendly_failure(
         locale,
         "Operation",
-        code + " bearer secret-sensitive /data/private 192.0.2.10",
+        code + " bearer secret-sensitive /data/private 192.0.2.1",
       )
       assert_false(result.contains("secret-sensitive"))
       assert_false(result.contains("/data/private"))
-      assert_false(result.contains("192.0.2.10"))
+      assert_false(result.contains("192.0.2.1"))
     }
   }
   assert_true(

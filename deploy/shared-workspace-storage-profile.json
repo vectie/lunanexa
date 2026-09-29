@@ -6,10 +6,10 @@
   "controller_node": "ubuntu",
   "nodes": [
     {"name": "ubuntu", "ip": "192.0.2.175"},
-    {"name": "spark-example-node", "ip": "192.0.2.176"},
-    {"name": "spark-example-node", "ip": "192.0.2.177"},
-    {"name": "spark-example-node", "ip": "192.0.2.178"},
-    {"name": "spark-example-node", "ip": "192.0.2.179"}
+    {"name": "spark-a001-00000001", "ip": "192.0.2.176"},
+    {"name": "spark-a002-00000002", "ip": "192.0.2.177"},
+    {"name": "spark-a003-00000003", "ip": "192.0.2.178"},
+    {"name": "spark-a004-00000004", "ip": "192.0.2.179"}
   ],
   "images": [
     {"name":"nfsplugin","tag":"v4.13.1","digest":"sha256:c1ab25922c8ec4d7f1744c272f28a89898bd020152e3942592c022410b544948"},

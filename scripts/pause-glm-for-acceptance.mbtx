@@ -26,8 +26,8 @@ async fn main {
   }
   @fs.mkdir(backup, permission=0o700)
   let targets = [
-    ("gpu-node@192.0.2.178", "glm53-exl3-head"),
-    ("gpu-node@192.0.2.179", "glm53-exl3-worker"),
+    ("gpu-node-c@192.0.2.178", "glm53-exl3-head"),
+    ("gpu-node-d@192.0.2.179", "glm53-exl3-worker"),
   ]
   let containers : Array[(String, String, String)] = []
   for (target, name) in targets {

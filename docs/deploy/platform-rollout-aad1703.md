@@ -43,8 +43,8 @@ Existing single-client settings must be retained/merged into the catalog.
 Reservation host JSON fields: `kubernetes_origin`, `token_file`, `ca_file`,
 `workload_namespace`/`workload_namespaces`, `node_names`, `infrastructure`.
 Observed Spark node IDs equal Kubernetes names:
-`spark-example-node`, `spark-example-node`, `spark-example-node`,
-`spark-example-node`. Node maps should map each ID to itself. Infrastructure
+`spark-a001-00000001`, `spark-a002-00000002`, `spark-a003-00000003`,
+`spark-a004-00000004`. Node maps should map each ID to itself. Infrastructure
 allowlist must be derived from real approved system pods, not wildcard tenant
 workloads. Controller reservation RBAC still requires explicit review.
 

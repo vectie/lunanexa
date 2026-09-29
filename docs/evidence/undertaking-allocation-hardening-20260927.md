@@ -30,7 +30,7 @@
 
 ## 后续修复与复验（同日）
 
-- `.177` 节点清单 ConfigMap 原本已写 `lunanexa.io/usage-pool=trial`，但旧节点代理仍上报缓存标签。仅滚动该节点的 `lunanexa-node-agent-spark-example-node` Deployment 后，公网管理端总览实测显示“试用池”；`minimaxh3-ref2va-787ffd645d-9p6d5` Pod 名称、Ready `1/1` 和零重启保持不变，公网 ComfyUI `:5005/` 返回 200。没有重启模型服务。
+- `.177` 节点清单 ConfigMap 原本已写 `lunanexa.io/usage-pool=trial`，但旧节点代理仍上报缓存标签。仅滚动该节点的 `lunanexa-node-agent-spark-a002-00000002` Deployment 后，公网管理端总览实测显示“试用池”；`minimaxh3-ref2va-787ffd645d-9p6d5` Pod 名称、Ready `1/1` 和零重启保持不变，公网 ComfyUI `:5005/` 返回 200。没有重启模型服务。
 - 修复承诺函年度／季度等档位被 30 天订单期限暗中截短的错误：企业端按所选档位加 31 天办理窗口创建订单；年度订单上限为 396 天，普通订单仍为 366 天；已签租期若晚于订单授权截止，服务端拒绝下发而不生成缩水租约。整机授权、主租约判定和合同运维到期展示统一按北京时间自然日边界处理。
 - 原生 API／合同定向测试 `28/28`、合同存储测试 `15/15`、JS 界面测试 `138/138`；`moon check --target native --deny-warn`、`moon check --target js --deny-warn`、`moon info`、`moon fmt` 均通过。代码提交 `e8f5288` 已推送 GitHub、GitLab `main`。
 - 三个候选镜像均先推送至集群私有仓库，再删除本地目标标签并从仓库拉回，才滚动 Deployment。新摘要：控制器 `moon/lunanexa-control@sha256:ef4d77171879e76ff44d15548bf1b7ec765e3e6b6fe8fbb3ddf20f82d5295a37`；管理端 `moon/lunanexa-web@sha256:3071cd930f96519648206be5e5166c5feb9776a0542c58ed3da90dec599ce796`；企业端 `moon/lunanexa-web@sha256:0f112fbef35d5d781203978bb6d4c89aadb9a57aaf9c2dbba8e337afd283aba1`。三者均 `1/1 Ready`；公网 `:8443/mana/`、`:8443/user/`、`:8443/docs/` 及 `:5005/` 为 HTTP 200，线上管理端和企业端 JS 的 SHA-256 与构建产物一致。回滚可用上方“验证与发布”所列的 `r1` 摘要。

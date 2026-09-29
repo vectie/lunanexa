@@ -3,7 +3,9 @@ kind: ConfigMap
 metadata: {name: lunanexa-offline-transfer, namespace: lunanexa}
 data:
   LUNANEXA_OFFLINE_TRANSFER_PUBLIC_ENDPOINT: /v1/offline-transfers
-  LUNANEXA_OFFLINE_TRANSFER_ADDRESS: 127.0.0.1:8096
+  # Browser capability uploads arrive through Traefik on the narrowly
+  # allowlisted public-upload Service; keep the private TLS sidecar on 8443.
+  LUNANEXA_OFFLINE_TRANSFER_ADDRESS: 0.0.0.0:8096
   LUNANEXA_CONTROLLER_ENDPOINT: https://lunanexa-offline-controller.lunanexa.svc:8443
   LUNANEXA_OFFLINE_S3_ENDPOINT: https://lunanexa-offline-object-store.lunanexa.svc:8443
   LUNANEXA_OFFLINE_S3_BUCKET: lunanexa-offline-commerce

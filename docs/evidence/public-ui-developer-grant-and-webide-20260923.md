@@ -4,8 +4,8 @@ This is a bounded browser acceptance record, **not** a claim that the nine-step
 undertaking order or ComfyUI generation is complete. The public endpoints were
 Operator `http://203.0.113.10:4174/console/` and Enterprise
 `http://203.0.113.10:5002/enterprise/`. The test organization was
-`organization-example` and the existing test
-subject was `example-user-ref`. No password, handoff code,
+`organization-example-b` and the existing test
+subject was `example-user-ad4db055b4142193c05052b1`. No password, handoff code,
 contract signature, payment, or exclusive machine assignment is recorded here.
 
 ## Buttons and visible feedback

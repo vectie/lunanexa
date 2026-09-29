@@ -1,7 +1,7 @@
 {
   "identity": {
     "account_id": "account-a8a646206b6dd368534b3277",
-    "subject_ref": "example-user-ref",
+    "subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
     "identity_issuer": "https://203.0.113.10:5006/realms/lunanexa",
     "display_name": "Technical Authority Acceptance",
     "email": "technical-waiver-oidc-20260922-townhelper@example.invalid",
@@ -45,7 +45,7 @@
     "version": "lunanexa.workspace.v1",
     "lease_id": "technical-acceptance-waiver-20260922-lease",
     "tenant_ref": "technical-acceptance-waiver-20260922",
-    "subject_ref": "example-user-ref",
+    "subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
     "access": "Developer",
     "limits": {
       "max_active_sessions": 1,
@@ -71,7 +71,7 @@
     "tenant_ref": "technical-acceptance-waiver-20260922",
     "organization_id": "technical-acceptance-waiver-20260922",
     "project_id": "technical-acceptance-waiver-20260922-project",
-    "purchaser_subject_ref": "example-user-ref",
+    "purchaser_subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
     "selected_service_code": "technical-workspace-acceptance",
     "selected_sla_code": "technical-only",
     "policy": {
@@ -94,7 +94,7 @@
     "tenant_ref": "technical-acceptance-waiver-20260922",
     "organization_id": "technical-acceptance-waiver-20260922",
     "project_id": "technical-acceptance-waiver-20260922-project",
-    "purchaser_subject_ref": "example-user-ref",
+    "purchaser_subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
     "selected_service_code": "technical-workspace-acceptance",
     "selected_sla_code": "technical-only",
     "policy": {
@@ -156,11 +156,11 @@
   },
   "before": {
     "version": "lunanexa.workspace.v1",
-    "subject_ref": "example-user-ref",
+    "subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
     "user": {
       "version": "lunanexa.workspace.v1",
       "user_id": "trial-user-a8a646206b6dd368534b3277",
-      "subject_ref": "example-user-ref",
+      "subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
       "display_name": "Technical Authority Acceptance",
       "email": "technical-waiver-oidc-20260922-townhelper@example.invalid",
       "state": "UserActive",
@@ -196,7 +196,7 @@
         "version": "lunanexa.workspace.v1",
         "lease_id": "trial-lease-a8a646206b6dd368534b3277",
         "tenant_ref": "trial-tenant-a8a646206b6dd368534b3277",
-        "subject_ref": "example-user-ref",
+        "subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
         "access": "Developer",
         "limits": {
           "max_active_sessions": 1,
@@ -220,7 +220,7 @@
         "version": "lunanexa.workspace.v1",
         "lease_id": "technical-acceptance-waiver-20260922-lease",
         "tenant_ref": "technical-acceptance-waiver-20260922",
-        "subject_ref": "example-user-ref",
+        "subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
         "access": "Developer",
         "limits": {
           "max_active_sessions": 1,
@@ -251,7 +251,7 @@
     "tenant_ref": "technical-acceptance-waiver-20260922",
     "organization_id": "technical-acceptance-waiver-20260922",
     "project_id": "technical-acceptance-waiver-20260922-project",
-    "purchaser_subject_ref": "example-user-ref",
+    "purchaser_subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
     "selected_service_code": "technical-workspace-acceptance",
     "selected_sla_code": "technical-only",
     "policy": {
@@ -317,7 +317,7 @@
       "order_id": "technical-acceptance-waiver-order-20260922",
       "tenant_ref": "technical-acceptance-waiver-20260922",
       "organization_id": "technical-acceptance-waiver-20260922",
-      "purchaser_subject_ref": "example-user-ref",
+      "purchaser_subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
       "quote": {
         "quote_id": "technical-acceptance-waiver-order-20260922-quote",
         "version": "v1",
@@ -368,7 +368,7 @@
       "identity_receipt": "oidc-registration:a8a646206b6dd368534b3277",
       "identity_verification_method": "actual-oidc-not-commercial-kyc",
       "operator_account_id": "account-62ccd3da9d05ea6c5783a8b8",
-      "operator_subject_ref": "example-user-ref",
+      "operator_subject_ref": "example-user-1762c252b37af6eca6e7339f",
       "operator_session_id": "session-87a9df0bd5e0d96042d3e490ae1994c5",
       "user_authorization_ref": "docs/evidence/offline-technical-waiver-20260922.md",
       "reason": "User-authorized isolated technical dispatcher activation and reversal; not a paid commercial order",
@@ -387,7 +387,7 @@
     "tenant_ref": "technical-acceptance-waiver-20260922",
     "organization_id": "technical-acceptance-waiver-20260922",
     "project_id": "technical-acceptance-waiver-20260922-project",
-    "purchaser_subject_ref": "example-user-ref",
+    "purchaser_subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
     "selected_service_code": "technical-workspace-acceptance",
     "selected_sla_code": "technical-only",
     "policy": {
@@ -453,7 +453,7 @@
       "order_id": "technical-acceptance-waiver-order-20260922",
       "tenant_ref": "technical-acceptance-waiver-20260922",
       "organization_id": "technical-acceptance-waiver-20260922",
-      "purchaser_subject_ref": "example-user-ref",
+      "purchaser_subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
       "quote": {
         "quote_id": "technical-acceptance-waiver-order-20260922-quote",
         "version": "v1",
@@ -504,7 +504,7 @@
       "identity_receipt": "oidc-registration:a8a646206b6dd368534b3277",
       "identity_verification_method": "actual-oidc-not-commercial-kyc",
       "operator_account_id": "account-62ccd3da9d05ea6c5783a8b8",
-      "operator_subject_ref": "example-user-ref",
+      "operator_subject_ref": "example-user-1762c252b37af6eca6e7339f",
       "operator_session_id": "session-87a9df0bd5e0d96042d3e490ae1994c5",
       "user_authorization_ref": "docs/evidence/offline-technical-waiver-20260922.md",
       "reason": "User-authorized isolated technical dispatcher activation and reversal; not a paid commercial order",
@@ -523,14 +523,14 @@
       "idempotency_key": "technical-acceptance-waiver-order-20260922-activation",
       "order_id": "technical-acceptance-waiver-order-20260922",
       "organization_id": "technical-acceptance-waiver-20260922",
-      "purchaser_subject_ref": "example-user-ref",
+      "purchaser_subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
       "kind": "WorkspaceLease",
       "authority_target_ref": "technical-acceptance-waiver-20260922-lease",
       "expected_order_generation": "3",
       "state": "EntitlementActivationConfirmed",
       "entitlement_ref": "technical-acceptance-waiver-20260922-lease",
       "authority_receipt": "offline-authority:0cc741b131a1a64f9d7a533a0bb97511a240f3714c3ffc315f46ea2019add5b7",
-      "requested_by": "example-user-ref",
+      "requested_by": "example-user-1762c252b37af6eca6e7339f",
       "requested_unix_ms": "1790076927442",
       "completed_unix_ms": "1790076931075"
     }
@@ -546,7 +546,7 @@
       "expected_order_generation": "5",
       "state": "ReversalConfirmed",
       "authority_receipt": "offline-authority:38411a12a2fd1c6d7deeab20b37e65d37046adf711f3b538de146b1f4e0f8cd8",
-      "requested_by": "example-user-ref",
+      "requested_by": "example-user-1762c252b37af6eca6e7339f",
       "requested_unix_ms": "1790076951505",
       "completed_unix_ms": "1790076956395"
     }
@@ -557,7 +557,7 @@
     "tenant_ref": "technical-acceptance-waiver-20260922",
     "organization_id": "technical-acceptance-waiver-20260922",
     "project_id": "technical-acceptance-waiver-20260922-project",
-    "purchaser_subject_ref": "example-user-ref",
+    "purchaser_subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
     "selected_service_code": "technical-workspace-acceptance",
     "selected_sla_code": "technical-only",
     "policy": {
@@ -624,7 +624,7 @@
       "order_id": "technical-acceptance-waiver-order-20260922",
       "tenant_ref": "technical-acceptance-waiver-20260922",
       "organization_id": "technical-acceptance-waiver-20260922",
-      "purchaser_subject_ref": "example-user-ref",
+      "purchaser_subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
       "quote": {
         "quote_id": "technical-acceptance-waiver-order-20260922-quote",
         "version": "v1",
@@ -675,7 +675,7 @@
       "identity_receipt": "oidc-registration:a8a646206b6dd368534b3277",
       "identity_verification_method": "actual-oidc-not-commercial-kyc",
       "operator_account_id": "account-62ccd3da9d05ea6c5783a8b8",
-      "operator_subject_ref": "example-user-ref",
+      "operator_subject_ref": "example-user-1762c252b37af6eca6e7339f",
       "operator_session_id": "session-87a9df0bd5e0d96042d3e490ae1994c5",
       "user_authorization_ref": "docs/evidence/offline-technical-waiver-20260922.md",
       "reason": "User-authorized isolated technical dispatcher activation and reversal; not a paid commercial order",
@@ -690,11 +690,11 @@
   },
   "active_self": {
     "version": "lunanexa.workspace.v1",
-    "subject_ref": "example-user-ref",
+    "subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
     "user": {
       "version": "lunanexa.workspace.v1",
       "user_id": "trial-user-a8a646206b6dd368534b3277",
-      "subject_ref": "example-user-ref",
+      "subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
       "display_name": "Technical Authority Acceptance",
       "email": "technical-waiver-oidc-20260922-townhelper@example.invalid",
       "state": "UserActive",
@@ -730,7 +730,7 @@
         "version": "lunanexa.workspace.v1",
         "lease_id": "trial-lease-a8a646206b6dd368534b3277",
         "tenant_ref": "trial-tenant-a8a646206b6dd368534b3277",
-        "subject_ref": "example-user-ref",
+        "subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
         "access": "Developer",
         "limits": {
           "max_active_sessions": 1,
@@ -754,7 +754,7 @@
         "version": "lunanexa.workspace.v1",
         "lease_id": "technical-acceptance-waiver-20260922-lease",
         "tenant_ref": "technical-acceptance-waiver-20260922",
-        "subject_ref": "example-user-ref",
+        "subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
         "access": "Developer",
         "limits": {
           "max_active_sessions": 1,
@@ -779,7 +779,7 @@
       "version": "lunanexa.workspace.v1",
       "lease_id": "technical-acceptance-waiver-20260922-lease",
       "tenant_ref": "technical-acceptance-waiver-20260922",
-      "subject_ref": "example-user-ref",
+      "subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
       "access": "Developer",
       "limits": {
         "max_active_sessions": 1,
@@ -811,7 +811,7 @@
     "tenant_ref": "technical-acceptance-waiver-20260922",
     "organization_id": "technical-acceptance-waiver-20260922",
     "project_id": "technical-acceptance-waiver-20260922-project",
-    "purchaser_subject_ref": "example-user-ref",
+    "purchaser_subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
     "selected_service_code": "technical-workspace-acceptance",
     "selected_sla_code": "technical-only",
     "policy": {
@@ -878,7 +878,7 @@
       "order_id": "technical-acceptance-waiver-order-20260922",
       "tenant_ref": "technical-acceptance-waiver-20260922",
       "organization_id": "technical-acceptance-waiver-20260922",
-      "purchaser_subject_ref": "example-user-ref",
+      "purchaser_subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
       "quote": {
         "quote_id": "technical-acceptance-waiver-order-20260922-quote",
         "version": "v1",
@@ -929,7 +929,7 @@
       "identity_receipt": "oidc-registration:a8a646206b6dd368534b3277",
       "identity_verification_method": "actual-oidc-not-commercial-kyc",
       "operator_account_id": "account-62ccd3da9d05ea6c5783a8b8",
-      "operator_subject_ref": "example-user-ref",
+      "operator_subject_ref": "example-user-1762c252b37af6eca6e7339f",
       "operator_session_id": "session-87a9df0bd5e0d96042d3e490ae1994c5",
       "user_authorization_ref": "docs/evidence/offline-technical-waiver-20260922.md",
       "reason": "User-authorized isolated technical dispatcher activation and reversal; not a paid commercial order",
@@ -948,7 +948,7 @@
     "tenant_ref": "technical-acceptance-waiver-20260922",
     "organization_id": "technical-acceptance-waiver-20260922",
     "project_id": "technical-acceptance-waiver-20260922-project",
-    "purchaser_subject_ref": "example-user-ref",
+    "purchaser_subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
     "selected_service_code": "technical-workspace-acceptance",
     "selected_sla_code": "technical-only",
     "policy": {
@@ -1015,7 +1015,7 @@
       "order_id": "technical-acceptance-waiver-order-20260922",
       "tenant_ref": "technical-acceptance-waiver-20260922",
       "organization_id": "technical-acceptance-waiver-20260922",
-      "purchaser_subject_ref": "example-user-ref",
+      "purchaser_subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
       "quote": {
         "quote_id": "technical-acceptance-waiver-order-20260922-quote",
         "version": "v1",
@@ -1066,7 +1066,7 @@
       "identity_receipt": "oidc-registration:a8a646206b6dd368534b3277",
       "identity_verification_method": "actual-oidc-not-commercial-kyc",
       "operator_account_id": "account-62ccd3da9d05ea6c5783a8b8",
-      "operator_subject_ref": "example-user-ref",
+      "operator_subject_ref": "example-user-1762c252b37af6eca6e7339f",
       "operator_session_id": "session-87a9df0bd5e0d96042d3e490ae1994c5",
       "user_authorization_ref": "docs/evidence/offline-technical-waiver-20260922.md",
       "reason": "User-authorized isolated technical dispatcher activation and reversal; not a paid commercial order",
@@ -1081,11 +1081,11 @@
   },
   "revoked_self": {
     "version": "lunanexa.workspace.v1",
-    "subject_ref": "example-user-ref",
+    "subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
     "user": {
       "version": "lunanexa.workspace.v1",
       "user_id": "trial-user-a8a646206b6dd368534b3277",
-      "subject_ref": "example-user-ref",
+      "subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
       "display_name": "Technical Authority Acceptance",
       "email": "technical-waiver-oidc-20260922-townhelper@example.invalid",
       "state": "UserActive",
@@ -1121,7 +1121,7 @@
         "version": "lunanexa.workspace.v1",
         "lease_id": "trial-lease-a8a646206b6dd368534b3277",
         "tenant_ref": "trial-tenant-a8a646206b6dd368534b3277",
-        "subject_ref": "example-user-ref",
+        "subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
         "access": "Developer",
         "limits": {
           "max_active_sessions": 1,
@@ -1145,7 +1145,7 @@
         "version": "lunanexa.workspace.v1",
         "lease_id": "technical-acceptance-waiver-20260922-lease",
         "tenant_ref": "technical-acceptance-waiver-20260922",
-        "subject_ref": "example-user-ref",
+        "subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
         "access": "Developer",
         "limits": {
           "max_active_sessions": 1,
@@ -1188,7 +1188,7 @@
   "user_cleanup": {
     "version": "lunanexa.workspace.v1",
     "user_id": "trial-user-a8a646206b6dd368534b3277",
-    "subject_ref": "example-user-ref",
+    "subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
     "display_name": "Technical Authority Acceptance",
     "email": "technical-waiver-oidc-20260922-townhelper@example.invalid",
     "state": "UserRevoked",

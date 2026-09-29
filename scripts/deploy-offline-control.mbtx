@@ -30,7 +30,7 @@ async fn main {
   if revision == "20260922-v4" {
     let authorization : Json = {
       "order_id": "technical-acceptance-waiver-order-20260922",
-      "purchaser_subject_ref": "example-user-ref",
+      "purchaser_subject_ref": "example-user-3ed6f3f28664d57c66b3dd45",
       "user_authorization_ref": "docs/evidence/offline-technical-waiver-20260922.md",
       "expires_unix_ms": (@async.now() + 3000000L).to_json(),
     }

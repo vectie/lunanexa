@@ -2,13 +2,13 @@
 
 ## Scope and actual state
 
-- `192.0.2.176` (`spark-example-node`) and `192.0.2.177`
-  (`spark-example-node`) are the **trial** pool. The existing MiniMax H3 and
+- `192.0.2.176` (`spark-a001-00000001`) and `192.0.2.177`
+  (`spark-a002-00000002`) are the **trial** pool. The existing MiniMax H3 and
   ComfyUI workloads were left running; the public ComfyUI route on port 5005
   remained HTTP 200 during this work. Additional trial apps/models require
   separate readiness and policy checks before being offered.
-- `192.0.2.178` (`spark-example-node`) and `192.0.2.179`
-  (`spark-example-node`) are the **enterprise-dedicated** pool. These
+- `192.0.2.178` (`spark-a003-00000003`) and `192.0.2.179`
+  (`spark-a004-00000004`) are the **enterprise-dedicated** pool. These
   classifications are stored in `deploy/cluster/cluster.json`, rendered into
   node inventory, and applied as `lunanexa.io/usage-pool` Kubernetes labels.
   All four nodes reported `Ready` with the expected labels at acceptance.
@@ -21,7 +21,7 @@
 ## Separate account/company and UI path
 
 The test used the existing `CeShi` account (`ceshi@lunanexa.local`) and a new
-company, **企业专属云 WebIDE 验收** (`organization-example`).
+company, **企业专属云 WebIDE 验收** (`organization-example-c`).
 Its Developer workspace grant and lease are limited to one day and to
 `glm-5.3.flash`; no platform-operator role or paid order was granted.
 

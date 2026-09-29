@@ -767,7 +767,7 @@ GET :5002/v1/auth/sessions              ->  200
 **而且企业侧第一次渲染出真实租户。** 打开 `http://203.0.113.10:5002/enterprise/`：
 
 ```
-example-user-ref · trial-org-b131b8c579a5901fe5ea97fe · secure browser session
+example-user-9fa3178cc352347a2927555b · trial-org-b131b8c579a5901fe5ea97fe · secure browser session
 trial-org-b131b8c579a5901fe5ea97fe            Tenant scoped
 Enterprise access loaded.
 FREE SHARED-INFERENCE TRIAL / Your trial is ready
@@ -807,7 +807,7 @@ Trial statistics unavailable. Refresh after checking controller support.
 ```
 GET /v1/accounts -> 200
 [{"account_id":"account-3b407b45…","display_name":"WebIDE Operator","roles":["EnterpriseUser"],"state":"Active",…},
- {"account_id":"account-b131b8c579a5901fe5ea97fe","subject_ref":"example-user-ref",
+ {"account_id":"account-b131b8c579a5901fe5ea97fe","subject_ref":"example-user-9fa3178cc352347a2927555b",
   "identity_issuer":"https://203.0.113.10:5006/realms/lunanexa",
   "display_name":"Recon Operator","roles":["EnterpriseUser"],"state":"Active",…}]
 
@@ -1432,7 +1432,7 @@ let machine_region_label : String = "lunanexa.io/region"
 //      heartbeat.inventory.labels.get(machine_region_label) == Some(offering.region) && …
 ```
 
-而**四台节点的标签里根本没有 `lunanexa.io/region`**（完整 dump，第一台 `spark-example-node`）：
+而**四台节点的标签里根本没有 `lunanexa.io/region`**（完整 dump，第一台 `spark-a001-00000001`）：
 
 ```
 lunanexa.data-classes          = Confidential
@@ -1440,7 +1440,7 @@ lunanexa.gpu.compute-capability= 12.1
 lunanexa.gpu.driver            = 580.178.04
 lunanexa.gpu.model             = NVIDIA GB10
 lunanexa.io/cx7-address        = 198.18.1.10
-lunanexa.io/cx7-peer           = spark-example-node
+lunanexa.io/cx7-peer           = spark-a002-00000002
 lunanexa.io/host-cpu-count     = 20
 lunanexa.io/host-memory-mib    = 124608
 ```
@@ -1475,10 +1475,10 @@ lunanexa.io/host-memory-mib    = 124608
 `"lunanexa.io/region": "cn-north-1"`，并重滚四个 node-agent 让它们重新上报：
 
 ```
-spark-example-node -> cn-north-1
-spark-example-node -> cn-north-1
-spark-example-node -> cn-north-1
-spark-example-node -> cn-north-1
+spark-a001-00000001 -> cn-north-1
+spark-a004-00000004 -> cn-north-1
+spark-a002-00000002 -> cn-north-1
+spark-a003-00000003 -> cn-north-1
 ```
 
 **② 把供给参数对齐真实清单**（原来 `nvidia-gb10 / 131072` 对不上
@@ -2272,7 +2272,7 @@ POST /v1/portal/self/machine-quotes  →  403
 - 标签只有四个字 `Provider subject / 提供商主体`，**没有任何说明文字**（`ui/console.mbt:4642`），
   而且是 `type=password`，输入时看不见；
 - 它要的是**身份提供商的原始 subject**（Keycloak 的用户 UUID）。而 LunaNexa 的任何界面都不显示这个值 ——
-  `Users & access` 的用户表里显示的是 `example-user-ref` 这种**派生指纹**，
+  `Users & access` 的用户表里显示的是 `example-user-a0d9aea16682695bfd3ad2be` 这种**派生指纹**，
   企业侧 `Account & API keys` 显示的也是同一个指纹；
 - 所以操作员要给一个"平台里已经存在的人"开通权限时，**必须去 Keycloak 自己的管理台把这个 UUID 抄出来**。
 
@@ -2531,7 +2531,7 @@ throw new Error(detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response
    | 状态 | 页面上实际出现的那一行 |
    |---|---|
    | 空 | `Paste the provider's own subject (the id the provider issued), not the derived reference. LunaNexa derives the account reference below; nothing leaves the browser until you submit.` |
-   | 填了真值 | `Derives example-user-ref · account-fe3ed0627ed85ce6e51cf621 — check it against the Subject column below before you submit.` |
+   | 填了真值 | `Derives example-user-9ae18ad0461d1b65bb575f5f · account-fe3ed0627ed85ce6e51cf621 — check it against the Subject column below before you submit.` |
 
    `aria-describedby` 也补上了，两个输入框以前连提示都没有。
 
@@ -2554,13 +2554,13 @@ throw new Error(detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response
 
 | | 值 |
 |---|---|
-| 账户列表里 `Platform Operator / wlc@lunanexa.local` 的 `Subject` 列 | `example-user-ref` |
-| 把上面那个原始 subject 填进 `Provider subject` 后，页面当场显示 | **`Derives example-user-ref · account-fe3ed0627ed85ce6e51cf621`** |
+| 账户列表里 `Platform Operator / wlc@lunanexa.local` 的 `Subject` 列 | `example-user-9ae18ad0461d1b65bb575f5f` |
+| 把上面那个原始 subject 填进 `Provider subject` 后，页面当场显示 | **`Derives example-user-9ae18ad0461d1b65bb575f5f · account-fe3ed0627ed85ce6e51cf621`** |
 | 两者是否一致 | **一致** |
 | 清空输入框 | 变回上面那段说明文案 |
 
 `Advanced: create account only` 面板同样填真值，同样得到
-`Derives example-user-ref · …`，且旧文案
+`Derives example-user-9ae18ad0461d1b65bb575f5f · …`，且旧文案
 （`neither the provider subject nor its digest appears in account views`）在页面上已不存在。
 
 **这一步的意义**：操作员现在**不需要离开产品**就能确认"我抄的这个 UUID 就是列表里那个人"。
@@ -2602,10 +2602,10 @@ throw new Error(detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response
 
 | # | 侧 | 按下的东西 / 填的值 | 结果 |
 |---|---|---|---|
-| 1 | 企业 | `Log out` → `Register a new account` → 邮箱 `recon-h-1790053838@example.test` / 名称 `Recon H Enterprise` / 密码 → `Create account` | ✅ 门户渲染，`Account & API keys` 显示 `account-a409fbcfca89d44f3b16bdf1` / `example-user-ref` |
+| 1 | 企业 | `Log out` → `Register a new account` → 邮箱 `recon-h-1790053838@example.test` / 名称 `Recon H Enterprise` / 密码 → `Create account` | ✅ 门户渲染，`Account & API keys` 显示 `account-a409fbcfca89d44f3b16bdf1` / `example-user-4d240d26a2ffe1073b3e34f7` |
 | 2 | （诊断读） | 从 Keycloak 管理 API 取这个人的原始 subject | `97716b94-fc9e-4cc3-9f0e-3d613537b07c` |
 | 3 | （本地核对） | 用同一份规范材料算指纹 | `a409fbcfca89d44f3b16bdf1` —— 与第 1 步门户自己算出来的**完全一致** |
-| 4 | 管理 | `Users & access` → `Create WebIDE access` 填 `Display name` / `Work email` / `Organization=organization-recon-h` / `Tenant=tenant-recon-h`，展开 `Identity provider details` 填 issuer + 上面那个真 subject | 预览显示 **`Derives example-user-ref · account-a409fbcfca89d44f3b16bdf1`**（§12.16 的修复在这里第一次用于真值） |
+| 4 | 管理 | `Users & access` → `Create WebIDE access` 填 `Display name` / `Work email` / `Organization=organization-recon-h` / `Tenant=tenant-recon-h`，展开 `Identity provider details` 填 issuer + 上面那个真 subject | 预览显示 **`Derives example-user-4d240d26a2ffe1073b3e34f7 · account-a409fbcfca89d44f3b16bdf1`**（§12.16 的修复在这里第一次用于真值） |
 | 5 | 管理 | `Identity verified` → `Prepare access` | ✅ notice：`WebIDE access was prepared. The next incomplete milestone is shown below.`；卡片 `ReadyToEnable`，四个 `✓` + `· WebIDE next` |
 | 6 | 管理 | 该卡片上的 `Enable WebIDE` | ✅ `POST /v1/onboarding/access-packages/account-a409fbcfca89d44f3b16bdf1:enable → 200`；卡片 `ReadyToEnable → Ready`，五个 `✓`，`Ready for WebIDE` |
 | 7 | 企业 | 硬刷新门户 → `Account & API keys` | ❌ **与第 1 步逐字相同**：`Organization = trial-org-a409fbcfca89d44f3b16bdf1`、`Tenant = trial-tenant-a409fbcfca89d44f3b16bdf1`、角色仍只有 `Enterprise user` |
@@ -2735,7 +2735,7 @@ tenant_ref:      "trial-tenant-\{fingerprint}",
 
 ```
 This subject already exists: Recon H Enterprise · recon-h-1790053838@example.test
-· example-user-ref. Tenants it already holds:
+· example-user-4d240d26a2ffe1073b3e34f7. Tenants it already holds:
 tenant-recon-h, trial-tenant-a409fbcfca89d44f3b16bdf1.
 The customer's own sign-in resolves its tenant from its existing membership,
 so a package opened on a different tenant will not be visible to them.

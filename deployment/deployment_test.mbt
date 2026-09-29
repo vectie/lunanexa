@@ -373,7 +373,7 @@ test "a paired placement is gated on the intent and the runtime together" {
     pair_intent,
     cx7_context([
       cx7_node("node-a", "node-b", "198.18.0.1"),
-      cx7_node("node-b", "node-a", "198.18.0.1"),
+      cx7_node("node-b", "node-a", "198.18.0.2"),
     ]),
   )
   assert_true(planned.executable)
@@ -384,7 +384,7 @@ test "a paired placement is gated on the intent and the runtime together" {
   assert_eq(head.group_id, "text-small-service-pair")
   assert_eq(head.rank, 0)
   assert_eq(head.world_size, 2)
-  assert_eq(head.peer_endpoint, "198.18.0.1")
+  assert_eq(head.peer_endpoint, "198.18.0.2")
   let worker = planned.replicas[1].group.unwrap()
   assert_eq(worker.rank, 1)
   assert_eq(worker.peer_endpoint, "198.18.0.1")
@@ -409,7 +409,7 @@ test "a paired placement is gated on the intent and the runtime together" {
     pair_intent,
     cx7_context([
       cx7_node("node-a", "node-b", ""),
-      cx7_node("node-b", "node-a", "198.18.0.1"),
+      cx7_node("node-b", "node-a", "198.18.0.2"),
     ]),
   )
   assert_false(addressless.executable)
@@ -422,8 +422,8 @@ test "a paired placement is gated on the intent and the runtime together" {
     pair_intent,
     cx7_context([
       cx7_node("node-a", "node-b", "198.18.0.1"),
-      cx7_node("node-b", "node-a", "198.18.0.1"),
-      cx7_node("node-c", "node-a", "198.18.0.1"),
+      cx7_node("node-b", "node-a", "198.18.0.2"),
+      cx7_node("node-c", "node-a", "198.18.0.3"),
     ]),
   )
   assert_true(triangle.executable)

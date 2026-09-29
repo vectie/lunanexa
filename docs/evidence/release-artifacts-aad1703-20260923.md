@@ -12,7 +12,7 @@ performed by this packaging workflow. A published image is not UI acceptance.
   `07d1711cf592aad7903add838e8261dbd3a7f076dc31d6a87adf87dc4b4d1782`.
 - Management source: `/home/cluster-admin/release-aad1703/lunanexa` with sibling
   `moonleaf`. Existing dependency caches were reused, not uncommitted sources.
-- ARM64 source: `/home/gpu-node/release-aad1703/lunanexa` on Spark .176, with the
+- ARM64 source: `/home/gpu-node-a/release-aad1703/lunanexa` on Spark .176, with the
   same source archives. Existing extracted `libpq-root` headers/libraries were
   selected explicitly; no host package installation or GPU execution occurred.
 

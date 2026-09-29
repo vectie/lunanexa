@@ -199,9 +199,9 @@ Secret —— agent 启动时即读取 `LUNANEXA_NODE_TOKEN_PATH`，缺文件直
 - **症状**：ComfyUI 从任何外部客户端都连不上（宿主机本机 curl 却返回 200），
   抓包显示 SYN 到达节点后无任何回包。
 - **根因**：`lunanexa-acceptance-example` 的 `default-deny` 策略按源地址丢弃入站：
-  先补 `192.0.2.10/24` 让内网通，公网源是路由器出口 `203.0.113.10`
+  先补 `192.0.2.0/24` 让内网通，公网源是路由器出口 `203.0.113.10`
   （未 SNAT），仍需单独放通。
-- **修复**：新增 `comfyui-acceptance-ingress`（放通 `192.0.2.10/24`、
+- **修复**：新增 `comfyui-acceptance-ingress`（放通 `192.0.2.0/24`、
   `203.0.113.10/32`、Pod/Service 网段到 8188）；出口侧另有
   `comfyui-acceptance-egress` 允许 DNS 与 `192.0.2.175:4174`。
 - **附带**：宿主机上遗留的 `moon-public-port-forward.py` 占着 5000 转发到已失效目标
@@ -1256,7 +1256,7 @@ POST http://203.0.113.10:4174/glm53/v1/chat/completions
 10. NFS 导出容器**镜像缺 ENTRYPOINT**（`docker inspect` 显示 `entry=[]`、`cmd=[/bin/sh]`），
     容器起个 shell 就退出、退出码 0、日志空——极难猜；补 `ENTRYPOINT ["/entrypoint.sh"]` 解决。
     `apk add nfs-utils` 还要把源改到国内镜像；宿主 `nfsd` 模块要先 `modprobe`。
-11. 配方把 `10.0.0.x` 判为 loopback，实际用 **`198.18.0.1`/`198.18.0.1`**；
+11. 配方把 `10.0.0.x` 判为 loopback，实际用 **`198.18.0.1`/`198.18.0.2`**；
     导出 ACL 本身正确，真正拦路的是 **worker 上缺 `alpine:latest`**——配方用它读 NFS 卷做校验，
     镜像缺失导致 pull 超时，却被报成 "cannot read … over NFS"（误导性报错）。
     另需 `chmod o+rx` 打开导出路径的目录穿越权限。
