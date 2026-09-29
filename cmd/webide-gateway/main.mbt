@@ -55,9 +55,11 @@ async fn main {
         )
         if !require_exclusive &&
           (
-            (client_id != "desktop-workspace" &&
-            client_id != "moonrobo" &&
-            client_id != "moontown") ||
+            (
+              client_id != "desktop-workspace" &&
+              client_id != "moonrobo" &&
+              client_id != "moontown"
+            ) ||
             runtime.gpu
           ) {
           raise Failure(
@@ -68,9 +70,11 @@ async fn main {
       }
       None => None
     }
-    if (client_id == "desktop-workspace" ||
-      client_id == "moonrobo" ||
-      client_id == "moontown") &&
+    if (
+        client_id == "desktop-workspace" ||
+        client_id == "moonrobo" ||
+        client_id == "moontown"
+      ) &&
       container is None {
       raise Failure(
         "Hosted personal WebIDE requires an isolated container image",
