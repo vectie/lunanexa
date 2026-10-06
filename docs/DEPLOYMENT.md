@@ -234,6 +234,17 @@ disabled until the scope-specific phrase (`DEPLOY MANAGEMENT`, `ADD COMPUTE`,
 the versioned stages in `scripts/deploy/`; there is no interactive terminal
 input or free-form command endpoint.
 
+The terminal distinguishes a pre-execution rejection from an unconfirmed
+outcome. A lost connection, malformed or oversized stream, or a stream without
+a valid completion event keeps the bounded, redacted output and shows
+**Outcome unknown**. The command may still be running or may already have
+changed the selected scope; this is not evidence of failure or rollback.
+Inspect the companion terminal and the current Kubernetes/node status, and
+recover manually if needed before considering another Apply. The installer
+never retries automatically. After checking the outcome, explicitly allow a new
+preview; the previous preview and confirmation phrase cannot authorize another
+Apply. A confirmed command exit, including a failed exit, retains its output.
+
 Prepare the protected local node-material directory in this shape before
 previewing:
 

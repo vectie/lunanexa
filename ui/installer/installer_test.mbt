@@ -22,7 +22,7 @@ test "installer renders guarded bilingual deployment workflow" {
 
 ///|
 test "terminal keeps a bounded tail and run state is explicit" {
-  let mut state = @installer.default_state(locale=English)
+  let mut state = preview_ready_state()
   state = @installer.update(state, PreviewRequested)
   assert_true(@installer.is_running(state))
   for index in 0..<510 {
@@ -39,7 +39,7 @@ test "terminal keeps a bounded tail and run state is explicit" {
 
 ///|
 test "a rejected rerun cannot leave stale success in the terminal" {
-  let mut state = @installer.default_state(locale=English)
+  let mut state = preview_ready_state()
   state = @installer.update(state, PreviewRequested)
   state = @installer.update(state, TerminalLine("[preview] safe dry run"))
   state = @installer.update(state, RunFinished(true, 0))

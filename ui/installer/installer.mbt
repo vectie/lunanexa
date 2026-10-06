@@ -5,6 +5,7 @@ pub(all) enum RunState {
   RunningApply
   Succeeded
   Failed
+  OutcomeUnknown
 } derive(Debug, Eq)
 
 ///|
@@ -81,6 +82,8 @@ pub(all) enum InstallerMessage {
   TerminalLine(String)
   RunFinished(Bool, Int)
   RunRejected(String)
+  RunOutcomeUnknown
+  RecoveryReviewed
   ClearTerminal
 } derive(Debug, Eq)
 
@@ -132,6 +135,20 @@ pub fn default_state(locale~ : @i18n.Locale) -> InstallerState {
 ///|
 pub fn is_running(state : InstallerState) -> Bool {
   state.run_state == RunningPreview || state.run_state == RunningApply
+}
+
+///|
+pub fn can_preview(state : InstallerState) -> Bool {
+  form_complete(state) &&
+  !is_running(state) &&
+  state.run_state != OutcomeUnknown
+}
+
+///|
+pub fn can_apply(state : InstallerState) -> Bool {
+  can_preview(state) &&
+  state.preview_verified &&
+  state.form.confirmation == state.form.deployment_target.confirmation()
 }
 
 ///|
@@ -328,7 +345,8 @@ pub fn update(
       }
     ConfirmationChanged(value) =>
       { ..state, form: { ..state.form, confirmation: value, }, }
-    PreviewRequested =>
+    PreviewRequested => {
+      guard can_preview(state) else { return state }
       {
         ..state,
         run_state: RunningPreview,
@@ -342,10 +360,13 @@ pub fn update(
         ],
         error_message: None,
       }
-    ApplyRequested =>
+    }
+    ApplyRequested => {
+      guard can_apply(state) else { return state }
       {
         ..state,
         run_state: RunningApply,
+        preview_verified: false,
         terminal_lines: [
           copy(
             state.locale,
@@ -355,6 +376,7 @@ pub fn update(
         ],
         error_message: None,
       }
+    }
     TerminalLine(line) => {
       let lines = [..state.terminal_lines, line]
       {
@@ -400,11 +422,38 @@ pub fn update(
         terminal_lines: [
           copy(
             state.locale,
-            "[blocked] companion rejected the request before execution",
-            "[已阻止] 本地伴随程序在执行前拒绝了请求",
+            "[blocked] request rejected before execution",
+            "[已阻止] 请求在执行前被拒绝",
           ),
         ],
         error_message: Some(message),
+      }
+    RunOutcomeUnknown =>
+      {
+        ..state,
+        run_state: OutcomeUnknown,
+        preview_verified: false,
+        terminal_lines: [
+          ..state.terminal_lines,
+          copy(
+            state.locale,
+            "[unknown] no confirmed command result; received output retained",
+            "[结果未知] 未收到已确认的命令结果；已保留收到的输出",
+          ),
+        ],
+        error_message: None,
+      }
+    RecoveryReviewed =>
+      if state.run_state == OutcomeUnknown {
+        {
+          ..state,
+          run_state: Idle,
+          preview_verified: false,
+          form: { ..state.form, confirmation: "", },
+          error_message: None,
+        }
+      } else {
+        state
       }
     ClearTerminal => { ..state, terminal_lines: [], error_message: None, }
   }
@@ -467,6 +516,7 @@ fn run_label(locale : @i18n.Locale, state : RunState) -> String {
     RunningApply => copy(locale, "Deployment running", "正在部署")
     Succeeded => copy(locale, "Completed", "已完成")
     Failed => copy(locale, "Needs attention", "需要处理")
+    OutcomeUnknown => copy(locale, "Outcome unknown", "结果未知")
   }
 }
 
@@ -475,7 +525,7 @@ fn run_tone(state : RunState) -> String {
   match state {
     RunningPreview | RunningApply => "running"
     Succeeded => "ok"
-    Failed => "failed"
+    Failed | OutcomeUnknown => "failed"
     Idle => ""
   }
 }
@@ -544,7 +594,6 @@ pub fn interactive_view(
   emit : @rabbita.Emit[InstallerMessage],
 ) -> @rabbita.Html {
   let running = is_running(state)
-  let complete = form_complete(state)
   let locale = state.locale
   let target = state.form.deployment_target
   let local_simulation = target == LocalSimulation
@@ -937,7 +986,7 @@ pub fn interactive_view(
             @html.button(
               type_="button",
               class="preview-button",
-              disabled=!complete || running,
+              disabled=!can_preview(state),
               on_click=emit(PreviewRequested),
               copy(locale, "Preview and verify", "预览并验证"),
             ),
@@ -988,10 +1037,7 @@ pub fn interactive_view(
             @html.button(
               type_="button",
               class="danger-button",
-              disabled=!complete ||
-                !state.preview_verified ||
-                running ||
-                state.form.confirmation != confirmation,
+              disabled=!can_apply(state),
               on_click=emit(ApplyRequested),
               match target {
                 ManagementFoundation =>
@@ -1012,6 +1058,35 @@ pub fn interactive_view(
         ]),
       ]),
       @html.section(class="install-card terminal-card", [
+        if state.run_state == OutcomeUnknown {
+          @html.div(
+            class="install-section",
+            attrs=@html.Attrs::build().role("alert"),
+            [
+              @html.strong(
+                copy(
+                  locale, "Outcome unknown. Check status before continuing.", "结果未知。请先检查状态再继续。",
+                ),
+              ),
+              @html.p(
+                class="field-help",
+                copy(
+                  locale, "The command may still be running or may have changed the selected scope. Inspect the companion terminal and current Kubernetes/node status, then recover manually if needed. Do not repeat Apply until you have verified the outcome.",
+                  "命令可能仍在运行，或已更改所选范围。请检查伴随程序终端以及当前 Kubernetes/节点状态，必要时手动恢复。确认结果前请勿再次应用。",
+                ),
+              ),
+              @html.button(
+                type_="button",
+                on_click=emit(RecoveryReviewed),
+                copy(
+                  locale, "I checked status; allow a new preview", "我已检查状态，允许重新预检",
+                ),
+              ),
+            ],
+          )
+        } else {
+          @html.text("")
+        },
         @html.div(class="terminal-toolbar", [
           @html.div(class="terminal-status", [
             @html.span(class="status-dot \{run_tone(state.run_state)}", ""),

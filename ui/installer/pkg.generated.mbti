@@ -9,6 +9,10 @@ import {
 }
 
 // Values
+pub fn can_apply(InstallerState) -> Bool
+
+pub fn can_preview(InstallerState) -> Bool
+
 pub fn default_state(locale~ : @i18n.Locale) -> InstallerState
 
 pub fn form_complete(InstallerState) -> Bool
@@ -71,6 +75,8 @@ pub(all) enum InstallerMessage {
   TerminalLine(String)
   RunFinished(Bool, Int)
   RunRejected(String)
+  RunOutcomeUnknown
+  RecoveryReviewed
   ClearTerminal
 } derive(Eq, @debug.Debug)
 pub fn InstallerMessage::equal(Self, Self) -> Bool
@@ -95,6 +101,7 @@ pub(all) enum RunState {
   RunningApply
   Succeeded
   Failed
+  OutcomeUnknown
 } derive(Eq, @debug.Debug)
 pub fn RunState::equal(Self, Self) -> Bool
 pub fn RunState::not_equal(Self, Self) -> Bool

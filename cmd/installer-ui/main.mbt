@@ -1,5 +1,6 @@
 ///|
 priv struct RunResult {
+  outcome : String
   ok : Bool
   exit_code : Int
   lines : Array[String]
@@ -40,6 +41,9 @@ extern "js" fn stream_install_promise(
   payload : String,
 ) -> @js.Promise =
   #| async (endpoint, token, payload) => {
+  #|   const lines = [];
+  #|   const result = (outcome, ok = false, exit_code = -1) =>
+  #|     JSON.stringify({outcome, ok, exit_code, lines});
   #|   let base;
   #|   try {
   #|     const url = new URL(endpoint);
@@ -50,68 +54,87 @@ extern "js" fn stream_install_promise(
   #|     }
   #|     base = url.origin;
   #|   } catch (_) {
-  #|     throw new Error("companion endpoint must be a plain HTTP loopback origin");
+  #|     return result("rejected");
   #|   }
-  #|   const response = await fetch(`${base}/v1/install:run`, {
-  #|     method: "POST",
-  #|     headers: {
-  #|       "Accept": "text/event-stream",
-  #|       "Authorization": `Bearer ${token}`,
-  #|       "Content-Type": "application/json"
-  #|     },
-  #|     cache: "no-store",
-  #|     credentials: "omit",
-  #|     redirect: "error",
-  #|     body: payload
-  #|   });
-  #|   if (!response.ok || !response.body) throw new Error(`installer HTTP ${response.status}`);
-  #|   const reader = response.body.getReader();
-  #|   const decoder = new TextDecoder();
-  #|   let buffer = "";
-  #|   let terminal = null;
-  #|   const lines = [];
-  #|   let outputBytes = 0;
-  #|   let renderedLines = 0;
-  #|   const appendToLog = (line) => {
-  #|     const log = globalThis.document?.querySelector(".terminal");
-  #|     if (!log) return;
-  #|     log.textContent = renderedLines === 0 ? line : `${log.textContent || ""}\n${line}`;
-  #|     renderedLines += 1;
-  #|     log.scrollTop = log.scrollHeight;
-  #|   };
-  #|   const appendLine = (text) => {
-  #|     const line = String(text).slice(0, 4096);
-  #|     outputBytes += new TextEncoder().encode(line).byteLength;
-  #|     if (outputBytes > 1048576 || lines.length >= 500) {
-  #|       throw new Error("installer output limit exceeded");
-  #|     }
-  #|     lines.push(line);
-  #|     appendToLog(line);
-  #|   };
-  #|   while (true) {
-  #|     const {value, done} = await reader.read();
-  #|     buffer += decoder.decode(value || new Uint8Array(), {stream: !done}).replaceAll("\r\n", "\n");
-  #|     if (buffer.length > 1048576) throw new Error("installer stream framing limit exceeded");
-  #|     let boundary;
-  #|     while ((boundary = buffer.indexOf("\n\n")) >= 0) {
-  #|       const block = buffer.slice(0, boundary);
-  #|       buffer = buffer.slice(boundary + 2);
-  #|       for (const row of block.split("\n")) {
-  #|         if (!row.startsWith("data:")) continue;
-  #|         const event = JSON.parse(row.slice(5).trim());
-  #|         if (event.kind === "line" && typeof event.text === "string") appendLine(event.text);
-  #|         if (event.kind === "complete") {
-  #|           terminal = event;
-  #|           appendToLog(event.ok ? "[complete] command exited successfully" : `[failed] exit code ${event.exit_code}`);
+  #|   let reader;
+  #|   try {
+  #|     const response = await fetch(`${base}/v1/install:run`, {
+  #|       method: "POST",
+  #|       headers: {
+  #|         "Accept": "text/event-stream",
+  #|         "Authorization": `Bearer ${token}`,
+  #|         "Content-Type": "application/json"
+  #|       },
+  #|       cache: "no-store",
+  #|       credentials: "omit",
+  #|       redirect: "error",
+  #|       body: payload
+  #|     });
+  #|     // These statuses are emitted only by the companion's pre-execution guards.
+  #|     if ([400, 401, 403, 404, 413].includes(response.status)) return result("rejected");
+  #|     if (!response.ok || !response.body) return result("unknown");
+  #|     reader = response.body.getReader();
+  #|     const decoder = new TextDecoder();
+  #|     let buffer = "";
+  #|     let outputBytes = 0;
+  #|     let renderedLines = 0;
+  #|     const appendToLog = (line) => {
+  #|       try {
+  #|         const log = globalThis.document?.querySelector(".terminal");
+  #|         if (!log) return;
+  #|         log.textContent = renderedLines === 0 ? line : `${log.textContent || ""}\n${line}`;
+  #|         renderedLines += 1;
+  #|         log.scrollTop = log.scrollHeight;
+  #|       } catch (_) { /* Rendering failure cannot change the command outcome. */ }
+  #|     };
+  #|     const appendLine = (text) => {
+  #|       // Keep the companion's redactions, and never echo the session bearer.
+  #|       const sensitive = (token && text.includes(token)) ||
+  #|         /authorization:|bearer |password[=:]|private[-_]key|node-token|bootstrap-token|operator-token|"secret"|secret=/i.test(text);
+  #|       const line = (sensitive ? "[redacted sensitive output]" : text).slice(0, 4096);
+  #|       outputBytes += new TextEncoder().encode(line).byteLength;
+  #|       if (outputBytes > 1048576 || lines.length >= 500) {
+  #|         throw new Error("installer output limit exceeded");
+  #|       }
+  #|       lines.push(line);
+  #|       appendToLog(line);
+  #|     };
+  #|     while (true) {
+  #|       const {value, done} = await reader.read();
+  #|       buffer += decoder.decode(value || new Uint8Array(), {stream: !done});
+  #|       buffer = buffer.replaceAll("\r\n", "\n");
+  #|       if (buffer.length > 1048576) throw new Error("installer stream framing limit exceeded");
+  #|       let boundary;
+  #|       while ((boundary = buffer.indexOf("\n\n")) >= 0) {
+  #|         const block = buffer.slice(0, boundary);
+  #|         buffer = buffer.slice(boundary + 2);
+  #|         for (const row of block.split("\n")) {
+  #|           if (!row.startsWith("data:")) continue;
+  #|           const event = JSON.parse(row.slice(5).trim());
+  #|           if (event?.kind === "line" && typeof event.text === "string") {
+  #|             appendLine(event.text);
+  #|           } else if (event?.kind === "complete" && typeof event.ok === "boolean" &&
+  #|                      Number.isInteger(event.exit_code) && event.exit_code >= -2147483648 &&
+  #|                      event.exit_code <= 2147483647 && event.ok === (event.exit_code === 0)) {
+  #|             return result("complete", event.ok, event.exit_code);
+  #|           } else {
+  #|             throw new Error("invalid installer event");
+  #|           }
   #|         }
   #|       }
+  #|       if (done) break;
   #|     }
-  #|     if (done) break;
+  #|     return result("unknown");
+  #|   } catch (_) {
+  #|     // Once POST has been attempted, transport/parser limits prove no outcome.
+  #|     // Return the bounded received evidence; never retry or imply rollback.
+  #|     return result("unknown");
+  #|   } finally {
+  #|     if (reader) {
+  #|       try { void reader.cancel().catch(() => {}); } catch (_) {}
+  #|       try { reader.releaseLock(); } catch (_) {}
+  #|     }
   #|   }
-  #|   if (!terminal || typeof terminal.ok !== "boolean" || !Number.isInteger(terminal.exit_code)) {
-  #|     throw new Error("installer stream ended without a terminal result");
-  #|   }
-  #|   return JSON.stringify({ok: terminal.ok, exit_code: terminal.exit_code, lines});
   #| }
 
 ///|
@@ -160,9 +183,14 @@ fn run_command(
   emit : @rabbita.Emit[AppMessage],
 ) -> @rabbita.Cmd {
   @rabbita.perform(message => emit(message), async fn() noraise {
-    try {
+    let request = try {
       let request = request_from_state(state, apply)
       @install_contract.validate_request(request)
+      request
+    } catch {
+      _ => return Rejected(rejection_message(state.locale))
+    }
+    try {
       let value = stream_install_promise(
         state.form.companion_endpoint,
         state.form.session_token,
@@ -172,18 +200,38 @@ fn run_command(
       let result : RunResult = @json.from_json(@json.parse(text))
       Outcome(result)
     } catch {
-      _ =>
-        Rejected(
-          if state.locale.is_chinese() {
-            "无法启动部署。请检查本地伴随程序、会话令牌和表单字段。"
-          } else {
-            "Deployment could not start. Check the local companion, session token, and form fields."
-          },
-        )
+      _ => Outcome({ outcome: "unknown", ok: false, exit_code: -1, lines: [], })
     } noraise {
       message => message
     }
   })
+}
+
+///|
+fn rejection_message(locale : @i18n.Locale) -> String {
+  if locale.is_chinese() {
+    "请求在执行前被阻止。请检查本地伴随程序、会话令牌和表单字段。"
+  } else {
+    "Request blocked before execution. Check the local companion, session token, and form fields."
+  }
+}
+
+///|
+fn apply_outcome(
+  state : @installer_ui.InstallerState,
+  result : RunResult,
+) -> @installer_ui.InstallerState {
+  let next = result.lines.fold(init=state, fn(current, line) {
+    @installer_ui.update(current, TerminalLine(line))
+  })
+  @installer_ui.update(
+    next,
+    match result.outcome {
+      "complete" => RunFinished(result.ok, result.exit_code)
+      "rejected" => RunRejected(rejection_message(state.locale))
+      _ => RunOutcomeUnknown
+    },
+  )
 }
 
 ///|
@@ -198,23 +246,21 @@ fn update(
       (@installer_ui.update(state, LocaleChanged(locale)), @rabbita.none)
     }
     Installer(PreviewRequested) => {
+      guard @installer_ui.can_preview(state) else {
+        return (state, @rabbita.none)
+      }
       let next = @installer_ui.update(state, PreviewRequested)
       (next, run_command(next, false, emit))
     }
     Installer(ApplyRequested) => {
+      guard @installer_ui.can_apply(state) else {
+        return (state, @rabbita.none)
+      }
       let next = @installer_ui.update(state, ApplyRequested)
       (next, run_command(next, true, emit))
     }
     Installer(inner) => (@installer_ui.update(state, inner), @rabbita.none)
-    Outcome(result) => {
-      let next = result.lines.fold(init=state, fn(current, line) {
-        @installer_ui.update(current, TerminalLine(line))
-      })
-      (
-        @installer_ui.update(next, RunFinished(result.ok, result.exit_code)),
-        @rabbita.none,
-      )
-    }
+    Outcome(result) => (apply_outcome(state, result), @rabbita.none)
     Rejected(message) =>
       (@installer_ui.update(state, RunRejected(message)), @rabbita.none)
   }
