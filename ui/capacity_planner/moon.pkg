@@ -1,0 +1,18 @@
+import {
+  "vectie/lunanexa/planning",
+  "vectie/lunanexa/contracts",
+  "vectie/lunanexa/telemetry/benchmark",
+  "vectie/lunanexa/ui/i18n",
+  "moonbit-community/rabbita",
+  "moonbit-community/rabbita/html",
+  "moonbitlang/core/string",
+  "moonbitlang/core/json",
+  "moonbitlang/core/encoding/base64",
+  "moonbitlang/core/encoding/utf8",
+}
+
+supported_targets = "js+native"
+
+options(
+  link: { "native": { "cc-link-flags": "-pthread -ldl" } },
+)

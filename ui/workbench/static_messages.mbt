@@ -206,8 +206,8 @@ fn static_message(locale : @i18n.Locale, key : StaticMessage) -> String {
     Explorer => @i18n.copy(locale, "EXPLORER", "资源管理器")
     NoBrowserLocalDraftFilesAdd =>
       @i18n.copy(
-        locale, "No browser-local draft files. Add a local draft before sending a request.",
-        "没有浏览器本地草稿。请先添加本地草稿，再发送请求。",
+        locale, "No browser-local draft files. Choose New draft to start with an empty file, or reopen an exported packet.",
+        "没有浏览器本地草稿。请选择“新建草稿”创建空白文件，或重新打开导出的草稿包。",
       )
     BrowserLocalOnly =>
       @i18n.copy(locale, "Browser-local only", "仅限浏览器本地")

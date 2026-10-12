@@ -6,8 +6,9 @@
   <meta name="color-scheme" content="light dark">
   <meta name="description" content="Role-protected, read-only platform guide diagnostics for administrators.">
   <title>能源谷“创未来”生态街区 · Guide diagnostics</title>
-  <link rel="stylesheet" href="./admin.css?v=2">
-  <script src="./admin.js?v=1" defer></script>
+  <link rel="stylesheet" href="./admin.css?v=3">
+  <script src="./admin-report.js?v=1" defer></script>
+  <script src="./admin.js?v=2" defer></script>
 </head>
 <body>
   <header class="admin-topbar">
@@ -39,6 +40,27 @@
       </section>
       <section class="panel"><header><div><small data-skills-kicker>Allowlisted capabilities</small><h2 data-skills-title>Guide skill inventory</h2></div></header><div class="skill-list" data-skills></div></section>
       <section class="panel missing-panel"><header><div><small data-evidence-kicker>Troubleshooting inputs</small><h2 data-evidence-title>Missing evidence</h2></div></header><div data-missing-evidence></div></section>
+      <section class="panel report-panel" aria-labelledby="report-title">
+        <h2 id="report-title" data-report-title>本地支持报告</h2>
+        <p data-report-description>选择要包含的汇总信息，查看完整 JSON，然后下载。不会上传或发送支持请求。</p>
+        <fieldset data-report-options>
+          <legend data-report-selection>报告内容</legend>
+          <label><input type="checkbox" data-report-section="health" checked><span data-report-health>组件健康与协调</span></label>
+          <label><input type="checkbox" data-report-section="alerts" checked><span data-report-alerts>告警代码与数量</span></label>
+          <label><input type="checkbox" data-report-section="fleet"><span data-report-fleet>机器与租约状态数量</span></label>
+          <label><input type="checkbox" data-report-section="knowledge" checked><span data-report-knowledge>知识版本与新鲜度</span></label>
+          <label><input type="checkbox" data-report-section="skills"><span data-report-skills>指南能力与依赖</span></label>
+        </fieldset>
+        <p data-report-warning>报告始终包含观测时间、支持回执和缺失证据。缺失不代表零；分享前请检查运行信息。</p>
+        <button type="button" data-report-review disabled>查看报告</button>
+        <div data-report-preview hidden>
+          <p data-report-review-help>请阅读完整报告。下载内容与下方预览完全一致。</p>
+          <pre data-report-content tabindex="0" aria-label="JSON report"></pre>
+          <button type="button" data-report-download disabled>下载已审阅的 JSON</button>
+          <button type="button" data-report-cancel>取消</button>
+        </div>
+        <p data-report-status role="status" aria-live="polite"></p>
+      </section>
     </div>
   </main>
 </body>

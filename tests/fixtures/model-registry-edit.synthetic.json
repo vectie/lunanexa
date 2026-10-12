@@ -1,0 +1,47 @@
+{
+  "schema_version": "lunanexa.registry.v1",
+  "models": [
+    {
+      "model_id": "model-existing",
+      "version": "v1",
+      "artifact": {
+        "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "uri": "modelstore://synthetic-existing",
+        "size_bytes": "9007199254740993",
+        "signature_ref": "synthetic-signature-existing"
+      },
+      "license_id": "license-existing",
+      "provenance": "Synthetic recorded metadata: 合成, \"sample\"\nNot authenticated artifact evidence",
+      "compatible_architectures": [
+        "x86_64",
+        "aarch64"
+      ],
+      "minimum_memory_mib": 8192,
+      "state": "Approved"
+    },
+    {
+      "model_id": "model-conflict",
+      "version": "v1",
+      "artifact": {
+        "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "uri": "oci://synthetic/models/conflict",
+        "size_bytes": "4096",
+        "signature_ref": "synthetic-signature-conflict"
+      },
+      "license_id": "license-conflict",
+      "provenance": "Synthetic prior metadata",
+      "compatible_architectures": [
+        "aarch64"
+      ],
+      "minimum_memory_mib": 8192,
+      "state": "Revoked"
+    }
+  ],
+  "licenses": [],
+  "verifications": [],
+  "evaluations": [],
+  "aliases": [],
+  "receipts": [],
+  "alias_history": [],
+  "runtimes": []
+}

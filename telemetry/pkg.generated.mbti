@@ -8,6 +8,7 @@ import {
   "vectie/lunanexa/contracts",
   "vectie/lunanexa/database",
   "vectie/lunanexa/settings",
+  "vectie/lunanexa/telemetry/benchmark",
 }
 
 // Values
@@ -15,26 +16,17 @@ pub fn bounded_metric(@contracts.TelemetrySample) -> Bool
 
 pub fn bounded_metric_with_settings(@contracts.TelemetrySample, @settings.TelemetrySafetySettings) -> Bool
 
-pub fn build_evidence_bundle(Array[BenchmarkSummary], EvidenceBundleInput) -> EvidenceBundle
+pub fn build_evidence_bundle(Array[@benchmark.BenchmarkSummary], @benchmark.EvidenceBundleInput) -> @benchmark.EvidenceBundle
 
-pub fn build_recommendation(Array[BenchmarkSummary], RecommendationInput) -> RecommendationEvidence raise BenchmarkError
+pub fn build_recommendation(Array[@benchmark.BenchmarkSummary], @benchmark.RecommendationInput) -> @benchmark.RecommendationEvidence raise @benchmark.BenchmarkError
 
-pub fn meets_objective(BenchmarkSummary, ServiceObjective) -> Bool
+pub fn meets_objective(@benchmark.BenchmarkSummary, @benchmark.ServiceObjective) -> Bool
 
-pub fn recommend_capacity(BenchmarkSummary, Int, Int, Int) -> CapacityRecommendation
+pub fn recommend_capacity(@benchmark.BenchmarkSummary, Int, Int, Int) -> @benchmark.CapacityRecommendation
 
-pub fn summarize(BenchmarkRun) -> BenchmarkSummary raise BenchmarkError
+pub fn summarize(@benchmark.BenchmarkRun) -> @benchmark.BenchmarkSummary raise @benchmark.BenchmarkError
 
 // Errors
-pub(all) suberror BenchmarkError {
-  EmptyRun
-  InvalidDuration
-  InvalidEvidence(String)
-} derive(Eq, @debug.Debug)
-pub fn BenchmarkError::equal(Self, Self) -> Bool
-pub fn BenchmarkError::not_equal(Self, Self) -> Bool
-pub fn BenchmarkError::to_repr(Self) -> @debug.Repr
-
 pub(all) suberror TelemetryError {
   PayloadMetricRejected
   InvalidTelemetryState(String)
@@ -44,199 +36,30 @@ pub fn TelemetryError::not_equal(Self, Self) -> Bool
 pub fn TelemetryError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
-pub(all) enum BenchmarkKind {
-  Concurrency
-  Saturation
-  ColdStart
-  LongStream
-  MixedWorkload
-} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn BenchmarkKind::equal(Self, Self) -> Bool
-pub fn BenchmarkKind::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn BenchmarkKind::not_equal(Self, Self) -> Bool
-pub fn BenchmarkKind::to_json(Self) -> Json
-pub fn BenchmarkKind::to_repr(Self) -> @debug.Repr
-
-pub(all) struct BenchmarkRun {
-  run_id : String
-  profile : String
-  model_digest : String
-  runtime_digest : String
-  hardware_profile : String
-  kind : BenchmarkKind
-  concurrency : Int
-  samples : Array[BenchmarkSample]
-} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn BenchmarkRun::equal(Self, Self) -> Bool
-pub fn BenchmarkRun::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn BenchmarkRun::not_equal(Self, Self) -> Bool
-pub fn BenchmarkRun::to_json(Self) -> Json
-pub fn BenchmarkRun::to_repr(Self) -> @debug.Repr
-
-pub(all) struct BenchmarkSample {
-  latency_ms : Int
-  queue_ms : Int
-  load_ms : Int
-  first_output_ms : Int
-  output_units : Int
-  duration_ms : Int
-  utilization_per_mille : Int
-  failed : Bool
-} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn BenchmarkSample::equal(Self, Self) -> Bool
-pub fn BenchmarkSample::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn BenchmarkSample::not_equal(Self, Self) -> Bool
-pub fn BenchmarkSample::to_json(Self) -> Json
-pub fn BenchmarkSample::to_repr(Self) -> @debug.Repr
-
-pub(all) struct BenchmarkSummary {
-  run_id : String
-  profile : String
-  sample_count : Int
-  latency_p50_ms : Int
-  latency_p95_ms : Int
-  latency_p99_ms : Int
-  queue_p95_ms : Int
-  first_output_p95_ms : Int
-  throughput_units_per_second : Int
-  failure_per_mille : Int
-  peak_utilization_per_mille : Int
-} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn BenchmarkSummary::equal(Self, Self) -> Bool
-pub fn BenchmarkSummary::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn BenchmarkSummary::not_equal(Self, Self) -> Bool
-pub fn BenchmarkSummary::to_json(Self) -> Json
-pub fn BenchmarkSummary::to_repr(Self) -> @debug.Repr
-
-pub(all) struct CapacityRecommendation {
-  profile : String
-  recommended_concurrency : Int
-  memory_headroom_mib : Int
-  evidence_run_id : String
-  statement : String
-} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn CapacityRecommendation::equal(Self, Self) -> Bool
-pub fn CapacityRecommendation::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn CapacityRecommendation::not_equal(Self, Self) -> Bool
-pub fn CapacityRecommendation::to_json(Self) -> Json
-pub fn CapacityRecommendation::to_repr(Self) -> @debug.Repr
-
-pub(all) struct EvidenceBundle {
-  release_version : String
-  benchmark_summaries : Array[BenchmarkSummary]
-  scenario_passed : Bool
-  isolation_scan_passed : Bool
-  physical_cluster_passed : Bool
-  postgres_failover_passed : Bool
-  object_store_transfer_passed : Bool
-  inference_billing_passed : Bool
-  provider_integration_passed : Bool
-  browser_acceptance_passed : Bool
-  security_report_ref : String
-  operations_report_ref : String
-  license_report_ref : String
-  ha_report_ref : String
-  object_store_report_ref : String
-  provider_report_ref : String
-  sanitization_report_ref : String
-  browser_report_ref : String
-  accepted_by : String?
-} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn EvidenceBundle::equal(Self, Self) -> Bool
-pub fn EvidenceBundle::export_json(Self) -> String
-pub fn EvidenceBundle::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn EvidenceBundle::not_equal(Self, Self) -> Bool
-pub fn EvidenceBundle::release_ready(Self) -> Bool
-pub fn EvidenceBundle::to_json(Self) -> Json
-pub fn EvidenceBundle::to_repr(Self) -> @debug.Repr
-
-pub(all) struct EvidenceBundleInput {
-  release_version : String
-  scenario_passed : Bool
-  isolation_scan_passed : Bool
-  physical_cluster_passed : Bool
-  postgres_failover_passed : Bool
-  object_store_transfer_passed : Bool
-  inference_billing_passed : Bool
-  provider_integration_passed : Bool
-  browser_acceptance_passed : Bool
-  security_report_ref : String
-  operations_report_ref : String
-  license_report_ref : String
-  ha_report_ref : String
-  object_store_report_ref : String
-  provider_report_ref : String
-  sanitization_report_ref : String
-  browser_report_ref : String
-  accepted_by : String?
-} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn EvidenceBundleInput::equal(Self, Self) -> Bool
-pub fn EvidenceBundleInput::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn EvidenceBundleInput::not_equal(Self, Self) -> Bool
-pub fn EvidenceBundleInput::to_json(Self) -> Json
-pub fn EvidenceBundleInput::to_repr(Self) -> @debug.Repr
-
 pub struct FileTelemetry {
   persistence : TelemetryPersistence
   sample_history_limit : Int
   benchmark_history_limit : Int
   safety_limits : @settings.TelemetrySafetySettings
   samples : Array[@contracts.TelemetrySample]
-  benchmark_runs : Array[BenchmarkRun]
-  benchmark_summaries : Array[BenchmarkSummary]
+  benchmark_runs : Array[@benchmark.BenchmarkRun]
+  benchmark_summaries : Array[@benchmark.BenchmarkSummary]
   mut published : TelemetrySnapshot
   mutex : @async.Mutex
 }
 pub async fn FileTelemetry::open(String, sample_history_limit? : Int, benchmark_history_limit? : Int, safety_limits? : @settings.TelemetrySafetySettings) -> Self
 pub async fn FileTelemetry::open_postgres(@database.PostgresDatabase, sample_history_limit? : Int, benchmark_history_limit? : Int, safety_limits? : @settings.TelemetrySafetySettings) -> Self
-pub async fn FileTelemetry::record_benchmark(Self, BenchmarkRun) -> BenchmarkSummary
+pub async fn FileTelemetry::record_benchmark(Self, @benchmark.BenchmarkRun) -> @benchmark.BenchmarkSummary
 pub async fn FileTelemetry::record_sample(Self, @contracts.TelemetrySample) -> Unit
 pub fn FileTelemetry::snapshot(Self) -> TelemetrySnapshot
-
-pub(all) struct RecommendationEvidence {
-  summary : BenchmarkSummary
-  objective : ServiceObjective
-  objective_met : Bool
-  capacity : CapacityRecommendation
-} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn RecommendationEvidence::equal(Self, Self) -> Bool
-pub fn RecommendationEvidence::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn RecommendationEvidence::not_equal(Self, Self) -> Bool
-pub fn RecommendationEvidence::to_json(Self) -> Json
-pub fn RecommendationEvidence::to_repr(Self) -> @debug.Repr
-
-pub(all) struct RecommendationInput {
-  run_id : String
-  objective : ServiceObjective
-  tested_concurrency : Int
-  memory_total_mib : Int
-  memory_peak_mib : Int
-} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn RecommendationInput::equal(Self, Self) -> Bool
-pub fn RecommendationInput::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn RecommendationInput::not_equal(Self, Self) -> Bool
-pub fn RecommendationInput::to_json(Self) -> Json
-pub fn RecommendationInput::to_repr(Self) -> @debug.Repr
-
-pub(all) struct ServiceObjective {
-  profile : String
-  maximum_p95_ms : Int
-  minimum_throughput_units_per_second : Int
-  maximum_failure_per_mille : Int
-} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
-pub fn ServiceObjective::equal(Self, Self) -> Bool
-pub fn ServiceObjective::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
-pub fn ServiceObjective::not_equal(Self, Self) -> Bool
-pub fn ServiceObjective::to_json(Self) -> Json
-pub fn ServiceObjective::to_repr(Self) -> @debug.Repr
 
 type TelemetryPersistence
 
 pub(all) struct TelemetrySnapshot {
   schema_version : String
   samples : Array[@contracts.TelemetrySample]
-  benchmark_runs : Array[BenchmarkRun]
-  benchmark_summaries : Array[BenchmarkSummary]
+  benchmark_runs : Array[@benchmark.BenchmarkRun]
+  benchmark_summaries : Array[@benchmark.BenchmarkSummary]
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 pub fn TelemetrySnapshot::equal(Self, Self) -> Bool
 pub fn TelemetrySnapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
@@ -245,5 +68,26 @@ pub fn TelemetrySnapshot::to_json(Self) -> Json
 pub fn TelemetrySnapshot::to_repr(Self) -> @debug.Repr
 
 // Type aliases
+pub using @benchmark {type BenchmarkError}
+
+pub using @benchmark {type BenchmarkKind}
+
+pub using @benchmark {type BenchmarkRun}
+
+pub using @benchmark {type BenchmarkSample}
+
+pub using @benchmark {type BenchmarkSummary}
+
+pub using @benchmark {type CapacityRecommendation}
+
+pub using @benchmark {type EvidenceBundle}
+
+pub using @benchmark {type EvidenceBundleInput}
+
+pub using @benchmark {type RecommendationEvidence}
+
+pub using @benchmark {type RecommendationInput}
+
+pub using @benchmark {type ServiceObjective}
 
 // Traits

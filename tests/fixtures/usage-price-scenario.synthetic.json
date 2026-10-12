@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "rates": [
+    {
+      "rate_card_id": "synthetic-candidate",
+      "version": "draft-1",
+      "meter": "accelerator-second",
+      "unit": "second",
+      "unit_price": {"minor_units": "20", "currency": "CNY", "scale": 2},
+      "effective_from_unix_ms": "1790726400000",
+      "effective_until_unix_ms": "1791504000000"
+    }
+  ]
+}

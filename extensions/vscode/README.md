@@ -4,7 +4,8 @@ This is a small northbound client for LunaNexa's canonical `lunanexa.v1`
 provider contract. It can store a scoped bearer token, open the separately
 hosted developer workbench, and send an explicitly selected editor range as a
 non-streaming `TextGenerate` workload after resolving the active workspace
-lease. It requires VS Code 1.100 or newer,
+lease. Ask About Selected Text can separately compose and review an explicit
+instruction with that selection before sending. It requires VS Code 1.100 or newer,
 whose Node.js extension host supports ECMAScript module extensions.
 
 ## Trust boundary
@@ -13,8 +14,9 @@ whose Node.js extension host supports ECMAScript module extensions.
   to the canonical API origin. It is never put in workspace/user settings, a
   URL, output, or a log. Changing the scheme, host, or port cannot silently
   reuse a token approved for another origin.
-- Only the current non-empty selection is sent after the user invokes
-  **LunaNexa: Send Selected Text**. The extension does not send the whole file,
+- **LunaNexa: Send Selected Text** sends only the current non-empty selection.
+  **Ask About Selected Text** sends a separately reviewed instruction plus that
+  quoted selection only after explicit preview confirmation. The extension does not send the whole file,
   filename, repository, workspace, language identifier, surrounding text, or
   editor telemetry.
 - Every request uses `Ephemeral` retention with caching and training reuse
@@ -90,9 +92,142 @@ npm test
 
 ## Current limitations
 
-The extension does not implement streaming, cancellation, automatic token
-issuance/refresh, or external-tool handoffs. It discovers the active
+The extension does not implement automatic token issuance/refresh or
+external-tool handoffs. It discovers the active
 text-generation lease before each invocation, while final access and
 concurrency enforcement remain server responsibilities. This initial client
 expects a JSON response from `POST /v1/workloads` and shows only the canonical
 text output and receipt.
+
+
+## Stream selected text
+
+Run **LunaNexa: Stream Selected Text** with a nonempty selection. It uses the
+same origin-bound token and live workspace lease discovery as the unary command,
+then calls the published canonical `/v1/workloads:stream` endpoint. A read-only
+plain-text virtual document updates as normalized text arrives. Closing it never
+reopens it on later chunks; it does not edit or insert into the source document.
+
+The preview displays at most 32,768 UTF-16 code units, with explicit truncation.
+A canonical terminal event and matching workload identity are required to show
+completion. On an interrupted stream, received text stays visible and is labeled
+incomplete. It is not automatically retried or resubmitted. Streaming output is
+not resumable: the server deliberately omits generated output from durable
+receipts. Nontext event metadata is not rendered or executed.
+
+The reader bounds each event to 1 MiB, a stream to 16 MiB and 65,536 events, and
+checks sequence order, workload identity, terminal state and JSON/UTF-8 framing.
+The configured deadline covers the network request and body read. No prompts,
+output, document paths or tokens are written to extension storage. The bounded
+request metadata journal described below is the only additional persisted state.
+
+### Focused verification boundary
+
+`node --test *.test.mjs` executes the production transport and registered command
+logic with built-in Fetch/ReadableStream and an injected VS Code contract
+fixture. It includes incremental Unicode, interrupted streams, close while
+pending, identity/sequence rejection, receipt states and bounded display. These
+are client behavior tests, not a real VS Code Extension Host, native controller,
+provider or GPU qualification. `node --check` validates each shipped module.
+The repository's native/console phase gate still needs its unavailable dependency
+prerequisites and was not run for this JavaScript-only change.
+
+For host verification, run the development extension against an authorized test
+controller, use a long selected-text request, observe text before completion,
+then disconnect once midstream and inspect the incomplete preview. Close a
+preview while pending and confirm it stays closed. This host journey remains
+unperformed in the dependency-free environment.
+
+
+## Cancel the current request
+
+Both **Send Selected Text** and **Stream Selected Text** expose a Cancel control
+in their progress notification. The control sends one cancellation request for
+that exact workload to the captured API base, using the same origin-bound token
+and subject. Repeated cancellation gestures never submit additional requests.
+Cancelling before submission prevents the workload POST entirely.
+
+A matching HTTP 202 cancellation receipt means the server accepted the request;
+it does not mean the workload has reached `Cancelled`. The existing invocation
+continues to observe the actual result. A generation can finish successfully
+while cancellation is racing, in which case `Succeeded` remains the outcome.
+A denial, missing workload, timeout, invalid receipt or transport error is shown
+as unconfirmed cancellation, without automatic retry. Local network abort is
+never presented as confirmed server cancellation. Cancellation has its own
+10-second response deadline and cannot outlive the completed invocation's UI.
+
+A streamed preview preserves received text and shows cancellation status plus
+any accepted receipt. Late cancellation responses cannot overwrite a terminal
+result. Closing a preview still does not reopen it. These client semantics are
+covered through the registered command and transport adapter in Node; actual
+VS Code controls and server resource release remain unqualified here.
+
+
+## Check an uncertain request outcome
+
+After a timeout, disconnection or lost preview, run **LunaNexa: Check Request
+Outcome**. Choose a recent request attempt for the currently configured API base
+and workspace subject. The command performs one authenticated status GET and
+shows canonical state, usage and audit receipt in a plain-text preview. It never
+submits the original selection again, automatically polls, or fetches generated
+output. A `404` is shown as unknown; it does not prove that the request never ran.
+`Succeeded` confirms the recorded outcome, not recovery of missing answer text.
+
+Before each unary or streamed workload dispatch, the extension saves a bounded
+journal of at most 20 attempts in VS Code global state. Each record contains only
+the approved API base URL, opaque subject, generated workload ID, timestamp and
+request mode. It contains no prompt, generated output, document path or token.
+Picker timestamps use Asia/Shanghai (UTC+08:00), while stored timestamps remain
+absolute milliseconds. Records are attempts, not proof of server admission. A cancellation during a
+pending journal write can leave an attempt that was never submitted. A failed
+journal write prevents dispatch and reports that no workload was submitted.
+Concurrent writes are serialized; a new extension activation can read the same
+metadata. Only references in this extension's generated `vscode-*` namespace are
+accepted, and dot-segment IDs are rejected before URL construction.
+
+The picker filters the exact canonical API base (including path) and subject.
+Changing either while choosing or loading a record prevents cross-context
+requests or display. Tokens still come only from origin-bound SecretStorage.
+Cancelling the picker does nothing; an older status response cannot overwrite a
+newer explicit check. Every status request has a local 10-second deadline.
+
+Focused combined verification is `node --test *.test.mjs`: production command,
+transport and metadata logic run through Node/VS Code contract adapters. The
+actual Extension Host global-state durability and native controller integration
+remain unperformed, as do all MoonBit/native/hardware gates. For an authorized
+host check, interrupt a test request, reload the extension, choose its recorded
+attempt, and verify the one GET result without any second workload POST.
+
+## Export selected request activity
+
+Run **LunaNexa: Export Request Activity Report**, select recent attempts from the
+current API base and subject, then choose JSON or CSV. The command reads each
+selected status once and opens a plain-text report for normal **Save As**. It
+includes exact reported usage and explicit unavailable/missing evidence without
+resubmitting requests, recovering generated text, pricing usage or writing the
+report to extension storage. Cancel stops the reads, not the workloads.
+
+See [the activity report guide](../../docs/CLIENT_ACTIVITY_REPORT_QUICKSTART.md)
+for field meanings, incomplete checks, context changes, privacy and verification
+limits. The report includes identifiers and public receipts; review before
+sharing. Ten new workflow tests extend the dependency-free client suite to 49
+passing tests. Real VS Code Save As and native/provider integration were not run.
+
+## Review and apply a local selection replacement
+
+After **Send Selected Text**, activate its successful result and run **Review
+Selection Replacement**. Inspect the original/proposed plain-text diff, then
+run **Apply Reviewed Replacement** from the diff and confirm the original
+local target. The extension edits only the captured unchanged range, in one
+undo-delimited editor transaction, without saving or another inference call.
+See [the replacement guide](../../docs/REVIEWED_SELECTION_REPLACEMENT.md) for
+eligible outputs, five-candidate memory retention, stale-source recovery and
+qualification limits. Actual VS Code Undo and diff UI were not executed here.
+
+## Ask a question about the selection
+
+Use **LunaNexa: Ask About Selected Text** to explain, summarize or request a
+rewrite without inserting prompt instructions into the source document. Inspect
+the exact read-only preview, then choose **Send reviewed prompt** or Cancel.
+See [the question workflow](../../docs/SELECTED_TEXT_QUESTIONS.md) for exact
+payload, interruption, privacy and verification boundaries.

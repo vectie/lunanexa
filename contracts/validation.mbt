@@ -49,6 +49,33 @@ pub fn valid_sha256_digest(value : String) -> Bool {
 }
 
 ///|
+/// The metadata predicate used by registry registration. Passing it only makes a
+/// Candidate structurally admissible; it does not verify or approve the model.
+pub fn valid_candidate_model(model : ModelRecord) -> Bool {
+  !(!valid_identifier(model.model_id, maximum_length=128) ||
+  !valid_identifier(model.version, maximum_length=128) ||
+  model.artifact.uri.contains("../") ||
+  model.artifact.uri.contains("file://") ||
+  model.artifact.uri.contains("<script") ||
+  model.artifact.uri.contains_char('\n') ||
+  !(model.artifact.uri.has_prefix("s3://") ||
+  model.artifact.uri.has_prefix("oci://") ||
+  model.artifact.uri.has_prefix(model_store_scheme)) ||
+  !valid_sha256_digest(model.artifact.digest) ||
+  model.artifact.size_bytes <= 0L ||
+  model.artifact.signature_ref == "" ||
+  model.artifact.signature_ref.contains_char('\n') ||
+  !valid_identifier(model.license_id, maximum_length=128) ||
+  model.provenance == "" ||
+  model.compatible_architectures.length() == 0 ||
+  !model.compatible_architectures.all(value => {
+    valid_identifier(value, maximum_length=128)
+  }) ||
+  model.minimum_memory_mib <= 0 ||
+  model.state != Candidate)
+}
+
+///|
 pub fn validate_workload(
   request : WorkloadEnvelope,
 ) -> Unit raise ContractError {

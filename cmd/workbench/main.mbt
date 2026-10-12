@@ -42,6 +42,8 @@ priv enum ClientOutcome {
   PublicFailure(PublicFailureKind, String, Bool)
   ClockAdvanced(Int64, Int64)
   LocalActionFinished(Bool, Bool)
+  DraftBoundOutcome(Int64, ClientOutcome)
+  InputBoundOutcome(Int64, ClientOutcome)
 }
 
 ///|
@@ -781,7 +783,7 @@ fn send_command(
   emit : @rabbita.Emit[AppMessage],
 ) -> @rabbita.Cmd {
   @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
-    try
+    let outcome = try
       send_workload(
         model.endpoint,
         model.scoped_token,
@@ -800,6 +802,10 @@ fn send_command(
     } noraise {
       result => RequestCompleted(result)
     }
+    DraftBoundOutcome(
+      model.workbench.draft_import_generation,
+      InputBoundOutcome(model.workbench.draft_revision, outcome),
+    )
   })
 }
 
@@ -853,6 +859,62 @@ fn update(
   emit : @rabbita.Emit[AppMessage],
 ) -> (AppModel, @rabbita.Cmd) {
   match message {
+    Outcome(InputBoundOutcome(revision, outcome)) => {
+      let (next, cmd) = update(model, Outcome(outcome), emit)
+      if revision == model.workbench.draft_revision {
+        (next, cmd)
+      } else {
+        // The request still settles usage/loading and authorization failures,
+        // but its output/receipt must never describe a different draft/input.
+        (
+          {
+            ..next,
+            workbench: {
+              ..next.workbench,
+              output_text: "",
+              receipt: "",
+              success_message: if outcome is RequestCompleted(_) {
+                Some(
+                  app_copy(
+                    model.workbench.locale,
+                    "The earlier request finished after its input changed. Its output and receipt are hidden; usage is still recorded.",
+                    "先前请求在输入更改后结束，其输出和回执已隐藏，但用量仍会记录。",
+                  ),
+                )
+              } else {
+                None
+              },
+              error_message: next.workbench.error_message.map(detail => {
+                app_copy(
+                  model.workbench.locale,
+                  "Earlier request (input has changed): ",
+                  "先前请求（输入已更改）：",
+                ) +
+                detail
+              }),
+            },
+          },
+          cmd,
+        )
+      }
+    }
+    Outcome(DraftBoundOutcome(generation, outcome)) =>
+      if generation == model.workbench.draft_import_generation &&
+        model.workbench.loading {
+        update(model, Outcome(outcome), emit)
+      } else {
+        (model, @rabbita.none)
+      }
+    Workbench(ReadDraftFile) => {
+      if model.workbench.loading {
+        return (model, @rabbita.none)
+      }
+      let state = model.workbench.update(ReadDraftFile)
+      (
+        { ..model, workbench: state, },
+        read_drafts_command(state.draft_import_generation, emit),
+      )
+    }
     Workbench(ExportDrafts) =>
       (
         model,
@@ -925,7 +987,7 @@ fn update(
           connecting: false,
           clock_generation: model.clock_generation + 1L,
           workbench: {
-            ..model.workbench,
+            ..model.workbench.update(CancelDraftImport).update(CancelDraftEdit),
             lease: None,
             success_message: None,
             error_message: None,
@@ -941,7 +1003,7 @@ fn update(
           connecting: false,
           clock_generation: model.clock_generation + 1L,
           workbench: {
-            ..model.workbench,
+            ..model.workbench.update(CancelDraftImport).update(CancelDraftEdit),
             lease: None,
             success_message: None,
             error_message: None,
@@ -957,7 +1019,7 @@ fn update(
           connecting: false,
           clock_generation: model.clock_generation + 1L,
           workbench: {
-            ..model.workbench,
+            ..model.workbench.update(CancelDraftImport).update(CancelDraftEdit),
             lease: None,
             success_message: None,
             error_message: None,
@@ -966,6 +1028,12 @@ fn update(
         @rabbita.none,
       )
     Connect => {
+      let model = {
+        ..model,
+        workbench: model.workbench
+        .update(CancelDraftImport)
+        .update(CancelDraftEdit),
+      }
       let endpoint = model.endpoint.trim().to_owned()
       let subject_ref = model.subject_ref.trim().to_owned()
       if !endpoint_is_safe(endpoint) {
@@ -1027,6 +1095,10 @@ fn update(
       (next, connect_command(next, emit))
     }
     Workbench(SendRequest) => {
+      // A second click while the first command is in flight is inert.
+      if model.workbench.loading {
+        return (model, @rabbita.none)
+      }
       let now = current_unix_ms()
       let current = if model.demo_mode {
         model.workbench

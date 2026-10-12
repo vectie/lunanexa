@@ -8,8 +8,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check extension.mjs && node --check client-core.mjs",
-    "test": "node --test client-core.test.mjs"
+    "check": "node --check extension.mjs && node --check extension-host.mjs && node --check client-core.mjs && node --check request-client.mjs && node --check cancellation-client.mjs && node --check recovery-client.mjs && node --check activity-report.mjs && node --check selection-replacement.mjs && node --check selected-prompt.mjs",
+    "test": "node --test *.test.mjs"
   },
   "extensionKind": [
     "ui"
@@ -25,7 +25,14 @@
   "activationEvents": [
     "onCommand:lunanexa.configureToken",
     "onCommand:lunanexa.openWorkbench",
-    "onCommand:lunanexa.sendSelection"
+    "onCommand:lunanexa.sendSelection",
+    "onCommand:lunanexa.streamSelection",
+    "onCommand:lunanexa.checkRequestOutcome",
+    "onCommand:lunanexa.exportActivityReport",
+    "onCommand:lunanexa.cancelRecordedRequest",
+    "onCommand:lunanexa.reviewSelectionReplacement",
+    "onCommand:lunanexa.applyReviewedReplacement",
+    "onCommand:lunanexa.askSelection"
   ],
   "contributes": {
     "commands": [
@@ -40,6 +47,34 @@
       {
         "command": "lunanexa.sendSelection",
         "title": "LunaNexa: Send Selected Text"
+      },
+      {
+        "command": "lunanexa.streamSelection",
+        "title": "LunaNexa: Stream Selected Text"
+      },
+      {
+        "command": "lunanexa.checkRequestOutcome",
+        "title": "LunaNexa: Check Request Outcome"
+      },
+      {
+        "command": "lunanexa.exportActivityReport",
+        "title": "LunaNexa: Export Request Activity Report"
+      },
+      {
+        "command": "lunanexa.cancelRecordedRequest",
+        "title": "LunaNexa: Cancel Recorded Request"
+      },
+      {
+        "command": "lunanexa.reviewSelectionReplacement",
+        "title": "LunaNexa: Review Selection Replacement"
+      },
+      {
+        "command": "lunanexa.applyReviewedReplacement",
+        "title": "LunaNexa: Apply Reviewed Replacement"
+      },
+      {
+        "command": "lunanexa.askSelection",
+        "title": "LunaNexa: Ask About Selected Text"
       }
     ],
     "configuration": {
@@ -89,6 +124,11 @@
           "command": "lunanexa.sendSelection",
           "when": "editorHasSelection",
           "group": "navigation@100"
+        },
+        {
+          "command": "lunanexa.askSelection",
+          "when": "editorHasSelection",
+          "group": "navigation@101"
         }
       ]
     }

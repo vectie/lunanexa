@@ -7,6 +7,7 @@ import {
   "vectie/lunanexa/ui/contract_documents",
   "vectie/lunanexa/notifications",
   "vectie/lunanexa/ui/i18n",
+  "vectie/lunanexa/ui/capacity_planner",
   "vectie/lunanexa/workspace",
   "moonbit-community/rabbita",
   "moonbit-community/rabbita/html",

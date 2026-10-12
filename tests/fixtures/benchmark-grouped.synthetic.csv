@@ -1,0 +1,8 @@
+trial,elapsed_ms,queued_ms,loaded_ms,ttft_ms,generated_tokens,sample_window_ms,busy_per_mille,is_error,note
+synthetic-csv-concurrency-8,300,10,0,50,160,300,800,false,"invented, 观察
+not hardware evidence"
+synthetic-csv-concurrency-4,200,5,0,30,160,400,700,false,fixture
+synthetic-csv-concurrency-8,360,11,0,51,160,300,800,false,fixture
+synthetic-csv-concurrency-4,240,6,0,31,160,400,700,false,fixture
+synthetic-csv-concurrency-8,420,12,0,52,160,300,800,true,fixture
+synthetic-csv-concurrency-4,280,7,0,32,160,400,700,false,fixture

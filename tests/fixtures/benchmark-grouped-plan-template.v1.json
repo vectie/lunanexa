@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "workload": {
+    "profile": "text-short-v1",
+    "model_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "runtime_digest": "sha256:synthetic-runtime-v1",
+    "hardware_profile": "fixture-accelerator-32g-driver-v1",
+    "kind": "Concurrency",
+    "workload_ref": "fixture:chat-input256-output160-seed79",
+    "output_unit": "tokens",
+    "minimum_tested_concurrency": 4
+  },
+  "objective": {
+    "profile": "text-short-v1",
+    "maximum_p95_ms": 350,
+    "minimum_throughput_units_per_second": 350,
+    "maximum_failure_per_mille": 0
+  },
+  "evidence": []
+}

@@ -9,6 +9,7 @@ import {
   "vectie/lunanexa/contracts",
   "vectie/lunanexa/deployment",
   "vectie/lunanexa/notifications",
+  "vectie/lunanexa/ui/capacity_planner",
   "vectie/lunanexa/ui/contract_documents",
   "vectie/lunanexa/ui/i18n",
   "vectie/lunanexa/ui/offline_commerce",
@@ -321,6 +322,7 @@ pub fn Confirmation::to_json(Self) -> Json
 pub fn Confirmation::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ConsoleMessage {
+  CapacityPlanner(@capacity_planner.Message)
   ResourceDelivery(ResourceDeliveryMessage)
   LocaleChanged(@i18n.Locale)
   Navigate(OperatorRoute)
@@ -454,6 +456,7 @@ pub(all) struct ConsoleState {
   request_details : Array[RequestDetail]
   stream_events : Array[StreamEventView]
   benchmark_evidence : Array[String]
+  capacity_planner : @capacity_planner.State
   policies : PolicySummary
   audit : Array[AuditRow]
   notifications : Array[NotificationRow]

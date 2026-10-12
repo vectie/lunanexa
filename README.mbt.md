@@ -156,6 +156,25 @@ signature, payment or tax-invoice providers.
 
 ## Documents
 
+- [Review generated text as a local selection replacement](docs/REVIEWED_SELECTION_REPLACEMENT.md)
+
+- [Review and export recent client request activity](docs/CLIENT_ACTIVITY_REPORT_QUICKSTART.md)
+
+- [Offline model catalog CSV intake and registration drafts](docs/MODEL_INTAKE_QUICKSTART.md)
+- [Edit saved model catalogs into successor-version drafts](docs/MODEL_CATALOG_EDIT_QUICKSTART.md)
+- [Offline usage exploration and cost allocation](docs/USAGE_EXPLORER_QUICKSTART.md)
+- [Explore saved usage over time](docs/USAGE_TIMELINE_QUICKSTART.md)
+- [Reconcile external references with saved usage and costs](docs/USAGE_CORRELATION_QUICKSTART.md)
+- [Compare saved usage snapshots](docs/USAGE_CHANGES_QUICKSTART.md)
+- [Combine overlapping usage captures](docs/USAGE_CONSOLIDATION_QUICKSTART.md)
+- [Offline candidate-rate cost exploration](docs/USAGE_PRICE_QUICKSTART.md)
+- [Offline fleet inventory exploration](docs/FLEET_EXPLORER_QUICKSTART.md)
+- [Offline saved deployment placement exploration](docs/DEPLOYMENT_EXPLORER_QUICKSTART.md)
+- [Offline fleet capture-history comparison](docs/FLEET_HISTORY_QUICKSTART.md)
+- [Explore repeated benchmark concurrency sweeps](docs/BENCHMARK_SWEEP_QUICKSTART.md)
+- [Explore benchmark latency and queue distributions](docs/BENCHMARK_DISTRIBUTION_QUICKSTART.md)
+- [Grouped multi-run benchmark CSV intake](docs/BENCHMARK_GROUPED_CSV_QUICKSTART.md)
+- [Offline operator capacity-plan workbench](docs/CAPACITY_PLANNING.md)
 - [Standalone source-grounded LunaNexa coursebook](docs-site/README.md)
 - [Product contract](docs/PRODUCT_CONTRACT.md)
 - [Enterprise portal and lease workflow](docs/ENTERPRISE_PORTAL.md)
@@ -179,3 +198,10 @@ signature, payment or tax-invoice providers.
 - [Cost center, digital agreements, and commercial controls](docs/research/suanli/COMMERCIAL_CONTROL_PLANE.md)
 - [Commercial, technical, and qualified-service expansion](docs/COMMERCIAL_AND_QUALIFIED_SERVICES.md)
 - [Next-thread handoff](docs/IMPLEMENTATION_HANDOFF.md)
+
+## Local artifact intake
+
+Prepare a Candidate model draft from one local artifact file with its computed
+SHA-256 and exact byte size, then reuse saved-registry review and request
+extraction. See [the local artifact intake guide](docs/LOCAL_ARTIFACT_INTAKE_QUICKSTART.md).
+The command is offline and does not upload, register, approve or execute a model.

@@ -1,0 +1,197 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/fleet"
+
+import {
+  "moonbitlang/core/json",
+  "vectie/lunanexa/contracts",
+}
+
+// Values
+pub fn explore(Array[@contracts.NodeHeartbeat], Query) -> Report raise FleetError
+
+pub fn explore_history(Array[HistoryCapture], HistoryQuery) -> HistoryReport raise FleetError
+
+pub fn import_history_manifest(String) -> HistoryManifest raise
+
+pub fn import_history_query(String) -> HistoryQuery raise
+
+pub fn import_nodes(String) -> Array[@contracts.NodeHeartbeat] raise
+
+pub fn import_query(String) -> Query raise
+
+// Errors
+pub suberror FleetError {
+  InvalidInput(String)
+}
+
+// Types and methods
+pub(all) struct DeviceRow {
+  node_id : String
+  device_id : String
+  architecture : String
+  state : String
+  freshness : String
+  healthy : Bool
+  observed_total_mib : Int
+  observed_free_mib : Int
+} derive(Eq, ToJson)
+pub fn DeviceRow::equal(Self, Self) -> Bool
+pub fn DeviceRow::not_equal(Self, Self) -> Bool
+pub fn DeviceRow::to_json(Self) -> Json
+
+pub(all) struct Group {
+  architecture : String
+  state : String
+  freshness : String
+  healthy : Bool
+  device_count : Int
+  summed_device_total_mib : Int64
+  summed_device_free_mib : Int64
+} derive(Eq, ToJson)
+pub fn Group::equal(Self, Self) -> Bool
+pub fn Group::not_equal(Self, Self) -> Bool
+pub fn Group::to_json(Self) -> Json
+
+pub(all) struct HistoryCapture {
+  capture_id : String
+  captured_unix_ms : Int64
+  nodes : Array[@contracts.NodeHeartbeat]
+}
+
+pub(all) struct HistoryChange {
+  from_capture : String
+  to_capture : String
+  from_captured_unix_ms : Int64
+  to_captured_unix_ms : Int64
+  node_id : String
+  device_id : String?
+  scope : String
+  field : String
+  before : String?
+  after : String?
+  before_observed_unix_ms : Int64?
+  after_observed_unix_ms : Int64?
+} derive(Eq, ToJson)
+pub fn HistoryChange::equal(Self, Self) -> Bool
+pub fn HistoryChange::not_equal(Self, Self) -> Bool
+pub fn HistoryChange::to_json(Self) -> Json
+
+pub(all) struct HistoryManifest {
+  schema_version : String
+  captures : Array[HistorySource]
+} derive(Eq, ToJson, @json.FromJson)
+pub fn HistoryManifest::equal(Self, Self) -> Bool
+pub fn HistoryManifest::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn HistoryManifest::not_equal(Self, Self) -> Bool
+pub fn HistoryManifest::to_json(Self) -> Json
+
+pub(all) struct HistoryQuery {
+  node_id : String
+  scope : String
+  field : String
+} derive(Eq, ToJson, @json.FromJson)
+pub fn HistoryQuery::equal(Self, Self) -> Bool
+pub fn HistoryQuery::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn HistoryQuery::not_equal(Self, Self) -> Bool
+pub fn HistoryQuery::to_json(Self) -> Json
+
+pub(all) struct HistoryReport {
+  schema_version : String
+  query : HistoryQuery
+  captures : Array[HistorySnapshot]
+  transitions : Array[HistoryTransition]
+  changes : Array[HistoryChange]
+} derive(Eq, ToJson)
+pub fn HistoryReport::changes_csv(Self) -> String
+pub fn HistoryReport::equal(Self, Self) -> Bool
+pub fn HistoryReport::json_text(Self) -> String
+pub fn HistoryReport::not_equal(Self, Self) -> Bool
+pub fn HistoryReport::summary_csv(Self) -> String
+pub fn HistoryReport::to_json(Self) -> Json
+
+pub(all) struct HistorySnapshot {
+  capture_id : String
+  captured_unix_ms : Int64
+  node_count : Int
+  device_count : Int
+  future_heartbeat_count : Int
+} derive(Eq, ToJson)
+pub fn HistorySnapshot::equal(Self, Self) -> Bool
+pub fn HistorySnapshot::not_equal(Self, Self) -> Bool
+pub fn HistorySnapshot::to_json(Self) -> Json
+
+pub(all) struct HistorySource {
+  capture_id : String
+  captured_unix_ms : Int64
+  path : String
+} derive(Eq, ToJson, @json.FromJson)
+pub fn HistorySource::equal(Self, Self) -> Bool
+pub fn HistorySource::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn HistorySource::not_equal(Self, Self) -> Bool
+pub fn HistorySource::to_json(Self) -> Json
+
+pub(all) struct HistoryTransition {
+  from_capture : String
+  to_capture : String
+  newly_observed_nodes : Int
+  absent_nodes : Int
+  matched_nodes : Int
+  repeated_heartbeat_nodes : Int
+  regressed_heartbeat_nodes : Int
+  total_change_count : Int
+  selected_change_count : Int
+} derive(Eq, ToJson)
+pub fn HistoryTransition::equal(Self, Self) -> Bool
+pub fn HistoryTransition::not_equal(Self, Self) -> Bool
+pub fn HistoryTransition::to_json(Self) -> Json
+
+pub(all) struct NodeRow {
+  node_id : String
+  state : String
+  observed_unix_ms : Int64
+  freshness : String
+  age_ms : Int64?
+  agent_version : String
+  runtime_names : Array[String]
+  reported_devices : Int
+  matching_devices : Int
+  running_deployment_count : Int
+} derive(Eq, ToJson)
+pub fn NodeRow::equal(Self, Self) -> Bool
+pub fn NodeRow::not_equal(Self, Self) -> Bool
+pub fn NodeRow::to_json(Self) -> Json
+
+pub(all) struct Query {
+  now_unix_ms : Int64
+  maximum_age_ms : Int64
+  node_id : String
+  state : String
+  architecture : String
+  runtime : String
+  freshness : String
+  health : String
+} derive(Eq, ToJson, @json.FromJson)
+pub fn Query::equal(Self, Self) -> Bool
+pub fn Query::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Query::not_equal(Self, Self) -> Bool
+pub fn Query::to_json(Self) -> Json
+
+pub(all) struct Report {
+  schema_version : String
+  query : Query
+  source_node_count : Int
+  nodes : Array[NodeRow]
+  devices : Array[DeviceRow]
+  groups : Array[Group]
+} derive(Eq, ToJson)
+pub fn Report::devices_csv(Self) -> String
+pub fn Report::equal(Self, Self) -> Bool
+pub fn Report::json_text(Self) -> String
+pub fn Report::nodes_csv(Self) -> String
+pub fn Report::not_equal(Self, Self) -> Bool
+pub fn Report::summary_csv(Self) -> String
+pub fn Report::to_json(Self) -> Json
+
+// Type aliases
+
+// Traits

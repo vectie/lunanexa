@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  const state = { locale: "en", pending: false };
+  const state = { locale: "en", pending: false, payload: null, report: null };
   const $ = (selector, root = document) => root.querySelector(selector);
   const clear = (node) => { while (node.firstChild) node.firstChild.remove(); };
   const text = (value) => String(value ?? "");
@@ -18,6 +18,11 @@
       evidence_inputs: "Troubleshooting inputs", missing_evidence: "Missing evidence", nodes: "Machines", leases: "Exclusive leases", total: "{count} total",
       no_alerts: "No active typed alerts.", no_missing: "All required evidence is available.", runbook: "Open runbook", enabled: "Enabled", disabled: "Disabled",
       required: "Required evidence", tools: "Allowed tools", data: "Allowed data", missing: "Missing: {value}", none: "None", truncated: "Bounded at {count}+ records",
+      report_title: "Local support report", report_description: "Choose aggregate sections, inspect the complete JSON, then download it. Nothing is uploaded and no support request is sent.",
+      report_selection: "Report sections", report_health: "Component health and reconciliation", report_alerts: "Alert codes and counts", report_fleet: "Machine and lease state counts", report_knowledge: "Knowledge revision and freshness", report_skills: "Guide capabilities and dependencies",
+      report_warning: "Observation time, support receipt and missing evidence are always included. Missing is not zero; review operational details before sharing.",
+      report_review: "Review report", report_review_help: "Read the complete report. The downloaded content will exactly match this preview.", report_download: "Download reviewed JSON", report_cancel: "Cancel",
+      report_choose: "Select at least one section, then review again.", report_failed: "The report could not be prepared or downloaded. Refresh diagnostics and try again.", report_cancelled: "Report discarded. Nothing was downloaded.", report_requested: "Download requested. Check your browser downloads; saving has not been verified.",
     },
     "zh-CN": {
       language: "语言", coursebook: "教程", kicker: "管理员 · 只读", title: "指南诊断",
@@ -31,6 +36,11 @@
       evidence_inputs: "排障输入", missing_evidence: "缺失证据", nodes: "机器", leases: "独占租约", total: "共 {count}",
       no_alerts: "没有活动的类型化告警。", no_missing: "所需证据均可用。", runbook: "打开运行手册", enabled: "已启用", disabled: "已禁用",
       required: "所需证据", tools: "允许工具", data: "允许数据", missing: "缺失：{value}", none: "无", truncated: "仅显示前 {count}+ 条记录的汇总",
+      report_title: "本地支持报告", report_description: "选择要包含的汇总信息，查看完整 JSON，然后下载。不会上传或发送支持请求。",
+      report_selection: "报告内容", report_health: "组件健康与协调", report_alerts: "告警代码与数量", report_fleet: "机器与租约状态数量", report_knowledge: "知识版本与新鲜度", report_skills: "指南能力与依赖",
+      report_warning: "报告始终包含观测时间、支持回执和缺失证据。缺失不代表零；分享前请检查运行信息。",
+      report_review: "查看报告", report_review_help: "请阅读完整报告。下载内容与下方预览完全一致。", report_download: "下载已审阅的 JSON", report_cancel: "取消",
+      report_choose: "请至少选择一项内容，然后重新查看报告。", report_failed: "无法准备或下载报告。请刷新诊断后重试。", report_cancelled: "报告已丢弃，未下载任何内容。", report_requested: "已请求下载。请查看浏览器下载记录；尚未验证文件保存。",
     },
   };
   function t(key) { return copy[state.locale]?.[key] || copy.en[key] || key; }
@@ -65,8 +75,51 @@
       "[data-components-kicker]": "dependencies", "[data-components-title]": "component_health", "[data-cluster-kicker]": "aggregate_state", "[data-cluster-title]": "cluster_leases",
       "[data-alert-kicker]": "typed_triggers", "[data-alert-title]": "alert_codes", "[data-skills-kicker]": "capabilities", "[data-skills-title]": "skill_inventory",
       "[data-evidence-kicker]": "evidence_inputs", "[data-evidence-title]": "missing_evidence",
+      "[data-report-title]": "report_title", "[data-report-description]": "report_description", "[data-report-selection]": "report_selection",
+      "[data-report-health]": "report_health", "[data-report-alerts]": "report_alerts", "[data-report-fleet]": "report_fleet", "[data-report-knowledge]": "report_knowledge", "[data-report-skills]": "report_skills",
+      "[data-report-warning]": "report_warning", "[data-report-review]": "report_review", "[data-report-review-help]": "report_review_help", "[data-report-download]": "report_download", "[data-report-cancel]": "report_cancel",
     };
     for (const [selector, key] of Object.entries(labels)) $(selector).textContent = t(key);
+  }
+  function discardReport() {
+    state.report = null;
+    $("[data-report-content]").textContent = "";
+    $("[data-report-preview]").hidden = true;
+    $("[data-report-download]").disabled = true;
+    $("[data-report-status]").textContent = "";
+  }
+  function reviewReport() {
+    discardReport();
+    if (state.pending || !state.payload) return;
+    const selected = [...document.querySelectorAll("[data-report-section]")].filter(node => node.checked).map(node => node.dataset.reportSection);
+    if (!selected.length) { $("[data-report-status]").textContent = t("report_choose"); return; }
+    try {
+      state.report = globalThis.LunaNexaDiagnosticReport.build(state.payload, selected);
+      $("[data-report-content]").textContent = state.report.content;
+      $("[data-report-preview]").hidden = false;
+      $("[data-report-download]").disabled = false;
+      $("[data-report-content]").focus();
+    } catch { $("[data-report-status]").textContent = t("report_failed"); }
+  }
+  function downloadReport() {
+    if (state.pending || !state.payload || !state.report) return;
+    const reviewed = state.report;
+    let url;
+    let anchor;
+    try {
+      url = URL.createObjectURL(new Blob([reviewed.content], { type: "application/json;charset=utf-8" }));
+      anchor = element("a", { attrs: { href: url, download: reviewed.filename } });
+      anchor.hidden = true; document.body.append(anchor); anchor.click();
+      discardReport();
+      $("[data-report-status]").textContent = t("report_requested");
+    } catch {
+      discardReport();
+      $("[data-report-status]").textContent = t("report_failed");
+    } finally {
+      anchor?.remove();
+      if (url) setTimeout(() => URL.revokeObjectURL(url), 1000);
+      $("[data-report-review]").focus();
+    }
   }
   function renderStates(parent, title, summary) {
     const section = element("section", { className: "state-summary" });
@@ -116,12 +169,15 @@
   }
   async function refresh() {
     if (state.pending) return;
+    state.payload = null; discardReport(); $("[data-report-review]").disabled = true;
     state.pending = true; renderChrome(); $("[data-refresh]").disabled = true; $("[data-error]").hidden = true;
     try {
       const response = await fetch("./api/coursebook/admin/diagnostics?category=overview", { headers: { Accept: "application/json" }, cache: "no-store" });
       const payload = await response.json().catch(() => null);
       if (!response.ok || payload?.ok !== true) throw new Error("unavailable");
       render(payload);
+      state.payload = payload;
+      $("[data-report-review]").disabled = false;
     } catch {
       $("[data-dashboard]").hidden = true; $("[data-loading]").hidden = true; $("[data-error]").hidden = false;
     } finally {
@@ -133,6 +189,10 @@
     $("[data-locale]").value = state.locale;
     $("[data-locale]").addEventListener("change", (event) => { state.locale = event.target.value === "zh-CN" ? "zh-CN" : "en"; try { localStorage.setItem("lunanexa.locale", state.locale); } catch { /* optional */ } renderChrome(); refresh(); });
     $("[data-refresh]").addEventListener("click", refresh); renderChrome(); refresh();
+    $("[data-report-review]").addEventListener("click", reviewReport);
+    $("[data-report-download]").addEventListener("click", downloadReport);
+    $("[data-report-cancel]").addEventListener("click", () => { discardReport(); $("[data-report-status]").textContent = t("report_cancelled"); $("[data-report-review]").focus(); });
+    for (const input of document.querySelectorAll("[data-report-section]")) input.addEventListener("change", discardReport);
   }
   window.addEventListener("DOMContentLoaded", init);
 })();

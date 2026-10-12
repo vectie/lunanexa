@@ -2037,6 +2037,7 @@ pub(all) struct ConsoleState {
   request_details : Array[RequestDetail]
   stream_events : Array[StreamEventView]
   benchmark_evidence : Array[String]
+  capacity_planner : @capacity_planner.State
   policies : PolicySummary
   audit : Array[AuditRow]
   notifications : Array[NotificationRow]
@@ -2095,6 +2096,7 @@ pub extend ConsoleState with Eq::{not_equal, equal}
 
 ///|
 pub(all) enum ConsoleMessage {
+  CapacityPlanner(@capacity_planner.Message)
   ResourceDelivery(ResourceDeliveryMessage)
   LocaleChanged(@i18n.Locale)
   Navigate(OperatorRoute)
@@ -2253,6 +2255,7 @@ pub fn default_state() -> ConsoleState {
     request_details: [],
     stream_events: [],
     benchmark_evidence: [],
+    capacity_planner: @capacity_planner.initial(),
     policies: {
       quota_count: 0,
       data_class_count: 4,
@@ -10009,7 +10012,10 @@ fn alerts_view(
 }
 
 ///|
-fn benchmarks_view(state : ConsoleState) -> @rabbita.Html {
+fn benchmarks_view(
+  state : ConsoleState,
+  emit : @rabbita.Emit[ConsoleMessage]?,
+) -> @rabbita.Html {
   @html.section(
     attrs=@html.Attrs::build().aria_labelledby("benchmarks-title"),
     [
@@ -10037,6 +10043,14 @@ fn benchmarks_view(state : ConsoleState) -> @rabbita.Html {
           ),
         ),
       ]),
+      @capacity_planner.view(
+        state.capacity_planner,
+        state.locale,
+        match emit {
+          Some(send) => Some(send.map(message => CapacityPlanner(message)))
+          None => None
+        },
+      ),
       if state.benchmark_evidence.length() == 0 {
         @html.nothing
       } else {
@@ -12327,7 +12341,7 @@ fn console_view(
     Catalog => catalog_view(state, emit)
     Deployments => deployments_view(state, emit)
     Requests => requests_view(state)
-    Benchmarks => benchmarks_view(state)
+    Benchmarks => benchmarks_view(state, emit)
     Policies => policies_view(state, emit)
     Audit => audit_view(state)
     Blank => blank_view(state)

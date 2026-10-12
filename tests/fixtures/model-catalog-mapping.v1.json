@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "columns": {
+    "model_id": "Model",
+    "version": "Version",
+    "artifact_digest": "SHA256",
+    "artifact_uri": "Location",
+    "artifact_size_bytes": "Bytes",
+    "signature_ref": "Signature",
+    "license_id": "License",
+    "provenance": "Source",
+    "compatible_architectures": "Architectures",
+    "minimum_memory_mib": "MemoryMiB"
+  }
+}

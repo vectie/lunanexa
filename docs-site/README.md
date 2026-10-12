@@ -288,3 +288,12 @@ Use the MoonBook skill against the LunaNexa repository:
 5. run the test and inspect English/Chinese desktop plus 390 px layouts;
 6. review meaning, commands, warnings, and public information disclosure before
    publishing.
+
+## Local diagnostic support report
+
+The existing administrator page now offers selected, reviewed JSON downloads
+from its displayed observation. It makes no additional request and never uploads
+or sends a support message. Observation time, support receipt and missing-evidence
+warnings stay with the selected aggregate sections. See
+[the support-report workflow](../docs/GUIDE_SUPPORT_REPORT_QUICKSTART.md) for exact
+steps, refresh/cancellation behavior, privacy limits and test qualifications.

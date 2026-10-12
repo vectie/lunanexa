@@ -1,0 +1,13 @@
+elapsed_ms,queued_ms,loaded_ms,ttft_ms,generated_tokens,sample_window_ms,busy_per_mille,is_error,scenario
+220,8,0,40,160,400,720,0,"SYNTHETIC, short prompt"
+230,9,0,41,160,400,722,0,synthetic-observation-2
+240,10,0,42,160,400,724,false,synthetic-observation-3
+250,11,0,43,160,400,726,false,synthetic-observation-4
+260,8,0,40,160,400,728,0,synthetic-observation-5
+270,9,0,41,160,400,730,0,synthetic-observation-6
+280,10,0,42,160,400,732,false,synthetic-observation-7
+290,11,0,43,160,400,734,false,synthetic-observation-8
+300,12,0,44,160,400,736,0,synthetic-observation-9
+310,13,0,45,160,400,738,0,synthetic-observation-10
+320,14,0,46,160,400,740,false,"fixture only: 观察"
+330,20,0,60,0,400,500,1,"synthetic failure, no GPU measured"

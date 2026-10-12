@@ -1,0 +1,230 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/ui/capacity_planner"
+
+import {
+  "moonbit-community/rabbita/cmd",
+  "moonbit-community/rabbita/html",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/contracts",
+  "vectie/lunanexa/planning",
+  "vectie/lunanexa/telemetry/benchmark",
+  "vectie/lunanexa/ui/i18n",
+}
+
+// Values
+pub fn captured_changed(State, @planning.Evidence) -> Bool
+
+pub fn decode_telemetry(Json) -> ConsoleTelemetrySnapshot raise
+
+pub fn initial() -> State
+
+pub fn input(State) -> @planning.Input raise
+
+pub fn interrupt_refresh(State) -> State
+
+pub fn recording_changed(State, Recording) -> Bool
+
+pub fn refresh_recorded(State, Array[@benchmark.BenchmarkRun]) -> State
+
+pub fn refresh_telemetry(State, ConsoleTelemetrySnapshot) -> State
+
+pub fn update(State, Message) -> State
+
+pub fn view(State, @i18n.Locale, @cmd.Emit[Message]?) -> @html.Html
+
+// Errors
+
+// Types and methods
+pub(all) struct ChangeState {
+  run_id : String
+  baseline_packet : @planning.Packet?
+  baseline_run_id : String
+  report : @planning.ChangeReport?
+  error : String?
+} derive(Eq)
+pub fn ChangeState::equal(Self, Self) -> Bool
+pub fn ChangeState::not_equal(Self, Self) -> Bool
+
+pub(all) struct ConsoleTelemetrySnapshot {
+  schema_version : String?
+  samples : Array[@contracts.TelemetrySample]
+  benchmark_runs : Array[@benchmark.BenchmarkRun]?
+  benchmark_summaries : Array[@contracts.BenchmarkReadSummary]
+} derive(Eq, ToJson, @json.FromJson)
+pub fn ConsoleTelemetrySnapshot::equal(Self, Self) -> Bool
+pub fn ConsoleTelemetrySnapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ConsoleTelemetrySnapshot::not_equal(Self, Self) -> Bool
+pub fn ConsoleTelemetrySnapshot::to_json(Self) -> Json
+
+pub(all) enum CsvField {
+  RunId
+  Profile
+  ModelDigest
+  RuntimeDigest
+  HardwareProfile
+  Kind
+  Concurrency
+} derive(Eq)
+pub fn CsvField::equal(Self, Self) -> Bool
+pub fn CsvField::not_equal(Self, Self) -> Bool
+
+pub(all) struct CsvState {
+  text : String
+  preview : @planning.CsvPreview?
+  mappings : Array[String]
+  run_id : String
+  profile : String
+  model_digest : String
+  runtime_digest : String
+  hardware_profile : String
+  kind : String
+  concurrency : String
+  metadata : MetadataDraft
+  mapping_json : String?
+  notice : String?
+  error : String?
+} derive(Eq)
+pub fn CsvState::equal(Self, Self) -> Bool
+pub fn CsvState::not_equal(Self, Self) -> Bool
+
+pub(all) struct Draft {
+  profile : String
+  model_digest : String
+  runtime_digest : String
+  hardware_profile : String
+  workload_ref : String
+  output_unit : String
+  kind : String
+  minimum_concurrency : String
+  maximum_p95 : String
+  minimum_throughput : String
+  maximum_failures : String
+} derive(Eq)
+pub fn Draft::equal(Self, Self) -> Bool
+pub fn Draft::not_equal(Self, Self) -> Bool
+
+pub(all) struct Explorer {
+  run_id : String
+  failed_only : Bool
+  order : @planning.SampleOrder
+  page : Int
+  export_csv : String?
+} derive(Eq)
+pub fn Explorer::equal(Self, Self) -> Bool
+pub fn Explorer::not_equal(Self, Self) -> Bool
+
+pub(all) enum Field {
+  Profile
+  ModelDigest
+  RuntimeDigest
+  HardwareProfile
+  WorkloadRef
+  OutputUnit
+  Kind
+  MinimumConcurrency
+  MaximumP95
+  MinimumThroughput
+  MaximumFailures
+} derive(Eq)
+pub fn Field::equal(Self, Self) -> Bool
+pub fn Field::not_equal(Self, Self) -> Bool
+
+pub(all) enum Message {
+  RefreshRecorded
+  RecordedLoaded(Int, Result[ConsoleTelemetrySnapshot, String])
+  ReadFile(Bool)
+  FileRead(Int, Bool, Result[String, String])
+  SelectRecorded(String)
+  EditMetadata(MetadataField, String)
+  AddRecorded
+  CancelRecorded
+  ImportEvidenceFile(String)
+  ReopenPacketFile(String)
+  ImportTextChanged(String)
+  ImportEvidence
+  ToggleRun(String)
+  Edit(Field, String)
+  Prepare
+  ReopenTextChanged(String)
+  ReopenPacket
+  ExploreRun(String)
+  ExploreFailures(Bool)
+  ExploreOrder(@planning.SampleOrder)
+  ExplorePage(Int)
+  ExportSamples
+  ChangeSelectRun(String)
+  ChangeCaptureBaseline
+  ChangeCompare
+  ChangeClear
+  ReadCsvFile
+  CsvFileRead(Int, Result[String, String])
+  CsvTextChanged(String)
+  CsvPreview
+  CsvMap(Int, String)
+  EditCsv(CsvField, String)
+  EditCsvMetadata(MetadataField, String)
+  AddCsv
+  ClearCsv
+  Reset
+} derive(Eq)
+pub fn Message::equal(Self, Self) -> Bool
+pub fn Message::not_equal(Self, Self) -> Bool
+
+pub(all) struct MetadataDraft {
+  origin : String
+  source_ref : String
+  workload_ref : String
+  output_unit : String
+  memory_total : String
+  memory_peak : String
+} derive(Eq)
+pub fn MetadataDraft::equal(Self, Self) -> Bool
+pub fn MetadataDraft::not_equal(Self, Self) -> Bool
+
+pub(all) enum MetadataField {
+  Origin
+  SourceRef
+  WorkloadRef
+  OutputUnit
+  MemoryTotal
+  MemoryPeak
+} derive(Eq)
+pub fn MetadataField::equal(Self, Self) -> Bool
+pub fn MetadataField::not_equal(Self, Self) -> Bool
+
+pub(all) struct Recording {
+  run : @benchmark.BenchmarkRun
+  snapshot_digest : String
+  metadata : MetadataDraft
+} derive(Eq)
+pub fn Recording::equal(Self, Self) -> Bool
+pub fn Recording::not_equal(Self, Self) -> Bool
+
+pub(all) struct State {
+  revision : Int
+  refresh_sequence : Int
+  refreshing : Bool
+  reading_file : Bool
+  recorded_runs : Array[@benchmark.BenchmarkRun]
+  recorded_loaded : Bool
+  recorded_snapshot : String
+  refresh_error : String?
+  recordings : Array[Recording]
+  pending_recording : Recording?
+  import_text : String
+  reopen_text : String
+  sources : Array[@planning.Evidence]
+  selected : Array[String]
+  draft : Draft
+  packet : @planning.Packet?
+  explorer : Explorer
+  change_analysis : ChangeState
+  csv : CsvState
+  error : String?
+} derive(Eq)
+pub fn State::equal(Self, Self) -> Bool
+pub fn State::not_equal(Self, Self) -> Bool
+
+// Type aliases
+
+// Traits

@@ -1,0 +1,95 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/deployment_report"
+
+import {
+  "moonbitlang/core/json",
+  "vectie/lunanexa/contracts",
+  "vectie/lunanexa/deployment",
+}
+
+// Values
+pub fn explore(Array[@deployment.DeploymentOperation], Array[@contracts.NodeHeartbeat], Query) -> Report raise ReportError
+
+pub fn import_nodes(String) -> Array[@contracts.NodeHeartbeat] raise
+
+pub fn import_operations(String) -> Array[@deployment.DeploymentOperation] raise
+
+pub fn import_query(String) -> Query raise
+
+// Errors
+pub suberror ReportError {
+  InvalidInput(String)
+}
+
+// Types and methods
+pub(all) struct DeploymentRow {
+  operation_id : String
+  deployment_id : String
+  generation : Int64
+  recorded_operation_state : String
+  template_id : String
+  template_version : String
+  model_id : String?
+  model_version : String?
+  artifact_digest : String?
+  runtime_name : String?
+  runtime_version : String?
+  runtime_image_digest : String?
+  requested_replicas : Int
+  planned_replicas : Int
+  selected_placements : Int
+  created_unix_ms : Int64
+  updated_unix_ms : Int64
+} derive(Eq, ToJson)
+pub fn DeploymentRow::equal(Self, Self) -> Bool
+pub fn DeploymentRow::not_equal(Self, Self) -> Bool
+pub fn DeploymentRow::to_json(Self) -> Json
+
+pub(all) struct PlacementRow {
+  operation_id : String
+  deployment_id : String
+  generation : Int64
+  replica_id : String
+  planned_node_id : String
+  planned_device_ids : Array[String]
+  node_deployment_membership : String
+  observed_node_state : String?
+  observed_unix_ms : Int64?
+  freshness : String
+  age_ms : Int64?
+} derive(Eq, ToJson)
+pub fn PlacementRow::equal(Self, Self) -> Bool
+pub fn PlacementRow::not_equal(Self, Self) -> Bool
+pub fn PlacementRow::to_json(Self) -> Json
+
+pub(all) struct Query {
+  now_unix_ms : Int64
+  maximum_age_ms : Int64
+  deployment_id : String
+  model_id : String
+  operation_state : String
+  node_id : String
+} derive(Eq, ToJson, @json.FromJson)
+pub fn Query::equal(Self, Self) -> Bool
+pub fn Query::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Query::not_equal(Self, Self) -> Bool
+pub fn Query::to_json(Self) -> Json
+
+pub(all) struct Report {
+  schema_version : String
+  query : Query
+  source_operation_count : Int
+  source_node_count : Int
+  deployments : Array[DeploymentRow]
+  placements : Array[PlacementRow]
+} derive(Eq, ToJson)
+pub fn Report::deployments_csv(Self) -> String raise ReportError
+pub fn Report::equal(Self, Self) -> Bool
+pub fn Report::json_text(Self) -> String raise ReportError
+pub fn Report::not_equal(Self, Self) -> Bool
+pub fn Report::placements_csv(Self) -> String raise ReportError
+pub fn Report::to_json(Self) -> Json
+
+// Type aliases
+
+// Traits

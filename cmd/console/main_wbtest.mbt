@@ -1569,7 +1569,12 @@ fn node_row_heartbeat(
 fn node_row_telemetry(
   samples : Array[@contracts.TelemetrySample],
 ) -> ConsoleTelemetrySnapshot {
-  { samples, benchmark_summaries: [], }
+  {
+    schema_version: Some("lunanexa.telemetry.v1"),
+    samples,
+    benchmark_runs: Some([]),
+    benchmark_summaries: [],
+  }
 }
 
 ///|

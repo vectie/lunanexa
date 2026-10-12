@@ -12,6 +12,13 @@ lease, choose the browser Web IDE or an external editor handoff, then enter the
 editing surface. The editing surface keeps resource and expiry status visible
 so a user understands why launch or invocation is unavailable.
 
+The Project drafts panel supports [creating, duplicating, renaming, exporting
+and reopening browser-local drafts](BROWSER_DRAFTS.md). Start with **New draft**,
+name the empty file and its language, edit it, then duplicate or rename using
+staged Save/Cancel controls. Export a v1 JSON packet; reopen, preview and
+explicitly replace the draft list to continue later. These operations do not
+upload content, run inference or change the current lease and identity.
+
 The interaction sequence is informed by
 [Huawei HiDevLab's public IDE guide](https://hidevlab.huawei.com/support/userGuide?currentKey=ide):
 permission approval, environment/resource selection, an explicit ready state,

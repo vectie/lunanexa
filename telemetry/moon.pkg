@@ -1,5 +1,6 @@
 import {
   "vectie/lunanexa/contracts",
+  "vectie/lunanexa/telemetry/benchmark",
   "vectie/lunanexa/database",
   "vectie/lunanexa/settings",
   "moonbitlang/async",

@@ -1,0 +1,446 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/planning"
+
+import {
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/telemetry/benchmark",
+}
+
+// Values
+pub fn analyze_change(ChangeInput) -> ChangeReport raise PlanningError
+
+pub fn compare_packet_runs(Packet, String, Packet, String) -> ChangeReport raise PlanningError
+
+pub fn compatible(Evidence, Workload) -> Bool
+
+pub fn csv_column_names(CsvColumns) -> Array[String]
+
+pub fn distribution_csv(Packet, String, DistributionPlan) -> String raise PlanningError
+
+pub fn explore_distribution(Packet, String, DistributionPlan) -> DistributionReport raise PlanningError
+
+pub fn explore_samples(Evidence, Bool, SampleOrder) -> Array[IndexedSample] raise PlanningError
+
+pub fn explore_sweep(Packet, SweepPlan) -> SweepReport raise PlanningError
+
+pub fn import_csv(String, CsvImportSpec) -> Evidence raise PlanningError
+
+pub fn import_csv_spec(String) -> CsvImportSpec raise PlanningError
+
+pub fn import_distribution_plan(String) -> DistributionPlan raise PlanningError
+
+pub fn import_evidence(String) -> Array[Evidence] raise PlanningError
+
+pub fn import_grouped_csv(String, GroupedCsvImportSpec) -> Array[Evidence] raise PlanningError
+
+pub fn import_grouped_csv_spec(String) -> GroupedCsvImportSpec raise PlanningError
+
+pub fn import_input(String) -> Input raise PlanningError
+
+pub fn import_sweep_plan(String) -> SweepPlan raise PlanningError
+
+pub fn observation_digest(@benchmark.BenchmarkRun) -> String
+
+pub fn observed_failure_count(Evidence) -> Int
+
+pub fn observed_objective_met(Evidence, @benchmark.RecommendationEvidence) -> Bool
+
+pub fn prepare(Input) -> Packet raise PlanningError
+
+pub fn preview_csv(String) -> CsvPreview raise PlanningError
+
+pub fn recorded_evidence(@benchmark.BenchmarkRun, String, RecordedMetadata) -> Evidence raise PlanningError
+
+pub fn reopen(String) -> Packet raise PlanningError
+
+pub fn reopen_change(String) -> ChangeReport raise PlanningError
+
+pub fn samples_csv(Evidence, Bool, SampleOrder) -> String raise PlanningError
+
+pub fn snapshot_digest(Array[@benchmark.BenchmarkRun]) -> String
+
+pub fn sweep_csv(Packet, SweepPlan) -> String raise PlanningError
+
+pub fn validate_evidence(Evidence) -> Unit raise PlanningError
+
+// Errors
+pub(all) suberror PlanningError {
+  InvalidInput(String)
+} derive(Eq, @debug.Debug)
+pub fn PlanningError::equal(Self, Self) -> Bool
+pub fn PlanningError::not_equal(Self, Self) -> Bool
+pub fn PlanningError::to_repr(Self) -> @debug.Repr
+
+// Types and methods
+pub(all) struct ChangeInput {
+  baseline : Evidence
+  candidate : Evidence
+  objective : @benchmark.ServiceObjective
+  minimum_tested_concurrency : Int
+} derive(Eq, ToJson, @json.FromJson)
+pub fn ChangeInput::equal(Self, Self) -> Bool
+pub fn ChangeInput::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ChangeInput::not_equal(Self, Self) -> Bool
+pub fn ChangeInput::to_json(Self) -> Json
+
+pub(all) struct ChangeReport {
+  schema_version : Int
+  analysis_id : String
+  input : ChangeInput
+  baseline_summary : @benchmark.BenchmarkSummary
+  candidate_summary : @benchmark.BenchmarkSummary
+  baseline_failures : Int
+  candidate_failures : Int
+  failure_rate_direction : String
+  baseline_meets_objective : Bool
+  candidate_meets_objective : Bool
+  baseline_meets_envelope : Bool
+  candidate_meets_envelope : Bool
+  configuration_changes : Array[ConfigurationChange]
+  metrics : Array[MetricChange]
+} derive(Eq, ToJson, @json.FromJson)
+pub fn ChangeReport::equal(Self, Self) -> Bool
+pub fn ChangeReport::export_json(Self) -> String
+pub fn ChangeReport::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ChangeReport::not_equal(Self, Self) -> Bool
+pub fn ChangeReport::summary_text(Self) -> String
+pub fn ChangeReport::to_json(Self) -> Json
+
+pub(all) struct Choice {
+  run_id : String
+  tested_concurrency : Int
+  origin : Origin
+  source_ref : String
+  recommendation : @benchmark.RecommendationEvidence
+  meets_declared_envelope : Bool
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn Choice::equal(Self, Self) -> Bool
+pub fn Choice::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Choice::not_equal(Self, Self) -> Bool
+pub fn Choice::to_json(Self) -> Json
+pub fn Choice::to_repr(Self) -> @debug.Repr
+
+pub(all) struct ConfigurationChange {
+  field : String
+  baseline : String
+  candidate : String
+} derive(Eq, ToJson, @json.FromJson)
+pub fn ConfigurationChange::equal(Self, Self) -> Bool
+pub fn ConfigurationChange::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ConfigurationChange::not_equal(Self, Self) -> Bool
+pub fn ConfigurationChange::to_json(Self) -> Json
+
+pub(all) struct CsvColumns {
+  latency_ms : String
+  queue_ms : String
+  load_ms : String
+  first_output_ms : String
+  output_units : String
+  duration_ms : String
+  utilization_per_mille : String
+  failed : String
+} derive(Eq, ToJson, @json.FromJson)
+pub fn CsvColumns::equal(Self, Self) -> Bool
+pub fn CsvColumns::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn CsvColumns::not_equal(Self, Self) -> Bool
+pub fn CsvColumns::to_json(Self) -> Json
+
+pub(all) struct CsvImportSpec {
+  schema_version : Int
+  run_id : String
+  profile : String
+  model_digest : String
+  runtime_digest : String
+  hardware_profile : String
+  kind : @benchmark.BenchmarkKind
+  concurrency : Int
+  metadata : RecordedMetadata
+  columns : CsvColumns
+} derive(Eq, ToJson, @json.FromJson)
+pub fn CsvImportSpec::equal(Self, Self) -> Bool
+pub fn CsvImportSpec::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn CsvImportSpec::not_equal(Self, Self) -> Bool
+pub fn CsvImportSpec::to_json(Self) -> Json
+
+pub(all) struct CsvPreview {
+  headers : Array[String]
+  sample_count : Int
+  first_rows : Array[Array[String]]
+} derive(Eq)
+pub fn CsvPreview::equal(Self, Self) -> Bool
+pub fn CsvPreview::not_equal(Self, Self) -> Bool
+
+pub(all) struct CsvRunContext {
+  run_id : String
+  profile : String
+  model_digest : String
+  runtime_digest : String
+  hardware_profile : String
+  kind : @benchmark.BenchmarkKind
+  concurrency : Int
+  metadata : RecordedMetadata
+} derive(Eq, ToJson, @json.FromJson)
+pub fn CsvRunContext::equal(Self, Self) -> Bool
+pub fn CsvRunContext::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn CsvRunContext::not_equal(Self, Self) -> Bool
+pub fn CsvRunContext::to_json(Self) -> Json
+
+pub(all) struct DistributionBucket {
+  lower_exclusive_ms : Int?
+  upper_inclusive_ms : Int?
+  sample_count : Int
+  succeeded_count : Int
+  failed_count : Int
+  cumulative_sample_count : Int
+  cumulative_succeeded_count : Int
+  cumulative_failed_count : Int
+} derive(Eq)
+pub fn DistributionBucket::equal(Self, Self) -> Bool
+pub fn DistributionBucket::not_equal(Self, Self) -> Bool
+pub fn DistributionBucket::to_json(Self) -> Json
+pub impl ToJson for DistributionBucket
+
+pub(all) enum DistributionMetric {
+  LatencyMs
+  QueueMs
+  FirstOutputMs
+  LoadMs
+  DurationMs
+} derive(Eq, ToJson, @json.FromJson)
+pub fn DistributionMetric::equal(Self, Self) -> Bool
+pub fn DistributionMetric::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn DistributionMetric::not_equal(Self, Self) -> Bool
+pub fn DistributionMetric::to_json(Self) -> Json
+
+pub(all) struct DistributionPlan {
+  schema_version : Int
+  metric : DistributionMetric
+  upper_bounds_ms : Array[Int]
+} derive(Eq, ToJson, @json.FromJson)
+pub fn DistributionPlan::equal(Self, Self) -> Bool
+pub fn DistributionPlan::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn DistributionPlan::not_equal(Self, Self) -> Bool
+pub fn DistributionPlan::to_json(Self) -> Json
+
+pub(all) struct DistributionReport {
+  schema_version : Int
+  packet_id : String
+  run_id : String
+  observation_sha256 : String
+  origin : Origin
+  source_ref : String
+  workload_ref : String
+  profile : String
+  model_digest : String
+  runtime_digest : String
+  hardware_profile : String
+  kind : @benchmark.BenchmarkKind
+  tested_concurrency : Int
+  metric : DistributionMetric
+  unit : String
+  upper_bounds_ms : Array[Int]
+  sample_count : Int
+  succeeded_count : Int
+  failed_count : Int
+  buckets : Array[DistributionBucket]
+} derive(ToJson)
+pub fn DistributionReport::to_json(Self) -> Json
+
+pub(all) struct Evidence {
+  run : @benchmark.BenchmarkRun
+  origin : Origin
+  source_ref : String
+  workload_ref : String
+  output_unit : String
+  memory_total_mib : Int
+  memory_peak_mib : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn Evidence::equal(Self, Self) -> Bool
+pub fn Evidence::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Evidence::not_equal(Self, Self) -> Bool
+pub fn Evidence::to_json(Self) -> Json
+pub fn Evidence::to_repr(Self) -> @debug.Repr
+
+pub(all) struct GroupedCsvImportSpec {
+  schema_version : Int
+  run_id_column : String
+  columns : CsvColumns
+  runs : Array[CsvRunContext]
+} derive(Eq, ToJson, @json.FromJson)
+pub fn GroupedCsvImportSpec::equal(Self, Self) -> Bool
+pub fn GroupedCsvImportSpec::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn GroupedCsvImportSpec::not_equal(Self, Self) -> Bool
+pub fn GroupedCsvImportSpec::to_json(Self) -> Json
+
+pub(all) struct IndexedSample {
+  sample_index : Int
+  sample : @benchmark.BenchmarkSample
+} derive(Eq)
+pub fn IndexedSample::equal(Self, Self) -> Bool
+pub fn IndexedSample::not_equal(Self, Self) -> Bool
+
+pub(all) struct Input {
+  schema_version : Int
+  workload : Workload
+  objective : @benchmark.ServiceObjective
+  evidence : Array[Evidence]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn Input::equal(Self, Self) -> Bool
+pub fn Input::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Input::not_equal(Self, Self) -> Bool
+pub fn Input::to_json(Self) -> Json
+pub fn Input::to_repr(Self) -> @debug.Repr
+
+pub(all) struct MetricChange {
+  metric : String
+  unit : String
+  baseline : Int
+  candidate : Int
+  delta : Int
+  relative_per_mille : Int64?
+} derive(Eq, ToJson, @json.FromJson)
+pub fn MetricChange::equal(Self, Self) -> Bool
+pub fn MetricChange::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn MetricChange::not_equal(Self, Self) -> Bool
+pub fn MetricChange::to_json(Self) -> Json
+
+pub(all) enum Origin {
+  SyntheticFixture
+  LocalObservation
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn Origin::equal(Self, Self) -> Bool
+pub fn Origin::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Origin::not_equal(Self, Self) -> Bool
+pub fn Origin::to_json(Self) -> Json
+pub fn Origin::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Packet {
+  schema_version : Int
+  packet_id : String
+  input : Input
+  choices : Array[Choice]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn Packet::equal(Self, Self) -> Bool
+pub fn Packet::export_json(Self) -> String
+pub fn Packet::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Packet::not_equal(Self, Self) -> Bool
+pub fn Packet::summary_csv(Self) -> String raise PlanningError
+pub fn Packet::to_json(Self) -> Json
+pub fn Packet::to_repr(Self) -> @debug.Repr
+
+pub(all) struct RecordedMetadata {
+  origin : Origin
+  source_ref : String
+  workload_ref : String
+  output_unit : String
+  memory_total_mib : Int
+  memory_peak_mib : Int
+} derive(Eq, ToJson, @json.FromJson)
+pub fn RecordedMetadata::equal(Self, Self) -> Bool
+pub fn RecordedMetadata::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn RecordedMetadata::not_equal(Self, Self) -> Bool
+pub fn RecordedMetadata::to_json(Self) -> Json
+
+pub(all) enum SampleOrder {
+  RecordedOrder
+  SlowestLatency
+  LongestQueue
+} derive(Eq)
+pub fn SampleOrder::equal(Self, Self) -> Bool
+pub fn SampleOrder::not_equal(Self, Self) -> Bool
+
+pub(all) struct SweepGroup {
+  tested_concurrency : Int
+  memory_total_mib : Int
+  expected_repeats : Int?
+  observed_repeats : Int
+  missing_repeats : Int?
+  coverage : String
+  objective_met_runs : Int
+  envelope_met_runs : Int
+  sample_count : Int
+  failed_count : Int
+  ranges : Array[SweepRange]
+  runs : Array[SweepRun]
+} derive(Eq, ToJson)
+pub fn SweepGroup::equal(Self, Self) -> Bool
+pub fn SweepGroup::not_equal(Self, Self) -> Bool
+pub fn SweepGroup::to_json(Self) -> Json
+
+pub(all) struct SweepPlan {
+  schema_version : Int
+  targets : Array[SweepTarget]
+} derive(Eq, ToJson, @json.FromJson)
+pub fn SweepPlan::equal(Self, Self) -> Bool
+pub fn SweepPlan::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn SweepPlan::not_equal(Self, Self) -> Bool
+pub fn SweepPlan::to_json(Self) -> Json
+
+pub(all) struct SweepRange {
+  metric : String
+  unit : String
+  minimum : Int
+  maximum : Int
+} derive(Eq, ToJson)
+pub fn SweepRange::equal(Self, Self) -> Bool
+pub fn SweepRange::not_equal(Self, Self) -> Bool
+pub fn SweepRange::to_json(Self) -> Json
+
+pub(all) struct SweepReport {
+  schema_version : String
+  packet_id : String
+  plan : SweepPlan
+  origin : Origin
+  workload : Workload
+  objective : @benchmark.ServiceObjective
+  interpretation : String
+  groups : Array[SweepGroup]
+} derive(Eq, ToJson)
+pub fn SweepReport::equal(Self, Self) -> Bool
+pub fn SweepReport::not_equal(Self, Self) -> Bool
+pub fn SweepReport::to_json(Self) -> Json
+
+pub(all) struct SweepRun {
+  run_id : String
+  source_ref : String
+  observation_sha256 : String
+  summary : @benchmark.BenchmarkSummary
+  failed_count : Int
+  memory_peak_mib : Int
+  exact_count_objective_met : Bool
+  meets_declared_envelope : Bool
+} derive(Eq, ToJson)
+pub fn SweepRun::equal(Self, Self) -> Bool
+pub fn SweepRun::not_equal(Self, Self) -> Bool
+pub fn SweepRun::to_json(Self) -> Json
+
+pub(all) struct SweepTarget {
+  tested_concurrency : Int
+  memory_total_mib : Int
+  expected_repeats : Int
+} derive(Eq, ToJson, @json.FromJson)
+pub fn SweepTarget::equal(Self, Self) -> Bool
+pub fn SweepTarget::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn SweepTarget::not_equal(Self, Self) -> Bool
+pub fn SweepTarget::to_json(Self) -> Json
+
+pub(all) struct Workload {
+  profile : String
+  model_digest : String
+  runtime_digest : String
+  hardware_profile : String
+  kind : @benchmark.BenchmarkKind
+  workload_ref : String
+  output_unit : String
+  minimum_tested_concurrency : Int
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn Workload::equal(Self, Self) -> Bool
+pub fn Workload::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Workload::not_equal(Self, Self) -> Bool
+pub fn Workload::to_json(Self) -> Json
+pub fn Workload::to_repr(Self) -> @debug.Repr
+
+// Type aliases
+
+// Traits

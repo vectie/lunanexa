@@ -9,11 +9,31 @@ import {
 // Values
 pub fn agreement_transition_allowed(AgreementState, AgreementState) -> Bool
 
+pub fn compare_usage_snapshots(CommercialSnapshot, CommercialSnapshot, UsageQuery) -> UsageChanges raise CommercialError
+
+pub fn consolidate_usage(Array[CommercialSnapshot], UsageQuery) -> UsageConsolidation raise CommercialError
+
 pub let contract_version : String
+
+pub fn correlate_usage(CommercialSnapshot, UsageQuery, UsageCorrelationManifest) -> UsageCorrelationReport raise CommercialError
 
 pub fn estimate_cost(Int64, FixedMoney) -> FixedMoney raise CommercialError
 
+pub fn explore_usage(CommercialSnapshot, UsageQuery) -> UsageReport raise CommercialError
+
+pub fn explore_usage_prices(CommercialSnapshot, UsageQuery, UsagePriceScenario) -> UsagePriceReport raise CommercialError
+
+pub fn explore_usage_timeline(CommercialSnapshot, UsageQuery, Int64) -> UsageTimeline raise CommercialError
+
 pub let export_schema_version : String
+
+pub fn import_usage_correlation_manifest(String) -> UsageCorrelationManifest raise CommercialError
+
+pub fn import_usage_price_scenario(String) -> UsagePriceScenario raise CommercialError
+
+pub fn import_usage_query(String) -> UsageQuery raise CommercialError
+
+pub fn import_usage_snapshot(String) -> CommercialSnapshot raise CommercialError
 
 pub fn money(Int64, String, Int) -> FixedMoney raise CommercialError
 
@@ -636,6 +656,102 @@ pub fn SignatureCallback::not_equal(Self, Self) -> Bool
 pub fn SignatureCallback::to_json(Self) -> Json
 pub fn SignatureCallback::to_repr(Self) -> @debug.Repr
 
+pub(all) struct UsageCaptureSource {
+  source_index : Int
+  snapshot_sha256 : String
+  selected_row_count : Int
+  usage_count : Int
+  ledger_count : Int
+} derive(ToJson)
+pub fn UsageCaptureSource::to_json(Self) -> Json
+
+pub(all) struct UsageChange {
+  identity_kind : String
+  identity : String
+  status : String
+  before : UsageReportRow?
+  after : UsageReportRow?
+} derive(ToJson)
+pub fn UsageChange::to_json(Self) -> Json
+
+pub(all) struct UsageChanges {
+  query : UsageQuery
+  baseline_row_count : Int
+  candidate_row_count : Int
+  unchanged_count : Int
+  changes : Array[UsageChange]
+}
+pub fn UsageChanges::json_text(Self) -> String
+pub fn UsageChanges::rows_csv(Self) -> String
+
+pub(all) struct UsageConsolidation {
+  report : UsageReport
+  sources : Array[UsageCaptureSource]
+  row_sources : Array[UsageRowSources]
+  unique_usage_count : Int
+  unique_ledger_count : Int
+  duplicate_usage_count : Int
+  duplicate_ledger_count : Int
+}
+pub fn UsageConsolidation::json_text(Self) -> String
+pub fn UsageConsolidation::rows_csv(Self) -> String
+pub fn UsageConsolidation::summary_csv(Self) -> String
+
+pub(all) struct UsageCorrelationGroup {
+  external_ref : String
+  links : Array[UsageCorrelationMatch]
+  report : UsageReport
+} derive(Eq, @debug.Debug)
+pub fn UsageCorrelationGroup::equal(Self, Self) -> Bool
+pub fn UsageCorrelationGroup::not_equal(Self, Self) -> Bool
+pub fn UsageCorrelationGroup::to_repr(Self) -> @debug.Repr
+
+pub(all) struct UsageCorrelationLink {
+  external_ref : String
+  project_id : String
+  event_id : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn UsageCorrelationLink::equal(Self, Self) -> Bool
+pub fn UsageCorrelationLink::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn UsageCorrelationLink::not_equal(Self, Self) -> Bool
+pub fn UsageCorrelationLink::to_json(Self) -> Json
+pub fn UsageCorrelationLink::to_repr(Self) -> @debug.Repr
+
+pub(all) struct UsageCorrelationManifest {
+  schema_version : String
+  organization_id : String
+  links : Array[UsageCorrelationLink]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn UsageCorrelationManifest::equal(Self, Self) -> Bool
+pub fn UsageCorrelationManifest::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn UsageCorrelationManifest::not_equal(Self, Self) -> Bool
+pub fn UsageCorrelationManifest::to_json(Self) -> Json
+pub fn UsageCorrelationManifest::to_repr(Self) -> @debug.Repr
+
+pub(all) struct UsageCorrelationMatch {
+  link : UsageCorrelationLink
+  status : String
+  row_count : Int
+  source_row_ids : Array[String]
+} derive(Eq, ToJson, @debug.Debug)
+pub fn UsageCorrelationMatch::equal(Self, Self) -> Bool
+pub fn UsageCorrelationMatch::not_equal(Self, Self) -> Bool
+pub fn UsageCorrelationMatch::to_json(Self) -> Json
+pub fn UsageCorrelationMatch::to_repr(Self) -> @debug.Repr
+
+pub(all) struct UsageCorrelationReport {
+  query : UsageQuery
+  duplicate_link_count : Int
+  references : Array[UsageCorrelationGroup]
+  unassigned : UsageReport
+} derive(Eq, @debug.Debug)
+pub fn UsageCorrelationReport::equal(Self, Self) -> Bool
+pub fn UsageCorrelationReport::json_text(Self) -> String
+pub fn UsageCorrelationReport::not_equal(Self, Self) -> Bool
+pub fn UsageCorrelationReport::rows_csv(Self) -> String
+pub fn UsageCorrelationReport::summary_csv(Self) -> String
+pub fn UsageCorrelationReport::to_repr(Self) -> @debug.Repr
+
 pub(all) struct UsageObservation {
   event_id : String
   organization_id : String
@@ -656,6 +772,165 @@ pub fn UsageObservation::from_json(Json, @json.JsonPath) -> Self raise @json.Jso
 pub fn UsageObservation::not_equal(Self, Self) -> Bool
 pub fn UsageObservation::to_json(Self) -> Json
 pub fn UsageObservation::to_repr(Self) -> @debug.Repr
+
+pub(all) struct UsagePriceGroup {
+  group_id : String
+  meter : String
+  unit : String
+  status : UsagePriceStatus
+  row_count : Int
+  quantity : Int64
+  crossing_window_count : Int
+  recorded_amount : FixedMoney?
+  hypothetical_amount : FixedMoney?
+  delta : FixedMoney?
+} derive(Eq, ToJson)
+pub fn UsagePriceGroup::equal(Self, Self) -> Bool
+pub fn UsagePriceGroup::not_equal(Self, Self) -> Bool
+pub fn UsagePriceGroup::to_json(Self) -> Json
+
+pub(all) struct UsagePriceReport {
+  query : UsageQuery
+  scenario : UsagePriceScenario
+  rows : Array[UsagePriceRow]
+  groups : Array[UsagePriceGroup]
+} derive(Eq, ToJson)
+pub fn UsagePriceReport::equal(Self, Self) -> Bool
+pub fn UsagePriceReport::json_text(Self) -> String raise CommercialError
+pub fn UsagePriceReport::not_equal(Self, Self) -> Bool
+pub fn UsagePriceReport::rows_csv(Self) -> String raise CommercialError
+pub fn UsagePriceReport::summary_csv(Self) -> String raise CommercialError
+pub fn UsagePriceReport::to_json(Self) -> Json
+
+pub(all) struct UsagePriceRow {
+  recorded : UsageReportRow
+  status : UsagePriceStatus
+  matched_rate_count : Int
+  candidate_rate_card_id : String
+  candidate_rate_card_version : String
+  hypothetical_amount : FixedMoney?
+  delta : FixedMoney?
+} derive(Eq, ToJson)
+pub fn UsagePriceRow::equal(Self, Self) -> Bool
+pub fn UsagePriceRow::not_equal(Self, Self) -> Bool
+pub fn UsagePriceRow::to_json(Self) -> Json
+
+pub(all) struct UsagePriceScenario {
+  schema_version : Int
+  rates : Array[RateCard]
+} derive(Eq, ToJson, @json.FromJson)
+pub fn UsagePriceScenario::equal(Self, Self) -> Bool
+pub fn UsagePriceScenario::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn UsagePriceScenario::not_equal(Self, Self) -> Bool
+pub fn UsagePriceScenario::to_json(Self) -> Json
+
+pub(all) enum UsagePriceStatus {
+  Compared
+  EstimatedUnpriced
+  MissingObservation
+  NoCoveringRate
+  AmbiguousRate
+  MoneyUnitMismatch
+  RecordedAdjustment
+} derive(Eq, ToJson)
+pub fn UsagePriceStatus::equal(Self, Self) -> Bool
+pub fn UsagePriceStatus::not_equal(Self, Self) -> Bool
+pub fn UsagePriceStatus::to_json(Self) -> Json
+
+pub(all) struct UsageQuery {
+  organization_id : String
+  started_unix_ms : Int64
+  ended_unix_ms : Int64
+  project_id : String
+  meter : String
+  group_by : String
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn UsageQuery::equal(Self, Self) -> Bool
+pub fn UsageQuery::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn UsageQuery::not_equal(Self, Self) -> Bool
+pub fn UsageQuery::to_json(Self) -> Json
+pub fn UsageQuery::to_repr(Self) -> @debug.Repr
+
+pub(all) struct UsageReport {
+  query : UsageQuery
+  rows : Array[UsageReportRow]
+  groups : Array[UsageReportGroup]
+} derive(Eq, ToJson, @debug.Debug)
+pub fn UsageReport::equal(Self, Self) -> Bool
+pub fn UsageReport::json_text(Self) -> String
+pub fn UsageReport::not_equal(Self, Self) -> Bool
+pub fn UsageReport::rows_csv(Self) -> String
+pub fn UsageReport::summary_csv(Self) -> String
+pub fn UsageReport::to_json(Self) -> Json
+pub fn UsageReport::to_repr(Self) -> @debug.Repr
+
+pub(all) struct UsageReportGroup {
+  group_id : String
+  meter : String
+  unit : String
+  quantity : Int64
+  amount : FixedMoney?
+  row_count : Int
+  ledger_entry_count : Int
+  unpriced_usage_count : Int
+  missing_observation_count : Int
+  crossing_window_count : Int
+} derive(Eq, ToJson, @debug.Debug)
+pub fn UsageReportGroup::equal(Self, Self) -> Bool
+pub fn UsageReportGroup::not_equal(Self, Self) -> Bool
+pub fn UsageReportGroup::to_json(Self) -> Json
+pub fn UsageReportGroup::to_repr(Self) -> @debug.Repr
+
+pub(all) struct UsageReportRow {
+  cost_center_id : String
+  cost_center_name : String
+  project_id : String
+  project_name : String
+  event_id : String
+  workload_id : String
+  entry_id : String
+  linked_entry_id : String
+  kind : String
+  rate_card_id : String
+  rate_card_version : String
+  reason : String
+  meter : String
+  unit : String
+  quantity : Int64
+  amount : FixedMoney?
+  started_unix_ms : Int64
+  ended_unix_ms : Int64
+  recorded_unix_ms : Int64
+  observation_available : Bool
+  crosses_window : Bool
+} derive(Eq, ToJson, @debug.Debug)
+pub fn UsageReportRow::equal(Self, Self) -> Bool
+pub fn UsageReportRow::not_equal(Self, Self) -> Bool
+pub fn UsageReportRow::to_json(Self) -> Json
+pub fn UsageReportRow::to_repr(Self) -> @debug.Repr
+
+pub(all) struct UsageRowSources {
+  event_id : String
+  entry_id : String
+  observation_sources : Array[Int]
+  ledger_sources : Array[Int]
+} derive(ToJson)
+pub fn UsageRowSources::to_json(Self) -> Json
+
+pub(all) struct UsageTimeBucket {
+  started_unix_ms : Int64
+  ended_unix_ms : Int64
+  crossing_bucket_count : Int
+  report : UsageReport
+}
+
+pub(all) struct UsageTimeline {
+  query : UsageQuery
+  bucket_milliseconds : Int64
+  buckets : Array[UsageTimeBucket]
+}
+pub fn UsageTimeline::json_text(Self) -> String
+pub fn UsageTimeline::summary_csv(Self) -> String
 
 // Type aliases
 

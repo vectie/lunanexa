@@ -14,6 +14,8 @@ pub fn active_file(WorkbenchState) -> DraftFile?
 
 pub fn can_send(WorkbenchState) -> Bool
 
+pub fn decode_drafts(Json) -> Result[Array[DraftFile], DraftImportError]
+
 pub fn default_state(Int64) -> WorkbenchState
 
 pub fn demo_state() -> WorkbenchState
@@ -31,6 +33,16 @@ pub fn view(WorkbenchState) -> @html.Html
 // Errors
 
 // Types and methods
+pub(all) struct DraftEdit {
+  operation : DraftOperation
+  name : String
+  language : String
+  error : String?
+} derive(Eq, @debug.Debug)
+pub fn DraftEdit::equal(Self, Self) -> Bool
+pub fn DraftEdit::not_equal(Self, Self) -> Bool
+pub fn DraftEdit::to_repr(Self) -> @debug.Repr
+
 pub(all) struct DraftFile {
   path : String
   language : String
@@ -39,6 +51,28 @@ pub(all) struct DraftFile {
 pub fn DraftFile::equal(Self, Self) -> Bool
 pub fn DraftFile::not_equal(Self, Self) -> Bool
 pub fn DraftFile::to_repr(Self) -> @debug.Repr
+
+pub(all) enum DraftImportError {
+  ReadCancelled
+  ReadFailed
+  InvalidPacket
+  UnsupportedFormat
+  InvalidFiles
+  DuplicatePath
+  LimitExceeded
+} derive(Eq, @debug.Debug)
+pub fn DraftImportError::equal(Self, Self) -> Bool
+pub fn DraftImportError::not_equal(Self, Self) -> Bool
+pub fn DraftImportError::to_repr(Self) -> @debug.Repr
+
+pub(all) enum DraftOperation {
+  Create
+  Duplicate(String)
+  Rename(String)
+} derive(Eq, @debug.Debug)
+pub fn DraftOperation::equal(Self, Self) -> Bool
+pub fn DraftOperation::not_equal(Self, Self) -> Bool
+pub fn DraftOperation::to_repr(Self) -> @debug.Repr
 
 pub(all) struct IntegrationSummary {
   provider : @workspace.IntegrationProvider
@@ -64,6 +98,13 @@ pub(all) enum WorkbenchMessage {
   LocaleChanged(@i18n.Locale)
   SelectFile(String)
   DraftChanged(String)
+  NewDraft
+  DuplicateDraft
+  RenameDraft
+  DraftNameChanged(String)
+  DraftLanguageChanged(String)
+  SaveDraft
+  CancelDraftEdit
   ModelChanged(String)
   InstructionChanged(String)
   SendRequest
@@ -71,6 +112,10 @@ pub(all) enum WorkbenchMessage {
   SelectIntegration(@workspace.IntegrationProvider)
   ClearNotice
   ExportDrafts
+  ReadDraftFile
+  DraftFileRead(Int64, Result[Array[DraftFile], DraftImportError])
+  CancelDraftImport
+  ReplaceDrafts
   CopyDiagnostic(String)
 } derive(Eq)
 pub fn WorkbenchMessage::equal(Self, Self) -> Bool
@@ -94,6 +139,11 @@ pub(all) struct WorkbenchState {
   loading : Bool
   success_message : String?
   error_message : String?
+  draft_import_generation : Int64
+  draft_import_pending : Bool
+  draft_import_preview : Array[DraftFile]?
+  draft_edit : DraftEdit?
+  draft_revision : Int64
 } derive(Eq)
 pub fn WorkbenchState::equal(Self, Self) -> Bool
 pub fn WorkbenchState::not_equal(Self, Self) -> Bool

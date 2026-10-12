@@ -42,3 +42,14 @@ and idempotently replayable; timeout is never mislabeled as caller cancellation.
 The consumer-side provider adapter and external-provider fallback tests belong
 in the consumer repository. LunaNexa publishes the contract and client package
 but never imports that adapter.
+
+## Recent editor-client activity reports
+
+The existing VS Code client can select recent recorded attempts and issue one
+status GET per workload to prepare a local JSON or CSV activity report. It
+projects canonical state, bounded public receipts and exact reported usage while
+keeping unknown evidence separate from zero. It does not fetch generated output,
+retry inference, infer prices/payment or become an authoritative usage ledger.
+See [the client activity report guide](CLIENT_ACTIVITY_REPORT_QUICKSTART.md).
+The dependency-free command/transport tests do not qualify a real Extension Host
+or native controller/provider integration.

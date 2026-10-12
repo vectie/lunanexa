@@ -37,6 +37,8 @@ pub fn node_transition_allowed(NodeState, NodeState) -> Bool
 
 pub let source_manifest_schema_version : String
 
+pub fn valid_candidate_model(ModelRecord) -> Bool
+
 pub fn valid_identifier(String, maximum_length? : Int) -> Bool
 
 pub fn valid_optional_identifier(String, maximum_length? : Int) -> Bool

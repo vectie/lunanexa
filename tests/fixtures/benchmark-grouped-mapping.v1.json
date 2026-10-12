@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "run_id_column": "trial",
+  "columns": {
+    "latency_ms": "elapsed_ms",
+    "queue_ms": "queued_ms",
+    "load_ms": "loaded_ms",
+    "first_output_ms": "ttft_ms",
+    "output_units": "generated_tokens",
+    "duration_ms": "sample_window_ms",
+    "utilization_per_mille": "busy_per_mille",
+    "failed": "is_error"
+  },
+  "runs": [
+    {
+      "run_id": "synthetic-csv-concurrency-4",
+      "profile": "text-short-v1",
+      "model_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtime_digest": "sha256:synthetic-runtime-v1",
+      "hardware_profile": "fixture-accelerator-32g-driver-v1",
+      "kind": "Concurrency",
+      "concurrency": 4,
+      "metadata": {
+        "origin": "SyntheticFixture",
+        "source_ref": "fixture:benchmark-grouped.synthetic.csv:concurrency-4",
+        "workload_ref": "fixture:chat-input256-output160-seed79",
+        "output_unit": "tokens",
+        "memory_total_mib": 32768,
+        "memory_peak_mib": 20000
+      }
+    },
+    {
+      "run_id": "synthetic-csv-concurrency-8",
+      "profile": "text-short-v1",
+      "model_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtime_digest": "sha256:synthetic-runtime-v1",
+      "hardware_profile": "fixture-accelerator-32g-driver-v1",
+      "kind": "Concurrency",
+      "concurrency": 8,
+      "metadata": {
+        "origin": "SyntheticFixture",
+        "source_ref": "fixture:benchmark-grouped.synthetic.csv:concurrency-8",
+        "workload_ref": "fixture:chat-input256-output160-seed79",
+        "output_unit": "tokens",
+        "memory_total_mib": 32768,
+        "memory_peak_mib": 23000
+      }
+    }
+  ]
+}

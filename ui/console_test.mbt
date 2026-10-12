@@ -85,6 +85,7 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
       { sequence: 2, kind: "Completed", text: "", receipt: "workload:1", },
     ],
     benchmark_evidence: ["text-short-v1 · p95 50 ms"],
+    capacity_planner: @ui.default_state().capacity_planner,
     policies: {
       quota_count: 1,
       data_class_count: 4,

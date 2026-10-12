@@ -351,27 +351,7 @@ pub fn ModelRegistry::register_model(
   self : ModelRegistry,
   model : @contracts.ModelRecord,
 ) -> Unit raise RegistryError {
-  if !@contracts.valid_identifier(model.model_id, maximum_length=128) ||
-    !@contracts.valid_identifier(model.version, maximum_length=128) ||
-    model.artifact.uri.contains("../") ||
-    model.artifact.uri.contains("file://") ||
-    model.artifact.uri.contains("<script") ||
-    model.artifact.uri.contains_char('\n') ||
-    !(model.artifact.uri.has_prefix("s3://") ||
-    model.artifact.uri.has_prefix("oci://") ||
-    model.artifact.uri.has_prefix(@contracts.model_store_scheme)) ||
-    !@contracts.valid_sha256_digest(model.artifact.digest) ||
-    model.artifact.size_bytes <= 0L ||
-    model.artifact.signature_ref == "" ||
-    model.artifact.signature_ref.contains_char('\n') ||
-    !@contracts.valid_identifier(model.license_id, maximum_length=128) ||
-    model.provenance == "" ||
-    model.compatible_architectures.length() == 0 ||
-    !model.compatible_architectures.all(value => {
-      @contracts.valid_identifier(value, maximum_length=128)
-    }) ||
-    model.minimum_memory_mib <= 0 ||
-    model.state != Candidate {
+  if !@contracts.valid_candidate_model(model) {
     raise InvalidMetadata(model.model_id)
   }
   self.models[model_key(model.model_id, model.version)] = model

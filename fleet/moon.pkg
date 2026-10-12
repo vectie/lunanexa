@@ -1,0 +1,10 @@
+import {
+  "vectie/lunanexa/contracts",
+  "moonbitlang/core/json",
+}
+
+supported_targets = "js+native"
+
+options(
+  link: { "native": { "cc-link-flags": "-pthread -ldl" } },
+)

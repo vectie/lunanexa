@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "workload": {
+    "profile": "text-short-v1",
+    "model_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "runtime_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "hardware_profile": "fixture-host-driver-v1",
+    "kind": "Concurrency",
+    "workload_ref": "fixture:text-short-v1:128-input-100-output",
+    "output_unit": "tokens",
+    "minimum_tested_concurrency": 4
+  },
+  "objective": {
+    "profile": "text-short-v1",
+    "maximum_p95_ms": 35,
+    "minimum_throughput_units_per_second": 900,
+    "maximum_failure_per_mille": 0
+  },
+  "evidence": [
+    {
+      "run": {
+        "run_id": "synthetic-concurrency-4",
+        "profile": "text-short-v1",
+        "model_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "runtime_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "hardware_profile": "fixture-host-driver-v1",
+        "kind": "Concurrency",
+        "concurrency": 4,
+        "samples": [
+          {
+            "latency_ms": 0,
+            "queue_ms": 0,
+            "load_ms": 0,
+            "first_output_ms": 0,
+            "output_units": 100,
+            "duration_ms": 100,
+            "utilization_per_mille": 500,
+            "failed": false
+          },
+          {
+            "latency_ms": 10,
+            "queue_ms": 2,
+            "load_ms": 0,
+            "first_output_ms": 1,
+            "output_units": 100,
+            "duration_ms": 100,
+            "utilization_per_mille": 500,
+            "failed": true
+          },
+          {
+            "latency_ms": 11,
+            "queue_ms": 4,
+            "load_ms": 0,
+            "first_output_ms": 2,
+            "output_units": 100,
+            "duration_ms": 100,
+            "utilization_per_mille": 500,
+            "failed": false
+          },
+          {
+            "latency_ms": 20,
+            "queue_ms": 6,
+            "load_ms": 0,
+            "first_output_ms": 3,
+            "output_units": 100,
+            "duration_ms": 100,
+            "utilization_per_mille": 500,
+            "failed": true
+          },
+          {
+            "latency_ms": 21,
+            "queue_ms": 8,
+            "load_ms": 0,
+            "first_output_ms": 4,
+            "output_units": 100,
+            "duration_ms": 100,
+            "utilization_per_mille": 500,
+            "failed": false
+          }
+        ]
+      },
+      "origin": "SyntheticFixture",
+      "source_ref": "fixture:capacity-v1",
+      "workload_ref": "fixture:text-short-v1:128-input-100-output",
+      "output_unit": "tokens",
+      "memory_total_mib": 16000,
+      "memory_peak_mib": 12000
+    },
+    {
+      "run": {
+        "run_id": "synthetic-concurrency-8",
+        "profile": "text-short-v1",
+        "model_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "runtime_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "hardware_profile": "fixture-host-driver-v1",
+        "kind": "Concurrency",
+        "concurrency": 8,
+        "samples": [
+          {
+            "latency_ms": 10,
+            "queue_ms": 1,
+            "load_ms": 0,
+            "first_output_ms": 4,
+            "output_units": 100,
+            "duration_ms": 100,
+            "utilization_per_mille": 500,
+            "failed": false
+          },
+          {
+            "latency_ms": 20,
+            "queue_ms": 1,
+            "load_ms": 0,
+            "first_output_ms": 4,
+            "output_units": 100,
+            "duration_ms": 100,
+            "utilization_per_mille": 500,
+            "failed": false
+          },
+          {
+            "latency_ms": 30,
+            "queue_ms": 1,
+            "load_ms": 0,
+            "first_output_ms": 4,
+            "output_units": 100,
+            "duration_ms": 100,
+            "utilization_per_mille": 500,
+            "failed": false
+          }
+        ]
+      },
+      "origin": "SyntheticFixture",
+      "source_ref": "fixture:capacity-v1",
+      "workload_ref": "fixture:text-short-v1:128-input-100-output",
+      "output_unit": "tokens",
+      "memory_total_mib": 16000,
+      "memory_peak_mib": 12000
+    }
+  ]
+}

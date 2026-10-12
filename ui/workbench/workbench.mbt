@@ -59,6 +59,11 @@ pub(all) struct WorkbenchState {
   loading : Bool
   success_message : String?
   error_message : String?
+  draft_import_generation : Int64
+  draft_import_pending : Bool
+  draft_import_preview : Array[DraftFile]?
+  draft_edit : DraftEdit?
+  draft_revision : Int64
 } derive(Eq)
 
 ///|
@@ -69,6 +74,13 @@ pub(all) enum WorkbenchMessage {
   LocaleChanged(@i18n.Locale)
   SelectFile(String)
   DraftChanged(String)
+  NewDraft
+  DuplicateDraft
+  RenameDraft
+  DraftNameChanged(String)
+  DraftLanguageChanged(String)
+  SaveDraft
+  CancelDraftEdit
   ModelChanged(String)
   InstructionChanged(String)
   SendRequest
@@ -76,6 +88,10 @@ pub(all) enum WorkbenchMessage {
   SelectIntegration(@workspace.IntegrationProvider)
   ClearNotice
   ExportDrafts
+  ReadDraftFile
+  DraftFileRead(Int64, Result[Array[DraftFile], DraftImportError])
+  CancelDraftImport
+  ReplaceDrafts
   CopyDiagnostic(String)
 } derive(Eq)
 
@@ -160,6 +176,11 @@ pub fn default_state(now_unix_ms : Int64) -> WorkbenchState {
     loading: false,
     success_message: None,
     error_message: None,
+    draft_import_generation: 0L,
+    draft_import_pending: false,
+    draft_import_preview: None,
+    draft_edit: None,
+    draft_revision: 0L,
   }
 }
 
@@ -224,6 +245,7 @@ pub fn can_send(state : WorkbenchState) -> Bool {
   @workspace.valid_identifier(state.model_selector) &&
   state.instruction.trim() != "" &&
   state.instruction.length() <= 4096 &&
+  state.draft_edit is None &&
   !state.loading
 }
 
@@ -243,6 +265,16 @@ pub fn WorkbenchState::update(
   message : WorkbenchMessage,
 ) -> WorkbenchState {
   match message {
+    NewDraft
+    | DuplicateDraft
+    | RenameDraft
+    | DraftNameChanged(_)
+    | DraftLanguageChanged(_)
+    | SaveDraft
+    | CancelDraftEdit
+    | DraftChanged(_) => update_draft_management(self, message)
+    ReadDraftFile | DraftFileRead(_, _) | CancelDraftImport | ReplaceDrafts =>
+      update_draft_import(self, message)
     ExportDrafts | CopyDiagnostic(_) => self
     LocaleChanged(locale) =>
       {
@@ -261,7 +293,16 @@ pub fn WorkbenchState::update(
       }
     SelectFile(path) =>
       if self.files.any(file => file.path == path) {
-        { ..self, active_path: path, error_message: None, }
+        {
+          ..(if path == self.active_path {
+            cancel_draft_import(self)
+          } else {
+            draft_input_changed(cancel_draft_import(self))
+          }),
+          active_path: path,
+          draft_edit: None,
+          error_message: None,
+        }
       } else {
         {
           ..self,
@@ -270,25 +311,26 @@ pub fn WorkbenchState::update(
           ),
         }
       }
-    DraftChanged(content) => {
-      let files = [
-        for file in self.files => {
-          if file.path == self.active_path {
-            { ..file, content, }
-          } else {
-            file
-          }
-        }
-      ]
-      { ..self, files, }
-    }
-    ModelChanged(value) => { ..self, model_selector: value, }
-    InstructionChanged(value) => { ..self, instruction: value, }
+    ModelChanged(value) =>
+      if value == self.model_selector {
+        self
+      } else {
+        { ..draft_input_changed(self), model_selector: value, }
+      }
+    InstructionChanged(value) =>
+      if value == self.instruction {
+        self
+      } else {
+        { ..draft_input_changed(self), instruction: value, }
+      }
     SendRequest =>
       if can_send(self) {
         {
-          ..self,
+          ..cancel_draft_import(self),
           loading: true,
+          // This context also distinguishes consecutive workload commands.
+          draft_import_generation: self.draft_import_generation + 1L,
+          draft_edit: None,
           output_text: "",
           receipt: "",
           success_message: None,
@@ -304,15 +346,17 @@ pub fn WorkbenchState::update(
       }
     SelectEditor(editor) =>
       {
-        ..self,
+        ..cancel_draft_import(self),
         selected_editor: Some(editor),
+        draft_edit: None,
         selected_integration: None,
         error_message: None,
       }
     SelectIntegration(provider) =>
       {
-        ..self,
+        ..cancel_draft_import(self),
         selected_editor: None,
+        draft_edit: None,
         selected_integration: Some(provider),
         error_message: None,
       }
@@ -643,6 +687,7 @@ fn file_tree(
           ],
         )
       },
+      draft_management_view(state, emit),
       @html.p(class="boundary-note compact", [
         @html.strong(static_message(state.locale, BrowserLocalOnly)),
         @html.span(
@@ -660,6 +705,7 @@ fn file_tree(
         on_click=command(emit, ExportDrafts),
         message_text(state.locale, ExportDraftsLabel),
       ),
+      draft_import_view(state, emit),
     ],
   )
 }
@@ -1084,6 +1130,15 @@ fn workbench_view(
           #|.file.active,.file:hover{border-color:var(--line);background:var(--panel-raised);color:var(--ink)}
           #|.file.active:before{background:var(--accent)}
           #|.file-panel .boundary-note{margin-top:auto}
+          #|.draft-import{margin-top:1rem;padding-top:1rem;border-top:1px solid var(--line);overflow-wrap:anywhere;font-size:.75rem}
+          #|.draft-management{margin-top:.8rem;font-size:.75rem;overflow-wrap:anywhere}.draft-actions{display:flex;flex-wrap:wrap;gap:.35rem}.draft-actions button{flex:1;font-size:.7rem}.draft-form{margin-top:.6rem;padding:.6rem;border:1px solid var(--line);border-radius:.5rem}.draft-form label{display:block;margin:.6rem 0 .3rem}.draft-form input{width:100%;min-width:0;padding:.5rem;border:1px solid var(--line-strong);border-radius:.4rem;background:var(--editor);color:var(--ink)}.draft-form h3{margin:.2rem 0;font-size:.8rem}.draft-form .error-state{margin:.5rem 0}
+          #|.draft-import label{display:block;font-weight:700;margin-bottom:.5rem}
+          #|.draft-import input{width:100%;min-width:0;font-size:.7rem}
+          #|.draft-import-preview{margin:.6rem 0;padding:.5rem;border:1px solid var(--line);border-radius:.5rem}
+          #|.draft-import-preview h3{font-size:.8rem}
+          #|.draft-import-preview details{margin:.5rem 0}
+          #|.draft-import-preview summary{cursor:pointer}
+          #|.draft-import-content{max-height:12rem;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--editor);padding:.5rem}
           #|.code-editor{display:block;width:100%;min-height:31rem;flex:1;margin:0;padding:1.2rem 1.35rem;border:0;resize:none;background:linear-gradient(90deg,rgba(255,255,255,.018) 0,rgba(255,255,255,.018) 3.25rem,transparent 3.25rem),var(--editor);color:#e4ebf5;caret-color:var(--accent);font:13.5px/1.72 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;tab-size:2}
           #|.editor-statusbar{min-height:1.8rem;padding:.35rem .85rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;border-top:1px solid var(--line);background:#0b131e;color:var(--muted);font-size:.64rem}
           #|.run-panel label{display:block;margin:.85rem 0 .32rem;color:var(--muted-strong);font-size:.7rem;font-weight:750}

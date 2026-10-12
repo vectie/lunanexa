@@ -1,0 +1,5 @@
+Model,Version,SHA256,Location,Bytes,Signature,License,Source,Architectures,MemoryMiB,Ignored
+model-new,v1,sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,s3://synthetic-models/new,9007199254740993,synthetic-signature-new,license-new,"Operator declaration: 合成, ""sample""
+no measured or verified evidence",x86_64; aarch64,32768,not imported
+model-existing,v1,sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,modelstore://synthetic-existing,2048,synthetic-signature-existing,license-existing,Synthetic existing metadata,aarch64,8192,not imported
+model-conflict,v1,sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc,oci://synthetic/models/conflict,4096,synthetic-signature-conflict,license-conflict,Synthetic revised metadata,aarch64,16384,not imported

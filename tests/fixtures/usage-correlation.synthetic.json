@@ -1,0 +1,11 @@
+{
+  "schema_version": "lunanexa.usage-correlation-manifest.v1",
+  "organization_id": "org-example",
+  "links": [
+    {"external_ref":"invoice:2026-10-research","project_id":"project-inference","event_id":"usage-one"},
+    {"external_ref":"invoice:2026-10-research","project_id":"project-batch","event_id":"usage-two"},
+    {"external_ref":"task:eval-42","project_id":"project-batch","event_id":"usage-unpriced"},
+    {"external_ref":"task:eval-43","project_id":"project-batch","event_id":"usage-awaiting-capture"},
+    {"external_ref":"invoice:2026-10-research","project_id":"project-inference","event_id":"usage-one"}
+  ]
+}

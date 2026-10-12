@@ -1,0 +1,8 @@
+{
+  "schema_version": "lunanexa.fleet.history-input.v1",
+  "captures": [
+    {"capture_id": "synthetic-before", "captured_unix_ms": "1791504000000", "path": "fleet-nodes.synthetic.json"},
+    {"capture_id": "synthetic-during", "captured_unix_ms": "1791504060000", "path": "fleet-history-during.synthetic.json"},
+    {"capture_id": "synthetic-after", "captured_unix_ms": "1791504120000", "path": "fleet-history-after.synthetic.json"}
+  ]
+}

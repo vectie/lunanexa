@@ -12,6 +12,7 @@ import {
   "vectie/lunanexa/workspace",
   "vectie/lunanexa/ui",
   "vectie/lunanexa/ui/i18n",
+  "vectie/lunanexa/ui/capacity_planner",
   "vectie/lunanexa/ui/offline_commerce",
   "vectie/lunanexa/ui/contract_documents",
   "moonbit-community/rabbita",

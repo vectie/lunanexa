@@ -1,0 +1,280 @@
+{
+  "schema_version": 1,
+  "workload": {
+    "profile": "text-short-v1",
+    "model_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "runtime_digest": "sha256:synthetic-runtime-v1",
+    "hardware_profile": "fixture-accelerator-32g-driver-v1",
+    "kind": "Concurrency",
+    "workload_ref": "fixture:chat-input256-output160-seed79",
+    "output_unit": "tokens",
+    "minimum_tested_concurrency": 4
+  },
+  "objective": {
+    "profile": "text-short-v1",
+    "maximum_p95_ms": 350,
+    "minimum_throughput_units_per_second": 350,
+    "maximum_failure_per_mille": 0
+  },
+  "evidence": [
+    {
+      "run": {
+        "run_id": "synthetic-runtime-v1",
+        "profile": "text-short-v1",
+        "model_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "runtime_digest": "sha256:synthetic-runtime-v1",
+        "hardware_profile": "fixture-accelerator-32g-driver-v1",
+        "kind": "Concurrency",
+        "concurrency": 4,
+        "samples": [
+          {
+            "latency_ms": 220,
+            "queue_ms": 8,
+            "load_ms": 0,
+            "first_output_ms": 40,
+            "output_units": 160,
+            "duration_ms": 400,
+            "utilization_per_mille": 720,
+            "failed": false
+          },
+          {
+            "latency_ms": 238,
+            "queue_ms": 9,
+            "load_ms": 0,
+            "first_output_ms": 41,
+            "output_units": 160,
+            "duration_ms": 400,
+            "utilization_per_mille": 721,
+            "failed": false
+          },
+          {
+            "latency_ms": 256,
+            "queue_ms": 10,
+            "load_ms": 0,
+            "first_output_ms": 42,
+            "output_units": 160,
+            "duration_ms": 400,
+            "utilization_per_mille": 722,
+            "failed": false
+          },
+          {
+            "latency_ms": 274,
+            "queue_ms": 11,
+            "load_ms": 0,
+            "first_output_ms": 43,
+            "output_units": 160,
+            "duration_ms": 400,
+            "utilization_per_mille": 723,
+            "failed": false
+          },
+          {
+            "latency_ms": 292,
+            "queue_ms": 8,
+            "load_ms": 0,
+            "first_output_ms": 44,
+            "output_units": 160,
+            "duration_ms": 400,
+            "utilization_per_mille": 724,
+            "failed": false
+          },
+          {
+            "latency_ms": 310,
+            "queue_ms": 9,
+            "load_ms": 0,
+            "first_output_ms": 40,
+            "output_units": 160,
+            "duration_ms": 400,
+            "utilization_per_mille": 725,
+            "failed": false
+          },
+          {
+            "latency_ms": 220,
+            "queue_ms": 10,
+            "load_ms": 0,
+            "first_output_ms": 41,
+            "output_units": 160,
+            "duration_ms": 400,
+            "utilization_per_mille": 726,
+            "failed": false
+          },
+          {
+            "latency_ms": 238,
+            "queue_ms": 11,
+            "load_ms": 0,
+            "first_output_ms": 42,
+            "output_units": 160,
+            "duration_ms": 400,
+            "utilization_per_mille": 727,
+            "failed": false
+          },
+          {
+            "latency_ms": 256,
+            "queue_ms": 8,
+            "load_ms": 0,
+            "first_output_ms": 43,
+            "output_units": 160,
+            "duration_ms": 400,
+            "utilization_per_mille": 728,
+            "failed": false
+          },
+          {
+            "latency_ms": 274,
+            "queue_ms": 9,
+            "load_ms": 0,
+            "first_output_ms": 44,
+            "output_units": 160,
+            "duration_ms": 400,
+            "utilization_per_mille": 729,
+            "failed": false
+          },
+          {
+            "latency_ms": 292,
+            "queue_ms": 10,
+            "load_ms": 0,
+            "first_output_ms": 40,
+            "output_units": 160,
+            "duration_ms": 400,
+            "utilization_per_mille": 730,
+            "failed": false
+          },
+          {
+            "latency_ms": 310,
+            "queue_ms": 11,
+            "load_ms": 0,
+            "first_output_ms": 41,
+            "output_units": 160,
+            "duration_ms": 400,
+            "utilization_per_mille": 731,
+            "failed": false
+          },
+          {
+            "latency_ms": 220,
+            "queue_ms": 8,
+            "load_ms": 0,
+            "first_output_ms": 42,
+            "output_units": 160,
+            "duration_ms": 400,
+            "utilization_per_mille": 732,
+            "failed": false
+          },
+          {
+            "latency_ms": 238,
+            "queue_ms": 9,
+            "load_ms": 0,
+            "first_output_ms": 43,
+            "output_units": 160,
+            "duration_ms": 400,
+            "utilization_per_mille": 733,
+            "failed": false
+          },
+          {
+            "latency_ms": 256,
+            "queue_ms": 10,
+            "load_ms": 0,
+            "first_output_ms": 44,
+            "output_units": 160,
+            "duration_ms": 400,
+            "utilization_per_mille": 734,
+            "failed": false
+          },
+          {
+            "latency_ms": 274,
+            "queue_ms": 11,
+            "load_ms": 0,
+            "first_output_ms": 40,
+            "output_units": 160,
+            "duration_ms": 400,
+            "utilization_per_mille": 735,
+            "failed": false
+          },
+          {
+            "latency_ms": 292,
+            "queue_ms": 8,
+            "load_ms": 0,
+            "first_output_ms": 41,
+            "output_units": 160,
+            "duration_ms": 400,
+            "utilization_per_mille": 736,
+            "failed": false
+          },
+          {
+            "latency_ms": 310,
+            "queue_ms": 9,
+            "load_ms": 0,
+            "first_output_ms": 42,
+            "output_units": 160,
+            "duration_ms": 400,
+            "utilization_per_mille": 737,
+            "failed": false
+          },
+          {
+            "latency_ms": 220,
+            "queue_ms": 10,
+            "load_ms": 0,
+            "first_output_ms": 43,
+            "output_units": 160,
+            "duration_ms": 400,
+            "utilization_per_mille": 738,
+            "failed": false
+          },
+          {
+            "latency_ms": 238,
+            "queue_ms": 11,
+            "load_ms": 0,
+            "first_output_ms": 44,
+            "output_units": 160,
+            "duration_ms": 400,
+            "utilization_per_mille": 739,
+            "failed": false
+          },
+          {
+            "latency_ms": 256,
+            "queue_ms": 8,
+            "load_ms": 0,
+            "first_output_ms": 40,
+            "output_units": 160,
+            "duration_ms": 400,
+            "utilization_per_mille": 740,
+            "failed": false
+          },
+          {
+            "latency_ms": 274,
+            "queue_ms": 9,
+            "load_ms": 0,
+            "first_output_ms": 41,
+            "output_units": 160,
+            "duration_ms": 400,
+            "utilization_per_mille": 741,
+            "failed": false
+          },
+          {
+            "latency_ms": 292,
+            "queue_ms": 10,
+            "load_ms": 0,
+            "first_output_ms": 42,
+            "output_units": 160,
+            "duration_ms": 400,
+            "utilization_per_mille": 742,
+            "failed": false
+          },
+          {
+            "latency_ms": 310,
+            "queue_ms": 11,
+            "load_ms": 0,
+            "first_output_ms": 43,
+            "output_units": 160,
+            "duration_ms": 400,
+            "utilization_per_mille": 743,
+            "failed": false
+          }
+        ]
+      },
+      "origin": "SyntheticFixture",
+      "source_ref": "fixture:runtime-change-review-v1",
+      "workload_ref": "fixture:chat-input256-output160-seed79",
+      "output_unit": "tokens",
+      "memory_total_mib": 32768,
+      "memory_peak_mib": 24576
+    }
+  ]
+}

@@ -1,0 +1,109 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/model_intake"
+
+import {
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/contracts",
+}
+
+// Values
+pub fn artifact_draft(ArtifactMetadata, String, Int64) -> Draft raise IntakeError
+
+pub fn default_mapping() -> Mapping
+
+pub fn export_registry_csv(Array[@contracts.ModelRecord], Mapping) -> String raise IntakeError
+
+pub fn import_artifact_metadata(String) -> ArtifactMetadata raise
+
+pub fn import_csv(String, Mapping) -> Draft raise
+
+pub fn import_draft(String) -> Draft raise
+
+pub fn import_mapping(String) -> Mapping raise
+
+pub fn import_registry(String) -> Array[@contracts.ModelRecord] raise
+
+pub fn registration_request(Draft, Array[@contracts.ModelRecord], String, String) -> @contracts.ModelRecord raise IntakeError
+
+pub fn review(Draft, Array[@contracts.ModelRecord]) -> Review raise IntakeError
+
+// Errors
+pub(all) suberror IntakeError {
+  InvalidInput(String)
+} derive(@debug.Debug)
+pub fn IntakeError::to_repr(Self) -> @debug.Repr
+
+// Types and methods
+pub(all) struct ArtifactMetadata {
+  schema_version : String
+  model_id : String
+  version : String
+  artifact_uri : String
+  signature_ref : String
+  license_id : String
+  provenance : String
+  compatible_architectures : Array[String]
+  minimum_memory_mib : Int
+  maximum_artifact_bytes : Int64
+} derive(ToJson, @json.FromJson)
+pub fn ArtifactMetadata::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ArtifactMetadata::to_json(Self) -> Json
+
+pub(all) struct Columns {
+  model_id : String
+  version : String
+  artifact_digest : String
+  artifact_uri : String
+  artifact_size_bytes : String
+  signature_ref : String
+  license_id : String
+  provenance : String
+  compatible_architectures : String
+  minimum_memory_mib : String
+} derive(ToJson, @json.FromJson)
+pub fn Columns::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Columns::to_json(Self) -> Json
+
+pub(all) struct Difference {
+  field : String
+  candidate : Json
+  registered : Json
+} derive(ToJson)
+pub fn Difference::to_json(Self) -> Json
+
+pub(all) struct Draft {
+  schema_version : Int
+  models : Array[@contracts.ModelRecord]
+} derive(ToJson, @json.FromJson)
+pub fn Draft::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Draft::to_json(Self) -> Json
+
+pub(all) struct Mapping {
+  schema_version : Int
+  columns : Columns
+} derive(ToJson, @json.FromJson)
+pub fn Mapping::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Mapping::to_json(Self) -> Json
+
+pub(all) struct Review {
+  schema_version : Int
+  new_count : Int
+  already_registered_count : Int
+  conflict_count : Int
+  rows : Array[ReviewRow]
+} derive(ToJson)
+pub fn Review::to_json(Self) -> Json
+
+pub(all) struct ReviewRow {
+  model_id : String
+  version : String
+  status : String
+  registered_state : @contracts.ModelState?
+  differences : Array[Difference]
+} derive(ToJson)
+pub fn ReviewRow::to_json(Self) -> Json
+
+// Type aliases
+
+// Traits

@@ -1,0 +1,15 @@
+{
+  "schema_version": "lunanexa.local-artifact.v1",
+  "model_id": "local-model",
+  "version": "v1",
+  "artifact_uri": "modelstore://synthetic/local-model.bin",
+  "signature_ref": "synthetic-declared-signature",
+  "license_id": "synthetic-declared-license",
+  "provenance": "Synthetic local binary for intake tests; no model or signature is verified. 本地 😀",
+  "compatible_architectures": [
+    "x86_64",
+    "aarch64"
+  ],
+  "minimum_memory_mib": 8192,
+  "maximum_artifact_bytes": "1048576"
+}

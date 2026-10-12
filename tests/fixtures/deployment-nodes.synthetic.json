@@ -1,0 +1,5 @@
+[
+{"node_id":"a","state":"Active","observed_generation":"0","controller_epoch":"0","inventory":{"node_id":"a","agent_version":"synthetic","os_release":"excluded","runtime_names":[],"accelerators":[],"labels":{},"taints":[]},"running_deployments":["synthetic-service"],"timestamp_unix_ms":"900","signature":"excluded-signature"},
+{"node_id":"b","state":"Cordoned","observed_generation":"0","controller_epoch":"0","inventory":{"node_id":"b","agent_version":"synthetic","os_release":"excluded","runtime_names":[],"accelerators":[],"labels":{},"taints":[]},"running_deployments":[],"timestamp_unix_ms":"899","signature":"excluded-signature"},
+{"node_id":"c","state":"Active","observed_generation":"0","controller_epoch":"0","inventory":{"node_id":"c","agent_version":"synthetic","os_release":"excluded","runtime_names":[],"accelerators":[],"labels":{},"taints":[]},"running_deployments":["synthetic-service"],"timestamp_unix_ms":"1001","signature":"excluded-signature"}
+]

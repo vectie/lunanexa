@@ -18,10 +18,7 @@ priv struct BrowserStreamEvent {
 } derive(FromJson)
 
 ///|
-priv struct ConsoleTelemetrySnapshot {
-  samples : Array[@contracts.TelemetrySample]
-  benchmark_summaries : Array[@contracts.BenchmarkReadSummary]
-} derive(FromJson)
+type ConsoleTelemetrySnapshot = @capacity_planner.ConsoleTelemetrySnapshot
 
 ///|
 priv struct MembershipRevocationIntent {
@@ -1347,7 +1344,7 @@ async fn load_console(
   let scheduler : @contracts.SchedulerReadContract = @json.from_json(
     parse_console_json(request("GET", endpoint, "/v1/scheduler", token)),
   )
-  let telemetry : ConsoleTelemetrySnapshot = @json.from_json(
+  let telemetry : ConsoleTelemetrySnapshot = @capacity_planner.decode_telemetry(
     parse_console_json(request("GET", endpoint, "/v1/telemetry", token)),
   )
   let authenticated_account : @ui.AccountView? = if token.has_prefix("lnxs_") {
@@ -1443,6 +1440,10 @@ async fn load_console(
     },
     request_details: [],
     stream_events: [],
+    capacity_planner: @capacity_planner.refresh_telemetry(
+      @capacity_planner.initial(),
+      telemetry,
+    ),
     benchmark_evidence: [
       for summary in telemetry.benchmark_summaries => {
         "\{summary.profile} · p95 \{summary.latency_p95_ms} ms · \{summary.throughput_units_per_second}/s · failures \{summary.failure_per_mille}‰ · \{summary.run_id}"
@@ -2570,6 +2571,13 @@ fn merge_console_group_read(
 
 ///|
 priv enum LoadOutcome {
+  RecordedBenchmarksLoaded(
+    String,
+    String,
+    Int64,
+    Int,
+    Result[@capacity_planner.ConsoleTelemetrySnapshot, String]
+  )
   Loaded(@ui.ConsoleState)
   LoadFailed(@i18n.Locale, String)
   ActionComplete(@i18n.Locale, String)
@@ -2711,6 +2719,23 @@ fn merge_loaded_console(
     template_draft: current.template_draft,
     operation_name: current.operation_name,
     operation_body: current.operation_body,
+    // Once loaded, the planner owns refresh ordering and captured selections.
+    // A slower unrelated core reload must not replace its observation snapshot.
+    capacity_planner: if current.capacity_planner.recorded_loaded {
+      @capacity_planner.interrupt_refresh(current.capacity_planner)
+    } else if loaded.capacity_planner.recorded_loaded {
+      @capacity_planner.refresh_recorded(
+        current.capacity_planner,
+        loaded.capacity_planner.recorded_runs,
+      )
+    } else if loaded.capacity_planner.refresh_error is Some(_) {
+      {
+        ..current.capacity_planner,
+        refresh_error: loaded.capacity_planner.refresh_error,
+      }
+    } else {
+      current.capacity_planner
+    },
     access_package_draft: {
       ..current.access_package_draft,
       identity_issuer: if current.access_package_draft.identity_issuer == "" {
@@ -4191,7 +4216,7 @@ fn cluster_poll_request_command(
           request("GET", model.endpoint, "/v1/storage-nodes", model.credential),
         ),
       )
-      let telemetry : ConsoleTelemetrySnapshot = @json.from_json(
+      let telemetry : ConsoleTelemetrySnapshot = @capacity_planner.decode_telemetry(
         parse_console_json(
           request("GET", model.endpoint, "/v1/telemetry", model.credential),
         ),
@@ -4227,6 +4252,9 @@ fn console_session_lost(model : AppModel) -> AppModel {
       ..model.console,
       loading: false,
       operator_authenticated: false,
+      capacity_planner: @capacity_planner.interrupt_refresh(
+        model.console.capacity_planner,
+      ),
       error_message: Some(
         console_copy(
           model.console.locale,
@@ -4330,7 +4358,13 @@ fn update_live(
           csrf_token: "",
           model_import_poll_generation: model.model_import_poll_generation + 1L,
           cluster_poll_generation: model.cluster_poll_generation + 1L,
-          console: { ..model.console, operator_authenticated: false, },
+          console: {
+            ..model.console,
+            operator_authenticated: false,
+            capacity_planner: @capacity_planner.interrupt_refresh(
+              model.console.capacity_planner,
+            ),
+          },
           console_read_groups: Map([]),
         },
         @rabbita.none,
@@ -4343,7 +4377,13 @@ fn update_live(
           csrf_token: "",
           model_import_poll_generation: model.model_import_poll_generation + 1L,
           cluster_poll_generation: model.cluster_poll_generation + 1L,
-          console: { ..model.console, operator_authenticated: false, },
+          console: {
+            ..model.console,
+            operator_authenticated: false,
+            capacity_planner: @capacity_planner.interrupt_refresh(
+              model.console.capacity_planner,
+            ),
+          },
           console_read_groups: Map([]),
         },
         @rabbita.none,
@@ -5016,6 +5056,59 @@ fn update_live(
       )
     }
     SessionLogoutFinished => (model, @rabbita.none)
+    Outcome(
+      RecordedBenchmarksLoaded(
+        endpoint,
+        credential,
+        generation,
+        sequence,
+        result
+      )
+    ) =>
+      if endpoint != model.endpoint ||
+        credential != model.credential ||
+        generation != model.cluster_poll_generation ||
+        !model.console.operator_authenticated {
+        (model, @rabbita.none)
+      } else {
+        (
+          {
+            ..model,
+            console: {
+              ..model.console,
+              capacity_planner: @capacity_planner.update(
+                model.console.capacity_planner,
+                RecordedLoaded(sequence, result),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
+      }
+    Console(CapacityPlanner(message)) => {
+      let planner = @capacity_planner.update(
+        model.console.capacity_planner,
+        message,
+      )
+      let planner = if message == RefreshRecorded &&
+        (model.demo_mode || !model.console.operator_authenticated) {
+        @capacity_planner.update(
+          planner,
+          RecordedLoaded(
+            planner.refresh_sequence,
+            Err(
+              "Connect an authenticated operator console before refreshing recorded runs",
+            ),
+          ),
+        )
+      } else {
+        planner
+      }
+      (
+        { ..model, console: { ..model.console, capacity_planner: planner, }, },
+        capacity_planner_command(model, planner, message, emit),
+      )
+    }
     Console(LocaleChanged(locale)) => {
       apply_console_locale(locale)
       (switch_app_locale(model, locale), @rabbita.none)
@@ -9250,6 +9343,7 @@ fn update(
   if model.demo_mode {
     match message {
       Console(LocaleChanged(_))
+      | Console(CapacityPlanner(_))
       | Console(Navigate(_))
       | Console(AlertsWindowChanged(_))
       | Console(QuickDeploymentIdChanged(_))
