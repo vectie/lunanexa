@@ -130,7 +130,7 @@ async test "native HTTP API authenticates invokes persists and replays idempoten
     )
     assert_eq(health_response.code, 200)
     assert_true(health_body.text().contains("LunaNexa"))
-    let operator_headers = {
+    let operator_headers : @http.Headers = {
       "Authorization": "Bearer operator-token",
       "Content-Type": "application/json",
     }
@@ -154,7 +154,7 @@ async test "native HTTP API authenticates invokes persists and replays idempoten
       api_request().to_json(),
     )
     assert_eq(unauthorized.code, 401)
-    let headers = {
+    let headers : @http.Headers = {
       "Authorization": "Bearer inference-token",
       "Content-Type": "application/json",
     }
@@ -232,7 +232,7 @@ async test "native HTTP API authenticates invokes persists and replays idempoten
       },
       signature: "",
     }
-    let forged_headers = {
+    let forged_headers : @http.Headers = {
       "Authorization": "Node other-node-secret",
       "X-LunaNexa-Node-Id": "node-1",
       "Content-Type": "application/json",
@@ -248,7 +248,7 @@ async test "native HTTP API authenticates invokes persists and replays idempoten
       headers=forged_headers,
     )
     assert_eq(forged_response.code, 401)
-    let node_headers = {
+    let node_headers : @http.Headers = {
       "Authorization": "Node node-specific-token-value",
       "X-LunaNexa-Node-Id": "node-1",
       "Content-Type": "application/json",
@@ -712,7 +712,7 @@ async test "cancellation aborts an active upstream invocation and persists recei
     group.spawn_bg(no_wait=true, allow_failure=true) <| () => {
       service.serve_on(api_server)
     }
-    let headers = {
+    let headers : @http.Headers = {
       "Authorization": "Bearer inference-token",
       "Content-Type": "application/json",
     }

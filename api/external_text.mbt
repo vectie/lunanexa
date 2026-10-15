@@ -61,12 +61,14 @@ async fn ApiService::handle_external_text_control(
   }
   let can_manage = view.membership.roles.contains(OrganizationAdministrator)
   guard self.external_text_control is Some(control) else {
+    let (ready, context_window_tokens) = self.external_text_observation()
     return if verb == Get && path == "/v1/portal/self/external-model-service" {
       json_reply(200, {
         "model_alias": route.model_alias,
         "state": "Unmanaged",
         "can_stop": false,
-        "ready": self.external_text_ready(),
+        "ready": ready,
+        "context_window_tokens": context_window_tokens,
       })
     } else {
       api_error(
@@ -150,11 +152,13 @@ async fn ApiService::handle_external_text_control(
       )
     })
   }
+  let (ready, context_window_tokens) = self.external_text_observation()
   json_reply(200, {
     "model_alias": route.model_alias,
     "state": state,
     "can_stop": can_manage,
-    "ready": self.external_text_ready(),
+    "ready": ready,
+    "context_window_tokens": context_window_tokens,
   })
 }
 
@@ -204,9 +208,26 @@ pub fn ApiService::with_external_text_route(
 /// An approved alias and artifact alone do not make a model serving. Check
 /// the exact advertised model and health on each readiness decision.
 async fn ApiService::external_text_ready(self : ApiService) -> Bool {
+  self.external_text_observation().0
+}
+
+///|
+fn external_model_context(model : Json) -> Int? {
+  match model {
+    { "max_model_len": Number(limit, ..), .. } if limit > 0 &&
+      limit <= 10485760 &&
+      limit == limit.to_int().to_double() => Some(limit.to_int())
+    _ => None
+  }
+}
+
+///|
+async fn ApiService::external_text_observation(
+  self : ApiService,
+) -> (Bool, Int?) {
   guard self.external_text_route is Some(route) &&
     self.registry is Some(registry) else {
-    return false
+    return (false, None)
   }
   let snapshot = registry.snapshot()
   guard snapshot.aliases
@@ -222,28 +243,34 @@ async fn ApiService::external_text_ready(self : ApiService) -> Bool {
       model.artifact.digest == route.runtime.artifact_digest()
     })
     is Some(_) else {
-    return false
+    return (false, None)
   }
   try
     @async.with_timeout(5000, () => {
       let (health, _) = @http.get("\{route.origin}/health")
       if health.code != 200 {
-        return false
+        return (false, None)
       }
       let (response, body) = @http.get("\{route.origin}/v1/models")
       if response.code != 200 || body.text().length() > 65536 {
-        return false
+        return (false, None)
       }
       match @json.parse(body.text()) {
         { "data": Array(models), .. } =>
-          models.any(model => {
-            model is { "id": String(id), .. } && id == route.served_model
-          })
-        _ => false
+          match
+            models
+            .iter()
+            .find_first(model => {
+              model is { "id": String(id), .. } && id == route.served_model
+            }) {
+            Some(model) => (true, external_model_context(model))
+            None => (false, None)
+          }
+        _ => (false, None)
       }
     })
   catch {
-    _ => false
+    _ => (false, None)
   } noraise {
     value => value
   }

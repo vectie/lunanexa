@@ -331,9 +331,8 @@ async fn call_adapter(
     return AdapterRejected("AdapterRedirectRejected")
   }
   let content_type = head.headers
-    .iter()
-    .find_first(entry => entry.0.to_lower() == "content-type")
-    .map(entry => entry.1.to_lower())
+    .get("content-type")
+    .map(value => value.to_lower())
   let buffer = @buffer.Buffer(size_hint=4096)
   for total = 0 {
     let remaining = 4097 - total

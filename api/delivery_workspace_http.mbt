@@ -225,9 +225,9 @@ async fn ApiService::handle_workspace_delivery(
           operation.operation_id,
           operation.generation,
           if operation.intent.kind == GpuContainer {
-            @delivery.Observation::ContainerResponded(instance_id=workspace_id)
+            ContainerResponded(instance_id=workspace_id)
           } else {
-            @delivery.Observation::WorkspaceResponded(workspace_id~)
+            WorkspaceResponded(workspace_id~)
           },
           now,
         ),

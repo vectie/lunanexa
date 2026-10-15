@@ -610,7 +610,9 @@ test "unauthenticated operator sees login gate instead of console shell" {
     @rabbita.Val::constant(app_view(model, emit))
   })
   assert_true(html.contains("Operator login"))
-  assert_true(html.contains("Operator access starts here."))
+  assert_false(html.contains("Operator access starts here."))
+  assert_false(html.contains("login-endpoint"))
+  assert_false(html.contains("login-credentials-help"))
   assert_true(html.contains("/auth/oidc/start?audience=operator"))
   assert_true(html.contains("login-username"))
   assert_true(html.contains("login-password"))
@@ -690,7 +692,7 @@ test "remote HTTPS login offers OIDC and never renders static token fallback" {
     @rabbita.Val::constant(app_view(model, emit))
   })
   assert_true(html.contains("/auth/oidc/start?audience=operator"))
-  assert_true(html.contains("Continue with organization sign-in"))
+  assert_true(html.contains("Organization sign-in"))
   assert_true(html.contains("login-username"))
   assert_true(html.contains("login-password"))
   // HTTPS is available, so the password route is usable and the browser may
@@ -1220,6 +1222,7 @@ test "contract refresh never borrows another packet's draft values" {
     ..base,
     selected_tenant_ref: Some(second.tenant_ref),
     selected_packet_id: Some(second.packet_id),
+    selected_form: Some(ReservationApplication),
     draft_values: old_draft,
   }
   let incoming = {
@@ -1233,6 +1236,7 @@ test "contract refresh never borrows another packet's draft values" {
   }
   let merged = merge_contract_read(selected, incoming, @i18n.default_locale())
   assert_eq(merged.selected_packet_id, Some(second.packet_id))
+  assert_eq(merged.selected_form, Some(ReservationApplication))
   assert_eq(merged.draft_values, new_values)
   assert_eq(merged.preview, None)
   let same_revision = merge_contract_read(
@@ -1456,10 +1460,7 @@ fn cluster_poll_test_row(
 ///|
 test "resource delivery errors explain the actionable node blocker" {
   assert_eq(
-    resource_delivery_error(
-      @i18n.Locale::ChineseSimplified,
-      "HTTP 409 NodeUnavailable",
-    ),
+    resource_delivery_error(ChineseSimplified, "HTTP 409 NodeUnavailable"),
     "所选机器仍被占用或缺少最新可用内存数据。请先停止运行任务，等待监测更新后刷新。",
   )
 }

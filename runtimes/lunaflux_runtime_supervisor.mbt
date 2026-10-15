@@ -274,7 +274,6 @@ pub async fn LunaFluxRuntimeDiscovery::probe_control(
       "{\"status\":\"ready\"}\n",
     )
   }) catch {
-    error if @async.is_cancellation_error(error) => raise error
     _ => raise LunaFluxRuntimeDiscoveryError::ControlProbeFailed
   }
   if observed is None {

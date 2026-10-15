@@ -3,11 +3,11 @@ test "editable export preserves every metadata field and displays all recorded s
   let original = draft().models[0]
   let models = [
     @contracts.Candidate,
-    @contracts.Verified,
-    @contracts.Evaluated,
-    @contracts.Approved,
-    @contracts.Deprecated,
-    @contracts.Revoked,
+    Verified,
+    Evaluated,
+    Approved,
+    Deprecated,
+    Revoked,
   ].mapi((index, state) => {
     ..original,
     model_id: "model-" + index.to_string(),
@@ -34,7 +34,7 @@ test "editable export preserves every metadata field and displays all recorded s
     assert_eq(model, {
       ..models[index],
       compatible_architectures: ["aarch64", "x86_64"],
-      state: @contracts.Candidate,
+      state: Candidate,
     })
   }
   assert_eq(models.to_json(), before)
@@ -60,18 +60,18 @@ test "custom column mapping quoted multiline Unicode and exact Int64 survive exp
     ..source,
     artifact: { ..source.artifact, size_bytes: 9223372036854775807L, },
     provenance: "  合成, \"declared\"\r\nsecond line 😀  ",
-    state: @contracts.Approved,
+    state: Approved,
   }
   let exported = @model_intake.export_registry_csv([model], mapping)
   let imported = @model_intake.import_csv(exported, mapping)
-  assert_eq(imported.models[0], { ..model, state: @contracts.Candidate, })
+  assert_eq(imported.models[0], { ..model, state: Candidate, })
   assert_eq(@model_intake.review(imported, [model]).already_registered_count, 1)
   assert_true(exported.has_suffix("\r\n"))
 }
 
 ///|
 test "an exported catalog becomes a successor Candidate only after explicit identity edit" {
-  let model = { ..draft().models[0], state: @contracts.Approved, }
+  let model = { ..draft().models[0], state: Approved, }
   let mapping = @model_intake.default_mapping()
   let csv = @model_intake.export_registry_csv([model], mapping)
   let unchanged = @model_intake.import_csv(csv, mapping)
@@ -92,7 +92,7 @@ test "an exported catalog becomes a successor Candidate only after explicit iden
     ..model,
     version: "v2",
     minimum_memory_mib: 65536,
-    state: @contracts.Candidate,
+    state: Candidate,
   })
   assert_true(@contracts.valid_candidate_model(request))
   // Changing the informational state cell never authorizes approval.

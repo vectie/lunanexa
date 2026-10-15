@@ -65,10 +65,7 @@ async test "HTTP transport sends authority and enforces bounded response" {
   @async.with_task_group(group => {
     group.spawn_bg(no_wait=true, allow_failure=true, () => {
       server.run_forever(allow_failure=true, (request, _, connection) => {
-        authenticated.val = request.headers
-          .iter()
-          .find_first(item => item.0.to_lower() == "authorization")
-          .map(item => item.1) ==
+        authenticated.val = request.headers.get("authorization") ==
           Some("Bearer test-dispatcher")
         connection.send_response(200, "OK")
         connection.write_string("12345678")

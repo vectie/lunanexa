@@ -396,7 +396,7 @@ test "optional evaluation still requires verification and is recorded as absent"
       ),
     )
   catch {
-    @registry.RegistryError::EvaluationNotPassed(_) => ()
+    EvaluationNotPassed(_) => ()
     _ => fail("wrong refusal: a missing evaluation was not the reason")
   } noraise {
     _ => fail("an unevaluated model was approved while evaluation was required")
@@ -409,7 +409,7 @@ test "optional evaluation still requires verification and is recorded as absent"
     "text.default",
     "model.text",
     "v-shelved",
-    @registry.RolloutStage::Canary,
+    Canary,
     "operator",
     1000L,
   )
@@ -432,7 +432,7 @@ test "optional evaluation does not admit an unverified artifact" {
     expires_unix_ms: None,
   })
   try ignore(registry.approve("model.text", "v-unverified", 1000L)) catch {
-    @registry.RegistryError::ArtifactNotVerified(_) => ()
+    ArtifactNotVerified(_) => ()
     _ => fail("wrong refusal: verification was not the reason")
   } noraise {
     _ => fail("an unverified model was approved")

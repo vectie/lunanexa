@@ -379,8 +379,8 @@ pub fn HttpTransport::with_subject_ref(
 }
 
 ///|
-fn HttpTransport::headers(self : HttpTransport) -> Map[String, String] {
-  let headers : Map[String, String] = {
+fn HttpTransport::headers(self : HttpTransport) -> @http.Headers {
+  let headers : @http.Headers = {
     "Authorization": "Bearer \{self.credential_value}",
     "Content-Type": "application/json",
     "Accept": "application/json",

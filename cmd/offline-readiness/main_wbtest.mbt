@@ -30,16 +30,16 @@ fn valid_readiness_capabilities() -> Array[
   @offline.OfflineCommerceCapabilityEvidence,
 ] {
   let kinds : Array[@offline.OfflineCommerceCapability] = [
-    @offline.ApprovedLegalTemplates,
-    @offline.ObjectStorage,
-    @offline.MalwareScanner,
-    @offline.OoxmlWorker,
-    @offline.PdfRenderer,
-    @offline.SpreadsheetFormulaEngine,
-    @offline.CjkFonts,
-    @offline.MachineCallbackIdentity,
-    @offline.EntitlementAuthority,
-    @offline.FinanceLegalPolicy,
+    ApprovedLegalTemplates,
+    ObjectStorage,
+    MalwareScanner,
+    OoxmlWorker,
+    PdfRenderer,
+    SpreadsheetFormulaEngine,
+    CjkFonts,
+    MachineCallbackIdentity,
+    EntitlementAuthority,
+    FinanceLegalPolicy,
   ]
   kinds.mapi((index, capability) => {
     capability,

@@ -286,7 +286,7 @@ async fn bounded_command_output(
   args : Array[String],
   limit : Int,
 ) -> (Int, Bytes) {
-  let (reader, writer) = @pipe.pipe()
+  let (reader, writer) = @process.read_from_process()
   defer reader.close()
   let mut status = -1
   let bytes = @async.with_timeout(30000, () => {
@@ -515,11 +515,7 @@ async fn flush(config : Config, record : Record) -> Unit {
 
 ///|
 fn header(request : @http.Request, name : String) -> String {
-  request.headers
-  .iter()
-  .find_first(pair => pair.0.to_lower() == name)
-  .map(pair => pair.1)
-  .unwrap_or("")
+  request.headers.get(name).unwrap_or("")
 }
 
 ///|

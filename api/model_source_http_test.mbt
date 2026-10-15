@@ -6,10 +6,7 @@ async test "operator model-source proxy authenticates adapter and rejects anonym
   @async.with_task_group <| group => {
     group.spawn_bg(no_wait=true, allow_failure=true) <| () => {
       adapter.run_forever(allow_failure=true) <| ((request, body, connection) => {
-        saw_authority[0] = request.headers
-          .iter()
-          .find_first(entry => entry.0.to_lower() == "authorization")
-          .map(entry => entry.1) ==
+        saw_authority[0] = request.headers.get("authorization") ==
           Some("Bearer model-source-adapter-test-token-more-than-32-bytes")
         assert_eq(request.path, "/internal/v1/modelscope/search")
         assert_true(body.read_all().text().contains("MiniCPM"))

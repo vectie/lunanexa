@@ -50,10 +50,6 @@ fn request_telemetry_chart(state : ConsoleState) -> @rabbita.Html {
   @html.figure(class="obs-figure obs-request-figure", [
     @html.div(class="obs-figure-heading", [
       @html.div([
-        @html.p(
-          class="eyebrow",
-          observability_localized(locale, "Current telemetry", "当前遥测"),
-        ),
         @html.h3(
           observability_localized(
             locale, "Aggregate request snapshot", "请求聚合快照",

@@ -24,7 +24,7 @@ fn offline_generation_packet(
     packet.template_id == template.template_id &&
     packet.template_version == template.version &&
     packet.template_sha256 == manifest.sha256 &&
-    packet.state == @contractdoc.GenerationRequested &&
+    packet.state == GenerationRequested &&
     order.agreement_ref.map_or(true, id => id == packet.packet_id)
   })
   // An explicit old binding is never replaced; an unbound order must have
@@ -124,7 +124,7 @@ async fn ApiService::offline_generation_plan(
   }
   let docx_replacements : Array[Json] = []
   let xlsx_replacements : Array[Json] = []
-  if request.kind == @offline.QuoteScheduleXlsx {
+  if request.kind == QuoteScheduleXlsx {
     guard template.template_id == "offline-quote-v1" && template.version == "1" else {
       return api_error(
         409, "UnsupportedQuoteTemplate", "quote template has no approved cell binding",
@@ -164,7 +164,7 @@ async fn ApiService::offline_generation_plan(
       })
     }
   }
-  if request.kind != @offline.QuoteScheduleXlsx && detailed is Some(input) {
+  if request.kind != QuoteScheduleXlsx && detailed is Some(input) {
     guard input.markers.length() > 0 &&
       input.markers.length() <= 512 &&
       self.contract_document_store is Some(documents) &&
@@ -198,9 +198,9 @@ async fn ApiService::offline_generation_plan(
       })
     }
   }
-  let xlsx = request.kind == @offline.QuoteScheduleXlsx
+  let xlsx = request.kind == QuoteScheduleXlsx
   let source_suffix = if xlsx { "xlsx" } else { "docx" }
-  let output_suffix = if request.kind == @offline.PrintReadyContractPdf {
+  let output_suffix = if request.kind == PrintReadyContractPdf {
     "pdf"
   } else {
     source_suffix

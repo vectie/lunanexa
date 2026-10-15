@@ -93,7 +93,7 @@ async test "actual saved registry export edit successor import review and Candid
   let request : @contracts.ModelRecord = @json.from_json(
     @json.parse(request_text),
   )
-  assert_eq(request.state, @contracts.Candidate)
+  assert_eq(request.state, Candidate)
   assert_eq(request.version, "v2")
   assert_eq(request.minimum_memory_mib, 16384)
   assert_eq(request.artifact.size_bytes, 9007199254740993L)

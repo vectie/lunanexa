@@ -77,7 +77,7 @@ async fn exchange(
   path : String,
   verb : @http.RequestMethod,
   body : Bytes,
-  extra? : Map[String, String] = {},
+  extra? : @http.Headers = Map([]),
   maximum? : Int = 8388608,
 ) -> (Int, Bytes) {
   @async.with_timeout(30000, () => {

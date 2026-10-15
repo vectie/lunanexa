@@ -1,4 +1,18 @@
 ///|
+test "missing focused user does not expose another user's resource choices" {
+  let base = demo_state()
+  let page = render({
+    ..base,
+    route: Leases,
+    access_package_context: Some(("removed-user", "removed-org")),
+  })
+  assert_true(page.contains("Access package unavailable"))
+  for lease in base.resource_delivery.leases {
+    assert_false(page.contains(lease.label))
+  }
+}
+
+///|
 test "resource chooser hides memory-pressured and unmeasured Sparks" {
   let ready = {
     ..demo_state().nodes[0],
@@ -28,24 +42,18 @@ test "resource chooser hides memory-pressured and unmeasured Sparks" {
     resource_node_selectable({ ..ready, free_memory_mib: 60000, }, [], false),
   )
   assert_eq(
-    undertaking_node_unavailable_reason(@i18n.Locale::ChineseSimplified, {
+    undertaking_node_unavailable_reason(ChineseSimplified, {
       ..ready,
       usage_pool: "trial",
     }),
     "非企业专属池",
   )
   assert_eq(
-    undertaking_allocation_status(
-      @i18n.Locale::ChineseSimplified,
-      "OrderClosed",
-    ),
+    undertaking_allocation_status(ChineseSimplified, "OrderClosed"),
     "订单已关闭，需重新下单",
   )
   assert_eq(
-    undertaking_allocation_status(
-      @i18n.Locale::ChineseSimplified,
-      "OrderTermMismatch",
-    ),
+    undertaking_allocation_status(ChineseSimplified, "OrderTermMismatch"),
     "订单授权截止早于已签租期结束；需重新下单",
   )
 }

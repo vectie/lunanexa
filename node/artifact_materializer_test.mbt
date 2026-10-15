@@ -88,13 +88,8 @@ fn materialization_assignment() -> @contracts.DesiredAssignment {
 }
 
 ///|
-fn request_header(headers : Map[String, String], name : String) -> String? {
-  for key, value in headers {
-    if key.to_lower() == name.to_lower() {
-      return Some(value)
-    }
-  }
-  None
+fn request_header(headers : @http.Headers, name : String) -> String? {
+  headers.get(name)
 }
 
 ///|

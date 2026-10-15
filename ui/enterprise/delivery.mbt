@@ -22,12 +22,59 @@ pub(all) struct ExternalModelServiceView {
   state : String
   can_stop : Bool
   ready : Bool
-} derive(Eq, FromJson)
+  context_window_tokens : Int?
+} derive(Eq)
 
 ///|
-fn public_maas_chat_endpoint() -> String {
+/// Accept both nullable JSON metadata and the native controller's optional
+/// value encoding. Older controllers omit the field entirely.
+pub impl @json.FromJson for ExternalModelServiceView with fn from_json(
+  value,
+  path,
+) {
+  guard value
+    is {
+      "model_alias": model_alias,
+      "state": state,
+      "can_stop": can_stop,
+      "ready": ready,
+      ..
+    } else {
+    raise @json.JsonDecodeError((path, "expected external model service"))
+  }
+  let context_window_tokens : Int? = match value {
+    { "context_window_tokens": Array([limit]), .. }
+    | { "context_window_tokens": Number(_, ..) as limit, .. } =>
+      Some(@json.from_json(limit, path=path.add_key("context_window_tokens")))
+    { "context_window_tokens": Array([]) | Null, .. } => None
+    { "context_window_tokens": _, .. } =>
+      raise @json.JsonDecodeError(
+        (path.add_key("context_window_tokens"), "expected context token limit"),
+      )
+    _ => None
+  }
+  {
+    model_alias: @json.from_json(model_alias, path=path.add_key("model_alias")),
+    state: @json.from_json(state, path=path.add_key("state")),
+    can_stop: @json.from_json(can_stop, path=path.add_key("can_stop")),
+    ready: @json.from_json(ready, path=path.add_key("ready")),
+    context_window_tokens,
+  }
+}
+
+///|
+fn public_maas_base_url() -> String {
   let origin = browser_public_origin()
-  "\{origin}/user/v1/chat/completions"
+  "\{origin}/user/v1"
+}
+
+///|
+fn model_context_label(tokens : Int?) -> String {
+  match tokens {
+    Some(value) if value % 1024 == 0 => "\{value / 1024}K"
+    Some(value) => value.to_string()
+    None => "—"
+  }
 }
 
 ///|
@@ -92,6 +139,7 @@ pub(all) struct DeliveryPanel {
   company_workspace : CompanyWorkspaceStatus?
   reservation_id : String
   template_choice : String
+  template_selections : Map[String, String]
   idempotency_key : String
   loading : Bool
   loaded : Bool
@@ -132,6 +180,7 @@ pub fn default_delivery_panel() -> DeliveryPanel {
     company_workspace: None,
     reservation_id: "",
     template_choice: "",
+    template_selections: {},
     idempotency_key: "",
     loading: false,
     loaded: false,
@@ -218,14 +267,23 @@ pub fn DeliveryPanel::update(
         error: None,
         api_access: None,
       }
-    SelectTemplate(value) =>
+    SelectTemplate(value) => {
+      let selections = self.template_selections.copy()
+      if self.options.templates
+        .iter()
+        .find_first(option => delivery_template_choice(option) == value)
+        is Some(option) {
+        selections[option.kind] = value
+      }
       {
         ..self,
         template_choice: value,
+        template_selections: selections,
         idempotency_key: "",
         error: None,
         api_access: None,
       }
+    }
     RequestStop(id) => { ..self, stop_confirmation: Some(id), }
     RequestStopExternal => { ..self, external_stop_confirmation: true, }
     RequestStartExternal => { ..self, external_start_confirmation: true, }
@@ -236,19 +294,34 @@ pub fn DeliveryPanel::update(
         external_stop_confirmation: false,
         external_start_confirmation: false,
       }
-    Refresh
-    | ActivateCompanyWorkspace
-    | Retry(_)
-    | ConfirmStop(_)
-    | ConfirmStopExternal
-    | ConfirmStartExternal =>
+    ConfirmStop(_) | ConfirmStopExternal | ConfirmStartExternal =>
+      {
+        ..self,
+        loading: true,
+        error: None,
+        stop_confirmation: None,
+        external_stop_confirmation: false,
+        external_start_confirmation: false,
+        poll_generation: self.poll_generation + 1L,
+      }
+    Refresh | ActivateCompanyWorkspace | Retry(_) =>
       {
         ..self,
         loading: true,
         error: None,
         poll_generation: self.poll_generation + 1L,
       }
-    OpenWorkspace(_) => self
+    OpenWorkspace(id) =>
+      if delivery_launch_template(self, id) is Some(_) {
+        {
+          ..self,
+          loading: true,
+          error: None,
+          poll_generation: self.poll_generation + 1L,
+        }
+      } else {
+        self
+      }
     IssueApiAccess(_) =>
       {
         ..self,
@@ -349,11 +422,11 @@ fn delivery_stage_guidance(
 }
 
 ///|
-fn delivery_kind_label(kind : String) -> String {
+fn delivery_kind_label(kind : String, locale : @i18n.Locale) -> String {
   match kind {
-    "Workspace" => "PaaS"
-    "ModelApi" => "MaaS"
-    "GpuContainer" => "IaaS"
+    "Workspace" => copy(locale, "Workspace", "工作区")
+    "ModelApi" => copy(locale, "Model API", "模型 API")
+    "GpuContainer" => copy(locale, "GPU container", "GPU 容器")
     _ => kind
   }
 }
@@ -415,19 +488,9 @@ fn delivery_overview(
     [
       @html.div(class="section-heading", [
         @html.div([
-          @html.p(
-            class="eyebrow",
-            copy(locale, "Your services", "您的服务"),
-          ),
           @html.h2(
             id="service-status-title",
             copy(locale, "Service status", "服务状态"),
-          ),
-          @html.p(
-            copy(
-              locale, "Status for your selected organization. Open a service for progress and next steps.",
-              "显示当前所选组织的服务状态；打开服务可查看进度和下一步。",
-            ),
           ),
         ]),
         @html.button(
@@ -451,7 +514,7 @@ fn delivery_overview(
             locale, "Checking service status…", "正在查询服务状态…",
           ),
         )
-      } else if panel.operations.is_empty() {
+      } else if panel.operations.is_empty() && panel.external_model is None {
         @html.p(
           copy(
             locale, "No dedicated service has been started for this organization.",
@@ -460,10 +523,50 @@ fn delivery_overview(
         )
       } else {
         @html.div(class="service-status-content", [
+          match panel.external_model {
+            Some(service) =>
+              @html.div(class="service-status-current", [
+                @html.strong(service.model_alias),
+                @html.span(
+                  attrs=@html.Attrs::build().role("status"),
+                  if service.ready {
+                    copy(locale, "API ready", "API 已就绪")
+                  } else {
+                    match service.state {
+                      "Stopped" => copy(locale, "Stopped", "已停止")
+                      "Running" =>
+                        copy(
+                          locale, "Starting; inference is not ready yet", "启动中 · 推理尚未就绪",
+                        )
+                      "Partial" =>
+                        copy(
+                          locale, "Operator attention required", "需管理员处理",
+                        )
+                      _ =>
+                        copy(locale, "Status unavailable", "状态暂不可用")
+                    }
+                  },
+                ),
+                @html.button(
+                  type_="button",
+                  class="primary-button",
+                  on_click=command(emit, Navigate(Models)),
+                  copy(locale, "Open model API", "打开模型 API"),
+                ),
+              ])
+            None => @html.nothing
+          },
           @html.dl(class="service-status-counts", [
             @html.div([
               @html.dt(copy(locale, "Ready", "可使用")),
-              @html.dd(ready.to_string()),
+              @html.dd(
+                (ready +
+                (if panel.external_model.map_or(false, service => service.ready) {
+                  1
+                } else {
+                  0
+                })).to_string(),
+              ),
             ]),
             @html.div([
               @html.dt(copy(locale, "In progress", "进行中")),
@@ -478,7 +581,7 @@ fn delivery_overview(
             Some(operation) =>
               @html.div(class="service-status-current", [
                 @html.strong(
-                  "\{delivery_kind_label(operation.kind)} · \{operation.template_id}",
+                  "\{delivery_kind_label(operation.kind, locale)} · \{operation.template_id}",
                 ),
                 @html.span(
                   attrs=@html.Attrs::build().role("status").aria_live("polite"),
@@ -512,6 +615,7 @@ fn delivery_overview(
                   copy(locale, "Open service details", "打开服务详情"),
                 ),
               ])
+            None if panel.external_model is Some(_) => @html.nothing
             None =>
               @html.p(
                 copy(
@@ -548,33 +652,179 @@ fn delivery_panel_view(
   let selected_kind = selected_delivery_template(panel).map_or(false, option => {
     option.kind == kind
   })
-  @html.section(class="workflow-panel", [
-    @html.div(class="section-heading", [
-      @html.h2(
-        match kind {
-          "GpuContainer" =>
-            copy(locale, "GPU container deliveries", "IaaS · GPU 容器交付")
-          "Workspace" =>
-            copy(
-              locale, "Dedicated application workspaces", "PaaS · 专属应用工作区",
-            )
-          _ => copy(locale, "Dedicated model APIs", "MaaS · 专属模型 API")
-        },
+  let setup = if panel.company_workspace.map_or(false, workspace => {
+      workspace.status == "NeedsActivation"
+    }) {
+    @html.nothing
+  } else if panel.error is Some(_) && panel.options.reservations.is_empty() {
+    @html.nothing
+  } else if panel.loaded && panel.options.reservations.is_empty() {
+    @html.div(class="empty", [
+      @html.p(
+        copy(
+          locale, "No active exclusive resource authorization. Ask your administrator to authorize resources, or complete your machine order.",
+          "暂无有效的独占资源授权。请管理员授权资源，或完成机器订单。",
+        ),
       ),
       @html.button(
         type_="button",
         class="quiet-button",
-        disabled=panel.loading,
-        on_click=command(emit, Delivery(Refresh)),
+        on_click=command(emit, Navigate(OfflineCommerce)),
+        copy(locale, "Rent machines", "租用机器"),
+      ),
+    ])
+  } else if panel.loaded && templates.is_empty() {
+    @html.p(
+      class="empty",
+      copy(
+        locale, "No published delivery template is available yet.", "尚无已发布的交付模板。",
+      ),
+    )
+  } else if panel.loaded {
+    @html.div(class="account-form", [
+      @html.div(class="field", [
+        @html.label(
+          for_="delivery-template",
+          copy(locale, "Service template", "服务模板"),
+        ),
+        @html.select(
+          id="delivery-template",
+          disabled=panel.loading,
+          on_change=text_command(emit, value => Delivery(SelectTemplate(value))),
+          [
+            @html.option(
+              value="",
+              selected=panel.template_choice == "",
+              copy(locale, "Choose a template", "选择模板"),
+            ),
+            ..if panel.template_choice != "" &&
+              !templates.any(option => {
+                delivery_template_choice(option) == panel.template_choice
+              }) {
+              [
+                @html.option(
+                  value=panel.template_choice,
+                  selected=true,
+                  disabled=true,
+                  copy(
+                    locale, "Selected template unavailable — choose again", "原选模板不可用，请重新选择",
+                  ),
+                ),
+              ]
+            } else {
+              []
+            },
+            ..templates.map(option => {
+              @html.option(
+                value=delivery_template_choice(option),
+                selected=panel.template_choice ==
+                  delivery_template_choice(option),
+                "\{delivery_kind_label(option.kind, locale)} · \{option.label} · \{option.template_version}",
+              )
+            }),
+          ],
+        ),
+      ]),
+      {
+        let resource_picker = @html.div(class="field", [
+          @html.label(
+            for_="delivery-reservation",
+            copy(locale, "Authorized resources", "已授权资源"),
+          ),
+          @html.select(
+            id="delivery-reservation",
+            disabled=panel.loading,
+            on_change=text_command(emit, value => {
+              Delivery(SelectReservation(value))
+            }),
+            [
+              @html.option(
+                value="",
+                selected=panel.reservation_id == "",
+                copy(locale, "Choose resources", "选择资源"),
+              ),
+              ..if panel.reservation_id != "" &&
+                !panel.options.reservations.any(option => {
+                  option.reservation_id == panel.reservation_id
+                }) {
+                [
+                  @html.option(
+                    value=panel.reservation_id,
+                    selected=true,
+                    disabled=true,
+                    copy(
+                      locale, "Selected resources unavailable — choose again",
+                      "原选资源不可用，请重新选择",
+                    ),
+                  ),
+                ]
+              } else {
+                []
+              },
+              ..panel.options.reservations.map(option => {
+                @html.option(
+                  value=option.reservation_id,
+                  selected=panel.reservation_id == option.reservation_id,
+                  "\{option.label} · \{option.node_count} " +
+                  copy(locale, "nodes", "台") +
+                  " · " +
+                  @contractdoc.format_unix_ms_beijing(option.expires_at_ms),
+                )
+              }),
+            ],
+          ),
+        ])
+        if panel.options.reservations is [reservation] &&
+          panel.reservation_id == reservation.reservation_id {
+          @controls.advanced(
+            copy(
+              locale, "Advanced: resource selection", "高级：资源选择",
+            ),
+            [resource_picker],
+          )
+        } else {
+          resource_picker
+        }
+      },
+      @html.button(
+        type_="button",
+        class="primary-button",
+        disabled=!selected_kind || !delivery_start_available(panel),
+        on_click=command(emit, Delivery(Start)),
+        copy(locale, "Start service", "启动服务"),
+      ),
+    ])
+  } else {
+    @html.p(
+      class="empty",
+      copy(
+        locale, "Refresh to load your authorized services.", "刷新以加载已授权服务。",
+      ),
+    )
+  }
+  @html.section(class="workflow-panel", [
+    @html.style_tag(
+      ".delivery-new-service{margin-top:1rem}.delivery-new-service>summary,.record-main details>summary{min-height:44px;padding:.7rem 0;cursor:pointer}.delivery-new-service>summary:focus-visible,.record-main details>summary:focus-visible{outline:2px solid var(--mint);outline-offset:2px}",
+    ),
+    @html.div(class="section-heading", [
+      @html.h2(
+        match kind {
+          "GpuContainer" =>
+            copy(locale, "GPU container deliveries", "GPU 容器交付")
+          "Workspace" =>
+            copy(
+              locale, "Dedicated application workspaces", "专属应用工作区",
+            )
+          _ => copy(locale, "Dedicated model APIs", "专属模型 API")
+        },
+      ),
+      @controls.icon_button(
+        Refresh,
         copy(locale, "Refresh status", "刷新状态"),
+        command(emit, Delivery(Refresh)),
+        busy=panel.loading,
       ),
     ]),
-    @html.p(
-      copy(
-        locale, "Choose an authorized resource allocation and a published template. Your files are retained when a service stops.",
-        "选择已授权资源和已发布模板。停止服务不会删除您的工作文件。",
-      ),
-    ),
     match panel.company_workspace {
       Some(workspace) if workspace.status == "NeedsActivation" =>
         @html.section(class="record-card", [
@@ -583,8 +833,8 @@ fn delivery_panel_view(
           ),
           @html.p(
             copy(
-              locale, "Your company already has approved machines. Activate your own bounded workspace before starting an application or model API; colleagues' files remain separate.",
-              "企业机器已下发。先开通您自己的限期工作区，再启动应用或模型 API；同事的文件和聊天不会共用。",
+              locale, "Activate your personal workspace to use your company's machines.",
+              "开通个人工作区后即可使用企业机器。",
             ),
           ),
           @html.button(
@@ -681,7 +931,11 @@ fn delivery_panel_view(
         Some(service) =>
           @html.article(class="record-card", [
             @html.div(class="record-main", [
-              @html.h3("企业共享模型 · " + service.model_alias),
+              @html.h3(
+                copy(
+                  locale, "Public API (OpenAI compatible)", "公网 API（OpenAI 兼容）",
+                ),
+              ),
               @html.p(
                 attrs=@html.Attrs::build().role("status").aria_live("polite"),
                 match service.state {
@@ -715,26 +969,78 @@ fn delivery_panel_view(
                     )
                 },
               ),
-              @html.p(
-                copy(
-                  locale, "Company-shared model. Stopping it disconnects every member; personal WebIDE files are unaffected.",
-                  "企业共享模型。停止后所有成员将无法调用；个人 WebIDE 工作文件不受影响。",
-                ),
+              @html.div(
+                style=[
+                  "display:flex", "align-items:center", "gap:.5rem", "flex-wrap:wrap",
+                ],
+                [
+                  @html.p(
+                    class="mono",
+                    style=["overflow-wrap:anywhere"],
+                    public_maas_base_url(),
+                  ),
+                  @controls.icon_button(
+                    Copy,
+                    copy(locale, "Copy API endpoint", "复制 API 接口地址"),
+                    command(emit, CopyDetail(public_maas_base_url())),
+                  ),
+                ],
               ),
-              @html.p(class="mono", "POST " + public_maas_chat_endpoint()),
-              @html.p(
-                copy(
-                  locale, "Use an API key from this enterprise. The endpoint uses this site's HTTPS port (443 or 8443).",
-                  "使用本企业的 API 密钥；接口沿用当前网站的 HTTPS 端口（443 或 8443）。",
-                ),
+              @html.p(class="mono", "Authorization: Bearer <API_KEY>"),
+              @html.div(
+                style=[
+                  "display:flex", "align-items:center", "gap:.5rem", "flex-wrap:wrap",
+                ],
+                [
+                  @html.p(
+                    class="mono",
+                    copy(locale, "Model: ", "模型名：") +
+                    service.model_alias +
+                    " · " +
+                    copy(locale, "Context: ", "上下文：") +
+                    model_context_label(service.context_window_tokens),
+                  ),
+                  @controls.icon_button(
+                    Copy,
+                    copy(locale, "Copy model name", "复制模型名"),
+                    command(emit, CopyDetail(service.model_alias)),
+                  ),
+                ],
               ),
+              @controls.advanced(copy(locale, "Call example", "调用示例"), [
+                @html.pre(
+                  class="mono",
+                  style=["white-space:pre-wrap", "overflow-wrap:anywhere"],
+                  model_api_example(public_maas_base_url(), service.model_alias),
+                ),
+                @controls.icon_button(
+                  Copy,
+                  copy(locale, "Copy call example", "复制调用示例"),
+                  command(
+                    emit,
+                    CopyDetail(
+                      model_api_example(
+                        public_maas_base_url(),
+                        service.model_alias,
+                      ),
+                    ),
+                  ),
+                ),
+              ]),
             ]),
             @html.div(class="record-actions", [
               @html.button(
                 type_="button",
+                class="primary-button",
+                disabled=panel.loading || !service.ready,
+                on_click=command(emit, CreateModelApiKey(service.model_alias)),
+                copy(locale, "Create API key", "创建 API 密钥"),
+              ),
+              @html.button(
+                type_="button",
                 class="quiet-button",
-                on_click=command(emit, CopyDetail(public_maas_chat_endpoint())),
-                copy(locale, "Copy API endpoint", "复制 API 接口地址"),
+                on_click=command(emit, Navigate(AccountAccess)),
+                copy(locale, "Manage API keys", "管理 API 密钥"),
               ),
               if service.can_stop &&
                 (service.state == "Running" || service.state == "Partial") {
@@ -766,113 +1072,20 @@ fn delivery_panel_view(
     } else {
       @html.nothing
     },
-    if panel.error is Some(_) && panel.options.reservations.is_empty() {
-      @html.nothing
-    } else if panel.loaded && panel.options.reservations.is_empty() {
-      @html.div(class="empty", [
-        @html.p(
-          copy(
-            locale, "No active exclusive resource authorization. Ask your administrator to authorize resources, or complete your machine order.",
-            "暂无有效的独占资源授权。请管理员授权资源，或完成机器订单。",
-          ),
-        ),
-        @html.button(
-          type_="button",
-          class="quiet-button",
-          on_click=command(emit, Navigate(LeaseRequests)),
-          copy(locale, "Request resources", "申请资源"),
-        ),
-      ])
-    } else if panel.loaded && templates.is_empty() {
-      @html.p(
-        class="empty",
-        copy(
-          locale, "No published delivery template is available yet.", "尚无已发布的交付模板。",
-        ),
-      )
-    } else if panel.loaded {
-      @html.div(class="account-form", [
-        @html.div(class="field", [
-          @html.label(
-            for_="delivery-reservation",
-            copy(locale, "Authorized resources", "已授权资源"),
-          ),
-          @html.select(
-            id="delivery-reservation",
-            disabled=panel.loading,
-            on_change=text_command(emit, value => {
-              Delivery(SelectReservation(value))
-            }),
-            [
-              @html.option(
-                value="",
-                selected=panel.reservation_id == "",
-                copy(locale, "Choose resources", "选择资源"),
-              ),
-              ..panel.options.reservations.map(option => {
-                @html.option(
-                  value=option.reservation_id,
-                  selected=panel.reservation_id == option.reservation_id,
-                  "\{option.label} · \{option.node_count} " +
-                  copy(locale, "nodes", "台") +
-                  " · " +
-                  @contractdoc.format_unix_ms_beijing(option.expires_at_ms),
-                )
-              }),
-            ],
-          ),
-        ]),
-        @html.div(class="field", [
-          @html.label(
-            for_="delivery-template",
-            copy(locale, "Service template", "服务模板"),
-          ),
-          @html.select(
-            id="delivery-template",
-            disabled=panel.loading,
-            on_change=text_command(emit, value => {
-              Delivery(SelectTemplate(value))
-            }),
-            [
-              @html.option(
-                value="",
-                selected=panel.template_choice == "",
-                copy(locale, "Choose a template", "选择模板"),
-              ),
-              ..templates.map(option => {
-                @html.option(
-                  value=delivery_template_choice(option),
-                  selected=panel.template_choice ==
-                    delivery_template_choice(option),
-                  "\{delivery_kind_label(option.kind)} · \{option.label} · \{option.template_version}",
-                )
-              }),
-            ],
-          ),
-        ]),
-        @html.button(
-          type_="button",
-          class="primary-button",
-          disabled=!selected_kind || !delivery_start_available(panel),
-          on_click=command(emit, Delivery(Start)),
-          copy(locale, "Start service", "启动服务"),
-        ),
-      ])
-    } else {
-      @html.p(
-        class="empty",
-        copy(
-          locale, "Refresh to load your authorized services.", "刷新以加载已授权服务。",
-        ),
-      )
-    },
     @html.div(
       class="record-list",
       operations.map(operation => {
         @html.article(class="record-card", [
           @html.div(class="record-main", [
             @html.h3(
-              "\{delivery_kind_label(operation.kind)} · \{operation.template_id} · \{operation.template_version}",
+              panel.options.templates
+              .iter()
+              .find_first(option => {
+                option.kind == operation.kind &&
+                option.template_id == operation.template_id &&
+                option.template_version == operation.template_version
+              })
+              .map_or(operation.template_id, option => option.label),
             ),
             @html.p(
               attrs=@html.Attrs::build().role("status").aria_live("polite"),
@@ -883,7 +1096,7 @@ fn delivery_panel_view(
                 delivery_stage_label(operation.stage, locale)
               },
             ),
-            if delivery_stage_guidance(operation, locale) != "" {
+            if operation.stage == "Failed" {
               @html.p(
                 class="delivery-next-step",
                 delivery_stage_guidance(operation, locale),
@@ -903,9 +1116,19 @@ fn delivery_panel_view(
                 copy(locale, "exclusive nodes", "台独占节点")
               },
             ),
-            @html.p(
-              copy(locale, "Project: ", "项目：") + operation.project_id,
-            ),
+            @html.details([
+              @html.summary(copy(locale, "Service details", "服务详情")),
+              @html.p(
+                copy(locale, "Project: ", "项目：") + operation.project_id,
+              ),
+              @html.p(
+                copy(locale, "Operation: ", "交付记录：") +
+                operation.operation_id,
+              ),
+              @html.p(
+                "\{operation.template_id} · \{operation.template_version}",
+              ),
+            ]),
             @html.p(
               copy(locale, "Expires: ", "到期时间：") +
               @contractdoc.format_unix_ms_beijing(operation.expires_at_ms),
@@ -1023,6 +1246,24 @@ fn delivery_panel_view(
         ])
       }),
     ),
+    if (
+        kind == "ModelApi" &&
+        panel.external_model.map_or(false, model => model.ready)
+      ) ||
+      operations.any(operation => {
+        operation.stage != "Stopped" &&
+        operation.stage != "Expired" &&
+        operation.stage != "Revoked"
+      }) {
+      @html.details(class="delivery-new-service", [
+        @html.summary(
+          copy(locale, "Start another service", "启动其他服务"),
+        ),
+        setup,
+      ])
+    } else {
+      setup
+    },
     match panel.stop_confirmation {
       Some(id) =>
         @html.div(class="request-boundary", [

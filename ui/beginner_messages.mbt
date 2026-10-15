@@ -19,8 +19,7 @@ fn beginner_message(locale : @i18n.Locale, message : BeginnerMessage) -> String 
       )
     TrialBoundary =>
       (
-        "Conversion means joining an active non-trial developer organization, not payment or revenue. Aggregate counts contain no prompts or personal content.",
-        "转正指加入有效的非试用开发者组织，不代表付款或收入。聚合统计不包含提示词或个人内容。",
+        "Converted: active company membership, not payment or revenue.", "转正：已加入有效企业，不代表付款或收入。",
       )
     AnnouncementTitle => ("Publish platform announcement", "发布平台公告")
     AnnouncementBoundary =>

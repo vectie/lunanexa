@@ -14,13 +14,6 @@ fn deployment_placement_graph(state : ConsoleState) -> @rabbita.Html {
               "部署放置关系",
             ),
           ),
-          @html.p(
-            localized(
-              state.locale,
-              "Services are connected to nodes only when the node reports the same active deployment ID.",
-              "仅当节点上报相同的活动部署 ID 时，服务才会连接到该节点。",
-            ),
-          ),
         ]),
         @html.span(
           class="placement-visual-count",
@@ -318,13 +311,6 @@ fn alert_impact_graph(state : ConsoleState) -> @rabbita.Html {
           ),
           @html.h2(
             localized(state.locale, "Alert impact map", "告警影响图"),
-          ),
-          @html.p(
-            localized(
-              state.locale,
-              "Notification node references are resolved against the current node inventory.",
-              "通知中的节点引用会与当前节点清单进行匹配。",
-            ),
           ),
         ]),
         @html.span(

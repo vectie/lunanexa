@@ -32,12 +32,7 @@ fn copy_detail(
   value : String,
   label : String,
 ) -> @rabbita.Html {
-  @html.button(
-    type_="button",
-    class="quiet-button",
-    on_click=command(emit, CopyAccessDetail(value)),
-    label,
-  )
+  @controls.icon_button(Copy, label, command(emit, CopyAccessDetail(value)))
 }
 
 ///|
@@ -47,8 +42,8 @@ fn next_steps(
   machine : @nodelease.CustomerExclusiveMachineView,
   access : @credential.CredentialHandoffRedemption,
 ) -> @rabbita.Html {
-  @html.section(class="machine-next-steps", [
-    @html.h4(machine_message(state.locale, NextSteps)),
+  @html.details(class="machine-next-steps", [
+    @html.summary(machine_message(state.locale, NextSteps)),
     @html.p(machine_message(state.locale, VerifyFingerprint)),
     @html.p(machine_message(state.locale, TunnelHelp)),
     match tunnel_command(machine.username, access.host_alias, access.ssh_port) {

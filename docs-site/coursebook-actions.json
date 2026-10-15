@@ -105,8 +105,8 @@
       "message": "MyMachine",
       "renderer": "enterprise_copy",
       "route": "MachineAccess",
-      "en": "My machine",
-      "zh": "我的机器"
+      "en": "IaaS · Compute",
+      "zh": "IaaS · 算力实例"
     },
     {
       "page_ids": [
@@ -168,7 +168,7 @@
       "catalog": "ui/enterprise/copy_catalog.mbt",
       "message": "TryAPromptInTheWorkbench",
       "renderer": "enterprise_copy",
-      "binding": "href=\"/workbench/?trial=1\"",
+      "binding": "href=\"/user/workbench/?trial=1\"",
       "en": "Try a prompt in the workbench",
       "zh": "先在工作台试一句"
     },
@@ -181,7 +181,7 @@
       "catalog": "ui/enterprise/copy_catalog.mbt",
       "message": "CopyFirstCallExample",
       "renderer": "enterprise_copy",
-      "binding": "on_click=command(emit, CopyFirstCallExample)",
+      "binding": "command(emit, CopyFirstCallExample)",
       "en": "Copy first-call example",
       "zh": "复制首次调用示例"
     },

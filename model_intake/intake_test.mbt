@@ -30,7 +30,7 @@ test "CSV intake retains explicit context exact bytes and Candidate state" {
   assert_eq(m.artifact.size_bytes.to_string(), "9007199254740993")
   assert_eq(m.provenance, "合成, \"declared\"\nsecond line")
   assert_eq(m.compatible_architectures, ["aarch64", "x86_64"])
-  assert_eq(m.state, @contracts.Candidate)
+  assert_eq(m.state, Candidate)
   assert_false(d.to_json().stringify().contains("excluded"))
   assert_eq(
     @model_intake.import_draft(d.to_json().stringify()).to_json(),
@@ -188,21 +188,17 @@ test "review distinguishes new equal metadata and conflicts without resetting st
   let m = d.models[0]
   let existing = {
     ..m,
-    state: @contracts.Approved,
+    state: Approved,
     compatible_architectures: ["x86_64", "aarch64"],
   }
   let same = @model_intake.review(d, [existing])
   assert_eq(same.already_registered_count, 1)
-  assert_eq(same.rows[0].registered_state, Some(@contracts.Approved))
+  assert_eq(same.rows[0].registered_state, Some(Approved))
   assert_eq(same.rows[0].differences.length(), 0)
   rejects(() => {
     @model_intake.registration_request(d, [existing], "model-a", "v1")
   })
-  let conflicting = {
-    ..existing,
-    state: @contracts.Revoked,
-    minimum_memory_mib: 16384,
-  }
+  let conflicting = { ..existing, state: Revoked, minimum_memory_mib: 16384, }
   let result = @model_intake.review(d, [conflicting])
   assert_eq(result.conflict_count, 1)
   assert_eq(result.rows[0].differences.length(), 1)

@@ -63,8 +63,8 @@ async fn limited(reader : &@io.Reader, limit : Int) -> Bytes {
 }
 
 ///|
-fn Provider::headers(self : Provider) -> Map[String, String] {
-  let headers = {
+fn Provider::headers(self : Provider) -> @http.Headers {
+  let headers : @http.Headers = {
     "content-type": "application/x-www-form-urlencoded",
     "accept": "application/json",
   }
@@ -80,13 +80,20 @@ async fn Provider::request(
   verb : @http.RequestMethod,
   path : String,
   body : String?,
+  binary? : Bytes,
+  content_type? : String = "application/x-www-form-urlencoded",
 ) -> (Int, Json) {
   @async.with_timeout(self.timeout_ms, () => {
     let client = @http.Client(self.origin)
     defer client.close()
-    client.request(verb, path, extra_headers=self.headers())
+    let headers = self.headers()
+    headers["content-type"] = content_type
+    client.request(verb, path, extra_headers=headers)
     if body is Some(text) {
       client.write(text)
+    }
+    if binary is Some(bytes) {
+      client.write(bytes)
     }
     let response = client.end_request()
     // Do not follow redirects or expose provider bodies in errors.
@@ -152,7 +159,43 @@ pub async fn Provider::submit(
     request.form(),
   )
   checked.fields["model"] = self.profile.provider_model
-  let (code, value) = self.request(Post, "/v1/videos", Some(checked.form()))
+  let (code, value) = if checked.fields.get("input_reference") is Some(image) {
+    let boundary = "LunaNexaReference_" +
+      @crypto.bytes_to_hex_string(@crypto.sha256(@utf8.encode(checked.form())))
+    let body = Buffer()
+    let keys = checked.fields.keys().to_array()
+    keys.sort()
+    for key in keys {
+      body.write_bytes(
+        @utf8.encode(
+          "--" +
+          boundary +
+          "\r\nContent-Disposition: form-data; name=\"" +
+          key +
+          "\"",
+        ),
+      )
+      if key == "input_reference" {
+        body.write_bytes(
+          b"; filename=\"reference.png\"\r\nContent-Type: image/png\r\n\r\n",
+        )
+        body.write_bytes(reference_image(image))
+      } else {
+        body.write_bytes(@utf8.encode("\r\n\r\n" + checked.fields[key]))
+      }
+      body.write_bytes(b"\r\n")
+    }
+    body.write_bytes(@utf8.encode("--" + boundary + "--\r\n"))
+    self.request(
+      Post,
+      "/v1/videos",
+      None,
+      binary=body.to_bytes(),
+      content_type="multipart/form-data; boundary=" + boundary,
+    )
+  } else {
+    self.request(Post, "/v1/videos", Some(checked.form()))
+  }
   if code < 200 || code >= 300 {
     raise Unavailable
   }
@@ -213,12 +256,9 @@ pub async fn Provider::content(
     if response.code != 200 {
       raise ContentUnavailable
     }
-    let media_type = response.headers
-      .iter()
-      .filter(pair => pair.0.to_lower() == "content-type")
-      .to_array()
-    if media_type.length() != 1 ||
-      media_type[0].1.split(";").next() != Some("video/mp4") {
+    let media_type = response.headers.get("content-type")
+    guard media_type is Some(value) &&
+      value.split(";").next() == Some("video/mp4") else {
       raise InvalidResponse
     }
     let mut size = 0L

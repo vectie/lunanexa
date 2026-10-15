@@ -1,11 +1,6 @@
 ///|
-fn header_value(headers : Map[String, String], name : String) -> String? {
-  for key, value in headers {
-    if key.to_lower() == name.to_lower() {
-      return Some(value)
-    }
-  }
-  None
+fn header_value(headers : @http.Headers, name : String) -> String? {
+  headers.get(name)
 }
 
 ///|
@@ -32,7 +27,7 @@ fn diagnostic_headers(
   plan : @guide_monitor.GuideProbePlan,
   identity_secret : String,
   now_unix_ms : Int64,
-) -> Map[String, String] {
+) -> @http.Headers {
   let pathname = "/api/coursebook/admin/diagnostics"
   {
     "Accept": "application/json",
@@ -54,7 +49,7 @@ fn diagnostic_headers(
 async fn[T : FromJson] bounded_json_get(
   config : GuideProbeConfig,
   path : String,
-  headers : Map[String, String],
+  headers : @http.Headers,
 ) -> T {
   let read = async fn() {
     let (response, stream) = @http.get_stream(

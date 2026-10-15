@@ -1,0 +1,55 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/process",
+  "moonbitlang/core/env",
+}
+
+///|
+async fn main {
+  let root = @fs.realpath(".")
+  let target = @env.get_env_var("LUNANEXA_NATIVE_TARGET_DIR").unwrap_or(
+    root + "/_build",
+  )
+  let jobs = @env.get_env_var("LUNANEXA_NATIVE_JOBS").unwrap_or("2")
+  let common = [
+    "--target", "native", "--deny-warn", "--warn-list", "+73", "--target-dir", target,
+    "--jobs", jobs,
+  ]
+  let commands = [
+    ("CAPACITY_PLAN", "capacity-plan"),
+    ("SWEEP", "capacity-plan"),
+    ("DEPLOYMENT_REPORT", "deployment-report"),
+    ("MODEL_INTAKE", "model-intake"),
+    ("USAGE_REPORT", "usage-report"),
+  ]
+  let build = ["build", "--debug"] +
+    common +
+    [
+      "cmd/capacity-plan", "cmd/deployment-report", "cmd/model-intake", "cmd/usage-report",
+    ]
+  guard @process.run("moon", build) == 0 else {
+    fail("Native CLI build failed")
+  }
+  let build_root = @fs.realpath(target)
+  let evidence = @fs.tmpdir(prefix="lunanexa-native-test-")
+  let environment : Map[String, String] = Map([])
+  for (prefix, command) in commands {
+    let output = evidence + "/" + prefix
+    @fs.mkdir(output)
+    environment[prefix + "_FIXTURES"] = root + "/tests/fixtures"
+    environment[prefix + "_EVIDENCE"] = output
+    environment[prefix + "_EXE"] = build_root +
+      "/native/debug/build/vectie/lunanexa/cmd/" +
+      command +
+      "/" +
+      command +
+      ".exe"
+  }
+  let status = @process.run("moon", ["test"] + common, extra_env=environment)
+  guard status == 0 else {
+    fail("Native tests failed; CLI evidence retained at " + evidence)
+  }
+  @fs.rmdir(evidence, recursive=true)
+}

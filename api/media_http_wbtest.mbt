@@ -97,6 +97,8 @@ async fn exercise_media_api(
       maximum_fps: 24,
       maximum_steps: 50,
       sound_supported: true,
+      image_reference_supported: None,
+      image_reference_required: None,
     },
   }
   let private_keys = @access.AccessStore::open(

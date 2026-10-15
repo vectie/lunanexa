@@ -13,3 +13,7 @@ import {
   "moonbitlang/async/fs",
   "moonbitlang/x/crypto",
 } for "test"
+
+options(
+  link: { "native": { "cc-link-flags": "-pthread -ldl" } },
+)

@@ -50,7 +50,7 @@ fn oidc_transport_url(config : GatewayConfig, url : String) -> String raise {
 async fn oidc_get(
   config : GatewayConfig,
   url : String,
-  headers : Map[String, String],
+  headers : @http.Headers,
 ) -> (@http.Response, String) {
   let (origin, path) = endpoint_origin_and_path(
     oidc_transport_url(config, url),

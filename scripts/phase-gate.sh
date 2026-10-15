@@ -7,5 +7,5 @@ cd "$repo_root"
 moon info
 moon fmt
 moon check --target native --warn-list +73 --deny-warn
-moon test --target native --warn-list +73 --deny-warn
+moon run scripts/test-native.mbtx
 sh scripts/check-release.sh

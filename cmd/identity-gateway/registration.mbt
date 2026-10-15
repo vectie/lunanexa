@@ -74,10 +74,9 @@ fn registration_stage_failed(stage : String, detail : String) -> Unit {
 /// A registration failure the browser is allowed to distinguish.
 fn registration_failure_response(error : RegistrationError) -> (Int, String) {
   match error {
-    RegistrationError::EmailTaken => (409, "email-taken")
-    RegistrationError::PasswordRejected => (400, "password-rejected")
-    RegistrationError::RegistrationUnavailable =>
-      (503, "registration-unavailable")
+    EmailTaken => (409, "email-taken")
+    PasswordRejected => (400, "password-rejected")
+    RegistrationUnavailable => (503, "registration-unavailable")
   }
 }
 
@@ -168,7 +167,7 @@ async fn registration_admin_token(
     registration_stage_failed(
       "admin-token", "the service account is not configured",
     )
-    raise RegistrationError::RegistrationUnavailable
+    raise RegistrationUnavailable
   }
   let url = registration_endpoint(
     config,
@@ -176,7 +175,7 @@ async fn registration_admin_token(
   ) catch {
     error => {
       registration_stage_failed("admin-token-endpoint", error.to_string())
-      raise RegistrationError::RegistrationUnavailable
+      raise RegistrationUnavailable
     }
   }
   let (response, body) = registration_post(
@@ -188,24 +187,24 @@ async fn registration_admin_token(
   ) catch {
     error => {
       registration_stage_failed("admin-token-transport", error.to_string())
-      raise RegistrationError::RegistrationUnavailable
+      raise RegistrationUnavailable
     }
   }
   guard response.code == 200 else {
     registration_stage_failed("admin-token-status", "HTTP \{response.code}")
-    raise RegistrationError::RegistrationUnavailable
+    raise RegistrationUnavailable
   }
   let token : AdminTokenResponse = @json.from_json(@json.parse(body)) catch {
     error => {
       registration_stage_failed("admin-token-body", error.to_string())
-      raise RegistrationError::RegistrationUnavailable
+      raise RegistrationUnavailable
     }
   }
   guard token.token_type.to_lower() == "bearer" &&
     token.access_token.length() >= 32 &&
     token.access_token.length() <= 8192 else {
     registration_stage_failed("admin-token-shape", token.token_type)
-    raise RegistrationError::RegistrationUnavailable
+    raise RegistrationUnavailable
   }
   token.access_token
 }
@@ -244,15 +243,15 @@ fn registration_user_body(request : RegistrationRequest) -> Json {
 /// so both are read from its status and never guessed here.
 fn registration_create_failure(status : Int) -> RegistrationError {
   if status == 409 {
-    RegistrationError::EmailTaken
+    EmailTaken
   } else if status == 400 {
-    RegistrationError::PasswordRejected
+    PasswordRejected
   } else if status == 401 || status == 403 {
     // The deployment's service account is not allowed to create users. That is
     // an operator problem, not the customer's, so it reads as unavailable.
-    RegistrationError::RegistrationUnavailable
+    RegistrationUnavailable
   } else {
-    RegistrationError::RegistrationUnavailable
+    RegistrationUnavailable
   }
 }
 
@@ -266,7 +265,7 @@ async fn registration_create_user(
   let url = registration_endpoint(config, "/admin/realms/\{realm}/users") catch {
     error => {
       registration_stage_failed("create-user-endpoint", error.to_string())
-      raise RegistrationError::RegistrationUnavailable
+      raise RegistrationUnavailable
     }
   }
   let (response, _) = registration_post(
@@ -278,7 +277,7 @@ async fn registration_create_user(
   ) catch {
     error => {
       registration_stage_failed("create-user-transport", error.to_string())
-      raise RegistrationError::RegistrationUnavailable
+      raise RegistrationUnavailable
     }
   }
   guard response.code == 201 else {

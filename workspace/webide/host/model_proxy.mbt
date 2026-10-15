@@ -1,14 +1,6 @@
 ///|
-fn request_header(headers : Map[String, String], name : String) -> String? {
-  let values = headers
-    .iter()
-    .filter(pair => pair.0.to_lower() == name)
-    .to_array()
-  if values.length() == 1 {
-    Some(values[0].1)
-  } else {
-    None
-  }
+fn request_header(headers : @http.Headers, name : String) -> String? {
+  headers.get(name)
 }
 
 ///|
@@ -186,6 +178,7 @@ pub async fn handle_model_proxy(
     !model_route(request.meth, request.path) {
     return proxy_reply(connection, 403, "Unsupported managed model operation")
   }
+  let mut stage = "workspace authority"
   @async.with_timeout(300000, () => {
     let file = @fs.open(config_file, mode=ReadOnly)
     defer file.close()
@@ -218,16 +211,25 @@ pub async fn handle_model_proxy(
       connection.write(response)
       return connection.end_response()
     }
+    stage = "request normalization"
     let mut payload = limited(body, 1048576)
     let mut content_type = request_header(request.headers, "content-type").unwrap_or(
       "application/json",
     )
     if request.meth == Post &&
       request.path == "/v1/videos" &&
-      content_type.has_prefix("multipart/form-data") {
-      guard multipart_fields(content_type, payload) is Some(fields) else {
+      (
+        content_type.has_prefix("multipart/form-data") ||
+        content_type == "application/x-www-form-urlencoded"
+      ) {
+      let form = if content_type == "application/x-www-form-urlencoded" {
+        urlencoded_video_fields(payload)
+      } else {
+        multipart_fields(content_type, payload)
+      }
+      guard form is Some(fields) else {
         return proxy_reply(
-          connection, 400, "A bounded text-only video form is required",
+          connection, 400, "A supported bounded video form is required",
         )
       }
       payload = @utf8.encode(fields.to_json().stringify())
@@ -243,7 +245,7 @@ pub async fn handle_model_proxy(
     }
     let upstream = @http.Client(config.model_gateway_origin)
     defer upstream.close()
-    let upstream_headers = {
+    let upstream_headers : @http.Headers = {
       "authorization": "Bearer " + config.api_secret,
       "content-type": content_type,
       "accept": if request.path == "/v1/chat/completions" {
@@ -269,10 +271,17 @@ pub async fn handle_model_proxy(
       }
       upstream_headers["idempotency-key"] = key
     }
+    stage = "model request headers"
     upstream.request(request.meth, request.path, extra_headers=upstream_headers)
+    stage = "model request body"
     upstream.write(payload)
+    stage = "model response headers"
     let response = upstream.end_request()
     if response.code < 200 || response.code >= 300 {
+      println(
+        "Managed model backend rejected a request with HTTP " +
+        response.code.to_string(),
+      )
       // Suppress internal addresses, prompts and provider exception details.
       return proxy_reply(
         connection,
@@ -284,6 +293,7 @@ pub async fn handle_model_proxy(
         "Model request was rejected or the backend is not ready",
       )
     }
+    stage = "model response stream"
     let response_type = request_header(response.headers, "content-type").unwrap_or(
       "application/octet-stream",
     )
@@ -304,6 +314,7 @@ pub async fn handle_model_proxy(
     connection.end_response()
   }) catch {
     _ => {
+      println("Managed model operation failed during " + stage)
       proxy_reply(connection, 502, "Managed model operation could not complete") catch {
         _ => ()
       }

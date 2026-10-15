@@ -97,9 +97,9 @@ test "all recorded millisecond metrics have independent distribution and count c
   for
     (metric, expected) in [
       (@planning.QueueMs, [1, 2, 2]),
-      (@planning.FirstOutputMs, [1, 4, 0]),
-      (@planning.LoadMs, [5, 0, 0]),
-      (@planning.DurationMs, [0, 0, 5]),
+      (FirstOutputMs, [1, 4, 0]),
+      (LoadMs, [5, 0, 0]),
+      (DurationMs, [0, 0, 5]),
     ] {
     let report = @planning.explore_distribution(packet, id, {
       schema_version: 1,

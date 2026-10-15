@@ -160,27 +160,21 @@ fn sync_document_locale(locale : @i18n.Locale) -> Unit {
 }
 
 ///|
-extern "js" fn configured_endpoint() -> String =
-  #| () => {
-  #|   try { if (new URL(globalThis.location.href).searchParams.get("trial") === "1") return globalThis.location.origin; } catch (_) {}
-  #|   return globalThis.LUNANEXA_API_ENDPOINT || globalThis.location?.origin || "";
-  #| }
+fn configured_endpoint() -> String {
+  let site = site_api_endpoint(browser_origin(), browser_path())
+  let configured = configured_api_override()
+  if browser_trial_requested() || configured.is_empty() {
+    site
+  } else {
+    configured
+  }
+}
 
 ///|
-extern "js" fn trial_session_mode(endpoint : String) -> Bool =
-  #| endpoint => {
-  #|   try { return new URL(globalThis.location.href).searchParams.get("trial") === "1" && endpoint === globalThis.location.origin; }
-  #|   catch (_) { return false; }
-  #| }
-
-///|
-extern "js" fn demo_mode() -> Bool =
-  #| () => {
-  #|   try {
-  #|     const value = new URL(globalThis.location.href).searchParams.get("demo");
-  #|     return value === "1" || value === "true";
-  #|   } catch (_) { return false; }
-  #| }
+fn trial_session_mode(endpoint : String) -> Bool {
+  browser_trial_requested() &&
+  endpoint == site_api_endpoint(browser_origin(), browser_path())
+}
 
 ///|
 fn endpoint_is_safe(value : String) -> Bool {
@@ -191,25 +185,6 @@ fn endpoint_is_safe(value : String) -> Bool {
 fn optional_subject_is_valid(value : String) -> Bool {
   let subject_ref = value.trim().to_owned()
   subject_ref == "" || @workspace.valid_identifier(subject_ref)
-}
-
-///|
-fn demo_workbench_state(
-  now_unix_ms : Int64,
-  locale : @i18n.Locale,
-  model_selector : String,
-) -> @workbench_ui.WorkbenchState {
-  let seeded = @workbench_ui.demo_state().update(LocaleChanged(locale))
-  let lease = match seeded.lease {
-    Some(value) =>
-      Some({
-        ..value,
-        starts_unix_ms: now_unix_ms - 3600000L,
-        expires_unix_ms: now_unix_ms + 21600000L,
-      })
-    None => None
-  }
-  { ..seeded, now_unix_ms, lease, model_selector, }
 }
 
 ///|
@@ -345,7 +320,7 @@ async fn request(
     endpoint
   }
   let session = if trial_session_mode(endpoint) {
-    Some(load_trial_browser_session())
+    Some(load_trial_browser_session(endpoint))
   } else {
     None
   }
@@ -373,7 +348,7 @@ async fn workload_request(
     endpoint
   }
   let session = if trial_session_mode(endpoint) {
-    Some(load_trial_browser_session())
+    Some(load_trial_browser_session(endpoint))
   } else {
     None
   }
@@ -1527,7 +1502,6 @@ fn app_view(
 fn main {
   let local_preferences = load_local_preferences()
   let locale = @i18n.parse_locale(local_preferences.locale)
-  let is_demo = demo_mode()
   let now = current_unix_ms()
   sync_document_locale(locale)
   @rabbita.elmish(
@@ -1535,18 +1509,14 @@ fn main {
       endpoint: configured_endpoint(),
       scoped_token: "",
       subject_ref: "",
-      demo_mode: is_demo,
+      demo_mode: false,
       connecting: false,
       clock_generation: 0L,
       global_policy_generation: 0L,
       global_max_output_units: 0,
-      workbench: if is_demo {
-        demo_workbench_state(now, locale, local_preferences.default_model_alias)
-      } else {
-        {
-          ..@workbench_ui.default_state(now).update(LocaleChanged(locale)),
-          model_selector: local_preferences.default_model_alias,
-        }
+      workbench: {
+        ..@workbench_ui.default_state(now).update(LocaleChanged(locale)),
+        model_selector: local_preferences.default_model_alias,
       },
     },
     view=app_view,

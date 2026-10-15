@@ -103,7 +103,11 @@ test "an unknown subject says the package will create the organization and tenan
 /// at the fields it depends on instead of claiming the subject is unknown.
 test "the tenant hint stays neutral until the subject is filled in" {
   let html = render({ ..default_state(), route: Users, })
-  assert_true(html.contains("Fill in Identity provider details first"))
+  assert_true(
+    html.contains(
+      "Complete Identity provider details to find existing memberships",
+    ),
+  )
   assert_false(html.contains("holds no account or workspace lease"))
   assert_false(html.contains("already exists"))
 }

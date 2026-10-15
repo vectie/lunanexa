@@ -32,6 +32,7 @@ if [ -n "${LUNANEXA_ENTERPRISE_PUBLIC_HTTP_ORIGINS:-}" ]; then
   mv "$output_root/enterprise/index.html.tmp" "$output_root/enterprise/index.html"
 fi
 cp "$browser_build_root/cmd/enterprise/enterprise.js" "$output_root/enterprise/enterprise.js"
+moon run scripts/copy-app-logo-assets.mbtx -- "$repo_root" "$output_root"
 cp cmd/workbench/index.html "$output_root/workbench/index.html"
 cp "$browser_build_root/cmd/workbench/workbench.js" "$output_root/workbench/workbench.js"
 cp cmd/installer-ui/index.html "$output_root/installer/index.html"

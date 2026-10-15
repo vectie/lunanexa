@@ -1,0 +1,26 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/ui/controls"
+
+import {
+  "moonbit-community/rabbita/cmd",
+  "moonbit-community/rabbita/html",
+}
+
+// Values
+pub fn advanced(String, Array[@html.Html]) -> @html.Html
+
+pub fn icon_button(Icon, String, @cmd.Cmd, disabled? : Bool, busy? : Bool) -> @html.Html
+
+pub fn styles() -> String
+
+// Errors
+
+// Types and methods
+pub(all) enum Icon {
+  Refresh
+  Copy
+}
+
+// Type aliases
+
+// Traits

@@ -36,15 +36,10 @@ priv enum EnterpriseCopyMessage {
   Cancelled
   Enterprise
   EnterpriseNavigation
-  CustomerBoundary
-  CatalogOrdersAreSelfServiceManaged
   SelectOrganization
-  EnterpriseControlCenter
-  Language
   InterfaceLanguage
   Organization
   ActiveOrganizationForScopedRequests
-  TenantScoped
   FreeSharedInferenceTrial
   YourTrialIsReady
   YourTrialHasEnded
@@ -54,7 +49,6 @@ priv enum EnterpriseCopyMessage {
   TryAPromptInTheWorkbench
   CreateTrialApiKey
   ViewTrialApiKey
-  YourLunanexaTenant
   NeedAManagedCapacityException
   UseThisPathWhenTheSelf
   RequestManagedCapacity
@@ -96,6 +90,7 @@ priv enum EnterpriseCopyMessage {
   Days102
   Year
   RequestQuota
+  AdvancedSettings
   Cancel
   Creating
   CreateKey
@@ -114,9 +109,7 @@ priv enum EnterpriseCopyMessage {
   RevokeKey
   AccountIdentityIsUnavailable
   Expires
-  AuthenticatedAccount
   IdentityMembership
-  AuthenticationIsSuppliedByTheTrusted
   ActiveMembership
   InactiveMembership
   Account
@@ -128,7 +121,6 @@ priv enum EnterpriseCopyMessage {
   Subject
   BrowserSessions
   ApiKeys
-  KeysAreSubjectBoundExpiringModel
   CreateAScopedApiKey
   TheOneTimeTrialApiKey
   AnActiveDeveloperMembershipOrAvailable
@@ -142,8 +134,6 @@ priv enum EnterpriseCopyMessage {
   QuotaAvailable
   Revoke
   AgreementsRequiringYourOrganization
-  ReviewTheImmutableDocumentHashBefore
-  Refreshing
   RefreshStatus
   Requesting
   ReviewSign
@@ -159,22 +149,16 @@ priv enum EnterpriseCopyMessage {
   Template
   DocumentHash
   Generation
-  ManagedCapacityRequest
   RequestAManuallyAssignedWorkspace
-  RequestRequirementsNotASpecificMachine
-  DescribeYourWorkloadAndModelsThe
   ProjectId
   UnixUsername
   PasswordIsNotAcceptedUseA
   ModelIds
   CommaSeparatedModelsFromTheShared
   BusinessJustification
-  WhatHappensNext
-  TheRequestEntersTheOperatorQueue
   SubmitLeaseRequest
   RequestHistory
   NoRequestsYet
-  AnOperatorReviewsPolicyHealthAnd
   Project
   AssignedNode
   NotAssigned
@@ -188,13 +172,11 @@ priv enum EnterpriseCopyMessage {
   NoBrowserActionIsRequiredFor
   ExportCostsCsv
   UsageAndCostAllocation
-  TenantScopedProjectionsFromTheCentral
   ProvisionalCharges
-  CentralLedgerProjection
   CostCenters
   OnlinePayment
   PayAFinalizedBillingPeriod
-  AmountCurrencyScaleAndRetrySafe
+  ReviewTotalBeforePayment
   RefreshPaymentStatus
   CheckoutTotal
   BillingPeriod
@@ -219,7 +201,6 @@ priv enum EnterpriseCopyMessage {
   Spend
   Status
   SharedModelCatalog
-  OneManagementPlaneCatalogFeedsPortal
   NoApprovedModelsAreEntitledFor
   DesktopClient
   YourOperatorMustFinishDesktopIntegration
@@ -228,12 +209,9 @@ priv enum EnterpriseCopyMessage {
   TheSelectedPaidEndpointIsUnavailable
   YourAccessIsReadyOpenThe
   ChooseYourWebide
-  OpenYourPreferredWorkspaceCreativeWorkflows
   ModelSource
   AuthorizedSharedModels
   SelectedOrderIsUnavailable
-  DedicatedOrdersStayBoundToTheir
-  SecureWebideHandoff
   CompleteMasterlease
   Connecting
   CopyModelAlias
@@ -241,10 +219,6 @@ priv enum EnterpriseCopyMessage {
   TextGeneration
   VideoGeneration
   ImageGeneration
-  CheckTheApprovedCapabilityBeforeCalling
-  Availability
-  ManagedCentrally
-  Artifact
   AllowedByAnActiveApiKey
   NoActiveApiKeyAllowsThis
   CapacityRequestApproved
@@ -284,7 +258,6 @@ priv enum EnterpriseCopyMessage {
   YourApiCredentialsWereRevokedBecause
   OpenTheRelatedRecordForDetails
   NotificationInbox
-  DurableUpdatesForAgreementsMachineAccess
   DeliveryPreferences
   InAppDeliveryAlwaysRemainsEnabled
   NoNotificationsYet
@@ -296,18 +269,10 @@ priv enum EnterpriseCopyMessage {
   DedicatedMaas
   BareGpu
   ChooseThisService
-  StartWithAnOutcome
   WhatDoYouWantToRun
-  ChooseAnApiAManagedDedicated
   CallAModelApi
-  NoMachineSelectionStartWithA
-  YouReceiveAnApiKey
   DeployAPrivateModelEndpoint
-  ChooseAGpuAndApprovedModel
-  YouReceiveAPrivateEndpoint
   RentAGpuWorkspace
-  ChooseCapacityAndManageYourOwn
-  YouReceiveSshAndWebideAccess
   Service
   Capacity
   Quote
@@ -328,7 +293,6 @@ priv enum EnterpriseCopyMessage {
   Continue
   WaitingForVerification
   CreateACompanyOrJoinOne
-  ACompanyIdentityProviderIsOptional
   CreateCompany
   JoinCompany
   LegalSubjectType
@@ -385,7 +349,6 @@ priv enum EnterpriseCopyMessage {
   NoneYouManageThisWorkspace
   CalculatingSignedQuote
   ReviewPrice
-  SignedQuote
   ReviewPriceAndScope
   CalculatingAnAuthoritativeQuote
   Dismiss
@@ -412,7 +375,6 @@ priv enum EnterpriseCopyMessage {
   TerminationPending
   CompensationPending
   Terminated
-  ContractPayment437
   CompleteCommercialGates
   RequiredAgreements
   ExecutedEvidenceIsVerified
@@ -429,22 +391,15 @@ priv enum EnterpriseCopyMessage {
   OrderNotCreated
   NoPaymentRequestWillBeCreated
   BackToQuote
-  LiveOrder
   ProvisioningProgress
-  Generation456
   PaymentWasVerifiedButCapacityCould
   ThisOrderFailedRefreshForThe
   TheRequestedShutdownIsInProgress
   OrderAccepted
-  CommercialScopeIsImmutable
   PaymentSettled462
-  ProviderEvidenceIsVerified
   CapacityProvisioned
-  ALeaseIsReservedAndPrepared
   ModelDeployed
-  ArtifactTransferVerificationAndLunafluxDeployment
   AccessIssued
-  ShortLivedSshAndWebideAccess
   Ready
   UseTheCanonicalVWorkloadsEndpoint
   MachineAccessBecomesVisibleInMy
@@ -475,7 +430,6 @@ priv enum EnterpriseCopyMessage {
   HRemaining
   MRemaining
   CopyIdentifier
-  Copy
   RequestQuotaUsed
   ViewErrorGuide
   HowToUseThisPage
@@ -499,9 +453,10 @@ fn enterprise_copy(
     ManagedRequests => @i18n.copy(locale, "Managed requests", "受管申请")
     Notifications => @i18n.copy(locale, "Notifications", "通知")
     UsageCosts => @i18n.copy(locale, "Usage & costs", "用量与成本")
-    ModelCatalog => @i18n.copy(locale, "Model catalog", "模型目录")
-    Webide => @i18n.copy(locale, "WebIDE", "WebIDE")
-    MyMachine => @i18n.copy(locale, "My machine", "我的机器")
+    ModelCatalog =>
+      @i18n.copy(locale, "MaaS · Model services", "MaaS · 模型服务")
+    Webide => @i18n.copy(locale, "PaaS · Workspaces", "PaaS · 工作区")
+    MyMachine => @i18n.copy(locale, "IaaS · Compute", "IaaS · 算力实例")
     OrdersDocuments =>
       @i18n.copy(locale, "Orders & documents", "订单与材料")
     ContractForms => @i18n.copy(locale, "Contract forms", "合同表单")
@@ -532,17 +487,8 @@ fn enterprise_copy(
     Enterprise => @i18n.copy(locale, "Enterprise", "企业平台")
     EnterpriseNavigation =>
       @i18n.copy(locale, "Enterprise navigation", "企业导航")
-    CustomerBoundary => @i18n.copy(locale, "Customer boundary", "客户边界")
-    CatalogOrdersAreSelfServiceManaged =>
-      @i18n.copy(
-        locale, "Catalog orders are self-service. Managed requests remain available when an operator must select exceptional capacity.",
-        "目录订单支持自助开通；需要运维人员选择特殊算力时，仍可提交受管申请。",
-      )
     SelectOrganization =>
       @i18n.copy(locale, "Select organization", "选择组织")
-    EnterpriseControlCenter =>
-      @i18n.copy(locale, "ENTERPRISE CONTROL CENTER", "企业控制中心")
-    Language => @i18n.copy(locale, "Language", "语言")
     InterfaceLanguage =>
       @i18n.copy(locale, "Interface language", "界面语言")
     Organization => @i18n.copy(locale, "Organization", "组织")
@@ -550,7 +496,6 @@ fn enterprise_copy(
       @i18n.copy(
         locale, "Active organization for scoped requests", "限定范围请求所使用的活跃组织",
       )
-    TenantScoped => @i18n.copy(locale, "Tenant scoped", "限定租户范围")
     FreeSharedInferenceTrial =>
       @i18n.copy(
         locale, "FREE SHARED-INFERENCE TRIAL", "免费共享推理体验",
@@ -578,16 +523,13 @@ fn enterprise_copy(
       @i18n.copy(locale, "Create trial API key", "创建体验 API 密钥")
     ViewTrialApiKey =>
       @i18n.copy(locale, "View trial API key", "查看体验 API 密钥")
-    YourLunanexaTenant =>
-      @i18n.copy(locale, "YOUR PLATFORM TENANT", "您的平台租户")
     NeedAManagedCapacityException =>
       @i18n.copy(
-        locale, "Need a managed capacity exception?", "需要受管算力例外？",
+        locale, "Need a different configuration?", "需要其他配置？",
       )
     UseThisPathWhenTheSelf =>
       @i18n.copy(
-        locale, "Use this path when the self-service catalog cannot satisfy your requirements. An operator will review policy, availability and node assignment.",
-        "当自助目录无法满足需求时使用此流程。运维人员将审核策略、库存与节点分配。",
+        locale, "Send your requirements for an operator to review.", "提交需求，由运维审核。",
       )
     RequestManagedCapacity =>
       @i18n.copy(locale, "Request managed capacity", "申请受管算力")
@@ -625,8 +567,7 @@ fn enterprise_copy(
     CreateApiKey => @i18n.copy(locale, "Create API key", "创建 API 密钥")
     TheSecretIsShownOnceTrial =>
       @i18n.copy(
-        locale, "The secret is shown once. Trial keys follow trial limits; other keys require the deployment's active authorization and Developer role.",
-        "密钥仅显示一次。体验密钥遵守体验限制；其他密钥要求部署策略规定的有效授权与开发者角色。",
+        locale, "The secret is shown once.", "密钥仅显示一次。",
       )
     BillingProject => @i18n.copy(locale, "Billing project", "计费项目")
     KeyName => @i18n.copy(locale, "Key name", "密钥名称")
@@ -648,6 +589,7 @@ fn enterprise_copy(
     Days102 => @i18n.copy(locale, "90 days", "90 天")
     Year => @i18n.copy(locale, "1 year", "1 年")
     RequestQuota => @i18n.copy(locale, "Request quota", "请求配额")
+    AdvancedSettings => @i18n.copy(locale, "Advanced", "高级设置")
     Cancel => @i18n.copy(locale, "Cancel", "取消")
     Creating => @i18n.copy(locale, "Creating…", "正在创建…")
     CreateKey => @i18n.copy(locale, "Create key", "创建密钥")
@@ -660,8 +602,8 @@ fn enterprise_copy(
       )
     LunanexaStoresOnlyItsHashThis =>
       @i18n.copy(
-        locale, "The platform stores only its hash. This secret cannot be retrieved after you close this dialog.",
-        "平台仅存储其哈希值。关闭此对话框后将无法再次获取该密钥。",
+        locale, "Save this key now. You cannot retrieve it after closing this dialog.",
+        "请立即保存密钥，关闭后无法再次获取。",
       )
     Name => @i18n.copy(locale, "Name", "名称")
     KeyId => @i18n.copy(locale, "Key ID", "密钥 ID")
@@ -688,15 +630,8 @@ fn enterprise_copy(
         locale, "Account identity is unavailable.", "账户身份不可用。",
       )
     Expires => @i18n.copy(locale, "Expires", "到期时间")
-    AuthenticatedAccount =>
-      @i18n.copy(locale, "AUTHENTICATED ACCOUNT", "已认证账户")
     IdentityMembership =>
       @i18n.copy(locale, "Identity & membership", "身份与成员资格")
-    AuthenticationIsSuppliedByTheTrusted =>
-      @i18n.copy(
-        locale, "Your sign-in is verified. Passwords are not shown here; a newly issued API key is shown only once.",
-        "登录身份已验证；此处不展示密码，新签发的 API 密钥仅显示一次。",
-      )
     ActiveMembership =>
       @i18n.copy(locale, "Active membership", "有效成员资格")
     InactiveMembership =>
@@ -714,11 +649,6 @@ fn enterprise_copy(
     Subject => @i18n.copy(locale, "Subject", "主体")
     BrowserSessions => @i18n.copy(locale, "Browser sessions", "浏览器会话")
     ApiKeys => @i18n.copy(locale, "API keys", "API 密钥")
-    KeysAreSubjectBoundExpiringModel =>
-      @i18n.copy(
-        locale, "Keys are subject-bound, expiring, model-scoped credentials for API clients.",
-        "密钥是绑定主体、具有有效期并限定模型范围的 API 客户端凭据。",
-      )
     CreateAScopedApiKey =>
       @i18n.copy(
         locale, "Create a scoped API key", "创建限定范围的 API 密钥",
@@ -732,11 +662,11 @@ fn enterprise_copy(
         locale, "An active Developer membership or available trial is required",
         "需要有效的开发者成员资格或可用体验权益",
       )
-    Rotation => @i18n.copy(locale, "Rotation", "轮换")
+    Rotation => @i18n.copy(locale, "Replace a key", "更换密钥")
     AtomicRotationIsNotAvailableYet =>
       @i18n.copy(
-        locale, "Atomic rotation is not available yet. Create a replacement, update the client, then revoke the old key.",
-        "原子轮换暂不可用。请先创建替代密钥、更新客户端，再撤销旧密钥。",
+        locale, "Create a replacement key, update your client, then revoke the old key.",
+        "创建新密钥并更新客户端后，再撤销旧密钥。",
       )
     NoApiKeysExistForThis =>
       @i18n.copy(
@@ -757,12 +687,6 @@ fn enterprise_copy(
       @i18n.copy(
         locale, "Agreements requiring your organization", "您组织需要处理的协议",
       )
-    ReviewTheImmutableDocumentHashBefore =>
-      @i18n.copy(
-        locale, "Review the immutable document hash before opening the external signature ceremony.",
-        "在打开外部签署流程前，请核对不可变文档哈希。",
-      )
-    Refreshing => @i18n.copy(locale, "Refreshing…", "正在刷新…")
     RefreshStatus => @i18n.copy(locale, "Refresh status", "刷新状态")
     Requesting => @i18n.copy(locale, "Requesting…", "正在发起…")
     ReviewSign => @i18n.copy(locale, "Review & sign", "审阅并签署")
@@ -801,28 +725,14 @@ fn enterprise_copy(
     Template => @i18n.copy(locale, "Template", "模板")
     DocumentHash => @i18n.copy(locale, "Document hash", "文档哈希")
     Generation => @i18n.copy(locale, "Generation", "版本代")
-    ManagedCapacityRequest =>
-      @i18n.copy(locale, "MANAGED CAPACITY REQUEST", "受管算力申请")
     RequestAManuallyAssignedWorkspace =>
-      @i18n.copy(
-        locale, "Request a manually assigned workspace", "申请人工分配的工作区",
-      )
-    RequestRequirementsNotASpecificMachine =>
-      @i18n.copy(
-        locale, "Request requirements, not a specific machine. An operator selects one eligible DGX Spark node after policy and availability checks.",
-        "请提交需求，而不是指定机器。运维人员将在策略与可用性检查后选择一个符合条件的 DGX Spark 节点。",
-      )
-    DescribeYourWorkloadAndModelsThe =>
-      @i18n.copy(
-        locale, "Describe your workload and models. The operator matches policy, machine health and capacity, then fences and verifies the machine before handing it over; a GPU label alone does not establish readiness.",
-        "请描述工作负载与模型。运维根据策略、机器健康度与容量进行匹配，在交付前完成隔离与核验；GPU 型号本身不代表机器已经就绪。",
-      )
+      @i18n.copy(locale, "Request machine access", "申请机器访问")
     ProjectId => @i18n.copy(locale, "Project ID", "项目 ID")
     UnixUsername => @i18n.copy(locale, "Unix username", "Unix 用户名")
     PasswordIsNotAcceptedUseA =>
       @i18n.copy(
-        locale, "Password is not accepted. Use a non-reserved lowercase Unix username; access uses a short-lived credential reference.",
-        "请使用非保留的小写 Unix 用户名；不接受密码。访问使用短期凭据引用。",
+        locale, "Use a non-reserved lowercase Unix username. Do not enter a password.",
+        "请填写非保留的小写 Unix 用户名，请勿填写密码。",
       )
     ModelIds => @i18n.copy(locale, "Model IDs", "模型 ID")
     CommaSeparatedModelsFromTheShared =>
@@ -831,21 +741,10 @@ fn enterprise_copy(
       )
     BusinessJustification =>
       @i18n.copy(locale, "Business justification", "业务说明")
-    WhatHappensNext => @i18n.copy(locale, "What happens next", "后续流程")
-    TheRequestEntersTheOperatorQueue =>
-      @i18n.copy(
-        locale, "The request enters the operator queue. Approval reserves exactly one node, then provisioning, access issuance and sanitization follow the exclusive-lease state machine.",
-        "申请进入运维队列。批准后只预留一个节点，随后按独占租用状态机完成配置、访问授权与清理。",
-      )
     SubmitLeaseRequest =>
       @i18n.copy(locale, "Submit lease request", "提交租用申请")
     RequestHistory => @i18n.copy(locale, "Request history", "申请记录")
     NoRequestsYet => @i18n.copy(locale, "No requests yet.", "暂无申请。")
-    AnOperatorReviewsPolicyHealthAnd =>
-      @i18n.copy(
-        locale, "An operator reviews policy, health and capacity before assigning one fenced, verified machine. This is manual review, not an instant reservation; refresh this history for progress.",
-        "运维人员根据策略、健康度与容量人工审核，再分配一台已隔离并核验的机器。这不是即时预留；请刷新此申请记录查看进度。",
-      )
     Project => @i18n.copy(locale, "Project", "项目")
     AssignedNode => @i18n.copy(locale, "Assigned node", "已分配节点")
     NotAssigned => @i18n.copy(locale, "Not assigned", "尚未分配")
@@ -875,25 +774,17 @@ fn enterprise_copy(
     ExportCostsCsv => @i18n.copy(locale, "Export costs CSV", "导出费用 CSV")
     UsageAndCostAllocation =>
       @i18n.copy(locale, "Usage and cost allocation", "用量与成本分摊")
-    TenantScopedProjectionsFromTheCentral =>
-      @i18n.copy(
-        locale, "Tenant-scoped projections from the central commercial ledger.",
-        "来自中央商业台账的限定租户范围视图。",
-      )
     ProvisionalCharges =>
       @i18n.copy(locale, "Provisional charges", "暂计费用")
-    CentralLedgerProjection =>
-      @i18n.copy(locale, "Central ledger projection", "中央台账视图")
     CostCenters => @i18n.copy(locale, "Cost centers", "成本中心")
     OnlinePayment => @i18n.copy(locale, "ONLINE PAYMENT", "在线支付")
     PayAFinalizedBillingPeriod =>
       @i18n.copy(
         locale, "Pay a finalized billing period", "支付已结算账期",
       )
-    AmountCurrencyScaleAndRetrySafe =>
+    ReviewTotalBeforePayment =>
       @i18n.copy(
-        locale, "Amount, currency, scale and retry-safe idempotency are derived from the finalized billing period. You confirm before leaving the platform.",
-        "金额、币种、精度和可安全重试的幂等键均由已结算账期自动派生。离开平台前由您确认。",
+        locale, "Review the total before continuing to payment.", "核对总额后继续支付。",
       )
     RefreshPaymentStatus =>
       @i18n.copy(locale, "Refresh payment status", "刷新支付状态")
@@ -951,11 +842,6 @@ fn enterprise_copy(
     Status => @i18n.copy(locale, "Status", "状态")
     SharedModelCatalog =>
       @i18n.copy(locale, "Shared model catalog", "共享模型目录")
-    OneManagementPlaneCatalogFeedsPortal =>
-      @i18n.copy(
-        locale, "One management-plane catalog feeds portal requests, one-click deployments and WebIDE selectors.",
-        "同一个管理平面目录为企业申请、一键部署与 WebIDE 选择器提供数据。",
-      )
     NoApprovedModelsAreEntitledFor =>
       @i18n.copy(
         locale, "No approved models are entitled for this tenant.", "此租户暂无已批准模型。",
@@ -983,13 +869,7 @@ fn enterprise_copy(
       @i18n.copy(
         locale, "Your access is ready. Open the selected WebIDE to continue.", "访问权限已就绪。打开所选 WebIDE 继续工作。",
       )
-    ChooseYourWebide =>
-      @i18n.copy(locale, "Choose your WebIDE", "选择 WebIDE")
-    OpenYourPreferredWorkspaceCreativeWorkflows =>
-      @i18n.copy(
-        locale, "Choose an approved workspace for code, creative workflows, or robot work.",
-        "选择已获批准的工作空间，处理代码、创作流程或机器人工作。",
-      )
+    ChooseYourWebide => @i18n.copy(locale, "Applications", "应用")
     ModelSource => @i18n.copy(locale, "Model source", "模型来源")
     AuthorizedSharedModels =>
       @i18n.copy(locale, "Authorized shared models", "已授权的共享模型")
@@ -997,13 +877,6 @@ fn enterprise_copy(
       @i18n.copy(
         locale, "Selected order is unavailable", "所选订单不可用",
       )
-    DedicatedOrdersStayBoundToTheir =>
-      @i18n.copy(
-        locale, "Dedicated orders stay bound to their purchased deployment and expiry.",
-        "专属订单绑定已购买的部署和有效期，不会混用共享算力。",
-      )
-    SecureWebideHandoff =>
-      @i18n.copy(locale, "SECURE WEBIDE HANDOFF", "安全 WebIDE 交接")
     CompleteMasterlease =>
       @i18n.copy(locale, "Complete MasterLease", "完成主租约")
     Connecting => @i18n.copy(locale, "Connecting…", "正在连接…")
@@ -1016,13 +889,6 @@ fn enterprise_copy(
     TextGeneration => @i18n.copy(locale, "Text generation", "文本生成")
     VideoGeneration => @i18n.copy(locale, "Video generation", "视频生成")
     ImageGeneration => @i18n.copy(locale, "Image generation", "图像生成")
-    CheckTheApprovedCapabilityBeforeCalling =>
-      @i18n.copy(
-        locale, "Check the approved capability before calling this model.", "调用前请核对该模型已批准的能力。",
-      )
-    Availability => @i18n.copy(locale, "Availability", "可用性")
-    ManagedCentrally => @i18n.copy(locale, "Managed centrally", "中央托管")
-    Artifact => @i18n.copy(locale, "Artifact", "制品")
     AllowedByAnActiveApiKey =>
       @i18n.copy(
         locale, "Allowed by an active API key", "有效 API 密钥允许调用",
@@ -1139,11 +1005,6 @@ fn enterprise_copy(
       )
     NotificationInbox =>
       @i18n.copy(locale, "Notification inbox", "通知收件箱")
-    DurableUpdatesForAgreementsMachineAccess =>
-      @i18n.copy(
-        locale, "Durable updates for agreements, machine access, expiry, and offline reconciliation.",
-        "查看协议、机器访问、到期与线下对账的持久化更新。",
-      )
     DeliveryPreferences =>
       @i18n.copy(locale, "Delivery preferences", "投递偏好")
     InAppDeliveryAlwaysRemainsEnabled =>
@@ -1157,55 +1018,23 @@ fn enterprise_copy(
     Receipt => @i18n.copy(locale, "Receipt", "回执")
     MarkAsRead => @i18n.copy(locale, "Mark as read", "标记为已读")
     SkipToContent => @i18n.copy(locale, "Skip to content", "跳到内容")
-    SharedMaas => @i18n.copy(locale, "Shared MaaS", "共享 MaaS")
-    DedicatedMaas => @i18n.copy(locale, "Dedicated MaaS", "专属 MaaS")
+    SharedMaas => @i18n.copy(locale, "Shared API", "共享 API")
+    DedicatedMaas => @i18n.copy(locale, "Dedicated API", "专属 API")
     BareGpu => @i18n.copy(locale, "Exclusive GPU machine", "独占 GPU 机器")
     ChooseThisService =>
       @i18n.copy(locale, "Choose this service", "选择此服务")
-    StartWithAnOutcome =>
-      @i18n.copy(locale, "START WITH AN OUTCOME", "从目标开始")
     WhatDoYouWantToRun =>
       @i18n.copy(
         locale, "What do you want to run?", "您希望以哪种方式运行？",
       )
-    ChooseAnApiAManagedDedicated =>
-      @i18n.copy(
-        locale, "Choose an API, a managed dedicated endpoint, or a machine you control. You can go back without losing entered values.",
-        "选择共享 API、托管专属端点，或由您控制的机器。返回上一步不会丢失已填写内容。",
-      )
     CallAModelApi => @i18n.copy(locale, "Call a model API", "调用模型 API")
-    NoMachineSelectionStartWithA =>
-      @i18n.copy(
-        locale, "No machine selection. Start with a quota-bound key and pay for measured inference.",
-        "无需选择机器。先创建受额度约束的密钥，按实际推理用量付费。",
-      )
-    YouReceiveAnApiKey =>
-      @i18n.copy(locale, "You receive an API key", "您将获得 API 密钥")
     DeployAPrivateModelEndpoint =>
       @i18n.copy(
         locale, "Deploy a private model endpoint", "部署专属模型端点",
       )
-    ChooseAGpuAndApprovedModel =>
-      @i18n.copy(
-        locale, "Choose a GPU and approved model. The platform transfers, deploys, and operates the endpoint.",
-        "选择 GPU 与已批准模型，由平台完成传输、部署与端点运维。",
-      )
-    YouReceiveAPrivateEndpoint =>
-      @i18n.copy(
-        locale, "You receive a private endpoint", "您将获得专属端点",
-      )
     RentAGpuWorkspace =>
       @i18n.copy(
         locale, "Rent exclusive GPU capacity", "租用独占 GPU 算力",
-      )
-    ChooseCapacityAndManageYourOwn =>
-      @i18n.copy(
-        locale, "Choose dedicated capacity for your company. The delivery page will show the actual container or machine access granted by your order.",
-        "为企业选择独占算力。实际交付的容器或机器访问方式，以订单和授权状态为准。",
-      )
-    YouReceiveSshAndWebideAccess =>
-      @i18n.copy(
-        locale, "Access is enabled after provisioning", "完成资源开通后获得访问入口",
       )
     Service => @i18n.copy(locale, "Service", "服务")
     Capacity => @i18n.copy(locale, "Capacity", "配置")
@@ -1221,13 +1050,12 @@ fn enterprise_copy(
       @i18n.copy(locale, "Company approval pending", "企业审核待完成")
     ThisOrderWillBeOwnedBy =>
       @i18n.copy(
-        locale, "This order will be owned by your active organization. Tenant and subject identifiers are derived from your signed-in session.",
-        "该订单将归属于您的活跃组织。租户和用户标识均从登录会话中派生。",
+        locale, "This order belongs to the selected company.", "此订单归所选企业所有。",
       )
     YourCompanyRecordExistsButMachine =>
       @i18n.copy(
-        locale, "Your company record exists, but machine ordering remains fail-closed until verification succeeds. Shared trial access is unaffected.",
-        "公司记录已创建，但完成验证前机器下单保持失败关闭；共享试用不受影响。",
+        locale, "Company approval is required before ordering machines. You can still use your shared trial.",
+        "企业通过审核后才可订购机器，仍可使用共享试用服务。",
       )
     VerifyOrganization =>
       @i18n.copy(locale, "Verify organization", "验证组织")
@@ -1238,8 +1066,7 @@ fn enterprise_copy(
       )
     VerificationDispatchNeedsRetryRefreshingThis =>
       @i18n.copy(
-        locale, "Verification dispatch needs retry. Refreshing this organization safely retries the durable request.",
-        "验证派发需要重试；刷新组织会安全重试持久化请求。",
+        locale, "Verification could not start. Refresh to retry.", "验证未能发起，请刷新重试。",
       )
     TheVerificationRequestIsPendingWhile =>
       @i18n.copy(
@@ -1255,11 +1082,6 @@ fn enterprise_copy(
     CreateACompanyOrJoinOne =>
       @i18n.copy(
         locale, "Create a company or join one", "创建公司或加入已有公司",
-      )
-    ACompanyIdentityProviderIsOptional =>
-      @i18n.copy(
-        locale, "A company identity provider is optional. Sign in with the platform identity service, then create the legal customer record here.",
-        "无需企业身份系统。先使用平台身份服务登录，再在这里建立正式客户主体。",
       )
     CreateCompany => @i18n.copy(locale, "Create company", "创建公司")
     JoinCompany => @i18n.copy(locale, "Join company", "加入公司")
@@ -1307,8 +1129,8 @@ fn enterprise_copy(
       @i18n.copy(locale, "Start with the shared API", "开始使用共享 API")
     SharedMaasDoesNotRequireA =>
       @i18n.copy(
-        locale, "Shared MaaS does not require a machine order. Choose an approved model and create a quota-bound API key from your account.",
-        "共享 MaaS 无需机器订单。请从账户中选择已批准模型并创建受额度约束的 API 密钥。",
+        locale, "Choose a model and create an API key from your account. No machine order is needed.",
+        "从账户中选择模型并创建 API 密钥，无需订购机器。",
       )
     SelectARegion => @i18n.copy(locale, "Select a region", "选择区域")
     SelectAModel => @i18n.copy(locale, "Select a model", "选择模型")
@@ -1316,13 +1138,12 @@ fn enterprise_copy(
       @i18n.copy(locale, "Choose capacity", "选择算力配置")
     TheSelectedApprovedModelWillBe =>
       @i18n.copy(
-        locale, "The selected approved model will be transferred from object storage and deployed after payment settles.",
-        "支付完成后，系统会从对象存储传输已批准模型并自动部署。",
+        locale, "Your model will be deployed after payment.", "支付完成后将部署所选模型。",
       )
     YouReceiveAnIsolatedWorkspaceNo =>
       @i18n.copy(
-        locale, "You receive dedicated GPU capacity and the access method specified by your order. No managed model is installed unless you choose Dedicated MaaS.",
-        "您将获得独占 GPU 算力及订单约定的访问方式。除非选择专属 MaaS，否则不会安装托管模型。",
+        locale, "You receive dedicated GPU capacity and the access method specified by your order. Managed model installation requires a Dedicated API order.",
+        "您将获得独占 GPU 算力及订单约定的访问方式。安装托管模型需选择专属 API 订单。",
       )
     LoadingLiveCapacity =>
       @i18n.copy(
@@ -1385,7 +1206,6 @@ fn enterprise_copy(
         locale, "Calculating signed quote…", "正在计算签名报价…",
       )
     ReviewPrice => @i18n.copy(locale, "Review price", "查看报价")
-    SignedQuote => @i18n.copy(locale, "SIGNED QUOTE", "签名报价")
     ReviewPriceAndScope =>
       @i18n.copy(locale, "Review price and scope", "核对价格与范围")
     CalculatingAnAuthoritativeQuote =>
@@ -1397,21 +1217,17 @@ fn enterprise_copy(
     ValidUntil => @i18n.copy(locale, "Valid until", "有效期至")
     AmountAvailabilityWindowAndTermsDigest =>
       @i18n.copy(
-        locale, "Amount, availability window and terms digest are server-derived and signed. Creating the order is idempotent; it does not mark payment as settled.",
-        "金额、库存窗口与条款摘要均由服务端派生并签名。创建订单可安全重试，且不会伪造支付成功状态。",
+        locale, "Review the total and terms before ordering. Payment follows order creation.",
+        "下单前请核对总额与条款，创建订单后再付款。",
       )
     MachineSelfServiceTerms =>
       @i18n.copy(
         locale, "Machine self-service terms", "机器自助服务条款",
       )
     OpenImmutableTermsDocument =>
-      @i18n.copy(
-        locale, "Open immutable terms document", "打开不可变条款文档",
-      )
+      @i18n.copy(locale, "Read terms", "阅读条款")
     AcceptanceEvidenceRecordedForThisSession =>
-      @i18n.copy(
-        locale, "Acceptance evidence recorded for this session.", "本次会话的接受证据已记录。",
-      )
+      @i18n.copy(locale, "Terms accepted.", "已接受条款。")
     DocumentReviewed =>
       @i18n.copy(locale, "Document reviewed", "已阅读文档")
     IReviewedThisDocument =>
@@ -1425,8 +1241,7 @@ fn enterprise_copy(
       )
     AnExecutedOrganizationAgreementSatisfiesThe =>
       @i18n.copy(
-        locale, "An executed organization agreement satisfies the machine terms gate.",
-        "组织已执行的协议满足机器条款门槛。",
+        locale, "Your company's signed agreement covers these terms.", "企业已签署的协议涵盖这些条款。",
       )
     CreateOrder => @i18n.copy(locale, "Create order", "创建订单")
     QuoteNotAvailable =>
@@ -1448,10 +1263,10 @@ fn enterprise_copy(
     CompensationPending =>
       @i18n.copy(locale, "Compensation pending", "正在补偿")
     Terminated => @i18n.copy(locale, "Terminated", "已终止")
-    ContractPayment437 =>
-      @i18n.copy(locale, "CONTRACT & PAYMENT", "合同与支付")
     CompleteCommercialGates =>
-      @i18n.copy(locale, "Complete commercial gates", "完成商业准入")
+      @i18n.copy(
+        locale, "Complete contract and payment", "完成合同与付款",
+      )
     RequiredAgreements =>
       @i18n.copy(locale, "Required agreements", "必需协议")
     ExecutedEvidenceIsVerified =>
@@ -1485,14 +1300,11 @@ fn enterprise_copy(
       @i18n.copy(locale, "Order not created", "订单尚未创建")
     NoPaymentRequestWillBeCreated =>
       @i18n.copy(
-        locale, "No payment request will be created until an idempotent machine order exists.",
-        "创建可安全重试的机器订单之前，系统不会发起支付请求。",
+        locale, "Create an order before proceeding to payment.", "请先创建订单，再继续付款。",
       )
     BackToQuote => @i18n.copy(locale, "Back to quote", "返回报价")
-    LiveOrder => @i18n.copy(locale, "LIVE ORDER", "实时订单")
     ProvisioningProgress =>
       @i18n.copy(locale, "Provisioning progress", "开通进度")
-    Generation456 => @i18n.copy(locale, "Generation", "版本")
     PaymentWasVerifiedButCapacityCould =>
       @i18n.copy(
         locale, "Payment was verified, but capacity could not be completed. Cleanup and refund compensation are being reconciled; do not place a duplicate order.",
@@ -1500,8 +1312,8 @@ fn enterprise_copy(
       )
     ThisOrderFailedRefreshForThe =>
       @i18n.copy(
-        locale, "This order failed. Refresh for the durable final state before starting another order.",
-        "该订单失败。创建新订单前，请刷新并确认其持久化最终状态。",
+        locale, "This order failed. Refresh to check its final status before placing another order.",
+        "订单失败。请刷新确认最终状态后再重新下单。",
       )
     TheRequestedShutdownIsInProgress =>
       @i18n.copy(
@@ -1509,37 +1321,15 @@ fn enterprise_copy(
         "关停请求正在处理中；完成清理验证前，不应继续信任访问状态。",
       )
     OrderAccepted => @i18n.copy(locale, "Order accepted", "订单已受理")
-    CommercialScopeIsImmutable =>
-      @i18n.copy(
-        locale, "Commercial scope is immutable.", "商业范围已固定。",
-      )
     PaymentSettled462 => @i18n.copy(locale, "Payment settled", "支付结算")
-    ProviderEvidenceIsVerified =>
-      @i18n.copy(
-        locale, "Provider evidence is verified.", "支付服务商证据已验证。",
-      )
     CapacityProvisioned =>
       @i18n.copy(locale, "Capacity provisioned", "算力开通")
-    ALeaseIsReservedAndPrepared =>
-      @i18n.copy(
-        locale, "A lease is reserved and prepared.", "正在预留并准备租约。",
-      )
     ModelDeployed => @i18n.copy(locale, "Model deployed", "模型部署")
-    ArtifactTransferVerificationAndLunafluxDeployment =>
-      @i18n.copy(
-        locale, "Artifact transfer, verification and LunaFlux deployment are tracked together.",
-        "模型传输、校验与 LunaFlux 部署统一跟踪。",
-      )
     AccessIssued => @i18n.copy(locale, "Access issued", "访问已签发")
-    ShortLivedSshAndWebideAccess =>
-      @i18n.copy(
-        locale, "Short-lived SSH and WebIDE access only.", "仅签发短期 SSH 与 WebIDE 访问。",
-      )
     Ready => @i18n.copy(locale, "Ready", "已就绪")
     UseTheCanonicalVWorkloadsEndpoint =>
       @i18n.copy(
-        locale, "Use the canonical /v1/workloads endpoint with an order-bound key from Endpoint access.",
-        "使用标准 /v1/workloads 端点，并在“端点访问”中创建订单绑定密钥。",
+        locale, "Open Endpoint access to get your API address and key.", "打开“端点访问”获取 API 地址与密钥。",
       )
     MachineAccessBecomesVisibleInMy =>
       @i18n.copy(
@@ -1625,7 +1415,6 @@ fn enterprise_copy(
     HRemaining => @i18n.copy(locale, "h remaining", " 小时后到期")
     MRemaining => @i18n.copy(locale, "m remaining", " 分钟后到期")
     CopyIdentifier => @i18n.copy(locale, "Copy identifier", "复制标识符")
-    Copy => @i18n.copy(locale, "Copy", "复制")
     RequestQuotaUsed =>
       @i18n.copy(locale, "Request quota used", "已使用请求配额")
     ViewErrorGuide =>

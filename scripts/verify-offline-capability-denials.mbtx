@@ -1,4 +1,4 @@
-import { "moonbitlang/async", "moonbitlang/async/fs", "moonbitlang/async/shell", "moonbitlang/core/env", "moonbitlang/core/json" }
+import { "moonbitlang/async@0.22.4", "moonbitlang/async@0.22.4/fs", "moonbitlang/async@0.22.4/shell", "moonbitlang/core/env", "moonbitlang/core/json" }
 enum Direction { DownloadTransfer } derive(ToJson)
 async fn main {
   guard @env.args() is [_, private_dir, kubeconfig] else {fail("Usage: verify-offline-capability-denials.mbtx PRIVATE_DIR KUBECONFIG")}

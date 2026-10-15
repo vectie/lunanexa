@@ -44,7 +44,6 @@ priv enum MachineMessage {
   LabelHost
   LabelPort
   LabelHostkey
-  CredentialIssuerExplanation
   ContinueToIssuer
   RecoverableDetailsHeading
   LabelAccessisready
@@ -53,7 +52,6 @@ priv enum MachineMessage {
   HandoffUnavailableExplanation
   AccessClosingExplanation
   LabelMymachineaccess
-  ExclusiveAccessBoundary
   NoAssignedMachine
   MachineTime
   HandoffTime
@@ -78,13 +76,11 @@ fn machine_message(locale : @i18n.Locale, message : MachineMessage) -> String {
   let (english, chinese) = match message {
     RecoveryExplanation =>
       (
-        "Recover the same safe connection metadata after a reload; this does not issue another credential.",
-        "页面重载后可恢复相同的安全连接信息；不会再次签发凭据。",
+        "Recover your connection details without issuing a new credential.", "恢复连接信息，不会签发新凭据。",
       )
     RedemptionExplanation =>
       (
-        "Redeem once to reveal safe connection metadata and continue to the short-lived certificate issuer.",
-        "仅可领取一次；领取后将显示安全连接信息，并继续前往短期证书签发方。",
+        "Retrieve connection details, then get your SSH certificate.", "领取连接信息后，继续获取 SSH 证书。",
       )
     LabelExpired => ("Expired", "已到期")
     LabelScheduledatclosure => ("Scheduled at closure", "将在关闭时执行")
@@ -142,11 +138,6 @@ fn machine_message(locale : @i18n.Locale, message : MachineMessage) -> String {
     LabelHost => ("Host", "主机")
     LabelPort => ("Port", "端口")
     LabelHostkey => ("Host key", "主机密钥")
-    CredentialIssuerExplanation =>
-      (
-        "Continue through the approved credential issuer. Verify the host key before connecting; no password or private key is displayed here.",
-        "请继续前往已批准的凭据签发方。连接前请核对主机密钥；此处不会显示密码或私钥。",
-      )
     ContinueToIssuer =>
       ("Continue to credential issuer", "前往凭据签发方")
     RecoverableDetailsHeading =>
@@ -166,11 +157,6 @@ fn machine_message(locale : @i18n.Locale, message : MachineMessage) -> String {
         "访问正在关闭或已关闭。机器将在撤销访问并验证清理完成前保持隔离。",
       )
     LabelMymachineaccess => ("My machine access", "我的机器访问")
-    ExclusiveAccessBoundary =>
-      (
-        "Exclusive machine access is separate from your model API quota and hosted WebIDE/ComfyUI workspace. Only an assigned exclusive lease grants SSH access.",
-        "独占机器访问与模型 API 额度、托管 WebIDE/ComfyUI 工作区相互独立。只有已分配的独占租约才提供 SSH 访问。",
-      )
     NoAssignedMachine =>
       (
         "No exclusive machine access has been assigned to your identity.", "您的身份尚未获分配独占机器访问权限。",
@@ -187,13 +173,13 @@ fn machine_message(locale : @i18n.Locale, message : MachineMessage) -> String {
       )
     ExpiryConsequences =>
       (
-        "At machine expiry, access closes and tenant-data cleanup follows. Download results beforehand; do not rely on recovery after closure. Cleanup is verified in stages, not a promise of instant physical disk erasure.",
-        "机器到期后将关闭访问并进入租户数据清理。请提前下载成果，不要依赖关闭后的数据恢复。清理分阶段验证，并不代表到期瞬间完成物理磁盘擦除。",
+        "Download your files before expiry. Access then ends and data cleanup begins; files may not be recoverable.",
+        "请在到期前下载文件。到期后访问关闭并开始清理数据，文件可能无法恢复。",
       )
     ContinuedAccess =>
       (
-        "Need more time? Contact your operator before expiry to discuss continued access. There is no self-service machine renewal here; access is not extended until separately approved and reflected in the lease.",
-        "需要更长时间？请在到期前联系运维确认后续使用安排。此处不提供机器自助延期；只有另行获批并反映到租约后，访问时间才算延长。",
+        "To extend access, contact your operator before expiry. The extension must be approved and appear in your lease.",
+        "需要延期请在到期前联系运维。延期须经批准并更新到租约中才生效。",
       )
     CopyFingerprint => ("Copy host fingerprint", "复制主机指纹")
     CopyHost => ("Copy host", "复制主机")
@@ -206,21 +192,21 @@ fn machine_message(locale : @i18n.Locale, message : MachineMessage) -> String {
         "Connection metadata is invalid. Contact your operator for corrected access details; do not run a guessed command.",
         "连接信息无效。请联系运维获取正确访问详情，不要运行自行猜测的命令。",
       )
-    NextSteps => ("Next steps", "接下来怎么用")
+    NextSteps => ("Connection help", "连接帮助")
     VerifyFingerprint =>
       (
-        "1. On your first SSH connection, compare the displayed SHA256 host fingerprint with the one above before accepting. If it differs, stop and contact your operator; do not disable host-key verification.",
-        "1. 首次 SSH 连接时，接受主机前先核对终端显示的 SHA256 指纹是否与上方一致。不一致时请停止并联系运维，不要关闭主机密钥验证。",
+        "Compare the SSH host fingerprint with the one above. If it differs, stop and contact your operator.",
+        "请核对 SSH 主机指纹是否与上方一致。不一致时请停止并联系运维。",
       )
     TunnelHelp =>
       (
-        "2. If you have started a web application on this exclusive machine at 127.0.0.1:8181, run this in your local terminal, keep it open, then visit http://127.0.0.1:8181 locally. It does not install or start ComfyUI. Hosted ComfyUI uses its Open workspace button instead. Complete the approved SSH certificate setup first.",
-        "2. 如果您已在这台独占机器的 127.0.0.1:8181 启动网页应用，请在本机终端运行下方命令并保持终端打开，再用本机浏览器访问 http://127.0.0.1:8181。此命令不会安装或启动 ComfyUI；托管 ComfyUI 请使用“打开工作空间”按钮。请先完成已批准的 SSH 证书配置。",
+        "For an app already running on the machine at port 8181: set up your SSH certificate, run this tunnel locally, and keep it open. Then visit http://127.0.0.1:8181. For hosted ComfyUI, use Open workspace.",
+        "如机器已在 8181 端口运行应用：配置好 SSH 证书后，在本机运行并保持此隧道，再访问 http://127.0.0.1:8181。托管 ComfyUI 请使用“打开工作空间”。",
       )
     DownloadReminder =>
       (
-        "3. Download workflows, uploads and generated results before machine access ends. The connection-details timer only limits retrieval/recovery of these details; it does not extend machine access or guarantee certificate validity.",
-        "3. 请在机器访问结束前下载工作流、上传文件和生成结果。连接信息倒计时只限制领取或恢复详情，不会延长机器使用时间，也不保证 SSH 证书始终有效。",
+        "The retrieval timer applies to connection details. Machine access and SSH certificates have separate expiry times.",
+        "领取倒计时仅适用于连接信息；机器访问与 SSH 证书各有有效期。",
       )
   }
   @i18n.copy(locale, english, chinese)

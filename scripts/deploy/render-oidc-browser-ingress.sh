@@ -143,10 +143,7 @@ else
     exit 64
   fi
   for required_resource in \
-    lunanexa-console-public \
-    lunanexa-workbench-public \
-    lunanexa-console-public-gateway \
-    lunanexa-workbench-public-gateway; do
+    lunanexa-console-public; do
     if ! rg -q "name: $required_resource" "$base"; then
       printf 'direct-IP browser edge requires management resource: %s\n' \
         "$required_resource" >&2
@@ -159,12 +156,6 @@ else
     "$repo_root/deploy/oidc-browser-direct-ip-edge.yaml" > "$direct_ip_edge"
   cp "$repo_root/deploy/oidc-browser-direct-ip-console-service-patch.json" \
     "$test_directory/oidc-browser-direct-ip-console-service-patch.json"
-  cp "$repo_root/deploy/oidc-browser-direct-ip-workbench-service-patch.json" \
-    "$test_directory/oidc-browser-direct-ip-workbench-service-patch.json"
-  cp "$repo_root/deploy/oidc-browser-disable-console-public-gateway-patch.yaml" \
-    "$test_directory/oidc-browser-disable-console-public-gateway-patch.yaml"
-  cp "$repo_root/deploy/oidc-browser-disable-workbench-public-gateway-patch.yaml" \
-    "$test_directory/oidc-browser-disable-workbench-public-gateway-patch.yaml"
 fi
 sed \
   -e "s|\${OIDC_IDENTITY_GATEWAY_IMAGE}|$gateway_image|g" \
@@ -212,13 +203,6 @@ if [ -n "$direct_ip_edge" ]; then
     '      version: v1' \
     '      kind: Service' \
     '      name: lunanexa-console-public' \
-    '  - path: oidc-browser-direct-ip-workbench-service-patch.json' \
-    '    target:' \
-    '      version: v1' \
-    '      kind: Service' \
-    '      name: lunanexa-workbench-public' \
-    '  - path: oidc-browser-disable-console-public-gateway-patch.yaml' \
-    '  - path: oidc-browser-disable-workbench-public-gateway-patch.yaml' \
     >> "$test_directory/kustomization.yaml"
 fi
 kubectl kustomize "$test_directory" > "$rendered"

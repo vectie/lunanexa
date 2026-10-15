@@ -30,15 +30,9 @@ async fn exercise_offline_transfer_adapter(
   @async.with_task_group <| group => {
     group.spawn_bg(no_wait=true, allow_failure=true) <| () => {
       server.run_forever(allow_failure=true) <| ((request, _, connection) => {
-        authenticated[0] = request.headers
-          .iter()
-          .find_first(item => item.0.to_lower() == "authorization")
-          .map(item => item.1) ==
+        authenticated[0] = request.headers.get("authorization") ==
           Some("Bearer offline-transfer-adapter-test-token-more-than-32-bytes") &&
-          request.headers
-          .iter()
-          .find_first(item => item.0.to_lower() == "idempotency-key")
-          .map(item => item.1) ==
+          request.headers.get("idempotency-key") ==
           Some("transfer-test-idempotency")
         match mode {
           TransferSuccess => {

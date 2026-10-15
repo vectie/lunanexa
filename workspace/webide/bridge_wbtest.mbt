@@ -94,7 +94,7 @@ test "shared platform workspace paths are product-specific" {
   assert_eq(make("moonrobo", "/moonrobo").public_base_path, "/moonrobo")
   assert_eq(make("moontown", "/moontown").public_base_path, "/moontown")
   try make("comfyui", "/moondesk") catch {
-    BridgeError::InvalidConfiguration => ()
+    InvalidConfiguration => ()
     _ => fail("wrong error for cross-product path")
   } noraise {
     _ => fail("cross-product path was accepted")
@@ -227,10 +227,9 @@ test "cookie parser rejects duplicate names and malformed capabilities" {
   )
   assert_eq(
     cookie(
-      {
-        "Cookie": "webide-session=\{token}",
-        "cookie": "webide-session=\{token}",
-      },
+      // The HTTP parser joins repeated, case-insensitive header names with a
+      // comma. A map literal with both spellings would overwrite the first.
+      { "Cookie": "webide-session=\{token},webide-session=\{token}" },
       "webide-session",
     ),
     None,
@@ -362,7 +361,7 @@ async fn launch_test(origin : String, code : String) -> (String, String) {
   assert_true(content.text().contains("nonce=\"\{challenge.value}\""))
   assert_true(content.text().contains("'X-WebIDE-CSRF':'\{challenge.value}'"))
   assert_true(challenge.http_only)
-  let headers = {
+  let headers : @http.Headers = {
     "origin": origin,
     "cookie": "\{challenge.name}=\{challenge.value}",
     "x-webide-csrf": challenge.value,

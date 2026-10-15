@@ -54,6 +54,20 @@ async fn WorkspaceHost::kubernetes(
     // Kubernetes errors can contain a submitted Secret. Do not include their
     // content in an exception or a browser readiness response.
     if response.code < 200 || response.code >= 300 {
+      let resource = if path.contains("/networkpolicies/") {
+        "network policy"
+      } else if path.contains("/persistentvolumeclaims/") {
+        "workspace volume"
+      } else if path.contains("/secrets/") {
+        "workspace credential"
+      } else if path.contains("/services/") {
+        "workspace service"
+      } else if path.contains("/deployments/") {
+        "workspace deployment"
+      } else {
+        "workspace resource"
+      }
+      eprintln("WebIDE Kubernetes \{resource} returned HTTP \{response.code}")
       raise HostError::WorkspaceUnavailable
     }
     (response.code, @json.parse(@utf8.decode(bytes)))

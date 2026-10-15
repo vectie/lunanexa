@@ -1,0 +1,22 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/core/env",
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, repo, destination] else {
+    fail("usage: copy-app-logo-assets.mbtx REPO_ROOT BROWSER_OUTPUT_ROOT")
+  }
+  let output = destination + "/enterprise/apps"
+  if !@fs.exists(output) { @fs.mkdir(output, recursive=true) }
+  for name in ["comfyui", "moondesk", "moonrobo", "moontown"] {
+    let logo = @fs.read_file(repo + "/assets/apps/" + name + ".svg").text()
+    guard logo.contains("<svg") && !logo.contains("<script") else {
+      fail("Invalid app logo: " + name)
+    }
+    @fs.write_file(output + "/" + name + ".svg", logo)
+  }
+}

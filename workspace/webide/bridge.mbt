@@ -26,7 +26,7 @@ async fn read_bounded(reader : &@io.Reader, limit : Int) -> Bytes {
 }
 
 ///|
-fn response_headers(content_type : String) -> Map[String, String] {
+fn response_headers(content_type : String) -> @http.Headers {
   {
     "content-type": content_type,
     "cache-control": "no-store",
@@ -357,7 +357,7 @@ async fn Bridge::proxy_http(
   if self.config.client_id == "moontown" {
     eprintln("MoonTown HTTP proxy request received")
   }
-  let headers : Map[String, String] = Map([])
+  let headers : @http.Headers = Map([])
   // Never forward browser cookies, Authorization, Host, forwarded identity or
   // hop-by-hop headers. The personal desktop sees only the private gateway's
   // service origin, not the browser's public origin or session secret.

@@ -9,11 +9,11 @@ test "undertaking order authority covers the selected rental term" {
 ///|
 test "cancel notice distinguishes an unfulfilled order from access revocation" {
   assert_eq(
-    offline_cancellation_notice(@i18n.ChineseSimplified, Cancelled),
+    offline_cancellation_notice(ChineseSimplified, Cancelled),
     "订单已在履约前取消；没有开通访问权限。",
   )
   assert_true(
-    offline_cancellation_notice(@i18n.ChineseSimplified, ReversalPending).contains(
+    offline_cancellation_notice(ChineseSimplified, ReversalPending).contains(
       "权益授权方确认前",
     ),
   )
@@ -183,6 +183,18 @@ test "enterprise contract preview is reactive and generation fenced" {
     after_stale.portal.contract_documents.draft_values,
     changed.portal.contract_documents.draft_values,
   )
+  let packet = changed.portal.contract_documents.packets[0]
+  let (saved, _) = update(
+    changed,
+    Outcome(
+      ContractPacketUpdated({ ..packet, revision: packet.revision + 1L, }),
+    ),
+    emit,
+  )
+  assert_eq(
+    saved.portal.contract_documents.selected_form,
+    Some(ReservationApplication),
+  )
 }
 
 ///|
@@ -292,6 +304,76 @@ test "enterprise demo machine countdown uses the snapshot clock" {
 }
 
 ///|
+test "enterprise demo quote period is finalized before its snapshot clock" {
+  let portal = @enterprise_ui.demo_state()
+  guard portal.payment_checkout_quote is Some(quote) else {
+    fail("missing demo checkout quote")
+  }
+  assert_eq(quote.period_id, "period-2026-08")
+  assert_true(portal.machine_access.now_unix_ms >= 1788220800000L)
+  assert_true(
+    portal.api_keys[0].expires_unix_ms > portal.machine_access.now_unix_ms,
+  )
+  assert_true(
+    portal.machine_access.machines[0].expires_unix_ms >
+    portal.machine_access.now_unix_ms,
+  )
+}
+
+///|
+test "live enterprise demo access clocks follow the supplied browser time" {
+  let now = 1790841600000L
+  let portal = @enterprise_ui.demo_state_at(now)
+  assert_eq(portal.machine_access.now_unix_ms, now)
+  assert_eq(portal.contract_documents.now_unix_ms, now)
+  assert_eq(portal.machine_access.machines[0].expires_unix_ms, now + 86400000L)
+  assert_true(portal.api_keys[0].expires_unix_ms > now)
+}
+
+///|
+test "demo quote action never strands a changed configuration without a quote" {
+  let base = @enterprise_ui.demo_state()
+  let changed = base.update(SelfService(DurationChanged(24)))
+  assert_true(changed.self_service.quote is None)
+  let model : AppModel = {
+    endpoint: "https://unused.invalid",
+    token: "",
+    csrf_token: "",
+    subject_ref: "",
+    connecting: false,
+    bootstrap_started: true,
+    demo_mode: true,
+    session_generation: 0L,
+    session_expires_unix_ms: None,
+    machine_clock_generation: 0L,
+    contract_preview_generation: 0L,
+    contract_poll_generation: 0L,
+    portal: { ..changed, route: SelfService, },
+    login_email: "",
+    login_password: "",
+    register_display_name: "",
+    registering: false,
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (held, _) = update(model, Portal(SelfService(RequestQuote)), emit)
+  assert_eq(held.portal.self_service.step, Capacity)
+  assert_true(
+    held.portal.self_service.action_error.unwrap_or("").contains("Demo preview"),
+  )
+  let (sample, _) = update(
+    { ..model, portal: { ..base, route: SelfService, }, },
+    Portal(SelfService(RequestQuote)),
+    emit,
+  )
+  assert_eq(sample.portal.self_service.step, Quote)
+  assert_true(sample.portal.self_service.quote is Some(_))
+  let html = @enterprise_ui.render(sample.portal)
+  assert_true(html.contains("Demo quote preview"))
+  assert_true(html.contains("Ordering is unavailable in this demo preview"))
+  assert_false(html.contains(">Create order</button>"))
+}
+
+///|
 test "enterprise demo renews the selected effective contract packet" {
   let model : AppModel = {
     endpoint: "http://127.0.0.1:4173",
@@ -372,7 +454,7 @@ test "signed-out enterprise gate hides application navigation and actions" {
   // second option, and the development fallback stays hidden on public HTTP.
   assert_true(html.contains("portal-login-email"))
   assert_true(html.contains("portal-login-password"))
-  assert_true(html.contains("Register a new account"))
+  assert_true(html.contains("Create account"))
   assert_true(html.contains("href=\"/auth/oidc/start?audience=enterprise\""))
   assert_false(html.contains("Development credential fallback"))
   assert_false(html.contains("session_token="))
@@ -1018,20 +1100,20 @@ test "organization mock response keeps verification provider action and redacted
 ///|
 test "portal failures reach the refusal-specific friendly copy" {
   let conflict = portal_failure_message(
-    @i18n.English,
+    English,
     "Unable to approve the model version: " +
     "HTTP 409: {\"error\":{\"code\":\"RegistryRejected\",\"message\":\"model approval prerequisites were not met\"}}",
   )
   assert_true(conflict.contains("The resource changed"))
   assert_true(conflict.contains("Operation"))
   let denied = portal_failure_message(
-    @i18n.English,
+    English,
     "Unable to load your organizations: " +
     "HTTP 403: {\"error\":{\"code\":\"PortalAccessDenied\",\"message\":\"denied\"}}",
   )
   assert_true(denied.contains("lacks permission"))
   let unauthenticated = portal_failure_message(
-    @i18n.English,
+    English,
     "HTTP 401: {\"error\":{\"code\":\"Unauthenticated\"}}",
   )
   assert_true(
@@ -1046,7 +1128,7 @@ test "an opaque debug representation cannot select friendly copy" {
   // never carries the status line, so every refusal silently fell through to
   // the generic copy instead of its own recovery guidance.
   let debug_repr = portal_failure_message(
-    @i18n.English,
+    English,
     "Unable to approve the model version: Error(\"RegistryRejected\")",
   )
   assert_true(debug_repr.contains("The action failed"))
@@ -1077,6 +1159,31 @@ fn gateway_auth_test_model() -> AppModel {
 }
 
 ///|
+test "catalog refresh does not replace a new purchase with an older order" {
+  let portal = @enterprise_ui.demo_state()
+    .update(SelfService(RestartSelfService))
+    .update(SelfService(SelectProduct(BareGpu)))
+  let model = { ..gateway_auth_test_model(), portal, }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (refreshed, _) = update(
+    model,
+    Outcome(
+      MachineCommerceLoaded(
+        [mock_machine_offering(DedicatedEndpoint)],
+        [mock_machine_order(AwaitingPayment)],
+        None,
+        [],
+      ),
+    ),
+    emit,
+  )
+  assert_eq(refreshed.portal.self_service.order, None)
+  assert_eq(refreshed.portal.self_service.step, Capacity)
+  assert_eq(refreshed.portal.self_service.selected_product, Some(BareGpu))
+  assert_eq(refreshed.portal.self_service.orders.length(), 1)
+}
+
+///|
 #warnings("-alert_unstable")
 test "signed-in shell shows a human status instead of internal tenant ids" {
   let base = gateway_auth_test_model()
@@ -1089,7 +1196,8 @@ test "signed-in shell shows a human status instead of internal tenant ids" {
   let html = @rabbita.render_to_string(() => {
     @rabbita.Val::constant(app_view(model, emit))
   })
-  assert_true(html.contains("Signed in"))
+  assert_true(html.contains("<strong>Alice Chen</strong>"))
+  assert_false(html.contains("browser session; ends on logout or expiry"))
   assert_false(html.contains("<strong>subject-"))
 }
 
@@ -1203,6 +1311,8 @@ test "the registration form asks for a display name the sign-in form does not" {
   })
   assert_true(html.contains("portal-login-email"))
   assert_false(html.contains("portal-register-name"))
+  assert_false(html.contains("12 characters"))
+  assert_false(html.contains("platform stores only a salted"))
   // Without a deployment opt-in the page still renders the form, but says why
   // it cannot be used yet instead of leaving a dead button unexplained.
   let blocked = @rabbita.render_to_string(() => {
@@ -1223,4 +1333,7 @@ test "the registration form asks for a display name the sign-in form does not" {
   assert_true(registering.contains("Create account"))
   // The realm's password policy is stated before the customer picks one.
   assert_true(registering.contains("12 characters"))
+  assert_true(
+    registering.contains("aria-describedby=\"portal-password-requirements\""),
+  )
 }

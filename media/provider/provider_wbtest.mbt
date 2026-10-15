@@ -9,6 +9,8 @@ fn profile() -> Profile {
     maximum_fps: 24,
     maximum_steps: 50,
     sound_supported: true,
+    image_reference_supported: None,
+    image_reference_required: None,
   }
 }
 

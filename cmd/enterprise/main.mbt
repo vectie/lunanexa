@@ -149,7 +149,7 @@ extend PortalApiKeyIssueIntent with ToJson::{to_json}
 priv struct PortalApiKeyRevokeView {
   key_id : String
   revoked_unix_ms : Int64?
-} derive(FromJson)
+}
 
 ///|
 priv struct PaymentCheckoutIntent {
@@ -378,7 +378,7 @@ priv enum Outcome {
   ContractPacketUpdated(@contractdoc.ContractPacket)
   ContractActionNeedsRefresh
   ContractApprovalNudged
-  DesktopClientLaunched(String)
+  ApplicationLaunchCompleted(Int64, String?, Int64?, Result[String, String])
   WorkspaceControlsOpened
   ContractPreviewLoaded(Int64, @contractdoc.ContractPreviewDocument)
   ContractPreviewFailed(Int64, @i18n.Locale, String)
@@ -427,6 +427,8 @@ priv enum AppMessage {
   EnterpriseSignInSubmitted
   EnterpriseRegistrationSubmitted
   EnterpriseAuthRefused(@i18n.Locale, String)
+  WifiTrialRedeem
+  WifiTrialFinished(Int64, String?)
   Connect
   Bootstrap
   BootstrapReady(Int64, GatewayBrowserBootstrap)
@@ -436,6 +438,8 @@ priv enum AppMessage {
   Portal(@enterprise_ui.EnterpriseMessage)
   ContractPreviewDue(Int64, @contract_documents.ContractDocumentsMessage)
   ContractPollDue(Int64, String, Int)
+  RentalWaitDue(Int64, String, Int)
+  RentalWaitLoaded(Int64, String, Int, Result[RentalWaitResult, String])
   ContractPollResult(
     Int64,
     String,
@@ -448,6 +452,20 @@ priv enum AppMessage {
 ///|
 extern "js" fn configured_endpoint() -> String =
   #| () => globalThis.LUNANEXA_API_ENDPOINT || (globalThis.location?.pathname?.startsWith("/user/") ? `${globalThis.location.origin}/user` : globalThis.location?.origin || "")
+
+///|
+extern "js" fn wifi_trial_entry() -> Bool =
+  #| () => {
+  #|   const key = "lunanexa.wifi-trial-entry";
+  #|   const scanned = new URLSearchParams(globalThis.location?.search || "").get("trial") === "wifi";
+  #|   try {
+  #|     if (scanned) { sessionStorage.setItem(key, String(Date.now())); return true; }
+  #|     const started = Number(sessionStorage.getItem(key));
+  #|     if (started > 0 && Date.now() - started < 7200000) return true;
+  #|     sessionStorage.removeItem(key);
+  #|   } catch (_) { return scanned; }
+  #|   return false;
+  #| }
 
 ///|
 extern "js" fn configured_docs_url() -> String =
@@ -470,17 +488,6 @@ extern "js" fn install_dialog_focus() -> Unit =
 ///|
 extern "js" fn download_costs_csv(value : String) -> Bool =
   #| (value) => { try { const url = URL.createObjectURL(new Blob(['\ufeff', value], {type:'text/csv;charset=utf-8'})); const a = document.createElement('a'); a.href=url; a.download='lunanexa-costs.csv'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); return true; } catch (_) { return false; } }
-
-///|
-extern "js" fn demo_mode() -> Bool =
-  #| () => {
-  #|   try {
-  #|     const value = new URL(globalThis.location.href).searchParams.get("demo");
-  #|     return value === "1" || value === "true";
-  #|   } catch (_) {
-  #|     return false;
-  #|   }
-  #| }
 
 ///|
 extern "js" fn stored_locale_preference() -> String =
@@ -1665,21 +1672,34 @@ fn desktop_client_command(
   model : AppModel,
   emit : @rabbita.Emit[AppMessage],
 ) -> @rabbita.Cmd {
-  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
-    try launch_desktop_client(model, false) catch {
-      error =>
-        Failed(
-          model.portal.locale,
-          portal_copy(
-            model.portal.locale,
-            "Unable to open the desktop WebIDE: \{error.to_string()}",
-            "无法打开桌面 WebIDE：\{error.to_string()}",
+  @rabbita.perform(
+    result => {
+      emit(
+        Outcome(
+          ApplicationLaunchCompleted(
+            model.session_generation,
+            model.portal.selected_organization_id,
+            None,
+            result,
           ),
-        )
-    } noraise {
-      name => DesktopClientLaunched(name)
-    }
-  })
+        ),
+      )
+    },
+    async fn() noraise {
+      try launch_desktop_client(model, false) catch {
+        error =>
+          Err(
+            portal_copy(
+              model.portal.locale,
+              "Unable to open the desktop WebIDE: \{error.to_string()}",
+              "无法打开桌面 WebIDE：\{error.to_string()}",
+            ),
+          )
+      } noraise {
+        name => Ok(name)
+      }
+    },
+  )
 }
 
 ///|
@@ -2449,15 +2469,26 @@ async fn request_and_download_offline_artifact(
 }
 
 ///|
-async fn issue_api_key(model : AppModel) -> @enterprise_ui.IssuedApiKeyView {
-  let draft = model.portal.api_key_issue_draft
-  let requested_expiry = current_unix_ms() +
-    draft.lifetime_days.to_int64() * 86400000L
-  let expires_unix_ms = match model.portal.trial {
-    Some(trial) if trial.revoked_unix_ms is None &&
+fn api_key_issue_expiry(
+  portal : @enterprise_ui.EnterpriseState,
+  now_unix_ms : Int64,
+) -> Int64 {
+  let requested_expiry = now_unix_ms +
+    portal.api_key_issue_draft.lifetime_days.to_int64() * 86400000L
+  match (portal.trial, portal.membership) {
+    (Some(trial), Some(membership)) if trial.revoked_unix_ms is None &&
+      trial.organization_id == membership.organization_id &&
+      trial.tenant_ref == membership.tenant_ref &&
+      trial.project_id == portal.project_id &&
       trial.expires_unix_ms < requested_expiry => trial.expires_unix_ms
     _ => requested_expiry
   }
+}
+
+///|
+async fn issue_api_key(model : AppModel) -> @enterprise_ui.IssuedApiKeyView {
+  let draft = model.portal.api_key_issue_draft
+  let expires_unix_ms = api_key_issue_expiry(model.portal, current_unix_ms())
   let intent : PortalApiKeyIssueIntent = {
     key_id: random_identifier("api-key"),
     project_id: model.portal.project_id.trim().to_owned(),
@@ -2465,7 +2496,13 @@ async fn issue_api_key(model : AppModel) -> @enterprise_ui.IssuedApiKeyView {
     scopes: @enterprise_ui.api_key_scopes(model.portal),
     allowed_models: @enterprise_ui.api_key_allowed_models(model.portal),
     expires_unix_ms,
-    maximum_requests: draft.maximum_requests,
+    maximum_requests: if @enterprise_ui.api_key_uses_reserved_model(
+        model.portal,
+      ) {
+      0L
+    } else {
+      draft.maximum_requests
+    },
   }
   let response = request(
     "POST",
@@ -2585,6 +2622,33 @@ fn bootstrap_command(
       BootstrapReady(generation, session)
     } catch {
       _ => BootstrapUnavailable(generation)
+    }
+  })
+}
+
+///|
+fn wifi_trial_command(
+  model : AppModel,
+  emit : @rabbita.Emit[AppMessage],
+) -> @rabbita.Cmd {
+  let generation = model.session_generation
+  @rabbita.perform(result => emit(result), async fn() noraise {
+    try {
+      let trial : @enterprise_ui.TrialEntitlementView = @json.from_json(
+        @json.parse(
+          request(
+            "POST",
+            model.endpoint,
+            "/v1/auth/wifi-trial:redeem",
+            model.token,
+            model.subject_ref,
+            body="{}",
+          ),
+        ),
+      )
+      WifiTrialFinished(generation, Some(trial.organization_id))
+    } catch {
+      _ => WifiTrialFinished(generation, None)
     }
   })
 }
@@ -3775,6 +3839,19 @@ fn update(
   emit : @rabbita.Emit[AppMessage],
 ) -> (AppModel, @rabbita.Cmd) {
   match message {
+    RentalWaitDue(generation, organization, remaining) =>
+      if rental_wait_active(model, generation, organization) {
+        (
+          model,
+          rental_wait_request(model, generation, organization, remaining, emit),
+        )
+      } else {
+        (model, @rabbita.none)
+      }
+    RentalWaitLoaded(generation, organization, remaining, result) =>
+      apply_rental_wait(
+        model, generation, organization, remaining, result, emit,
+      )
     ContractPollDue(generation, packet_id, remaining) =>
       if contract_poll_active(model, generation, packet_id) && remaining > 0 {
         (
@@ -3863,6 +3940,53 @@ fn update(
         },
         @rabbita.none,
       )
+    WifiTrialRedeem =>
+      if !wifi_trial_entry() ||
+        model.demo_mode ||
+        model.token == "" ||
+        model.connecting {
+        (model, @rabbita.none)
+      } else {
+        let next = {
+          ..model,
+          connecting: true,
+          portal: { ..model.portal, error_message: None, },
+        }
+        (next, wifi_trial_command(next, emit))
+      }
+    WifiTrialFinished(generation, trial_organization) =>
+      if generation != model.session_generation {
+        (model, @rabbita.none)
+      } else if trial_organization is Some(organization_id) {
+        commit_enterprise_organization(organization_id)
+        let next = {
+          ..model,
+          connecting: false,
+          portal: {
+            ..model.portal,
+            selected_organization_id: Some(organization_id),
+          },
+        }
+        (next, organization_bootstrap_command(next, emit))
+      } else {
+        (
+          {
+            ..model,
+            connecting: false,
+            portal: {
+              ..model.portal,
+              error_message: Some(
+                portal_copy(
+                  model.portal.locale,
+                  "Trial could not start. Connect to the guest Wi-Fi and retry; an existing trial cannot be extended.",
+                  "体验未能开始。请连接访客 Wi-Fi 后重试；已有体验不可延长。",
+                ),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
+      }
     Connect =>
       if model.token == "" || model.endpoint == "" {
         (
@@ -3968,19 +4092,70 @@ fn update(
           {
             ..panel,
             options,
+            reservation_id: if options.reservations.any(option => {
+                option.reservation_id == panel.reservation_id
+              }) {
+              panel.reservation_id
+            } else if panel.reservation_id == "" &&
+              options.reservations.length() == 1 {
+              options.reservations[0].reservation_id
+            } else {
+              panel.reservation_id
+            },
             operations,
             external_model,
             company_workspace,
             loaded: true,
             loading: false,
             error,
-            stop_confirmation: None,
-            external_stop_confirmation: false,
+            stop_confirmation: panel.stop_confirmation.filter(id => {
+              operations.any(operation => {
+                operation.operation_id == id &&
+                operation.stage != "Stopped" &&
+                operation.stage != "Stopping" &&
+                operation.stage != "Expired" &&
+                operation.stage != "Revoked"
+              })
+            }),
+            external_stop_confirmation: panel.external_stop_confirmation &&
+            external_model.map_or(false, service => {
+              service.state == "Running" || service.state == "Partial"
+            }),
+            external_start_confirmation: panel.external_start_confirmation &&
+            external_model.map_or(false, service => service.state == "Stopped"),
           }
         Err(error) => { ..panel, loading: false, error: Some(error), }
       }
-      let next = { ..model, portal: { ..model.portal, deliveries, }, }
-      (next, delivery_poll_command(next, emit))
+      let next = {
+        ..model,
+        portal: {
+          ..model.portal,
+          deliveries: deliveries.for_route(model.portal.route),
+        },
+      }
+      let access_changed = deliveries.company_workspace.map_or(false, value => {
+          value.status == "Ready"
+        }) &&
+        !panel.company_workspace.map_or(false, value => value.status == "Ready")
+      let model_ready = deliveries.operations.any(operation => {
+        operation.kind == "ModelApi" &&
+        operation.stage == "Ready" &&
+        !panel.operations.any(previous => {
+          previous.operation_id == operation.operation_id &&
+          previous.stage == "Ready"
+        })
+      })
+      (
+        next,
+        @rabbita.batch([
+          delivery_poll_command(next, emit),
+          if !model.demo_mode && (access_changed || model_ready) {
+            load_command(next, emit)
+          } else {
+            @rabbita.none
+          },
+        ]),
+      )
     }
     DeliveryAccessIssued(generation, organization, poll_generation, result) => {
       if generation != model.session_generation ||
@@ -4039,6 +4214,37 @@ fn update(
         }
       }
     }
+    Portal(OfflineCommerce(OpenContractDocuments(order_id))) => {
+      let portal = model.portal.update(
+        OfflineCommerce(OpenContractDocuments(order_id)),
+      )
+      let next = { ..model, portal, }
+      if model.demo_mode {
+        schedule_contract_preview(next, portal.contract_documents, 0, emit)
+      } else {
+        (next, load_command(next, emit))
+      }
+    }
+    Portal(ContractDocuments(OpenOrder(order_id))) => {
+      let next = {
+        ..model,
+        portal: model.portal.update(ContractDocuments(OpenOrder(order_id))),
+      }
+      if model.demo_mode {
+        (next, @rabbita.none)
+      } else {
+        (next, load_command(next, emit))
+      }
+    }
+    Portal(OfflineCommerce(OpenMachineAccess(order_id))) => {
+      let next = {
+        ..model,
+        portal: model.portal.update(
+          OfflineCommerce(OpenMachineAccess(order_id)),
+        ),
+      }
+      update(next, Portal(Navigate(MachineAccess)), emit)
+    }
     Portal(Navigate(route)) => {
       let portal = model.portal.update(Navigate(route))
       let portal = {
@@ -4046,23 +4252,34 @@ fn update(
         deliveries: {
           ..portal.deliveries,
           api_access: None,
-          template_choice: "",
           loading: false,
+          stop_confirmation: None,
+          external_stop_confirmation: false,
+          external_start_confirmation: false,
           poll_generation: portal.deliveries.poll_generation + 1L,
         },
       }
       let next = {
         ..model,
-        portal,
+        portal: {
+          ..portal,
+          deliveries: portal.deliveries.for_route(portal.route),
+        },
         contract_poll_generation: model.contract_poll_generation + 1L,
       }
-      match route {
+      match portal.route {
         Overview | DesktopIde | MachineAccess | Models if !model.demo_mode => {
           let next = { ..next, portal: next.portal.update(Delivery(Refresh)), }
           (next, delivery_command(next, None, emit))
         }
         ContractDocuments =>
           schedule_contract_preview(next, portal.contract_documents, 0, emit)
+        SelfService if portal.self_service.step == Organization &&
+          portal.organizations.any(value => {
+            Some(value.organization.organization_id) ==
+            portal.selected_organization_id &&
+            value.organization.state == PendingVerification
+          }) => start_rental_wait(next, emit)
         SelfService if !model.demo_mode &&
           @enterprise_ui.selected_organization_header(portal) is Some(_) => {
           let loading = {
@@ -4196,6 +4413,17 @@ fn update(
         (next, organization_bootstrap_command(next, emit))
       }
     }
+    Portal(SelfService(ResumeMachineOrder(order_id))) => {
+      let portal = model.portal.update(
+        SelfService(ResumeMachineOrder(order_id)),
+      )
+      let next = { ..model, portal, }
+      if model.demo_mode {
+        (next, @rabbita.none)
+      } else {
+        (next, machine_commerce_command(next, emit))
+      }
+    }
     Portal(SelfService(RefreshOfferings))
     | Portal(SelfService(RefreshMachineOrders)) => {
       if model.demo_mode {
@@ -4228,6 +4456,29 @@ fn update(
         ) {
         return (model, @rabbita.none)
       }
+      if model.demo_mode && model.portal.self_service.quote is None {
+        return (
+          {
+            ..model,
+            portal: {
+              ..model.portal,
+              self_service: {
+                ..model.portal.self_service,
+                step: Capacity,
+                action_loading: false,
+                action_error: Some(
+                  portal_copy(
+                    model.portal.locale,
+                    "Demo preview cannot price a changed selection. Reload the demo to inspect its sample quote; a signed quote requires a connected account.",
+                    "演示预览无法为更改后的配置定价。重新加载演示可查看示例报价；签名报价需要连接账户。",
+                  ),
+                ),
+              },
+            },
+          },
+          @rabbita.none,
+        )
+      }
       let portal = model.portal.update(SelfService(RequestQuote))
       let next = { ..model, portal, }
       if model.demo_mode {
@@ -4236,7 +4487,11 @@ fn update(
             ..next,
             portal: {
               ..portal,
-              self_service: { ..portal.self_service, action_loading: false, },
+              self_service: {
+                ..portal.self_service,
+                step: Quote,
+                action_loading: false,
+              },
             },
           },
           @rabbita.none,
@@ -4493,7 +4748,7 @@ fn update(
             model,
             copy_api_key_secret_command(
               model,
-              @enterprise_ui.first_call_example(value),
+              @enterprise_ui.api_key_first_call_example(model.portal, value),
               emit,
             ),
           )
@@ -4726,15 +4981,30 @@ fn update(
         ({ ..model, portal: next, }, lease_command(model, emit))
       }
     }
+    Portal(UseModelInApplication(model_name)) => {
+      let portal = model.portal.update(UseModelInApplication(model_name))
+      if portal.route != DesktopIde {
+        return (model, @rabbita.none)
+      }
+      update({ ..model, portal, }, Portal(Navigate(DesktopIde)), emit)
+    }
+    Portal(OpenApplication(client_id)) => {
+      if model.portal.loading ||
+        !model.portal.desktop_clients.any(client => {
+          client.client_id == client_id
+        }) {
+        return (model, @rabbita.none)
+      }
+      let portal = model.portal.update(SelectWebIde(client_id))
+      update({ ..model, portal, }, Portal(LaunchDesktopClient), emit)
+    }
     Portal(LaunchDesktopClient) => {
+      if model.portal.loading ||
+        @enterprise_ui.webide_launch_selection(model.portal) is None {
+        return (model, @rabbita.none)
+      }
       let next = model.portal.update(LaunchDesktopClient)
       if model.demo_mode {
-        open_desktop_client(
-          "/workbench/?demo=1",
-          "demo-client",
-          "lnxc_" + "d".repeat(64),
-          false,
-        )
         (
           {
             ..model,
@@ -4744,8 +5014,8 @@ fn update(
               success_message: Some(
                 portal_copy(
                   next.locale,
-                  "Demo WebIDE opened with a simulated one-time handoff.",
-                  "演示 WebIDE 已通过模拟单次交接打开。",
+                  "Test fixture: no application was opened.",
+                  "测试数据：未打开应用。",
                 ),
               ),
             },
@@ -5174,7 +5444,6 @@ fn update(
               ..model.portal,
               contract_documents: {
                 ..model.portal.contract_documents,
-                confirmation: None,
                 loading: true,
               },
             },
@@ -5419,7 +5688,12 @@ fn update(
           let portal = base.update(
             SelfService(SelectOrganization(organization_id)),
           )
-          let next = { ..model, connecting: true, portal, }
+          let next = {
+            ..model,
+            connecting: true,
+            portal,
+            contract_poll_generation: model.contract_poll_generation + 1L,
+          }
           (next, load_command(next, emit))
         }
         None => {
@@ -5530,19 +5804,10 @@ fn update(
       let preferred_id = model.portal.self_service.order.map(value => {
         value.order_id
       })
-      let mut current = match preferred_id {
+      let current = match preferred_id {
         Some(order_id) =>
           orders.iter().find_first(order => order.order_id == order_id)
         None => None
-      }
-      if current is None {
-        for order in orders {
-          match current {
-            Some(selected) if selected.updated_unix_ms >= order.updated_unix_ms =>
-              ()
-            _ => current = Some(order)
-          }
-        }
       }
       (
         {
@@ -5859,11 +6124,21 @@ fn update(
             now_unix_ms: current_unix_ms(),
             selected_packet_id: selected_contract.map(packet => packet.packet_id),
             selected_form: match selected_contract {
-              Some(packet) => packet.active_forms.get(0)
+              Some(packet) =>
+                model.portal.contract_documents.form_for_packet(packet)
               None => None
             },
             draft_values: selected_contract.map_or([], packet => {
-              packet.values.copy()
+              if model.portal.contract_documents.selected_packet_id ==
+                Some(packet.packet_id) &&
+                model.portal.contract_documents.packets.any(previous => {
+                  previous.packet_id == packet.packet_id &&
+                  previous.revision == packet.revision
+                }) {
+                model.portal.contract_documents.draft_values
+              } else {
+                packet.values.copy()
+              }
             }),
             loading: false,
             error_message: None,
@@ -5879,9 +6154,20 @@ fn update(
           error_message: None,
         },
       }
-      let (next, poll) = match selected_contract {
-        Some(packet) => start_contract_poll(next, packet, emit)
-        None => (next, @rabbita.none)
+      let next = {
+        ..next,
+        portal: {
+          ..next.portal,
+          contract_documents: next.portal.contract_documents.restore_order_context(),
+        },
+      }
+      let (next, poll) = if next.portal.route == ContractDocuments {
+        schedule_contract_preview(next, next.portal.contract_documents, 0, emit)
+      } else {
+        match selected_contract {
+          Some(packet) => start_contract_poll(next, packet, emit)
+          None => start_rental_wait(next, emit)
+        }
       }
       let (next, delivery_refresh) = if next.portal.route == Overview &&
         !next.demo_mode {
@@ -5903,26 +6189,68 @@ fn update(
         ]),
       )
     }
-    Outcome(DesktopClientLaunched(name)) =>
+    Outcome(
+      ApplicationLaunchCompleted(
+        generation,
+        organization,
+        delivery_generation,
+        result
+      )
+    ) => {
+      if generation != model.session_generation ||
+        organization != model.portal.selected_organization_id ||
+        delivery_generation.map_or(false, value => {
+          value != model.portal.deliveries.poll_generation
+        }) {
+        return (model, @rabbita.none)
+      }
+      let (success, error) = match result {
+        Ok(name) =>
+          (
+            Some(
+              portal_copy(
+                model.portal.locale,
+                "Continue in \{name}.",
+                "请在 \{name} 中继续。",
+              ),
+            ),
+            None,
+          )
+        Err(error) => (None, Some(error))
+      }
       (
         {
           ..model,
           portal: {
             ..model.portal,
-            loading: false,
-            desktop_connect_phase: ClientOpened,
-            success_message: Some(
-              portal_copy(
-                model.portal.locale,
-                "\{name} received a one-time setup request.",
-                "\{name} 已收到单次设置请求。",
-              ),
-            ),
-            error_message: None,
+            loading: if delivery_generation is None {
+              false
+            } else {
+              model.portal.loading
+            },
+            deliveries: if delivery_generation is Some(_) {
+              { ..model.portal.deliveries, loading: false, error, }
+            } else {
+              model.portal.deliveries
+            },
+            desktop_connect_phase: if delivery_generation is Some(_) {
+              model.portal.desktop_connect_phase
+            } else if error is Some(_) {
+              ConnectFailed
+            } else {
+              ClientOpened
+            },
+            success_message: success,
+            error_message: if delivery_generation is None {
+              error
+            } else {
+              None
+            },
           },
         },
         @rabbita.none,
       )
+    }
     Outcome(WorkspaceControlsOpened) => (model, @rabbita.none)
     Outcome(OfflineOrderCreated(order)) =>
       (
@@ -5974,39 +6302,45 @@ fn update(
         },
         @rabbita.none,
       )
-    Outcome(EvidenceUploaded(filename)) =>
-      (
-        {
-          ..model,
-          portal: {
-            ..model.portal,
-            contract_documents: {
-              ..model.portal.contract_documents,
-              loading: false,
-              success_message: Some(
-                portal_copy(
-                  model.portal.locale,
-                  "Signed scan uploaded. Refresh after the safety scan to select it for approval.",
-                  "扫描件已上传。安全检查通过后刷新，即可选择并提交审批。",
-                ),
+    Outcome(EvidenceUploaded(filename)) => {
+      let next = {
+        ..model,
+        portal: {
+          ..model.portal,
+          contract_documents: {
+            ..model.portal.contract_documents,
+            loading: false,
+            success_message: Some(
+              portal_copy(
+                model.portal.locale,
+                "File uploaded. Checking the file…",
+                "文件已上传，正在检查…",
               ),
-            },
-            offline_commerce: {
-              ..model.portal.offline_commerce,
-              loading: false,
-              success_message: Some(
-                portal_copy(
-                  model.portal.locale,
-                  "Evidence uploaded: \{filename}. Safety scanning and reconciliation will continue asynchronously.",
-                  "凭证已上传：\{filename}。安全扫描与核验将异步继续。",
-                ),
+            ),
+          },
+          offline_commerce: {
+            ..model.portal.offline_commerce,
+            loading: false,
+            success_message: Some(
+              portal_copy(
+                model.portal.locale,
+                "Evidence uploaded: \{filename}. Safety scanning and reconciliation will continue asynchronously.",
+                "凭证已上传：\{filename}。安全扫描与核验将异步继续。",
               ),
-              error_message: None,
-            },
+            ),
+            error_message: None,
           },
         },
-        @rabbita.none,
-      )
+      }
+      if next.portal.contract_documents.confirmation
+        is Some(SubmitUndertaking(_, _, _, _)) {
+        start_rental_wait(next, emit)
+      } else if next.demo_mode {
+        (next, @rabbita.none)
+      } else {
+        (next, load_command(next, emit))
+      }
+    }
     Outcome(ArtifactDownloaded(filename)) =>
       (
         {
@@ -6054,7 +6388,9 @@ fn update(
             ..model.portal.contract_documents,
             packets,
             selected_packet_id: Some(packet.packet_id),
-            selected_form: packet.active_forms.get(0),
+            selected_form: model.portal.contract_documents.form_for_packet(
+              packet,
+            ),
             draft_values: if model.portal.contract_documents.selected_packet_id ==
               Some(packet.packet_id) {
               merge_contract_draft(
@@ -6438,7 +6774,13 @@ fn app_view(
   let transport_allowed = @browser_transport.endpoint_allowed(model.endpoint)
   let development_allowed = development_transport_allowed(model.endpoint)
   let shell_styles =
-    #|:root{color-scheme:dark}body{margin:0;background:#071016;color:#ecf5f2;font:14px/1.5 Inter,"PingFang SC","Noto Sans SC",system-ui,sans-serif}.login-gate{min-height:100vh;padding:clamp(1rem,5vw,4rem);display:grid;place-items:center;background:radial-gradient(circle at 80% 0,rgba(53,189,141,.14),transparent 34rem),#071016}.login-card{box-sizing:border-box;width:min(38rem,100%);padding:clamp(1.25rem,4vw,2.5rem);border:1px solid #29424f;border-radius:1rem;background:#0d1820;box-shadow:0 2rem 6rem rgba(0,0,0,.35)}.login-mark{width:2.6rem;height:2.6rem;display:grid;place-items:center;border-radius:.7rem;background:#7ee0bd;color:#06251a;font-weight:900}.login-card h1{margin:1rem 0 .4rem;font-size:clamp(1.8rem,5vw,2.7rem);line-height:1.1}.login-card>p{color:#9db0b6}.login-sso-note{padding:.9rem;border-left:3px solid #7ee0bd;background:rgba(126,224,189,.06)}.sso-start{min-height:48px;margin:.9rem 0;display:flex;align-items:center;justify-content:center;padding:.65rem 1rem;border:1px solid #35bd8d;border-radius:.55rem;background:#7ee0bd;color:#06251a;text-decoration:none;font-weight:900}.bootstrap-status{color:#9db0b6;text-align:center}.development-fallback{margin-top:1.2rem;border:1px solid #29424f;border-radius:.7rem}.development-fallback summary{min-height:44px;padding:.8rem 1rem;cursor:pointer;font-weight:800}.development-form{display:grid;gap:.8rem;padding:0 1rem 1rem}.development-form label{display:block;margin-bottom:.3rem;font-weight:750}.development-form input{width:100%;min-height:44px;box-sizing:border-box;padding:.6rem .7rem;border:1px solid #35505f;border-radius:.5rem;background:#071218;color:#ecf5f2;font:inherit}.development-form button,.session-strip button{min-height:44px;padding:.6rem .9rem;border:1px solid #35bd8d;border-radius:.5rem;background:#7ee0bd;color:#06251a;font:inherit;font-weight:850;cursor:pointer}.development-form button:disabled{opacity:.45;cursor:not-allowed}.development-warning,.login-error{margin:0;padding:.7rem;border-radius:.5rem}.development-warning{color:#f1c66c;background:rgba(241,198,108,.08)}.login-error{color:#ffadad;background:rgba(241,111,111,.1)}.session-strip{position:relative;z-index:45;display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.65rem 1rem;border-bottom:1px solid #223743;background:#09151c;color:#9db0b6}.session-strip strong{color:#ecf5f2}.session-strip p{margin:0}.session-strip button{background:transparent;color:#ecf5f2;border-color:#35505f}.demo-flag{position:fixed;z-index:45;right:1rem;top:1rem;padding:.45rem .65rem;border:1px solid rgba(126,224,189,.3);border-radius:999px;background:#0b1720;color:#7ee0bd;font:800 .65rem/1 system-ui}.login-card form{margin:.95rem 0 0}.login-actions{display:flex;flex-wrap:wrap;gap:.6rem}.login-actions button{flex:1 1 auto}.login-actions button[type=button]{background:transparent;color:#ecf5f2;border-color:#35505f}.login-divider{display:flex;align-items:center;gap:.6rem;margin:1.1rem 0 .6rem;color:#9db0b6;font-size:.75rem}.login-divider::before,.login-divider::after{height:1px;flex:1;background:#29424f;content:""}@media(max-width:38rem){.demo-flag{position:absolute}.session-strip{align-items:stretch;flex-direction:column}.session-strip button{width:100%}.login-gate{place-items:start center}}@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+    #|:root{color-scheme:dark}body{margin:0;background:#071016;color:#ecf5f2;font:14px/1.5 Inter,"PingFang SC","Noto Sans SC",system-ui,sans-serif}
+    #|.login-gate{box-sizing:border-box;min-height:100vh;padding:clamp(1rem,5vw,3rem);display:grid;place-items:center;background:#071016}.login-card{box-sizing:border-box;width:min(28rem,100%);padding:clamp(1.25rem,4vw,2rem);border:1px solid #29424f;border-radius:1rem;background:#0d1820;box-shadow:0 1rem 3rem rgba(0,0,0,.2)}.login-brand{display:flex;align-items:center;gap:.75rem;margin-bottom:1.75rem;font-size:.85rem}.login-brand img{flex:none}.login-card h1{margin:0 0 1.5rem;font-size:1.5rem;line-height:1.25}
+    #|.login-sso-note{padding:.6rem .75rem;border-left:3px solid #7ee0bd;background:rgba(126,224,189,.06)}.sso-start{min-height:44px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;padding:.65rem 1rem;border:1px solid #35505f;border-radius:.55rem;color:#ecf5f2;text-decoration:none;font-weight:650}.sso-start:hover{background:#172b35}.bootstrap-status{color:#9db0b6;text-align:center}
+    #|.development-fallback{margin-top:1.5rem;border:1px solid #29424f;border-radius:.6rem}.development-fallback summary{min-height:44px;box-sizing:border-box;padding:.7rem .8rem;cursor:pointer;font-weight:650;color:#9db0b6}.development-form{display:grid;gap:1rem;padding:0 1rem 1rem}.login-card>.development-form{padding:0}.development-form label{display:block;margin-bottom:.35rem;font-weight:650}.development-form input{width:100%;min-height:44px;box-sizing:border-box;padding:.65rem .75rem;border:1px solid #35505f;border-radius:.55rem;background:#071218;color:#ecf5f2;font:inherit}.development-form button,.session-strip button{min-height:44px;padding:.65rem 1rem;border:1px solid #35bd8d;border-radius:.55rem;background:#7ee0bd;color:#06251a;font:inherit;font-weight:750;cursor:pointer}.development-form button:disabled{opacity:.45;cursor:not-allowed}
+    #|.login-actions{display:grid;gap:.5rem}.login-actions button[type=button]{background:transparent;color:#b7cacb;border-color:transparent}.login-actions button[type=button]:hover{background:#172b35}.password-requirements{margin:.4rem 0 0;color:#9db0b6;font-size:.8rem}.login-card :is(button,a,input,select,summary):focus-visible{outline:2px solid #7ee0bd;outline-offset:3px}.login-divider{display:flex;align-items:center;gap:.6rem;margin:1.15rem 0;color:#9db0b6;font-size:.8rem}.login-divider::before,.login-divider::after{height:1px;flex:1;background:#29424f;content:""}
+    #|.development-warning,.login-error{margin:.75rem 0 0;padding:.75rem;border-radius:.55rem}.development-warning{color:#f1c66c;background:rgba(241,198,108,.08)}.login-error{color:#ffadad;background:rgba(241,111,111,.1)}.session-strip{position:relative;z-index:45;display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.65rem 1rem;border-bottom:1px solid #223743;background:#09151c;color:#9db0b6}.session-strip strong{color:#ecf5f2}.session-strip p{margin:0}.session-strip button{background:transparent;color:#ecf5f2;border-color:#35505f}.demo-flag{position:fixed;z-index:45;right:1rem;top:1rem;padding:.45rem .65rem;border:1px solid rgba(126,224,189,.3);border-radius:999px;background:#0b1720;color:#7ee0bd;font:800 .65rem/1 system-ui}
+    #|@media(max-width:38rem){.demo-flag{position:absolute}.session-strip{align-items:stretch;flex-direction:column}.session-strip button{width:100%}.login-gate{place-items:start center;padding-top:2rem}}@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
   if model.demo_mode {
     return @html.div([
       @html.style_tag(shell_styles),
@@ -6468,36 +6810,28 @@ fn app_view(
         class="login-card",
         attrs=@html.Attrs::build().aria_labelledby("enterprise-sign-in-title"),
         [
-          @html.div(class="login-mark", "创"),
+          @html.div(class="login-brand", [
+            @html.img(src="/user/assets/platform-logo-light.png", alt="", style=[
+              "width: 44px", "height: 44px", "object-fit: contain",
+            ]),
+            @html.strong("能源谷“创未来”生态街区"),
+          ]),
+          if wifi_trial_entry() {
+            @html.p(
+              class="login-sso-note",
+              portal_copy(
+                locale, "One-hour trial · Guest Wi-Fi required", "一小时体验 · 需连接访客 Wi-Fi",
+              ),
+            )
+          } else {
+            @html.nothing
+          },
           @html.h1(
             id="enterprise-sign-in-title",
-            portal_copy(
-              locale, "Energy Valley · Create the Future Ecosystem District", "能源谷“创未来”生态街区",
-            ),
-          ),
-          @html.p(
-            portal_copy(
-              locale, "Sign in or create an account on this platform.", "登录或在本平台注册新账户。",
-            ),
-          ),
-          @html.p(
-            portal_copy(
-              locale, "This is the customer portal for workspaces, model APIs and machine orders. The operator console has a separate application session, even when you use the same identity.",
-              "这里是用于工作空间、模型 API 和机器订单的用户门户。运维控制台使用独立的应用会话，即使登录的是同一身份。",
-            ),
-          ),
-          @html.p(
-            class="login-sso-note",
             if model.registering {
-              portal_copy(
-                locale, "A new account needs an email address, the name you want shown, and a password of at least 12 characters with an uppercase letter, a lowercase letter, a digit and a symbol. An eligible first sign-in also creates a bounded trial when trials are enabled.",
-                "新账户需要邮箱、希望显示的名称，以及至少 12 位且包含大写字母、小写字母、数字和符号的密码。开启体验时，符合条件的首次登录还会获得受限体验额度。",
-              )
+              portal_copy(locale, "Create account", "创建账户")
             } else {
-              portal_copy(
-                locale, "Sign in with your registered email and password. The platform identity service stores a password hash; this page receives only a short-lived session.",
-                "请使用注册时的邮箱和密码登录。平台身份服务保存密码哈希；此页面只接收短期会话。",
-              )
+              portal_copy(locale, "Sign in", "登录")
             },
           ),
           @html.form(
@@ -6557,11 +6891,30 @@ fn app_view(
                   value=model.login_password,
                   auto_complete=On,
                   maxlength=256,
-                  attrs=@html.Attrs::build().disabled(
-                    !transport_allowed || model.connecting,
-                  ),
+                  attrs={
+                    let attrs = @html.Attrs::build().disabled(
+                      !transport_allowed || model.connecting,
+                    )
+                    if model.registering {
+                      attrs.aria_describedby("portal-password-requirements")
+                    } else {
+                      attrs
+                    }
+                  },
                   on_input=emit.map(value => LoginPasswordChanged(value)),
                 ),
+                if model.registering {
+                  @html.p(
+                    id="portal-password-requirements",
+                    class="password-requirements",
+                    portal_copy(
+                      locale, "12 characters minimum, with uppercase, lowercase, a number and a symbol.",
+                      "至少 12 位，包含大写字母、小写字母、数字和符号。",
+                    ),
+                  )
+                } else {
+                  @html.nothing
+                },
               ]),
               @html.div(class="login-actions", [
                 @html.button(
@@ -6587,13 +6940,9 @@ fn app_view(
                   disabled=model.connecting,
                   on_click=emit(ToggleRegistration),
                   if model.registering {
-                    portal_copy(
-                      locale, "I already have an account", "我已有账户，去登录",
-                    )
+                    portal_copy(locale, "Sign in", "登录已有账户")
                   } else {
-                    portal_copy(
-                      locale, "Register a new account", "注册新账户",
-                    )
+                    portal_copy(locale, "Create account", "注册账户")
                   },
                 ),
               ]),
@@ -6602,12 +6951,7 @@ fn app_view(
           if configured_endpoint().has_suffix("/user") {
             @html.nothing
           } else {
-            @html.div(
-              class="login-divider",
-              portal_copy(
-                locale, "or use organization sign-in", "或使用组织账户登录",
-              ),
-            )
+            @html.div(class="login-divider", portal_copy(locale, "or", "或"))
           },
           if configured_endpoint().has_suffix("/user") {
             @html.nothing
@@ -6615,18 +6959,14 @@ fn app_view(
             @html.a(
               class="sso-start",
               href="/auth/oidc/start?audience=enterprise",
-              portal_copy(
-                locale, "Sign in with the organization identity provider", "使用组织身份提供商登录",
-              ),
+              portal_copy(locale, "Organization sign-in", "组织账户登录"),
             )
           },
           if model.connecting {
             @html.p(
               class="bootstrap-status",
               attrs=@html.Attrs::build().role("status").aria_live("polite"),
-              portal_copy(
-                locale, "Checking for an existing browser session…", "正在检查现有浏览器会话…",
-              ),
+              portal_copy(locale, "Signing in…", "正在登录…"),
             )
           } else {
             @html.nothing
@@ -6754,27 +7094,24 @@ fn app_view(
       ),
     ])
   }
-  let session_scope = if model.portal.membership is Some(_) {
-    portal_copy(locale, "Signed in", "已登录")
-  } else {
-    portal_copy(locale, "Organization setup", "组织设置")
-  }
-  let session_transport_copy = if model.endpoint.has_prefix("http://") &&
-    !development_allowed {
-    portal_copy(
-      locale, "HTTP browser session (unencrypted); ends on logout or expiry", "HTTP 浏览器会话（未加密）；退出或到期时结束",
-    )
-  } else {
-    portal_copy(
-      locale, "browser session; ends on logout or expiry", "浏览器会话；退出或到期时结束",
-    )
+  let session_scope = match model.portal.account {
+    Some(account) => account.display_name
+    None => portal_copy(locale, "Signed in", "已登录")
   }
   @html.div([
     @html.style_tag(shell_styles),
     @html.header(class="session-strip", [
       @html.p([
         @html.strong(session_scope),
-        @html.span(" · " + session_transport_copy),
+        if model.endpoint.has_prefix("http://") && !development_allowed {
+          @html.span(
+            portal_copy(
+              locale, " · Unencrypted connection", " · 连接未加密",
+            ),
+          )
+        } else {
+          @html.nothing
+        },
       ]),
       @html.button(
         type_="button",
@@ -6782,6 +7119,38 @@ fn app_view(
         portal_copy(locale, "Log out", "退出登录"),
       ),
     ]),
+    if wifi_trial_entry() {
+      @html.section(class="login-card", [
+        @html.h2(
+          portal_copy(locale, "One-hour guest trial", "一小时访客体验"),
+        ),
+        @html.p(
+          portal_copy(
+            locale, "Guest Wi-Fi access is checked when you activate. The trial starts once per account and expires after one hour, even if you disconnect.",
+            "激活时会检查访客 Wi-Fi。每个账户只能开启一次；一小时后到期，即使断开 Wi-Fi 也不会暂停。",
+          ),
+        ),
+        if model.portal.trial is Some(_) {
+          @html.p(
+            portal_copy(
+              locale, "Your account already has a trial. See its remaining time and model limits below.",
+              "此账户已有体验。可在下方查看剩余时间和模型限制。",
+            ),
+          )
+        } else {
+          @html.button(
+            type_="button",
+            disabled=model.connecting,
+            on_click=emit(WifiTrialRedeem),
+            portal_copy(
+              locale, "Activate one-hour trial", "激活一小时体验",
+            ),
+          )
+        },
+      ])
+    } else {
+      @html.nothing
+    },
     @enterprise_ui.interactive_view(
       {
         ..model.portal,
@@ -6811,7 +7180,6 @@ fn subscriptions(
 ///|
 fn main {
   install_dialog_focus()
-  let is_demo = demo_mode()
   let initial_locale = @i18n.parse_locale(stored_locale_preference())
   commit_enterprise_organization(stored_organization_preference())
   apply_enterprise_locale(initial_locale)
@@ -6822,57 +7190,33 @@ fn main {
       csrf_token: "",
       subject_ref: "",
       connecting: false,
-      bootstrap_started: is_demo,
-      demo_mode: is_demo,
+      bootstrap_started: false,
+      demo_mode: false,
       session_generation: 0L,
       session_expires_unix_ms: None,
       machine_clock_generation: 0L,
       contract_preview_generation: 0L,
       contract_poll_generation: 0L,
-      portal: if is_demo {
-        {
-          ..@enterprise_ui.demo_state(),
-          docs_base_url: if configured_docs_url() == "" {
-            None
-          } else {
-            Some(configured_docs_url())
-          },
+      portal: {
+        ..@enterprise_ui.default_state(current_unix_ms()),
+        docs_base_url: if configured_docs_url() == "" {
+          None
+        } else {
+          Some(configured_docs_url())
+        },
+        locale: initial_locale,
+        machine_access: {
+          ..@enterprise_ui.default_state(current_unix_ms()).machine_access,
           locale: initial_locale,
-          machine_access: {
-            ..@enterprise_ui.demo_state().machine_access,
-            locale: initial_locale,
-          },
-          offline_commerce: {
-            ..@enterprise_ui.demo_state().offline_commerce,
-            locale: initial_locale,
-          },
-          contract_documents: {
-            ..@enterprise_ui.demo_state().contract_documents,
-            locale: initial_locale,
-          },
-        }
-      } else {
-        {
-          ..@enterprise_ui.default_state(current_unix_ms()),
-          docs_base_url: if configured_docs_url() == "" {
-            None
-          } else {
-            Some(configured_docs_url())
-          },
+        },
+        offline_commerce: {
+          ..@enterprise_ui.default_state(current_unix_ms()).offline_commerce,
           locale: initial_locale,
-          machine_access: {
-            ..@enterprise_ui.default_state(current_unix_ms()).machine_access,
-            locale: initial_locale,
-          },
-          offline_commerce: {
-            ..@enterprise_ui.default_state(current_unix_ms()).offline_commerce,
-            locale: initial_locale,
-          },
-          contract_documents: {
-            ..@enterprise_ui.default_state(current_unix_ms()).contract_documents,
-            locale: initial_locale,
-          },
-        }
+        },
+        contract_documents: {
+          ..@enterprise_ui.default_state(current_unix_ms()).contract_documents,
+          locale: initial_locale,
+        },
       },
       login_email: "",
       login_password: "",

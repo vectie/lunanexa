@@ -238,6 +238,7 @@ async test "workspace initialization preserves user edits and refuses symlink di
   initialize_workspace(root, "video.h3")
   let path = root + "/user/default/workflows/LunaNexa Video - video.h3.json"
   let initial = @fs.read_file(path).text()
+  assert_false(@fs.exists(root + "/.lunanexa-bootstrap/staged.json"))
   assert_true(initial.contains("VLLMOmniGenerateVideo"))
   assert_true(initial.contains("http://127.0.0.1:8189/v1"))
   assert_false(initial.contains("api_secret"))
@@ -324,6 +325,25 @@ async test "workspace initialization preserves user edits and refuses symlink di
 }
 
 ///|
+async test "initial workflow publication never replaces a symlink destination" {
+  let root = @fs.tmpdir(prefix="lunanexa-initial-publication-")
+  defer @fs.rmdir(root, recursive=true)
+  let original = root + "/owned.json"
+  let destination = root + "/workflow.json"
+  @fs.write_file(original, "customer workflow", create_mode=CreateNew)
+  @fs.symlink(target=original, destination)
+  try {
+    create_initial_file(destination, root + "/staged.json", { "new": true })
+    fail("existing symlink must be refused")
+  } catch {
+    HostError::InvalidConfiguration => ()
+    error => fail("Unexpected error: \{error}")
+  }
+  assert_eq(@fs.kind(destination, follow_symlink=false), SymLink)
+  assert_eq(@fs.read_file(original).text(), "customer workflow")
+}
+
+///|
 test "delivery workspace refuses a broad model scope before creating a ComfyUI pod" {
   let config = host_config()
   let host = WorkspaceHost::new(config)
@@ -333,7 +353,7 @@ test "delivery workspace refuses a broad model scope before creating a ComfyUI p
     allowed_models: ["component-fl2va", "unrelated-model"],
   }
   try host.resources(@webide.workspace_id(grant), grant) catch {
-    HostError::ControllerRejected => ()
+    ControllerRejected => ()
     _ => fail("Unexpected host error")
   } noraise {
     _ => fail("broad delivery model grant was accepted")
@@ -654,7 +674,7 @@ async test "pod-local model proxy injects scoped credentials and never bypasses 
     assert_eq(models.code, 200)
     assert_true(listed.text().contains("video.h3"))
     assert_false(listed.text().contains(config.api_secret))
-    let headers = {
+    let headers : @http.Headers = {
       "content-type": "application/x-www-form-urlencoded",
       "authorization": "Bearer browser-poison",
       "idempotency-key": "fixture-video-request",
@@ -666,7 +686,11 @@ async test "pod-local model proxy injects scoped credentials and never bypasses 
     )
     assert_eq(submitted.code, 200)
     assert_false(result.text().contains(config.api_secret))
-    assert_eq(forwarded, ["model=video.h3&prompt=hello"])
+    assert_eq(forwarded.length(), 1)
+    json_inspect(@json.parse(forwarded[0]), content={
+      "model": "video.h3",
+      "prompt": "hello",
+    })
     let (wrong_model, _) = @http.post(
       origin + "/v1/videos",
       "model=unapproved&prompt=hello",
@@ -678,7 +702,7 @@ async test "pod-local model proxy injects scoped credentials and never bypasses 
       "model=video.h3&model=evil",
       headers~,
     )
-    assert_eq(duplicate.code, 403)
+    assert_eq(duplicate.code, 400)
     let multipart = "--editor\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nvideo.h3\r\n--editor\r\nContent-Disposition: form-data; name=\"prompt\"\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nTEST ONLY 中文\r\n--editor--\r\n"
     let (converted, _) = @http.post(origin + "/v1/videos", multipart, headers={
       "content-type": "multipart/form-data; boundary=editor",

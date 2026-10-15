@@ -23,7 +23,7 @@ fn polling_fixture() -> AppModel {
   let portal = @enterprise_ui.demo_state()
   let packet = {
     ..portal.contract_documents.packets[0],
-    state: @contractdoc.ContractPacketState::GenerationRequested,
+    state: GenerationRequested,
   }
   {
     endpoint: "",
@@ -59,10 +59,7 @@ test "contract generation polling converges without replacing local edits" {
   let model = polling_fixture()
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let packet = model.portal.contract_documents.packets[0]
-  let generated = {
-    ..packet,
-    state: @contractdoc.ContractPacketState::Generated,
-  }
+  let generated = { ..packet, state: Generated, }
   let (next, _) = update(
     model,
     ContractPollResult(1L, packet.packet_id, 20, Ok([generated])),

@@ -47,6 +47,7 @@ priv struct GatewayConfig {
   operator_cookie_secret : String
   enterprise_cookie_secret : String
   assertion_secret : String
+  wifi_trial_source_cidrs : Array[String]
   database_url : String
   relay_endpoint : String
   control_endpoint : String

@@ -1,4 +1,4 @@
-import { "moonbitlang/async", "moonbitlang/async/fs", "moonbitlang/async/shell", "moonbitlang/core/env" }
+import { "moonbitlang/async@0.22.4", "moonbitlang/async@0.22.4/fs", "moonbitlang/async@0.22.4/shell", "moonbitlang/core/env" }
 async fn main {
   guard @env.args() is [_, kubeconfig, private_dir, image, revision, ..flags] && (flags is [] || flags is ["--console-only"] || flags is ["--console-enterprise"]) else { fail("Usage: deploy-offline-web.mbtx KUBECONFIG PRIVATE_DIR PINNED_IMAGE REVISION [--console-only|--console-enterprise]") }
   let coursebook = image.has_prefix("lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/coursebook@sha256:")

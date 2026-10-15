@@ -185,8 +185,8 @@ fn verifier_hmac_sha256(
   // SHA256::finalize leaves its mutable context intact. Reset both temporary
   // contexts so key-derived chaining state and buffered bytes are overwritten
   // deterministically instead of waiting for garbage collection.
-  inner.reset()
-  outer.reset()
+  @crypto.CryptoHasher::reset(inner)
+  @crypto.CryptoHasher::reset(outer)
   inner_pad.fill(0)
   outer_pad.fill(0)
   inner_digest.fill(0)

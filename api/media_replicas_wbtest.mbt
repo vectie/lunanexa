@@ -9,6 +9,8 @@ async test "media replicas balance new requests but pin retries to original exec
     maximum_fps: 24,
     maximum_steps: 30,
     sound_supported: false,
+    image_reference_supported: None,
+    image_reference_required: None,
   }
   let first : MediaBinding = {
     deployment_id: "delivery-1",

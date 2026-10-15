@@ -1,0 +1,11 @@
+import {
+  "moonbit-community/rabbita",
+  "moonbit-community/rabbita/html",
+  "moonbit-community/rabbita/svg",
+}
+
+supported_targets = "js+native"
+
+options(
+  link: { "native": { "cc-link-flags": "-pthread -ldl" } },
+)

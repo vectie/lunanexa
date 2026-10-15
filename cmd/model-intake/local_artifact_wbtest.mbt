@@ -22,7 +22,7 @@ async test "actual local binary intake save reopen review request and successor 
     model.artifact.digest,
     "sha256:f9bee7fdb821357e6b4a03658df896a5bb056360b1e6645dfbeacc1018130056",
   )
-  assert_eq(model.state, @contracts.Candidate)
+  assert_eq(model.state, Candidate)
   assert_true(@contracts.valid_candidate_model(model))
   assert_false(output.contains(artifact))
   let (again_code, again, again_error) = invoke([
@@ -56,7 +56,7 @@ async test "actual local binary intake save reopen review request and successor 
     (
       {
         "schema_version": "lunanexa.registry.v1",
-        "models": [{ ..model, state: @contracts.Approved, }.to_json()],
+        "models": [{ ..model, state: Approved, }.to_json()],
       } : Json).stringify(),
   )
   let (blocked, no_request, _) = invoke([

@@ -112,7 +112,7 @@ async fn request_model_source_adapter(
     return api_error(404, "NotFound", "model-source route not found", false)
   }
   let url = "\{endpoint}\{internal_path}"
-  let headers : Map[String, String] = {
+  let headers : @http.Headers = {
     "Authorization": "Bearer \{token}",
     "Accept": "application/json",
     "Content-Type": "application/json",
@@ -131,9 +131,8 @@ async fn request_model_source_adapter(
     )
   }
   let content_type = response.headers
-    .iter()
-    .find_first(entry => entry.0.to_lower() == "content-type")
-    .map(entry => entry.1.to_lower())
+    .get("content-type")
+    .map(value => value.to_lower())
   if !content_type.map_or(false, value => value.has_prefix("application/json")) {
     return api_error(
       502, "ModelSourceInvalidResponse", "model-source response type was rejected",

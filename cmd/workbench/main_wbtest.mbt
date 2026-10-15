@@ -1,4 +1,12 @@
 ///|
+test "embedded workbench uses the customer portal API and session scope" {
+  let origin = "https://suanli.kechuangfuwu.com:8443"
+  assert_eq(site_api_endpoint(origin, "/user/workbench/"), origin + "/user")
+  assert_eq(site_api_endpoint(origin, "/workbench/"), origin)
+  assert_eq(site_api_endpoint(origin, "/user-other/workbench/"), origin)
+}
+
+///|
 test "workbench only sends credentials to an HTTPS or loopback origin" {
   assert_true(endpoint_is_safe("https://lunanexa.example"))
   assert_true(endpoint_is_safe("http://127.0.0.1:8080"))
@@ -78,6 +86,25 @@ test "workbench builds an ephemeral bounded canonical workload" {
   assert_eq(envelope.resource_ceiling.max_accelerator_memory_mib, 8192)
   assert_eq(envelope.deadline_unix_ms, 2000000030000L)
   assert_false(envelope.stream)
+}
+
+///|
+fn demo_workbench_state(
+  now_unix_ms : Int64,
+  locale : @i18n.Locale,
+  model_selector : String,
+) -> @workbench_ui.WorkbenchState {
+  let seeded = @workbench_ui.demo_state().update(LocaleChanged(locale))
+  let lease = match seeded.lease {
+    Some(value) =>
+      Some({
+        ..value,
+        starts_unix_ms: now_unix_ms - 3600000L,
+        expires_unix_ms: now_unix_ms + 21600000L,
+      })
+    None => None
+  }
+  { ..seeded, now_unix_ms, lease, model_selector, }
 }
 
 ///|

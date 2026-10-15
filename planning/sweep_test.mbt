@@ -73,7 +73,7 @@ test "sweep retains failed repeats missing levels and distinct memory environmen
   )
   assert_eq(report.workload, packet.input.workload)
   assert_eq(report.objective, packet.input.objective)
-  assert_eq(report.origin, @planning.SyntheticFixture)
+  assert_eq(report.origin, SyntheticFixture)
   assert_eq(report.packet_id, packet.packet_id)
 }
 

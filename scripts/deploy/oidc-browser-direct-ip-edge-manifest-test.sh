@@ -4,9 +4,6 @@ set -eu
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 edge_manifest=$repo_root/deploy/oidc-browser-direct-ip-edge.yaml
 console_service_patch=$repo_root/deploy/oidc-browser-direct-ip-console-service-patch.json
-workbench_service_patch=$repo_root/deploy/oidc-browser-direct-ip-workbench-service-patch.json
-console_gateway_patch=$repo_root/deploy/oidc-browser-disable-console-public-gateway-patch.yaml
-workbench_gateway_patch=$repo_root/deploy/oidc-browser-disable-workbench-public-gateway-patch.yaml
 management=$repo_root/scripts/deploy/testdata/oidc-direct-ip-management.yaml
 test_directory=$(mktemp -d "${TMPDIR:-/tmp}/lunanexa-browser-direct-ip-test.XXXXXX")
 cleanup() { rm -rf "$test_directory"; }
@@ -15,14 +12,11 @@ trap cleanup EXIT HUP INT TERM
 for source in \
   "$edge_manifest" \
   "$console_service_patch" \
-  "$workbench_service_patch" \
-  "$console_gateway_patch" \
-  "$workbench_gateway_patch" \
   "$management"; do
   test -f "$source"
 done
 if rg -q '^kind: Secret$|data:.*(password|secret)|stringData:' \
-  "$edge_manifest" "$console_service_patch" "$workbench_service_patch"; then
+  "$edge_manifest" "$console_service_patch"; then
   printf '%s\n' 'direct-IP browser edge source contains secret material' >&2
   exit 1
 fi
@@ -107,10 +101,9 @@ if rg -q 'port: (4174|3000|5001)' "$rendered"; then
   printf '%s\n' 'direct-IP browser edge retained a legacy public port' >&2
   exit 1
 fi
-rg -F -q 'type: ClusterIP' "$workbench_service"
-rg -F -q 'port: 8080' "$workbench_service"
-rg -F -q 'replicas: 0' "$console_gateway"
-rg -F -q 'replicas: 0' "$workbench_gateway"
+test ! -s "$workbench_service"
+test ! -s "$console_gateway"
+test ! -s "$workbench_gateway"
 for required in \
   'name: lunanexa-identity-edge-direct-ip' \
   'name: lunanexa-identity-gateway-from-direct-ip-edge' \
@@ -130,7 +123,7 @@ dns_rendered=$test_directory/dns.yaml
   --gateway-image registry.example.test/lunanexa/identity-gateway@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
   >/dev/null
 rg -U -q 'kind: Ingress(.|\n)*name: lunanexa-oidc-browser' "$dns_rendered"
-if rg -q 'name: lunanexa-identity-edge$|port: 5003|port: 5005' "$dns_rendered"; then
+if rg -q 'name: lunanexa-identity-edge$|port: 5005' "$dns_rendered"; then
   printf '%s\n' 'DNS browser render included direct-IP edge resources' >&2
   exit 1
 fi

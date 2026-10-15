@@ -30,8 +30,8 @@ priv struct Redeemed {
 ///|
 async fn controller_client(origin : String) -> @http.Client {
   match @env.get_env_var("SSL_CERT_FILE") {
-    Some(path) if path != "" => @http.Client(origin, trust=CustomPemFile(path))
-    _ => @http.Client(origin)
+    Some(path) if path != "" => Client(origin, trust=CustomPemFile(path))
+    _ => Client(origin)
   }
 }
 

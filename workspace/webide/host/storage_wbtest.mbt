@@ -34,7 +34,7 @@ test "shared storage is explicit and preserves existing volume profile" {
       storage_access_mode: Some("ReadWriteMany"),
     })
   catch {
-    HostError::InvalidConfiguration => ()
+    InvalidConfiguration => ()
     _ => fail("unexpected profile error")
   } noraise {
     _ => fail("local-path cannot provide shared RWX storage")

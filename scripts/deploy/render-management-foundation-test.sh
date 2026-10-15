@@ -36,26 +36,23 @@ if rg -q '\$\{[A-Z0-9_]+\}|registry\.invalid|lunanexa\.invalid' "$manifest"; the
 fi
 rg -q 'name: lunanexa-workbench' "$manifest"
 rg -q 'name: lunanexa-console-public' "$manifest"
-rg -q 'lunanexa.io/exposure: temporary-plain-http' "$manifest"
-rg -q 'port: 4174' "$manifest"
-rg -q 'name: lunanexa-console-public-gateway' "$manifest"
-rg -q 'app: lunanexa-console-public-gateway' "$manifest"
+rg -q 'lunanexa.io/exposure: ingress-only' "$manifest"
+rg -q 'app: lunanexa-identity-edge' "$manifest"
+! rg -q 'lunanexa-(console|workbench)-public-gateway|temporary-plain-http|port: (4174|3000)' "$manifest"
 rg -q 'image: docker.io/lunanexa/control:test-1' "$manifest"
 rg -q 'image: docker.io/lunanexa/web:test-2' "$manifest"
 rg -q 'image: docker.io/lunanexa/model-source:test-4' "$manifest"
-rg -q 'image: docker.io/lunanexa/workbench-web:test-5' "$manifest"
 rg -q 'image: docker.io/lunanexa/coursebook-static:test-6' "$manifest"
 rg -q 'image: docker.io/lunanexa/postgres:test-3' "$manifest"
 rg -q 'runAsUser: 1000' "$manifest"
 rg -q 'kubernetes.io/hostname: ubuntu' "$manifest"
-test "$(rg -c 'imagePullPolicy: Never' "$manifest")" -eq 9
+test "$(rg -c 'imagePullPolicy: Never' "$manifest")" -eq 7
 rg -q 'name: lunanexa-model-source' "$manifest"
 rg -q 'name: lunanexa-model-source-credentials' "$manifest"
-rg -q 'port: 3000' "$manifest"
 rg -q 'port: 4173' "$manifest"
-test "$(rg -c 'mountPath: /tmp' "$manifest")" -eq 6
-test "$(rg -c 'name: nginx-tmp' "$manifest")" -eq 12
-test "$(rg -c 'emptyDir: \{\}' "$manifest")" -ge 6
+test "$(rg -c 'mountPath: /tmp' "$manifest")" -eq 4
+test "$(rg -c 'name: nginx-tmp' "$manifest")" -eq 8
+test "$(rg -c 'emptyDir: \{\}' "$manifest")" -ge 4
 rg -q '"generation":"1"' "$manifest"
 rg -q '"heartbeat_timeout_ms":"15000"' "$manifest"
 rg -q 'lunanexa.io/management-config-digest: [0-9a-f]{64}' "$manifest"

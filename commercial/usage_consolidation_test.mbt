@@ -63,8 +63,8 @@ fn combine_rejects(
   expected : String,
 ) -> Unit raise {
   try @commercial.consolidate_usage(snapshots, report_query()) catch {
-    @commercial.InvalidInput(message) => assert_true(message.contains(expected))
-    @commercial.ArithmeticOverflow => assert_eq(expected, "overflow")
+    InvalidInput(message) => assert_true(message.contains(expected))
+    ArithmeticOverflow => assert_eq(expected, "overflow")
     _ => fail("unexpected commercial error")
   } noraise {
     _ => fail("expected rejected consolidation: \{expected}")
@@ -235,7 +235,7 @@ test "combine supports empty windows and organization scope without inventing co
       { ..report_query(), started_unix_ms: 6000L, ended_unix_ms: 7000L, },
     )
   catch {
-    @commercial.InvalidInput(_) => ()
+    InvalidInput(_) => ()
     _ => fail("unexpected commercial error")
   } noraise {
     _ => fail("out-of-window conflict was ignored")

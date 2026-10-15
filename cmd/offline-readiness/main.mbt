@@ -129,16 +129,16 @@ fn required_readiness_capabilities() -> Array[
   @offline.OfflineCommerceCapability,
 ] {
   [
-    @offline.ApprovedLegalTemplates,
-    @offline.ObjectStorage,
-    @offline.MalwareScanner,
-    @offline.OoxmlWorker,
-    @offline.PdfRenderer,
-    @offline.SpreadsheetFormulaEngine,
-    @offline.CjkFonts,
-    @offline.MachineCallbackIdentity,
-    @offline.EntitlementAuthority,
-    @offline.FinanceLegalPolicy,
+    ApprovedLegalTemplates,
+    ObjectStorage,
+    MalwareScanner,
+    OoxmlWorker,
+    PdfRenderer,
+    SpreadsheetFormulaEngine,
+    CjkFonts,
+    MachineCallbackIdentity,
+    EntitlementAuthority,
+    FinanceLegalPolicy,
   ]
 }
 
@@ -177,7 +177,7 @@ fn sign_readiness_evidence(
 /// a document the reader can still load.
 fn without_null_readiness_refs(value : Json) -> Json {
   value.transform(
-    @json.Replacer((key, item) => {
+    Replacer((key, item) => {
       match (key, item) {
         ("evidence_ref", Null) => None
         _ => Some(item)

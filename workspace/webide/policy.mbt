@@ -178,20 +178,12 @@ fn Bridge::valid_grant(self : Bridge, grant : Grant, now : Int64) -> Bool {
 }
 
 ///|
-fn header(headers : Map[String, String], name : String) -> String? {
-  let matches = headers
-    .iter()
-    .filter(pair => pair.0.to_lower() == name)
-    .to_array()
-  if matches.length() == 1 {
-    Some(matches[0].1)
-  } else {
-    None
-  }
+fn header(headers : @http.Headers, name : String) -> String? {
+  headers.get(name)
 }
 
 ///|
-fn cookie(headers : Map[String, String], name : String) -> String? {
+fn cookie(headers : @http.Headers, name : String) -> String? {
   guard header(headers, "cookie") is Some(raw) else { return None }
   let matches = raw
     .split(";")

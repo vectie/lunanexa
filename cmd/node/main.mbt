@@ -80,7 +80,7 @@ async fn load_global_admin_settings() -> @settings.GlobalAdminSettings {
 }
 
 ///|
-fn node_headers(node_id : String, token : String) -> Map[String, String] {
+fn node_headers(node_id : String, token : String) -> @http.Headers {
   {
     "Authorization": "Node \{token}",
     "X-LunaNexa-Node-Id": node_id,
@@ -149,6 +149,19 @@ async fn load_lease_guard(
     raise Failure::Failure("exclusive lease state belongs to a different node")
   }
   @nodelease.LeaseAgentGuard::from_snapshot(snapshot)
+}
+
+///|
+async fn load_lease_guard_for_mode(
+  path : String,
+  node_id : String,
+  exclusive_leases_enabled : Bool,
+) -> @nodelease.LeaseAgentGuard {
+  if exclusive_leases_enabled {
+    load_lease_guard(path, node_id)
+  } else {
+    @nodelease.LeaseAgentGuard::new(node_id)
+  }
 }
 
 ///|
@@ -1060,7 +1073,6 @@ async fn main {
   let lease_state_path = @env.get_env_var("LUNANEXA_LEASE_STATE_PATH").unwrap_or(
     "lunanexa-exclusive-lease-agent.json",
   )
-  let lease_guard = load_lease_guard(lease_state_path, node_id)
   let lease_helper = @env.get_env_var("LUNANEXA_LEASE_HELPER").unwrap_or(
     "/usr/libexec/lunanexa-lease-helper",
   )
@@ -1073,6 +1085,9 @@ async fn main {
         "LUNANEXA_EXCLUSIVE_LEASES_ENABLED must be exactly 0 or 1",
       )
   }
+  let lease_guard = load_lease_guard_for_mode(
+    lease_state_path, node_id, exclusive_leases_enabled,
+  )
   @async.with_task_group(group => {
     if supervisor is Kubernetes(kubernetes) {
       // Independent delivery: a failed report must not block probes, heartbeats

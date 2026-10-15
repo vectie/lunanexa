@@ -25,26 +25,21 @@ test "inactive workspace does not claim a prepared lease is waiting for activati
 }
 
 ///|
-test "one-click connection shows model-first progress and never claims client completion early" {
+test "application connection reports actual status without invented progress" {
   let ready = { ..@enterprise.demo_state(), route: DesktopIde, }
   let before = @enterprise.render(ready)
-  assert_true(before.contains("One-click connection"))
+  assert_true(before.contains(">Ready</p>"))
   assert_true(before.contains("Refresh model and access"))
-  assert_true(before.contains("aria-label=\"Connection progress\""))
-  assert_true(before.contains("aria-valuenow=\"25\""))
+  assert_false(before.contains("Connection progress"))
   let issuing = ready.update(LaunchDesktopClient)
-  assert_true(@enterprise.render(issuing).contains("aria-valuenow=\"50\""))
-  assert_true(
-    @enterprise.render(issuing).contains("Issuing a single-use connection"),
-  )
+  assert_true(@enterprise.render(issuing).contains("Opening Desktop WebIDE…"))
   let issued = {
     ..issuing,
     loading: false,
     desktop_connect_phase: ClientOpened,
   }
   let issued_page = @enterprise.render(issued)
-  assert_true(issued_page.contains("aria-valuenow=\"75\""))
-  assert_true(issued_page.contains("Continue in MoonDesk"))
+  assert_true(issued_page.contains("Continue in Desktop WebIDE."))
   assert_false(issued_page.contains("aria-valuenow=\"100\""))
   guard ready.desktop_client is Some(client) else {
     fail("missing demo client")
@@ -53,7 +48,7 @@ test "one-click connection shows model-first progress and never claims client co
     ..ready,
     desktop_client: Some({ ..client, models_ready: false, ready: false, }),
   }
-  assert_true(@enterprise.render(blocked).contains("aria-valuenow=\"0\""))
+  assert_false(@enterprise.render(blocked).contains("Connection progress"))
   let refreshing = blocked.update(RefreshDesktopStatus)
   assert_true(refreshing.loading)
   assert_true(
@@ -92,7 +87,7 @@ test "personal MoonDesk exposes a stop control without stopping the shared model
   )
   assert_false(rendered.contains("target=\"_blank\""))
   let opening = state.update(
-    @enterprise.ManageWebIde("http://198.51.100.5:5002/workspace-control"),
+    ManageWebIde("http://198.51.100.5:5002/workspace-control"),
   )
   assert_eq(opening.success_message, Some("Opening workspace controls…"))
 }
@@ -117,13 +112,11 @@ test "ComfyUI is selectable beside code WebIDE without weakening readiness" {
   let selected = state.update(SelectWebIde("comfyui"))
   assert_eq(selected.desktop_client, Some(comfy))
   let rendered = @enterprise.render(selected)
-  assert_true(rendered.contains("Choose your WebIDE"))
+  assert_true(rendered.contains("Applications"))
   assert_true(rendered.contains("ComfyUI"))
   assert_true(rendered.contains("aria-pressed=\"true\""))
   assert_false(rendered.contains("Open ComfyUI</button>"))
-  assert_true(
-    rendered.contains("workspace lease alone does not reserve a machine"),
-  )
+  assert_true(rendered.contains("Set up a GPU workspace below"))
   assert_false(rendered.contains("One-click connection"))
   assert_false(rendered.contains("href=\"https://creative.example/connect"))
   assert_true(selected.update(SelectWebIde("unregistered")) == selected)
@@ -132,8 +125,8 @@ test "ComfyUI is selectable beside code WebIDE without weakening readiness" {
   let chinese = @enterprise.render(
     selected.update(LocaleChanged(ChineseSimplified)),
   )
-  assert_true(chinese.contains("选择 WebIDE"))
-  assert_true(chinese.contains("ComfyUI 需要有效的 GPU 交付"))
+  assert_true(chinese.contains("应用"))
+  assert_true(chinese.contains("请先在下方配置 GPU 工作区"))
 }
 
 ///|
@@ -158,7 +151,7 @@ test "MoonRobo is a selectable personal WebIDE with its own controls" {
   assert_true(@enterprise.webide_launch_selection(selected) is Some(_))
   let rendered = @enterprise.render(selected)
   assert_true(rendered.contains("Open MoonRobo"))
-  assert_true(rendered.contains("MoonRobo cockpit"))
+  assert_true(rendered.contains("Continue working in MoonRobo"))
   assert_true(rendered.contains("Manage / stop my WebIDE"))
   assert_eq(
     @enterprise.personal_webide_control_uri(robo),
@@ -189,7 +182,7 @@ test "MoonTown is a selectable personal WebIDE with a named launch and stop path
   assert_true(@enterprise.webide_launch_selection(selected) is Some(_))
   let rendered = @enterprise.render(selected)
   assert_true(rendered.contains("Open MoonTown"))
-  assert_true(rendered.contains("MoonTown workspace"))
+  assert_true(rendered.contains("Continue working in MoonTown"))
   assert_true(rendered.contains("Manage / stop my WebIDE"))
   assert_eq(
     @enterprise.personal_webide_control_uri(town),
@@ -205,7 +198,8 @@ test "legacy shared local MoonDesk cannot issue another user's one-click launch"
   let state = { ..demo, route: DesktopIde, desktop_client: Some(legacy), }
   assert_true(@enterprise.webide_launch_selection(state) is None)
   let page = @enterprise.render(state.update(LocaleChanged(ChineseSimplified)))
-  assert_true(page.contains("共用同一数据目录"))
+  assert_true(page.contains("MoonDesk 访问已暂停"))
+  assert_true(page.contains("已保存的文件仍保留"))
   assert_true(page.contains("disabled>打开"))
 }
 
@@ -229,15 +223,13 @@ test "exclusive ComfyUI is launched only from a delivery and shared local deskto
   }.update(SelectWebIde("comfyui"))
   assert_eq(@enterprise.webide_launch_selection(selected), None)
   let rendered = @enterprise.render(selected)
-  assert_true(
-    rendered.contains("workspace lease alone does not reserve a machine"),
-  )
+  assert_true(rendered.contains("Set up a GPU workspace below"))
   assert_false(rendered.contains("Open ComfyUI</button>"))
   let chinese = @enterprise.render(
     selected.update(LocaleChanged(ChineseSimplified)),
   )
-  assert_true(chinese.contains("仅有工作区租约不会预留机器"))
-  assert_true(chinese.contains("PaaS · 专属应用工作区"))
+  assert_true(chinese.contains("请先在下方配置 GPU 工作区"))
+  assert_true(chinese.contains("专属应用工作区"))
   let local_desktop = {
     ..desktop,
     launch_uri: "http://127.0.0.1:4188/connect",
@@ -249,9 +241,7 @@ test "exclusive ComfyUI is launched only from a delivery and shared local deskto
     desktop_client: Some(local_desktop),
   }
   assert_true(
-    @enterprise.render(local_state).contains(
-      "legacy local MoonDesk shares one data directory",
-    ),
+    @enterprise.render(local_state).contains("MoonDesk access is paused"),
   )
 }
 

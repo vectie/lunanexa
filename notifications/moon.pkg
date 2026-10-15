@@ -2,3 +2,7 @@ import {
   "moonbitlang/core/json",
   "vectie/lunanexa/contracts",
 }
+
+options(
+  link: { "native": { "cc-link-flags": "-pthread -ldl" } },
+)

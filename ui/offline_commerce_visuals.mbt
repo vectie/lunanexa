@@ -150,21 +150,9 @@ fn offline_commerce_lifecycle_graph(state : ConsoleState) -> @rabbita.Html {
   @html.figure(class="offline-life-figure", [
     @html.header(class="offline-life-heading", [
       @html.div([
-        @html.p(
-          class="eyebrow",
-          offline_lifecycle_copy(
-            locale, "Authority state map", "权威状态图",
-          ),
-        ),
         @html.h2(
           offline_lifecycle_copy(
             locale, "Offline commerce lifecycle", "线下商务生命周期",
-          ),
-        ),
-        @html.p(
-          offline_lifecycle_copy(
-            locale, "Happy-path progress, evidence correction, terminal exits, and entitlement reversal from the typed commerce authority.",
-            "展示类型化商务权限中的主流程、凭证补正、终止出口与权益撤销路径。",
           ),
         ),
       ]),
@@ -272,8 +260,8 @@ fn offline_commerce_lifecycle_graph(state : ConsoleState) -> @rabbita.Html {
             @html.p(
               class="offline-life-lane-note",
               offline_lifecycle_copy(
-                locale, "When internal approval is not required, Quoted proceeds directly to PendingOfflineExecution.",
-                "无需内部审批时，Quoted 会直接进入 PendingOfflineExecution。",
+                locale, "Quotes proceed to offline signing when internal approval is not required.",
+                "无需内部审批时，报价可直接进入线下签署。",
               ),
             ),
           ],
@@ -336,12 +324,6 @@ fn offline_commerce_lifecycle_graph(state : ConsoleState) -> @rabbita.Html {
             @html.div(class="offline-life-unlinked-state", [
               offline_lifecycle_state_node(
                 locale, "Rejected", "Rejected", "已拒绝", current_code,
-              ),
-              @html.p(
-                offline_lifecycle_copy(
-                  locale, "Typed terminal record; the current backend publishes no transition constructor into this state.",
-                  "类型化终止记录；当前后端未发布进入此状态的转换构造器。",
-                ),
               ),
             ]),
           ]),
@@ -623,7 +605,7 @@ fn offline_commerce_lifecycle_graph(state : ConsoleState) -> @rabbita.Html {
                 ),
                 "Rejected",
                 offline_lifecycle_copy(
-                  locale, "Typed terminal record only", "仅类型化终止记录",
+                  locale, "No action available", "无可用操作",
                 ),
               ),
             ]),

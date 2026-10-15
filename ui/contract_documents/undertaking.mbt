@@ -21,10 +21,8 @@ fn contract_route_unavailable_copy(locale : @i18n.Locale) -> String {
 pub fn ContractDocumentsState::current_manifest(
   self : ContractDocumentsState,
 ) -> @contractdoc.ContractTemplateManifest? {
-  let packet = match self.selected_packet_id {
-    Some(id) => find_packet(self.packets, id)
-    None => self.packets.get(0)
-  }
+  let self = self.order_view()
+  let packet = self.selected_packet()
   match packet {
     Some(packet) => {
       for manifest in self.available_manifests {
@@ -48,6 +46,9 @@ fn undertaking_creation(
     return @html.nothing
   }
   let template_id = state.creation_template_id
+  if state.order_context is Some(_) && !state.packets.is_empty() {
+    return @html.nothing
+  }
   let order_ref = state.creation_order_ref
   let orders = state.available_orders.filter(item => {
     (
@@ -117,20 +118,7 @@ fn undertaking_creation(
   }
   @html.section(class="contract-workspace", [
     @html.div(class="contract-form-panel", [
-      @html.h2(
-        copy(
-          state.locale,
-          "Choose your rental document",
-          "选择租赁办理方式",
-        ),
-      ),
-      @html.p(
-        copy(
-          state.locale,
-          "Traditional bilateral contract or a tenant-signed undertaking reviewed by Party A. Both retain payment, capacity and access checks. The traditional contract route is temporarily unavailable.",
-          "可选传统双方合同，或使用方签章、甲方审批的承诺函。两种方式均保留付款、资源与权限检查。传统合同方式暂未开放。",
-        ),
-      ),
+      @html.h2(copy(state.locale, "Rental document", "租赁文件")),
       @html.div(class="contract-field-grid", [
         @html.div(class="contract-field", [
           @html.label(
@@ -168,13 +156,6 @@ fn undertaking_creation(
           ),
         ]),
       ]),
-      @html.p(
-        copy(
-          state.locale,
-          "Organization and order information are reused where verified. Review the original document, generate it, sign and stamp it, then submit the scan for approval. Approval is not a second signature.",
-          "已核实的单位与订单资料自动带入。审阅原文、生成文件、签字盖章后提交扫描件审批；甲方审批不等于再次签署。",
-        ),
-      ),
       if orders.is_empty() {
         @html.p(
           copy(
@@ -211,6 +192,28 @@ fn undertaking_scans(
   state.signed_artifacts.filter(item => {
     item.0 == packet.order_ref && item.3 >= rendered_at
   })
+}
+
+///|
+/// Selecting the sole eligible upload is navigation, not signature attestation.
+/// The user still supplies the actual signing date and confirms submission.
+pub fn ContractDocumentsState::select_only_signed_scan(
+  self : ContractDocumentsState,
+) -> ContractDocumentsState {
+  match self.confirmation {
+    Some(SubmitUndertaking(id, revision, "", date)) => {
+      let scans = undertaking_scans(self, id)
+      if scans.length() == 1 {
+        {
+          ..self,
+          confirmation: Some(SubmitUndertaking(id, revision, scans[0].1, date)),
+        }
+      } else {
+        self
+      }
+    }
+    _ => self
+  }
 }
 
 ///|
@@ -323,6 +326,20 @@ fn undertaking_confirmation(
             ])
           }
           _ => @html.nothing
+        },
+        if submitting {
+          match state.error_message {
+            Some(message) =>
+              @html.p(attrs=@html.Attrs::build().role("alert"), message)
+            None =>
+              match state.success_message {
+                Some(message) =>
+                  @html.p(attrs=@html.Attrs::build().role("status"), message)
+                None => @html.nothing
+              }
+          }
+        } else {
+          @html.nothing
         },
         @html.div(class="dialog-actions", [
           @html.button(

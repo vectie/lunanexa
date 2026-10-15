@@ -25,7 +25,7 @@ async fn send_body(
   status : Int,
   body : String,
   content_type : String,
-  headers? : Map[String, String] = Map([]),
+  headers? : @http.Headers = Map([]),
   cookies? : Array[@http.Cookie] = [],
 ) -> Unit {
   headers["Content-Type"] = content_type
@@ -505,7 +505,7 @@ fn enterprise_machine_request_allowed(
   audience : BrowserAudience,
   method_ : @http.RequestMethod,
   path : String,
-  headers : Map[String, String],
+  headers : @http.Headers,
 ) -> Bool {
   if audience != Enterprise ||
     header(headers, "Origin") is Some(_) ||
@@ -550,8 +550,8 @@ fn exact_or_child(path : String, prefix : String) -> Bool {
 fn forward_request_headers(
   request : @http.Request,
   authorization? : String,
-) -> Map[String, String] {
-  let result : Map[String, String] = Map([])
+) -> @http.Headers {
+  let result : @http.Headers = Map([])
   for
     name in [
       "Accept", "Content-Type", "If-None-Match", "Range", "X-LunaNexa-Organization",
@@ -577,6 +577,7 @@ async fn proxy_request(
   authorization? : String,
   no_store~ : Bool,
   response_cookie? : @http.Cookie,
+  additional_headers? : @http.Headers = Map([]),
 ) -> Unit {
   let request_body = reader.read_all().binary()
   guard request_body.length() <= MaximumRequestBytes else {
@@ -588,15 +589,15 @@ async fn proxy_request(
   }
   let client = @http.Client(origin)
   defer client.close()
-  client.request(
-    request.meth,
-    request.path,
-    extra_headers=forward_request_headers(request, authorization?),
-  )
+  let forwarded = forward_request_headers(request, authorization?)
+  for name, value in additional_headers {
+    forwarded[name] = value
+  }
+  client.request(request.meth, request.path, extra_headers=forwarded)
   client.write(request_body)
   let response = client.end_request()
   let response_body = client.read_all().binary()
-  let headers : Map[String, String] = Map([])
+  let headers : @http.Headers = Map([])
   for name in ["Content-Type", "Cache-Control", "ETag", "Content-Range"] {
     match header(response.headers, name) {
       Some(value) if value.length() <= 1024 => headers[name] = value
@@ -646,6 +647,15 @@ async fn handle_api_proxy(
     return send_error(connection, 401, "browser-bearer-rejected")
   }
   let refreshed = { ..session, last_used_unix_ms: @async.now(), }
+  let wifi_trial_request = path == "/v1/auth/wifi-trial:redeem"
+  if wifi_trial_request &&
+    (
+      audience != Enterprise ||
+      request.meth != Post ||
+      !wifi_trial_source_allowed(config, request.headers)
+    ) {
+    return send_error(connection, 403, "guest-wifi-required")
+  }
   store.replace(session_id, refreshed)
   let cookie_reference = encode_cookie_reference(
     session_id,
@@ -664,6 +674,15 @@ async fn handle_api_proxy(
       (session.expires_unix_ms - @async.now()) / 1000L,
       secure=config.browser_secure(),
     ),
+    additional_headers=if wifi_trial_request {
+      wifi_trial_assertion_headers(
+        config.assertion_secret,
+        session.bearer,
+        @async.now(),
+      )
+    } else {
+      Map([])
+    },
   )
 }
 

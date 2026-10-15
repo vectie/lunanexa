@@ -185,7 +185,7 @@ fn percent_encode(value : String) -> String {
 
 ///|
 async fn get_json(url : String) -> Json {
-  let headers : Map[String, String] = {
+  let headers : @http.Headers = {
     "Accept": "application/json",
     "User-Agent": "LunaNexa-ModelSource/0.2",
   }
@@ -353,13 +353,8 @@ fn file_url(
 }
 
 ///|
-fn response_header(headers : Map[String, String], name : String) -> String? {
-  for key, value in headers {
-    if key.to_lower() == name.to_lower() {
-      return Some(value)
-    }
-  }
-  None
+fn response_header(headers : @http.Headers, name : String) -> String? {
+  headers.get(name)
 }
 
 ///| ModelScope serves LFS objects through short-lived HTTPS redirects. Keep
@@ -399,7 +394,7 @@ fn trusted_modelscope_download_redirect(location : String) -> Bool {
 /// resumable; each intermediate response body is closed before continuing.
 async fn modelscope_download_stream(
   initial_url : String,
-  headers : Map[String, String],
+  headers : @http.Headers,
 ) -> (@http.Response, @http.Client) {
   let mut current_url = initial_url
   let mut redirects = 0
@@ -445,7 +440,7 @@ pub async fn ModelScopeClient::download_file(
   progress : async (Int64) -> Unit,
   cancelled : async () -> Bool,
 ) -> Unit {
-  let headers : Map[String, String] = {
+  let headers : @http.Headers = {
     "Accept": "application/octet-stream",
     "User-Agent": "LunaNexa-ModelSource/0.2",
   }
@@ -468,7 +463,7 @@ pub async fn ModelScopeClient::download_file(
           return
         }
         offset = 0L
-        digest.reset()
+        @crypto.CryptoHasher::reset(digest)
       }
     }
   }
@@ -502,7 +497,7 @@ pub async fn ModelScopeClient::download_file(
       if request_start > 0L {
         progress(-request_start)
         size = 0L
-        digest.reset()
+        @crypto.CryptoHasher::reset(digest)
       }
       expected_end = file.size - 1L
       false

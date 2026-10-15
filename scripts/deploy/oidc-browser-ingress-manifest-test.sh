@@ -7,7 +7,6 @@ public_ingress_manifest=$repo_root/deploy/oidc-browser-public-ingress.yaml
 controller_patch=$repo_root/deploy/oidc-browser-ingress-controller-patch.yaml
 base_policy=$repo_root/deploy/network-policy.yaml
 controller_manifest=$repo_root/deploy/controller.yaml
-dev_patch=$repo_root/deploy/management-foundation/network-policy-dev-browser-patch.yaml
 enterprise_source=$repo_root/cmd/enterprise/main.mbt
 direct_management_fixture=$repo_root/scripts/deploy/testdata/oidc-direct-ip-management.yaml
 test_directory=$(mktemp -d "${TMPDIR:-/tmp}/lunanexa-oidc-ingress-test.XXXXXX")
@@ -133,8 +132,7 @@ if rg -q 'lunanexa-(console|workbench)-public-gateway' "$base_controller_policy"
   printf '%s\n' 'production controller policy admits a plain browser gateway' >&2
   exit 1
 fi
-rg -q 'app: lunanexa-console-public-gateway' "$dev_patch"
-rg -q 'app: lunanexa-workbench-public-gateway' "$dev_patch"
+test ! -e "$repo_root/deploy/management-foundation/network-policy-dev-browser-patch.yaml"
 rg -q 'name: LUNANEXA_ACCOUNT_SESSION_ISSUER_SECRET' "$controller_manifest"
 rg -q 'key: account-session-issuer-secret' "$controller_manifest"
 test "$(rg -c 'name: LUNANEXA_IDENTITY_ASSERTION_SECRET' "$controller_manifest")" -eq 1

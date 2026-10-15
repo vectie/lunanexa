@@ -97,6 +97,7 @@ test "OIDC transport override preserves the public issuer path" {
     operator_cookie_secret: "operator-cookie-secret-32-bytes-000",
     enterprise_cookie_secret: "enterprise-cookie-secret-32-bytes",
     assertion_secret: "identity-assertion-secret-32-bytes",
+    wifi_trial_source_cidrs: [],
     database_url: "postgres://database",
     relay_endpoint: "http://relay:8081",
     control_endpoint: "http://control:8080",
@@ -221,7 +222,7 @@ test "ID token claims bind issuer client nonce and lifetime" {
 
 ///|
 test "relay forwards only signed identity header allowlist" {
-  let incoming : Map[String, String] = {
+  let incoming : @http.Headers = {
     "Content-Type": "application/json",
     "Authorization": "Bearer forged",
     "Cookie": "forged=true",

@@ -150,12 +150,14 @@ fn delivery_command(
               ),
             )
         }
-        // The external model belongs to MaaS. A failed model-control probe
-        // must not hide IaaS inventory or personal PaaS controls.
+        // Overview and IaaS also display the company's model handoff. Load
+        // current model evidence on direct entry, without requiring a MaaS visit.
         let (external_model, external_error) : (
           @enterprise_ui.ExternalModelServiceView?,
           String?,
-        ) = if model.portal.route == Models {
+        ) = if model.portal.route == Models ||
+          model.portal.route == Overview ||
+          model.portal.route == MachineAccess {
           try
             (
               Some(
@@ -250,13 +252,19 @@ fn delivery_poll_command(
       model.portal.route != Overview
     ) ||
     model.portal.deliveries.error is Some(_) ||
-    !model.portal.deliveries.operations.any(operation => {
-      operation.stage == "Reserving" ||
-      operation.stage == "PreparingModel" ||
-      operation.stage == "LoadingModel" ||
-      operation.stage == "StartingWorkspace" ||
-      operation.stage == "Stopping"
-    }) {
+    (
+      !model.portal.deliveries.operations.any(operation => {
+        operation.stage == "Reserving" ||
+        operation.stage == "PreparingModel" ||
+        operation.stage == "LoadingModel" ||
+        operation.stage == "StartingWorkspace" ||
+        operation.stage == "Stopping"
+      }) &&
+      !(model.portal.route == Models &&
+      model.portal.deliveries.external_model.map_or(false, service => {
+        service.state == "Running" && !service.ready
+      }))
+    ) {
     return @rabbita.none
   }
   @rabbita.perform(
@@ -283,94 +291,107 @@ fn delivery_workspace_command(
   operation_id : String,
   emit : @rabbita.Emit[AppMessage],
 ) -> @rabbita.Cmd {
-  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
-    try {
-      guard @enterprise_ui.delivery_launch_template(
-          model.portal.deliveries,
-          operation_id,
-        )
-        is Some(template) &&
-        template.client_id is Some(client_id) else {
-        raise Failure("interactive delivery unavailable")
-      }
-      guard model.portal.deliveries.operations
-        .iter()
-        .find_first(operation => operation.operation_id == operation_id)
-        is Some(operation) else {
-        raise Failure("delivery unavailable")
-      }
-      let clients : Array[DesktopClientResponse] = @json.from_json(
-        @json.parse(
-          request(
-            "GET",
-            model.endpoint,
-            "/v1/portal/self/clients",
-            model.token,
-            model.subject_ref,
+  @rabbita.perform(
+    result => {
+      emit(
+        Outcome(
+          ApplicationLaunchCompleted(
+            model.session_generation,
+            model.portal.selected_organization_id,
+            Some(model.portal.deliveries.poll_generation),
+            result,
           ),
         ),
       )
-      guard clients.iter().find_first(client => client.client_id == client_id)
-        is Some(client) else {
-        raise Failure("public workspace integration unavailable")
-      }
-      let body : Json = {
-        "request_id": random_identifier("delivery-handoff"),
-        "client_id": client.client_id,
-        "project_id": operation.project_id,
-        "allowed_models": (if template.kind == "GpuContainer" {
-          ([] : Array[String])
-        } else {
-          [template.model_selector]
-        }).to_json(),
-        "delivery_id": operation_id,
-      }
-      let launch : DesktopClientHandoffLaunch = @json.from_json(
-        @json.parse(
-          request(
-            "POST",
-            model.endpoint,
-            "/v1/portal/self/client-handoffs",
-            model.token,
-            model.subject_ref,
-            body=body.stringify(),
-          ),
-        ),
-      )
-      if !launch.one_time ||
-        launch.client_id != client.client_id ||
-        launch.handoff_expires_unix_ms <= current_unix_ms() ||
-        !(launch.launch_uri.has_prefix("https://") ||
-        launch.launch_uri.has_prefix("http://")) ||
-        (
-          template.kind != "ModelApi" &&
-          (
-            launch.launch_uri.contains("127.0.0.1") ||
-            launch.launch_uri.contains("localhost") ||
-            launch.launch_uri.contains("[::1]")
+    },
+    async fn() noraise {
+      try {
+        guard @enterprise_ui.delivery_launch_template(
+            model.portal.deliveries,
+            operation_id,
           )
-        ) {
-        raise Failure("public workspace address unavailable")
-      }
-      open_desktop_client(
-        launch.launch_uri,
-        launch.client_id,
-        launch.handoff_code,
-        false,
-      )
-      DesktopClientLaunched(launch.display_name)
-    } catch {
-      _ =>
-        Failed(
-          model.portal.locale,
-          portal_copy(
-            model.portal.locale,
-            "Unable to open this delivery's public workspace or terminal. Refresh service status and retry.",
-            "无法打开此交付的公网工作区或终端。请刷新服务状态后重试。",
+          is Some(template) &&
+          template.client_id is Some(client_id) else {
+          raise Failure("interactive delivery unavailable")
+        }
+        guard model.portal.deliveries.operations
+          .iter()
+          .find_first(operation => operation.operation_id == operation_id)
+          is Some(operation) else {
+          raise Failure("delivery unavailable")
+        }
+        let clients : Array[DesktopClientResponse] = @json.from_json(
+          @json.parse(
+            request(
+              "GET",
+              model.endpoint,
+              "/v1/portal/self/clients",
+              model.token,
+              model.subject_ref,
+            ),
           ),
         )
-    }
-  })
+        guard clients.iter().find_first(client => client.client_id == client_id)
+          is Some(client) else {
+          raise Failure("public workspace integration unavailable")
+        }
+        let body : Json = {
+          "request_id": random_identifier("delivery-handoff"),
+          "client_id": client.client_id,
+          "project_id": operation.project_id,
+          "allowed_models": (if template.kind == "GpuContainer" {
+            ([] : Array[String])
+          } else {
+            [template.model_selector]
+          }).to_json(),
+          "delivery_id": operation_id,
+        }
+        let launch : DesktopClientHandoffLaunch = @json.from_json(
+          @json.parse(
+            request(
+              "POST",
+              model.endpoint,
+              "/v1/portal/self/client-handoffs",
+              model.token,
+              model.subject_ref,
+              body=body.stringify(),
+            ),
+          ),
+        )
+        if !launch.one_time ||
+          launch.client_id != client.client_id ||
+          launch.handoff_expires_unix_ms <= current_unix_ms() ||
+          !(launch.launch_uri.has_prefix("https://") ||
+          launch.launch_uri.has_prefix("http://")) ||
+          (
+            template.kind != "ModelApi" &&
+            (
+              launch.launch_uri.contains("127.0.0.1") ||
+              launch.launch_uri.contains("localhost") ||
+              launch.launch_uri.contains("[::1]")
+            )
+          ) {
+          raise Failure("public workspace address unavailable")
+        }
+        open_desktop_client(
+          launch.launch_uri,
+          launch.client_id,
+          launch.handoff_code,
+          false,
+        )
+        Ok(launch.display_name)
+      } catch {
+        _ =>
+          Err(
+            portal_copy(
+              model.portal.locale,
+              "Unable to open this delivery's public workspace or terminal. Refresh service status and retry.",
+              "无法打开此交付的公网工作区或终端。请刷新服务状态后重试。",
+            ),
+          )
+      }
+    },
+  )
 }
 
 ///|

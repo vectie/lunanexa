@@ -22,6 +22,7 @@ fn password_test_config(relay_endpoint : String) -> GatewayConfig {
     operator_cookie_secret: "operator-cookie-secret-32-bytes-000",
     enterprise_cookie_secret: "enterprise-cookie-secret-32-bytes",
     assertion_secret: "identity-assertion-secret-32-bytes",
+    wifi_trial_source_cidrs: [],
     database_url: "postgres://database",
     relay_endpoint,
     control_endpoint: "http://control:8080",
@@ -237,7 +238,7 @@ test "a provider identity without a usable email fails closed" {
         ),
       )
     catch {
-      PasswordLoginError::IdentityRejected => ()
+      IdentityRejected => ()
       _ => fail("unexpected password login error")
     } noraise {
       _ => fail("unusable provider identity must be rejected")

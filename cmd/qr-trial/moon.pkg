@@ -1,0 +1,14 @@
+import {
+  "PaiGack/moonbitqrcode/src/lib" @qr,
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/core/env",
+}
+
+supported_targets = "native"
+
+pkgtype(kind: "executable")
+
+options(
+  link: { "native": { "cc-link-flags": "-pthread -ldl" } },
+)

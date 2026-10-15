@@ -139,11 +139,8 @@ async fn start_glm() -> String {
 }
 
 ///|
-fn header(headers : Map[String, String], name : String) -> String? {
-  headers
-  .iter()
-  .find_first(pair => pair.0.to_lower() == name)
-  .map(pair => pair.1)
+fn header(headers : @http.Headers, name : String) -> String? {
+  headers.get(name)
 }
 
 ///|

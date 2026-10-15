@@ -138,7 +138,7 @@ test("current reader guides bind named actions to bilingual catalogs and actual 
         const block = source.split("///|").find((candidate) => label.test(candidate));
         const compact = (value) => value.replace(/\s+/g, "");
         assert.ok(block?.includes("@html.button(") || block?.includes("@html.a("));
-        assert.ok(compact(block).includes(compact(action.binding)), `${action.source}: named action has no expected event binding`);
+        assert.ok(compact(block).includes(compact(action.binding)), `${action.source}: ${action.en} has no expected event binding`);
     }
     for (const id of action.page_ids) {
       assert.ok(pageById.has(id));
@@ -228,24 +228,26 @@ test("newcomer operations runbook connects both roles without exposing internals
   assert.match(JSON.stringify(zhBook.pages[page.id]), /告警|线下|独占机器|指南诊断/u);
 });
 
-test("UI-only acceptance SOP records every surface and consequential journey", () => {
+test("UI acceptance uses canonical portals and prioritizes the service entries", () => {
   const page = pageById.get("ui-end-to-end-sop");
   assert.ok(page);
   assert.equal(page.group_id, "operations");
-  assert.equal(page.status, "simulated");
+  assert.equal(page.status, "documented");
   const published = JSON.stringify(page);
   for (const surface of [
-    "/installer/", "/console/?demo=1", "/enterprise/?demo=1", "/workbench/",
+    "https://suanli.kechuangfuwu.com:8443/user/",
+    "https://suanli.kechuangfuwu.com:8443/mana/",
+    "https://suanli.kechuangfuwu.com:8443/docs/",
   ]) assert.ok(published.includes(surface), surface);
   for (const action of [
-    "Preview and verify", "Reconcile simulation", "Cordon", "Drain",
-    "Review and sign", "Submit lease request", "Save data", "End access early",
-    "Terminate access", "Request renewal", "Connect / refresh",
+    "IaaS", "MaaS", "PaaS", "organization", "order", "readiness",
   ]) assert.match(published, new RegExp(action.replaceAll("/", "\\/"), "i"), action);
   for (const boundary of [
-    "demo records", "production controller", "physical sanitization", "external receipts",
+    "authorized action", "external receipts", "demos are removed",
   ]) assert.match(published, new RegExp(boundary, "i"), boundary);
-  assert.match(JSON.stringify(zhBook.pages[page.id]), /预览并验证|协调模拟|提前结束访问|终止访问|保存资料/u);
+  assert.match(JSON.stringify(zhBook.pages[page.id]), /正式门户|算力实例|模型服务|工作区/u);
+  assert.doesNotMatch(JSON.stringify(book), /[?&]demo=|127\.0\.0\.1:4173\/(enterprise|console)\//);
+  assert.doesNotMatch(JSON.stringify(zhBook), /[?&]demo=|127\.0\.0\.1:4173\/(enterprise|console)\//);
 });
 
 test("production UI validation publishes exactly 50 honest scenarios and blockers", async () => {

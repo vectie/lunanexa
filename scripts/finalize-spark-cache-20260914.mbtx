@@ -1,8 +1,8 @@
 ///|
 import {
-  "moonbitlang/async",
-  "moonbitlang/async/shell",
-  "moonbitlang/async/fs",
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/async@0.22.4/fs",
   "moonbitlang/core/env",
   "moonbitlang/core/json",
 }

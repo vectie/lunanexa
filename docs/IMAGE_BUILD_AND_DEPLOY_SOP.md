@@ -473,9 +473,17 @@ bash deploy/acceptance/install-comfyui-templates.sh
 
 ---
 
-## 11. 浏览器 UI 的落点（2026-09-22 实测）
+## 11. 浏览器 UI 的落点
 
-同一套 bundle 在这台机器上有**三条**不同的投放路径，改 UI 时三条都要想到：
+2026-10-14 更新：当前产品优化和验收入口仅为
+`https://suanli.kechuangfuwu.com:8443/user/`、`/mana/`、`/docs/`。
+浏览器演示模式已移除，禁止部署独立演示站点或使用 `?demo=1` 验收。
+`enterprise` 和 `console` 是正式门户的内部 bundle 名称，不是独立演示产品。
+发布后必须对照公网 bundle 的 SHA-256，并验证真实登录和已登录页面。
+
+### 历史路由记录（2026-09-22，非当前发布入口）
+
+当时同一套 bundle 在这台机器上有三条不同的投放路径：
 
 | 入口 | 谁在服务 | 更新方式 |
 | --- | --- | --- |
@@ -489,7 +497,8 @@ bash deploy/acceptance/install-comfyui-templates.sh
   **身份网关**，并把 `Host`/`Origin` 改写成 operator host（`203.0.113.10:5003`）——
   网关把一个会话绑定在**一个**配置的 host 上，而 4174 不是它。
 - 5002 的 `/` 原本对没有 OIDC cookie 的访客 302 到 `/enterprise/?demo=1`，也就是**默认进演示态**，
-  真实门户的注册/登录表单永远看不到。已改成直接 302 到 `/enterprise/`；`?demo=1` 仍可用。
+  真实门户的注册/登录表单永远看不到。当时改成直接 302 到 `/enterprise/`；
+  2026-10-14 起不再支持 `?demo=1` 演示入口。
 
 ---
 

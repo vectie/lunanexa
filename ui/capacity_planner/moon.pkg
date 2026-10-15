@@ -3,6 +3,7 @@ import {
   "vectie/lunanexa/contracts",
   "vectie/lunanexa/telemetry/benchmark",
   "vectie/lunanexa/ui/i18n",
+  "vectie/lunanexa/ui/controls",
   "moonbit-community/rabbita",
   "moonbit-community/rabbita/html",
   "moonbitlang/core/string",

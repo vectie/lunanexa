@@ -16,6 +16,8 @@ test "media instance identity fences replacement even when address is reused" {
       maximum_fps: 24,
       maximum_steps: 20,
       sound_supported: false,
+      image_reference_supported: None,
+      image_reference_required: None,
     },
   }
   let rotated = { ..original, bearer: Some("test-only-rotated-token"), }

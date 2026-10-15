@@ -1,7 +1,7 @@
 import {
-  "moonbitlang/async",
-  "moonbitlang/async/fs",
-  "moonbitlang/async/shell",
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
 }
 
 async fn main {
@@ -64,5 +64,14 @@ async fn main {
   @fs.write_file(scratch + "/desktop/native/moon.pkg", "import { \"vectie/moontown\" }")
   let owned_manifest = @shell.Cmd("sh", [scratch + "/scripts/check-isolation.sh"]).output()
   assert_true(owned_manifest.exit_code() != 0)
-  println("Isolation/response scan fixtures: \{cases.length() + 4} passed. Static scans do not replace public-response tests.")
+  @fs.write_file(scratch + "/desktop/native/moon.pkg", "")
+  @fs.mkdir(scratch + "/ui")
+  @fs.write_file(scratch + "/ui/apps.mbt", "let client_id = \"moonrobo\"\nlet path = \"/moontown\"")
+  assert_eq(@shell.Cmd("sh", [scratch + "/scripts/check-isolation.sh"]).output().exit_code(), 0)
+  @fs.write_file(scratch + "/ui/apps.mbt", "import {\n \"vectie/moonrobo\"\n}")
+  assert_true(@shell.Cmd("sh", [scratch + "/scripts/check-isolation.sh"]).output().exit_code() != 0)
+  @fs.write_file(scratch + "/ui/apps.mbt", "")
+  @fs.write_file(scratch + "/node/control.mbt", "let client_path = \"/moontown\"")
+  assert_true(@shell.Cmd("sh", [scratch + "/scripts/check-isolation.sh"]).output().exit_code() != 0)
+  println("Isolation/response scan fixtures: \{cases.length() + 7} passed. Static scans do not replace public-response tests.")
 }

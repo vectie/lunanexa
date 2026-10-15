@@ -38,7 +38,7 @@ test "offline commerce lifecycle renders empty reference state" {
   assert_true(html.contains("No order selected"))
   assert_true(html.contains("Reference map only"))
   assert_true(html.contains("Draft"))
-  assert_true(html.contains("Typed terminal record"))
+  assert_true(html.contains("No action available"))
 }
 
 ///|
@@ -55,7 +55,7 @@ test "offline commerce lifecycle localizes state and transition limits" {
   for
     value in [
       "线下商务生命周期", "当前订单", "撤销需人工处理", "补正循环",
-      "权益撤销", "权威转换表", "当前后端未发布进入此状态的转换构造器",
+      "权益撤销", "权威转换表", "无可用操作",
     ] {
     assert_true(html.contains(value))
   }

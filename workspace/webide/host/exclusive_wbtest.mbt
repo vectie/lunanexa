@@ -128,7 +128,7 @@ test "exclusive ComfyUI uses reserved node and retains stable customer volume" {
       tenant_ref: "other",
     })
   catch {
-    HostError::ControllerRejected => ()
+    ControllerRejected => ()
     error => fail("unexpected error: \{Repr(error)}")
   } noraise {
     _ => fail("cross tenant placement accepted")
@@ -178,7 +178,7 @@ test "exclusive GPU terminal has persistent HOME and no host authority" {
   try
     host.resources(@webide.workspace_id(grant), grant, container=runtime)
   catch {
-    HostError::InvalidConfiguration => ()
+    InvalidConfiguration => ()
     error => fail("unexpected error: \{Repr(error)}")
   } noraise {
     _ => fail("GPU container without placement accepted")
@@ -203,7 +203,7 @@ test "two company members get separate hosted MoonDesk pods and PVCs" {
     gpu: false,
   }
   try host.resources(@webide.workspace_id(first), first) catch {
-    HostError::InvalidConfiguration => ()
+    InvalidConfiguration => ()
     error => fail("unexpected error: \{Repr(error)}")
   } noraise {
     _ => fail("MoonDesk without its own container was accepted")
@@ -276,7 +276,7 @@ test "hosted MoonRobo has isolated storage and a native health probe" {
     gpu: false,
   }
   try host.resources(@webide.workspace_id(alice), alice) catch {
-    HostError::InvalidConfiguration => ()
+    InvalidConfiguration => ()
     _ => fail("unexpected error")
   } noraise {
     _ => fail("MoonRobo without an isolated container was accepted")
@@ -336,7 +336,7 @@ test "hosted MoonTown has per-user storage and a private health probe" {
     gpu: false,
   }
   try host.resources(@webide.workspace_id(alice), alice) catch {
-    HostError::InvalidConfiguration => ()
+    InvalidConfiguration => ()
     _ => fail("unexpected error")
   } noraise {
     _ => fail("MoonTown without an isolated container was accepted")

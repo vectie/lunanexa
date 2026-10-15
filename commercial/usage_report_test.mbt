@@ -249,13 +249,13 @@ test "imports accept existing snapshot schema and a plain editable query" {
   )
   assert_eq(@commercial.import_usage_query(query.to_json().stringify()), query)
   try @commercial.import_usage_query("{}") catch {
-    @commercial.InvalidInput(_) => ()
+    InvalidInput(_) => ()
     _ => fail("unexpected error type")
   } noraise {
     _ => fail("expected invalid query")
   }
   try @commercial.import_usage_snapshot("{}") catch {
-    @commercial.InvalidInput(_) => ()
+    InvalidInput(_) => ()
     _ => fail("unexpected error type")
   } noraise {
     _ => fail("expected invalid snapshot")
@@ -263,7 +263,7 @@ test "imports accept existing snapshot schema and a plain editable query" {
   try
     @commercial.explore_usage({ ..source, schema_version: "future", }, query)
   catch {
-    @commercial.InvalidInput(_) => ()
+    InvalidInput(_) => ()
     _ => fail("unexpected error type")
   } noraise {
     _ => fail("expected unsupported schema")
@@ -277,7 +277,7 @@ test "imports accept existing snapshot schema and a plain editable query" {
       { ..query, project_id: "missing", },
     ] {
     try @commercial.explore_usage(source, invalid) catch {
-      @commercial.InvalidInput(_) => ()
+      InvalidInput(_) => ()
       _ => fail("unexpected error type")
     } noraise {
       _ => fail("expected invalid query")
@@ -319,7 +319,7 @@ test "ambiguous joins and duplicate source identities cannot double count costs"
       },
     ] {
     try @commercial.explore_usage(invalid, report_query()) catch {
-      @commercial.InvalidInput(_) => ()
+      InvalidInput(_) => ()
       _ => fail("unexpected error type")
     } noraise {
       _ => fail("expected invalid source")
@@ -347,7 +347,7 @@ test "exact money and quantity overflow are errors rather than wrapped allocatio
       report_query(),
     )
   catch {
-    @commercial.ArithmeticOverflow => ()
+    ArithmeticOverflow => ()
     _ => fail("unexpected error type")
   } noraise {
     _ => fail("expected money overflow")
@@ -362,7 +362,7 @@ test "exact money and quantity overflow are errors rather than wrapped allocatio
       report_query(),
     )
   catch {
-    @commercial.ArithmeticOverflow => ()
+    ArithmeticOverflow => ()
     _ => fail("unexpected error type")
   } noraise {
     _ => fail("expected quantity overflow")

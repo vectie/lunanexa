@@ -30,6 +30,8 @@ pub(all) struct ApiKeyIssueIntent {
   scopes : Array[ApiKeyScope]
   allowed_models : Array[String]
   expires_unix_ms : Int64
+  /// Zero means no request-count cap. Public issuance must verify dedicated
+  /// private-model authority before accepting this value.
   maximum_requests : Int64
 } derive(Debug, Eq, ToJson, FromJson)
 
@@ -60,6 +62,7 @@ pub(all) struct ApiCredential {
   allowed_models : Array[String]
   issued_unix_ms : Int64
   expires_unix_ms : Int64
+  /// The maximum Int64 is the durable unbounded ceiling. Public views use zero.
   maximum_requests : Int64
   consumed_requests : Int64
   revoked_unix_ms : Int64?
@@ -146,6 +149,7 @@ pub(all) struct ApiCredentialView {
   allowed_models : Array[String]
   issued_unix_ms : Int64
   expires_unix_ms : Int64
+  /// Zero means no request-count cap.
   maximum_requests : Int64
   consumed_requests : Int64
   revoked_unix_ms : Int64?

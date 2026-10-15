@@ -1644,6 +1644,19 @@ kubectl -n lunanexa logs daemonset/lunanexa-node --tail=100
 
 Repeat with new bootstrap and node credentials for each remaining DGX.
 
+### Recover a node whose renewal window has elapsed
+
+Certificate renewal accepts the current node authority only within its bounded
+24-hour expiry grace period. After a longer outage, repeated renewal HTTP 401s
+require operator-led enrollment recovery. Compare the host certificate with
+the durable enrollment record and verify the existing node secret against its
+stored digest. Privately back up both records, issue a fresh short-lived,
+one-use bootstrap, and pause only that node agent. Enroll the same node identity
+with its existing authority, install the returned certificate with the original
+ownership and restricted permissions, then resume the agent. Confirm fresh
+heartbeats, measured telemetry and automatic heartbeat-alert resolution.
+Existing model workloads and resource reservations retain their own lifecycle.
+
 ## 11. Register and deploy the first model service
 
 Use the operator sequence in `docs/OPERATIONS.md` to register the runtime,

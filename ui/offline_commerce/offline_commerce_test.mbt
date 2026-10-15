@@ -84,7 +84,9 @@ test "terminal customer orders do not promise a future activation notification" 
       selected_order_id: Some("order-2026-001"),
     })
     assert_true(
-      rendered.contains("此订单已结束，不会自动开通权限"),
+      rendered.contains(
+        "订单已结束。如需继续使用，请重新下单或联系管理员",
+      ),
     )
     assert_false(
       rendered.contains("下一步可办理时，我们会通知您"),
@@ -102,7 +104,7 @@ test "customer workflow is clear bilingual and hides internal object authority" 
   })
   assert_true(english.contains("Orders and offline documents"))
   assert_true(english.contains("Upload Executed contract scan"))
-  assert_true(english.contains("Every stage is explicit"))
+  assert_true(english.contains("aria-label=\"Refresh orders\""))
   assert_false(english.contains("object_ref"))
   assert_false(english.contains("scanner_receipt"))
   let chinese = @offline_commerce.render({

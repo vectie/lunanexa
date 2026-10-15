@@ -45,12 +45,9 @@ pub struct PgConnection {
 /// by their worker on first use, so this only starts threads and pipes.
 pub async fn PgPool::connect(url : String, workers? : Int = 4) -> PgPool {
   let driver = @postgres.pool_create(url, workers~) catch {
-    @postgres.PostgresError::InvalidParameter(message) =>
-      raise InvalidArgument(message)
-    @postgres.PostgresError::ConnectionFailed(message) =>
-      raise ConnectionUnavailable(message)
-    @postgres.PostgresError::QueryFailed(message) =>
-      raise QueryRejected(message)
+    InvalidParameter(message) => raise InvalidArgument(message)
+    ConnectionFailed(message) => raise ConnectionUnavailable(message)
+    QueryFailed(message) => raise QueryRejected(message)
   }
   let started = driver.worker_count()
   if started <= 0 {
@@ -62,11 +59,11 @@ pub async fn PgPool::connect(url : String, workers? : Int = 4) -> PgPool {
     if fd < 0 {
       raise ConnectionUnavailable("database completion pipe is unavailable")
     }
-    wakes.push(@raw_fd.RawFd(fd))
+    wakes.push(RawFd(fd))
   }
   let leases : Array[@async.Mutex] = []
   for _ in 0..<started {
-    leases.push(@async.Mutex())
+    leases.push(Mutex())
   }
   { driver, wakes, leases, next_worker: 0, closed: false, }
 }
@@ -166,8 +163,7 @@ async fn PgPool::run_on(
   parameters : Array[String?],
 ) -> PgResult {
   self.driver.submit(index, sql, parameters) catch {
-    @postgres.PostgresError::InvalidParameter(message) =>
-      raise InvalidArgument(message)
+    InvalidParameter(message) => raise InvalidArgument(message)
     _ => raise ConnectionUnavailable("database worker rejected the statement")
   }
   let buffer = FixedArray::make(1, b'\x00')

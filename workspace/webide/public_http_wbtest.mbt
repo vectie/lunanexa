@@ -59,11 +59,6 @@ async test "HTTP opt-in preserves exact host origin and one-time challenge check
         // Simulate the ingress preserving the externally observed authority.
         // The test client connects to loopback, so its native Host is different.
         if header(request.headers, "x-fixture-forwarded-host") is Some(host) {
-          for name, _ in request.headers.copy() {
-            if name.to_lower() == "host" {
-              request.headers.remove(name)
-            }
-          }
           request.headers["host"] = host
         }
         bridge.handle(request, body, connection)
@@ -78,7 +73,7 @@ async test "HTTP opt-in preserves exact host origin and one-time challenge check
     assert_eq(page.code, 200)
     let nonce = page.cookies[0]
     assert_true(nonce.http_only)
-    let headers = {
+    let headers : @http.Headers = {
       "x-fixture-forwarded-host": "198.51.100.5:5000",
       "origin": "http://198.51.100.5:5001",
       "cookie": "\{nonce.name}=\{nonce.value}",

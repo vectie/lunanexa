@@ -15,7 +15,11 @@ fn valid_profile(profile : Profile) -> Bool {
   profile.maximum_fps >= 1 &&
   profile.maximum_fps <= 120 &&
   profile.maximum_steps >= 1 &&
-  profile.maximum_steps <= 1000
+  profile.maximum_steps <= 1000 &&
+  (
+    profile.image_reference_required != Some(true) ||
+    profile.image_reference_supported == Some(true)
+  )
 }
 
 ///|
@@ -75,8 +79,8 @@ fn encode_component(value : String) -> String {
 }
 
 ///|
-/// Text-only first profile: file paths, external references, LoRA and arbitrary
-/// extra_params are rejected, not forwarded into a privileged model worker.
+/// File paths, external references, LoRA and arbitrary overrides stay rejected.
+/// A qualified reference profile accepts bounded embedded PNG and PCM data.
 pub fn VideoRequest::decode(
   profile : Profile,
   content_type : String,
@@ -85,7 +89,12 @@ pub fn VideoRequest::decode(
   if !valid_profile(profile) {
     raise InvalidConfiguration
   }
-  if @utf8.encode(body).length() > 65536 {
+  if @utf8.encode(body).length() >
+    (if profile.image_reference_supported == Some(true) {
+      2097152
+    } else {
+      65536
+    }) {
     raise InvalidRequest
   }
   let fields : Map[String, String] = Map([])
@@ -116,7 +125,7 @@ pub fn VideoRequest::decode(
     }
     let allowed = [
       "model", "prompt", "negative_prompt", "width", "height", "num_frames", "fps",
-      "num_inference_steps", "seed", "generate_sound",
+      "num_inference_steps", "seed", "generate_sound", "input_reference", "audio_reference",
     ]
     if fields.keys().any(key => !allowed.contains(key)) ||
       fields.get("model") != Some(profile.model) {
@@ -167,10 +176,94 @@ pub fn VideoRequest::decode(
         raise InvalidRequest
       }
     }
+    if fields.get("input_reference") is Some(image) {
+      if profile.image_reference_supported != Some(true) {
+        raise InvalidRequest
+      }
+      ignore(reference_image(image))
+    }
+    if profile.image_reference_required == Some(true) &&
+      !fields.contains("input_reference") {
+      raise InvalidRequest
+    }
+    if fields.get("audio_reference") is Some(audio) {
+      if profile.image_reference_supported != Some(true) ||
+        !fields.contains("input_reference") {
+        raise InvalidRequest
+      }
+      guard unique_json_fields(audio) &&
+        @json.parse(audio) is Object(values) &&
+        values.length() == 1 &&
+        values.get("audio_url") is Some(String(url)) &&
+        url.has_prefix("data:audio/wav;base64,") else {
+        raise InvalidRequest
+      }
+      let bytes = @base64.decode(url["data:audio/wav;base64,".length():])
+      if bytes.length() < 44 ||
+        bytes.length() > 262144 ||
+        bytes[:4] != b"RIFF" ||
+        bytes[8:12] != b"WAVE" ||
+        bytes[12:16] != b"fmt " ||
+        bytes[16:20] != b"\x10\x00\x00\x00" ||
+        bytes[20:22] != b"\x01\x00" ||
+        bytes[36:40] != b"data" ||
+        bytes[34:36] != b"\x10\x00" ||
+        little_u32(bytes, 4) != bytes.length() - 8 ||
+        little_u32(bytes, 40) != bytes.length() - 44 {
+        raise InvalidRequest
+      }
+      let channels = bytes[22].to_int()
+      let rate = little_u32(bytes, 24)
+      if bytes[23] != b'\x00' ||
+        (channels != 1 && channels != 2) ||
+        rate < 8000 ||
+        rate > 48000 ||
+        little_u32(bytes, 28) != rate * channels * 2 ||
+        bytes[32].to_int() != channels * 2 ||
+        bytes[33] != b'\x00' ||
+        (bytes.length() - 44) % (channels * 2) != 0 {
+        raise InvalidRequest
+      }
+      fields["audio_reference"] = ({ "audio_url": url } : Json).stringify()
+    }
     { model: profile.model, fields, }
   } catch {
     _ => raise InvalidRequest
   }
+}
+
+///|
+fn little_u32(bytes : Bytes, offset : Int) -> Int {
+  if bytes[offset + 3] > b'\x7f' {
+    return -1
+  }
+  bytes[offset].to_int() +
+  bytes[offset + 1].to_int() * 256 +
+  bytes[offset + 2].to_int() * 65536 +
+  bytes[offset + 3].to_int() * 16777216
+}
+
+///|
+fn reference_image(value : String) -> Bytes raise {
+  guard value.has_prefix("data:image/png;base64,") else { raise InvalidRequest }
+  let bytes = @base64.decode(value["data:image/png;base64,".length():])
+  if bytes.length() < 24 ||
+    bytes.length() > 1048576 ||
+    bytes[:8] != b"\x89PNG\r\n\x1a\n" ||
+    bytes[12:16] != b"IHDR" {
+    raise InvalidRequest
+  }
+  // Bound the decoded dimensions before an opaque provider image sees them.
+  for start in [16, 20] {
+    if bytes[start] != b'\x00' || bytes[start + 1] != b'\x00' {
+      raise InvalidRequest
+    }
+    let size = bytes[start + 2].to_int() * 256 + bytes[start + 3].to_int()
+    if size < 1 || size > 4096 {
+      raise InvalidRequest
+    }
+  }
+  bytes
 }
 
 ///|
@@ -184,9 +277,7 @@ pub fn VideoRequest::within_workspace_budget(
   maximum_input : Int,
   maximum_output : Int,
 ) -> Bool {
-  self.fields["prompt"].length() +
-  self.fields.get("negative_prompt").unwrap_or("").length() <=
-  maximum_input &&
+  @utf8.encode(self.fields.to_json().stringify()).length() <= maximum_input &&
   (@string.parse_int(self.fields["num_frames"]) catch {
     _ => maximum_output + 1
   }) <=

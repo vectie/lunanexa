@@ -230,6 +230,128 @@ async test "one access package intent is resumable and enables only after contra
       @async.now(),
     ),
   )
+  let access = @access.AccessStore::open(
+    "\{temp}/private-keys.json",
+    "private-key-test-issuer-more-than-thirty-two-bytes",
+  )
+  let model_service = private_service
+    .with_access_store(access)
+    .with_external_text_route(
+      "private.model",
+      "tenant-friendly",
+      "private-node",
+      "http://127.0.0.1:19091",
+      "served-private",
+      "runtime-v1",
+      "sha256:" + "b".repeat(64),
+      "sha256:" + "a".repeat(64),
+    )
+  let key_headers = {
+    "Authorization": "Bearer inference-token",
+    "X-LunaNexa-Subject": account.subject_ref,
+  }
+  let key_intent : Json = {
+    "key_id": "private-key",
+    "project_id": "private-project",
+    "display_name": "Private key",
+    "scopes": ["ModelList", "Inference"],
+    "allowed_models": ["private.model"],
+    "expires_unix_ms": (@async.now() + 3600000L).to_json(),
+    "maximum_requests": 10000L.to_json(),
+  }
+  let key_reply = model_service.handle(
+    Post,
+    "/v1/portal/self/api-keys",
+    key_headers,
+    key_intent.stringify(),
+  )
+  assert_eq(key_reply.status, 201)
+  let payload = @json.parse(key_reply.body)
+  assert_true(payload is { "api_base_url": Null, .. })
+  let issued : @access.IssuedApiKeyView = @json.from_json(payload)
+  assert_eq(issued.credential.maximum_requests, 0L)
+  assert_true(
+    model_service.api_key_check(
+      { "Authorization": "Bearer " + issued.secret },
+      Inference,
+      Some("tenant-friendly"),
+      Some("private.model"),
+      true,
+    )
+    is KeyAuthorized(_),
+  )
+  assert_true(
+    model_service
+    .with_private_cloud_workspace_access(false)
+    .api_key_check(
+      { "Authorization": "Bearer " + issued.secret },
+      Inference,
+      None,
+      None,
+      false,
+    )
+    is KeyDenied,
+  )
+  assert_true(
+    model_service.private_model_key_scope("tenant-friendly", ["private.model"]),
+  )
+  let old_key = access.issue(
+    {
+      key_id: "older-private-key",
+      tenant_ref: "tenant-friendly",
+      subject_ref: account.subject_ref,
+      organization_id: "org-friendly",
+      project_id: "private-project",
+      display_name: "Old private key",
+      scopes: [Inference],
+      allowed_models: ["private.model"],
+      expires_unix_ms: @async.now() + 3600000L,
+      maximum_requests: 1L,
+    },
+    @async.now(),
+  )
+  ignore(access.authorize(old_key.secret, Inference, @async.now(), true))
+  assert_true(
+    model_service.api_key_check(
+      { "Authorization": "Bearer " + old_key.secret },
+      Inference,
+      Some("tenant-friendly"),
+      Some("private.model"),
+      true,
+    )
+    is KeyAuthorized(_),
+  )
+  let upgraded = access
+    .views_for_subject("tenant-friendly", account.subject_ref)
+    .iter()
+    .find_first(key => key.key_id == old_key.credential.key_id)
+    .unwrap()
+  assert_eq(upgraded.maximum_requests, 0L)
+  assert_eq(upgraded.consumed_requests, 2L)
+  assert_false(
+    model_service.private_model_key_scope("another-tenant", ["private.model"]),
+  )
+  for
+    models in [
+      ([] : Array[String]),
+      ["shared.model"],
+      ["private.model", "shared.model"],
+    ] {
+    guard key_intent is Object(fields) else { fail("missing key intent") }
+    let changed = fields.copy()
+    changed["key_id"] = "rejected-key"
+    changed["maximum_requests"] = 0L.to_json()
+    changed["allowed_models"] = models.to_json()
+    assert_eq(
+      model_service.handle(
+        Post,
+        "/v1/portal/self/api-keys",
+        key_headers,
+        Json::object(changed).stringify(),
+      ).status,
+      403,
+    )
+  }
   assert_false(
     private_service.private_workspace_authorized(
       "another-tenant",

@@ -1,10 +1,18 @@
 ///|
+// POSIX link() atomically publishes a complete file without replacing an
+// existing name. NFS supports this even when RENAME_NOREPLACE returns EINVAL.
+// This runs only in the single-purpose init process before any app is served.
+#borrow(source, destination)
+extern "c" fn publish_initial_link(source : Bytes, destination : Bytes) -> Int = "link"
+
+///|
 /// Runs as an init container before ComfyUI starts, with only the workspace
 /// volume mounted. The image and custom-node directories stay read-only.
 pub async fn initialize_workspace(root : String, model : String) -> Unit {
   if !root.has_prefix("/") ||
     root == "/" ||
     root.has_suffix("/") ||
+    root.contains("\u0000") ||
     root.split("/").any(part => part == "." || part == "..") ||
     model.is_empty() ||
     model.length() > 128 ||
@@ -82,7 +90,14 @@ async fn create_initial_file(
     permission=0o600,
     sync=Full,
   )
-  @fs.rename(staging, path, replace=false)
+  if publish_initial_link(@utf8.encode(staging), @utf8.encode(path)) != 0 {
+    // A competing completed initialization is safe; every other failure stays
+    // closed. In particular, never replace an existing symlink or directory.
+    guard @fs.kind(path, follow_symlink=false) is Regular else {
+      raise HostError::InvalidConfiguration
+    }
+  }
+  @fs.remove(staging)
 }
 
 ///|

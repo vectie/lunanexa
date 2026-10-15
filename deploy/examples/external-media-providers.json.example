@@ -1,0 +1,24 @@
+[
+  {
+    "provider_id": "external-media-shared-video",
+    "generation": "1",
+    "active": true,
+    "tenant_ref": "approved-tenant",
+    "node_id": "trial-node-a",
+    "artifact_digest": "sha256:REPLACE_WITH_APPROVED_ARTIFACT_DIGEST",
+    "origin": "http://127.0.0.1:5903",
+    "bearer_file": "/run/external-media-tokens/video",
+    "profile": {
+      "model": "video.default",
+      "provider_model": "provider-video-model",
+      "widths": [384, 512],
+      "heights": [256, 512],
+      "maximum_frames": 121,
+      "maximum_fps": 24,
+      "maximum_steps": 20,
+      "sound_supported": false,
+      "image_reference_supported": true,
+      "image_reference_required": false
+    }
+  }
+]

@@ -144,7 +144,7 @@ test "the admin API is addressed only through a configured origin" {
     "https://id.example:8443/admin/realms/lunanexa/users",
   )
   assert_true(
-    password_login_failure_response(PasswordLoginError::InvalidCredentials) ==
+    password_login_failure_response(InvalidCredentials) ==
     (401, "invalid-credentials"),
   )
 }

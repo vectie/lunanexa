@@ -93,7 +93,10 @@ async fn exercise_runtime_route_discovery(
     ),
   )
   service.store.put_heartbeat(current)
-  let discovered = service.media_all_bindings([], [template])
+  // Use the observation clock for these in-process snapshots. Filesystem
+  // synchronization and other tests must not consume a 15-second freshness
+  // window between recording a fixture heartbeat and checking its identity.
+  let discovered = service.media_all_bindings([], [template], now_unix_ms=now)
   assert_eq(discovered.length(), 1)
   assert_eq(discovered[0].origin, "http://10.42.1.99:5885")
   let original_identity = discovered[0].identity()
@@ -150,7 +153,11 @@ async fn exercise_runtime_route_discovery(
       },
     ]),
   })
-  let replacement = service.media_all_bindings([], [template])
+  let replacement = service.media_all_bindings(
+    [],
+    [template],
+    now_unix_ms=replacement_now,
+  )
   assert_eq(replacement.length(), 1)
   assert_true(replacement[0].identity() != original_identity)
   // Even after a replacement becomes available, the old job stays attached to
@@ -164,7 +171,10 @@ async fn exercise_runtime_route_discovery(
       { ..endpoint, observed_unix_ms: now - 15001L, },
     ] {
     service.store.put_heartbeat({ ..current, runtime_endpoints: Some([bad]), })
-    assert_eq(service.media_all_bindings([], [template]).length(), 0)
+    assert_eq(
+      service.media_all_bindings([], [template], now_unix_ms=now).length(),
+      0,
+    )
   }
   service.store.put_heartbeat({ ..heartbeat, timestamp_unix_ms: @async.now(), })
   assert_eq(service.media_all_bindings([], [template]).length(), 0)

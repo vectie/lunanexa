@@ -828,8 +828,8 @@ fn template_field_specs() -> Array[TemplateFieldSpec] {
       "制品大小（字节）",
       "16000000000",
       ByteCount(1099511627776L),
-      "A positive byte count, at most 1 TiB. The control plane carries it as a JSON string.",
-      "正整数字节数，最多 1 TiB。控制平面以 JSON 字符串传输该值。",
+      "A positive byte count, at most 1 TiB.",
+      "正整数字节数，最多 1 TiB。",
     ),
     template_field_spec(
       TemplateArtifactSignatureRef,
@@ -2050,6 +2050,7 @@ pub(all) struct ConsoleState {
   account_invite : AccountInviteDraft
   access_package_draft : AccessPackageDraft
   access_packages : Array[AccessPackageView]
+  access_package_context : (String, String)?
   users : Array[UserAccessRow]
   pending_organizations : Array[PendingOrganizationRow]
   access_grants : Array[AccessGrantRow]
@@ -2100,6 +2101,8 @@ pub(all) enum ConsoleMessage {
   ResourceDelivery(ResourceDeliveryMessage)
   LocaleChanged(@i18n.Locale)
   Navigate(OperatorRoute)
+  OpenAccessStep(String, String, OperatorRoute)
+  ClearAccessContext
   AlertsWindowChanged(AlertsWindow)
   BeginCordon(String)
   BeginUncordon(String)
@@ -2297,6 +2300,7 @@ pub fn default_state() -> ConsoleState {
     compute_leases: [],
     exclusive_node_leases: [],
     resource_delivery: default_resource_delivery_panel(),
+    access_package_context: None,
     cost_centers: [],
     agreements: [],
     enterprise_lease_requests: [],
@@ -3020,7 +3024,32 @@ pub fn demo_state() -> ConsoleState {
         actor_owner=ManagerOperator,
       ),
       manifest: Some(contract_manifest),
-      packets: [contract_packet, effective_contract_packet],
+      available_manifests: [
+        contract_manifest,
+        @contractdoc.undertaking_manifest(),
+      ],
+      packets: [
+        contract_packet,
+        effective_contract_packet,
+        {
+          ..effective_contract_packet,
+          packet_id: "packet-demo-undertaking",
+          values: [
+            { field_id: "lessee.name", value: "Northstar Research", },
+            { field_id: "undertaking.signed_date", value: "2026-09-16", },
+            { field_id: "lease.start_date", value: "2026-09-17", },
+            { field_id: "lease.end_date", value: "2026-10-16", },
+            { field_id: "lease.total_rent", value: "1290.00", },
+          ],
+          order_ref: "order-demo-undertaking",
+          organization_id: "org-northstar",
+          tenant_ref: "tenant-northstar",
+          template_id: @contractdoc.undertaking_manifest().template_id,
+          template_version: @contractdoc.undertaking_manifest().template_version,
+          template_sha256: @contractdoc.undertaking_manifest().sha256,
+          active_forms: [MasterLease],
+        },
+      ],
       events: [
         {
           event_id: "contract-event-operator-demo-created",
@@ -3274,99 +3303,6 @@ fn blank_view(state : ConsoleState) -> @rabbita.Html {
 }
 
 ///|
-fn route_description(locale : @i18n.Locale, route : OperatorRoute) -> String {
-  match route {
-    Overview =>
-      localized(
-        locale, "Live capacity, service posture, and recent control-plane activity.",
-        "查看实时容量、服务状态与近期控制平面活动。",
-      )
-    Alerts =>
-      localized(
-        locale, "Durable cluster incidents with acknowledgement, ownership, silence, and resolution.",
-        "查看可确认、分派、静默和解决的持久化集群事件。",
-      )
-    Users =>
-      localized(
-        locale, "Identity lifecycle and scoped access to LunaNexa services.", "管理身份生命周期与 LunaNexa 服务的限定范围访问权限。",
-      )
-    Leases =>
-      localized(
-        locale, "Manage exclusive machine access and workspace capacity separately.",
-        "分别管理独占机器访问与工作区容量授权。",
-      )
-    CostCenters =>
-      localized(
-        locale, "Tenant hierarchy, metered spend, budgets, quotas, and finance evidence.",
-        "管理租户层级、计量支出、预算、配额与财务证据。",
-      )
-    Agreements =>
-      localized(
-        locale, "Versioned clickwrap and e-signature lifecycles with immutable evidence receipts.",
-        "管理带不可变证据回执的版本化点击接受与电子签名生命周期。",
-      )
-    OfflineCommerce =>
-      localized(
-        locale, "Quote, generate, release, review, and fulfill hybrid offline orders with auditable evidence.",
-        "通过可审计凭证完成线上线下协同订单的报价、生成、发布、审核与履约。",
-      )
-    ContractDocuments =>
-      localized(
-        locale, "Complete manager-owned contract fields and review the same live source preview as the customer.",
-        "填写经理/运营方负责的合同字段，并与客户查看同一份源文件实时预览。",
-      )
-    QualifiedServices =>
-      localized(
-        locale, "Provider-neutral identity, signature, payment, and invoice integration posture.",
-        "查看供应商中立的身份、签名、支付与发票集成状态。",
-      )
-    Nodes =>
-      localized(
-        locale, "Hardware inventory, workload pressure, and maintenance controls.",
-        "查看硬件清单、工作负载压力与维护控制。",
-      )
-    Models =>
-      localized(
-        locale, "Approved artifacts, evaluation evidence, and serving aliases.",
-        "查看已批准模型制品、评测证据与服务模型别名。",
-      )
-    Catalog =>
-      localized(
-        locale, "Approved templates, deterministic preflight, and one-click model services.",
-        "管理已批准模板、确定性预检与一键模型服务。",
-      )
-    Deployments =>
-      localized(
-        locale, "Desired state, observed readiness, and placement decisions.", "对比期望状态、实际就绪状态与放置决策。",
-      )
-    Requests =>
-      localized(
-        locale, "Bounded request telemetry and payload-free workload receipts.",
-        "查看有边界的请求遥测与不含载荷的工作负载回执。",
-      )
-    Benchmarks =>
-      localized(
-        locale, "Comparable performance evidence for approved runtime profiles.",
-        "比较已批准运行时配置的性能证据。",
-      )
-    Policies =>
-      localized(
-        locale, "Quotas, retention, runtime policy, and typed operator operations.",
-        "管理配额、保留策略、运行时策略与类型化运维操作。",
-      )
-    Audit =>
-      localized(
-        locale, "Immutable decisions, evidence, results, and correlation receipts.",
-        "追踪不可变的决策、证据、结果与关联回执。",
-      )
-    Blank =>
-      localized(
-        locale, "Deliberately empty, for whatever is placed here next.", "刻意留空的页面，供后续放置内容。",
-      )
-  }
-}
-
-///|
 fn command(
   emit : @rabbita.Emit[ConsoleMessage]?,
   message : ConsoleMessage,
@@ -3402,24 +3338,33 @@ fn navigation(
       @html.p(class="nav-group-label", localized(locale, "Monitor", "监控")),
       nav_link(locale, Overview, current, emit),
       nav_link(locale, Alerts, current, emit),
+      @html.p(
+        class="nav-group-label",
+        localized(locale, "Supply", "资源供给"),
+      ),
       nav_link(locale, Nodes, current, emit),
       nav_link(locale, Models, current, emit),
+      nav_link(locale, Benchmarks, current, emit),
+      nav_link(locale, QualifiedServices, current, emit),
       nav_link(locale, Catalog, current, emit),
       nav_link(locale, Deployments, current, emit),
       nav_link(locale, Requests, current, emit),
-      @html.p(class="nav-group-label", localized(locale, "Govern", "治理")),
+      @html.p(
+        class="nav-group-label",
+        localized(locale, "Customers", "客户服务"),
+      ),
       nav_link(locale, Users, current, emit),
-      nav_link(locale, Leases, current, emit),
-      nav_link(locale, CostCenters, current, emit),
+      nav_link(locale, Policies, current, emit),
       nav_link(locale, Agreements, current, emit),
       nav_link(locale, OfflineCommerce, current, emit),
       nav_link(locale, ContractDocuments, current, emit),
-      nav_link(locale, Policies, current, emit),
+      nav_link(locale, Leases, current, emit),
+      nav_link(locale, CostCenters, current, emit),
       @html.p(class="nav-group-label", localized(locale, "Evidence", "证据")),
-      nav_link(locale, QualifiedServices, current, emit),
-      nav_link(locale, Benchmarks, current, emit),
       nav_link(locale, Audit, current, emit),
-      nav_link(locale, Blank, current, emit),
+      @html.a(class="nav-link", href="/docs/", [
+        @html.span(localized(locale, "Documentation", "使用文档")),
+      ]),
     ],
   )
 }
@@ -3541,10 +3486,6 @@ fn overview_view(
           "health-panel health-panel-warning"
         },
         [
-          @html.p(
-            class="eyebrow",
-            localized(state.locale, "Cluster posture", "集群状态"),
-          ),
           @html.div(class="health-title", [
             @html.span(
               class="health-dot",
@@ -3603,32 +3544,6 @@ fn overview_view(
               )
             },
           ),
-          @html.dl(class="health-facts", [
-            @html.div([
-              @html.dt(
-                localized(state.locale, "Node availability", "节点可用性"),
-              ),
-              @html.dd(
-                localized(
-                  state.locale,
-                  "\{state.overview.active_nodes} of \{state.overview.total_nodes}",
-                  "\{state.overview.active_nodes} / \{state.overview.total_nodes}",
-                ),
-              ),
-            ]),
-            @html.div([
-              @html.dt(
-                localized(state.locale, "Approved models", "已批准模型"),
-              ),
-              @html.dd(state.overview.active_models.to_string()),
-            ]),
-            @html.div([
-              @html.dt(
-                localized(state.locale, "Pending queue", "待处理队列"),
-              ),
-              @html.dd(state.overview.queue_depth.to_string()),
-            ]),
-          ]),
         ],
       ),
       @html.aside(class="activity-panel", [
@@ -3652,20 +3567,8 @@ fn overview_view(
             "已加载审计记录（最多 20 条）；完整记录请打开审计页。",
           ),
         ),
-        @html.div(class="activity-divider", ""),
-        @html.p(class="activity-note", [
-          @html.strong(localized(state.locale, "Audit ready", "审计就绪")),
-          @html.span(
-            localized(
-              state.locale,
-              "Every consequential action produces a receipt.",
-              "每项重要操作都会生成回执。",
-            ),
-          ),
-        ]),
       ]),
     ]),
-    fleet_overview(state, now_unix_ms, emit),
     @html.dl(class="stats", [
       stat(
         localized(state.locale, "Active nodes", "活跃节点"),
@@ -3726,6 +3629,7 @@ fn overview_view(
         },
       ),
     ]),
+    fleet_overview(state, now_unix_ms, emit),
     @html.section(
       class="readiness-panel",
       attrs=@html.Attrs::build().aria_labelledby("deployment-readiness-title"),
@@ -3747,8 +3651,8 @@ fn overview_view(
             class="section-copy",
             localized(
               state.locale,
-              "Browse the catalog and review a deployment plan. Opening the catalog does not start a service; the controller checks authorization and model/resource readiness before deployment.",
-              "先浏览目录并查看部署计划。打开目录不会启动服务；实际部署前，控制器仍会检查授权、模型和资源条件。",
+              "Choose a template, then review the deployment plan.",
+              "选择模板后查看部署计划。",
             ),
           ),
           @html.button(
@@ -4311,14 +4215,24 @@ fn access_package_card(
         @html.button(
           type_="button",
           disabled=state.loading,
-          on_click=command(emit, Navigate(ContractDocuments)),
+          on_click=command(
+            emit,
+            OpenAccessStep(
+              item.account_id,
+              item.organization_id,
+              ContractDocuments,
+            ),
+          ),
           localized(state.locale, "Complete MasterLease", "完成主租约"),
         )
       } else if !item.models_ready {
         @html.button(
           type_="button",
           disabled=state.loading,
-          on_click=command(emit, Navigate(Catalog)),
+          on_click=command(
+            emit,
+            OpenAccessStep(item.account_id, item.organization_id, Catalog),
+          ),
           localized(
             state.locale,
             "Deploy a serving model",
@@ -4328,7 +4242,11 @@ fn access_package_card(
       } else if item.ready {
         @html.span(
           class="access-package-ready",
-          localized(state.locale, "Ready for WebIDE", "WebIDE 已就绪"),
+          localized(
+            state.locale,
+            "Ready for applications",
+            "应用权限已就绪",
+          ),
         )
       } else {
         @html.span(
@@ -4339,6 +4257,20 @@ fn access_package_card(
             "请检查上方未完成的里程碑。",
           ),
         )
+      },
+      if item.lease_id is Some(_) {
+        @html.button(
+          type_="button",
+          class="quiet-button",
+          disabled=state.loading,
+          on_click=command(
+            emit,
+            OpenAccessStep(item.account_id, item.organization_id, Leases),
+          ),
+          localized(state.locale, "Manage GPU resources", "管理 GPU 资源"),
+        )
+      } else {
+        @html.nothing
       },
       @html.details(class="access-package-evidence", [
         @html.summary(
@@ -4402,8 +4334,8 @@ fn access_identity_reference(
       class="field-help",
       localized(
         state.locale,
-        "Paste the provider's own subject (the id the provider issued), not the derived reference. LunaNexa derives the account reference below; nothing leaves the browser until you submit.",
-        "请粘贴提供商自己签发的原始主体，而不是派生引用。LunaNexa 会在下方派生账户引用；提交前不会发送任何内容。",
+        "Use the original subject issued by the identity provider.",
+        "填写身份提供商签发的原始主体。",
       ),
     )
   }
@@ -4444,8 +4376,8 @@ fn access_existing_authority(
       class="field-help",
       localized(
         state.locale,
-        "Fill in Identity provider details first; LunaNexa then lists the tenants this subject already holds, so you can reuse the customer's own tenant instead of inventing one.",
-        "请先填写上方「身份提供商详情」；LunaNexa 随后会列出这个主体已有的租户，便于你沿用客户自己的租户，而不是另起一个。",
+        "Complete Identity provider details to find existing memberships.",
+        "填写「身份提供商详情」以查找已有成员资格。",
       ),
     )
   }
@@ -4500,14 +4432,6 @@ fn users_view(
           id="users-title",
           localized(state.locale, "Users & access", "用户与访问权限"),
         ),
-        @html.p(
-          class="section-copy",
-          localized(
-            state.locale,
-            "Manage control-plane identities and time-bounded access grants. This view does not expose node credentials.",
-            "管理控制平面身份和有时限的访问授权。此视图不会公开节点凭据。",
-          ),
-        ),
       ]),
       @html.span(
         class="resource-count",
@@ -4533,8 +4457,8 @@ fn users_view(
             class="section-copy",
             localized(
               state.locale,
-              "Review the submitted legal details. Approval activates the company without an external identity provider; it does not grant machines or paid service.",
-              "核对企业提交的法定资料。审核通过即可激活企业，无需外部认证服务；不会自动开通机器或付费服务。",
+              "Approval activates the company. Machines and paid services require separate authorization.",
+              "审核通过后企业生效。机器与付费服务须另行授权。",
             ),
           ),
         ]),
@@ -4717,8 +4641,8 @@ fn users_view(
           class="account-self account-self-static",
           localized(
             state.locale,
-            "This console is using the localhost development-token fallback. Sign in with an lnxs_ account session to inspect personal session evidence.",
-            "此控制台正在使用本机开发令牌回退。请使用 lnxs_ 账户会话登录以查看个人会话证据。",
+            "Using a development token. Sign in with an account to view your sessions.",
+            "当前使用开发令牌。请使用账户登录以查看您的会话。",
           ),
         )
     },
@@ -4727,24 +4651,12 @@ fn users_view(
       attrs=@html.Attrs::build().aria_labelledby("access-package-title"),
       [
         @html.div(class="access-package-intro", [
-          @html.p(
-            class="eyebrow",
-            localized(state.locale, "Guided setup", "引导式设置"),
-          ),
           @html.h3(
             id="access-package-title",
             localized(
               state.locale,
               "Create WebIDE access",
               "创建 WebIDE 访问",
-            ),
-          ),
-          @html.p(
-            class="section-copy",
-            localized(
-              state.locale,
-              "Enter the person and organization once. LunaNexa prepares the account, membership, workspace profile, Developer grant, and requested compute lease as one resumable package.",
-              "只需输入一次人员与组织信息。LunaNexa 会将账户、成员关系、工作区档案、开发者授权和计算租约请求准备为一个可恢复的软件包。",
             ),
           ),
         ]),
@@ -5035,7 +4947,10 @@ fn users_view(
           } else {
             @html.fragment(
               [
-                for item in state.access_packages => {
+                for item in state.access_packages if Some(
+                  (item.account_id, item.organization_id),
+                ) !=
+                state.access_package_context => {
                   access_package_card(state, item, emit)
                 }
               ],
@@ -5057,8 +4972,8 @@ fn users_view(
           class="section-copy",
           localized(
             state.locale,
-            "Map a verified identity-provider subject to a LunaNexa account. Passwords, MFA factors, and provider tokens remain with the external provider.",
-            "将已验证的身份提供商主体映射到 LunaNexa 账户。密码、多因素认证和提供商令牌仍由外部提供商保管。",
+            "Link a verified identity-provider subject to an account.",
+            "将身份提供商中已验证的主体关联到账户。",
           ),
         ),
         @html.div(class="account-invite-grid", [
@@ -5267,11 +5182,23 @@ fn users_view(
                     @html.span(class="secondary", account.email),
                     @html.span(class="mono secondary", account.account_id),
                   ]),
-                  @html.td([
-                    @html.strong(account.identity_issuer),
-                    @html.span(class="mono secondary", account.subject_ref),
-                    @html.span(class="mono secondary", account.identity_receipt),
-                  ]),
+                  @html.td(
+                    @controls.advanced(
+                      localized(
+                        state.locale,
+                        "Identity details",
+                        "身份详情",
+                      ),
+                      [
+                        @html.strong(account.identity_issuer),
+                        @html.span(class="mono secondary", account.subject_ref),
+                        @html.span(
+                          class="mono secondary",
+                          account.identity_receipt,
+                        ),
+                      ],
+                    ),
+                  ),
                   @html.td(account_state_badge(state.locale, account.state)),
                   @html.td(
                     account_role_controls(
@@ -5532,8 +5459,8 @@ fn leases_view(
           class="section-copy",
           localized(
             state.locale,
-            "Exclusive machine access and workspace capacity are separate authorities. Ending machine access always revokes credentials, stops tenant work, sanitizes the node, and verifies a clean baseline before placement resumes.",
-            "独占机器访问与工作区容量属于不同权限。结束机器访问时，系统必须撤销凭据、停止租户工作、清理节点并验证干净基线，随后才能恢复调度。",
+            "Ending machine access revokes credentials and stops work. Nodes return to the pool after cleanup is verified.",
+            "结束机器访问将撤销凭据并停止工作。节点通过清理验证后才会重新进入资源池。",
           ),
         ),
       ]),
@@ -5546,14 +5473,8 @@ fn leases_view(
         ),
       ),
     ]),
-    @html.div(class="lease-cleanup-policy", [
-      @html.strong(
-        localized(
-          state.locale,
-          "Fail-closed cleanup boundary",
-          "故障关闭式清理边界",
-        ),
-      ),
+    @html.details(class="lease-cleanup-policy", [
+      @html.summary(localized(state.locale, "Cleanup policy", "清理策略")),
       @html.p(
         localized(
           state.locale,
@@ -5575,14 +5496,6 @@ fn leases_view(
             state.locale,
             "Exclusive machine leases",
             "独占机器租约",
-          ),
-        ),
-        @html.p(
-          class="section-copy",
-          localized(
-            state.locale,
-            "A node remains fenced until the cleanup helper returns generation-bound verification evidence.",
-            "节点会保持隔离，直到清理助手返回绑定到对应代际的验证证据。",
           ),
         ),
       ]),
@@ -5703,8 +5616,8 @@ fn leases_view(
           class="section-copy",
           localized(
             state.locale,
-            "These grant control-plane capacity only and never grant direct DGX login access.",
-            "这些租约只授予控制平面容量，绝不会直接授予 DGX 登录权限。",
+            "Workspace capacity does not include direct machine login.",
+            "工作区容量不包含直接登录机器的权限。",
           ),
         ),
       ]),
@@ -5840,61 +5753,12 @@ fn nodes_view(
   emit : @rabbita.Emit[ConsoleMessage]?,
 ) -> @rabbita.Html {
   @html.section(attrs=@html.Attrs::build().aria_labelledby("nodes-title"), [
-    @html.div(class="section-heading", [
-      @html.div([
-        @html.h2(localized(state.locale, "Storage nodes", "存储节点")),
-        @html.p(
-          class="section-copy",
-          localized(
-            state.locale,
-            "Measured capacity and inode headroom on the model-storage host. This is not GPU placement capacity.",
-            "查看模型存储主机的实测容量与 inode 余量；此处不计入 GPU 放置容量。",
-          ),
-        ),
-      ]),
-    ]),
-    if state.storage_nodes.is_empty() {
-      @html.p(
-        class="empty-state",
-        localized(
-          state.locale,
-          "No storage monitor is configured. Configure the storage mount in the controller deployment.",
-          "尚未配置存储监控。请在控制器部署中指定存储挂载卷。",
-        ),
-      )
-    } else {
-      @html.div(
-        class="node-list",
-        [
-          for storage in state.storage_nodes => {
-            storage_node_item(state.locale, storage)
-          }
-        ],
-      )
-    },
-    @html.details(class="topology-disclosure", [
-      @html.summary(
-        localized(
-          state.locale,
-          "Cluster topology and trust boundaries",
-          "集群拓扑与信任边界",
-        ),
-      ),
-      cluster_topology(state),
-    ]),
+    cluster_topology(state),
     @html.div(class="section-heading", [
       @html.div([
         @html.h2(
           id="nodes-title",
           localized(state.locale, "Node inventory", "节点清单"),
-        ),
-        @html.p(
-          class="section-copy",
-          localized(
-            state.locale,
-            "Inspect placement capacity and move nodes through controlled maintenance states.",
-            "检查放置容量，并通过受控维护状态管理节点。",
-          ),
         ),
       ]),
       @html.span(
@@ -5936,13 +5800,77 @@ fn nodes_view(
         ],
       )
     },
+    @html.div(class="section-heading storage-heading", [
+      @html.h2(localized(state.locale, "Storage nodes", "存储节点")),
+    ]),
+    if state.storage_nodes.is_empty() {
+      @html.p(
+        class="empty-state",
+        localized(
+          state.locale,
+          "Storage monitoring is not configured.",
+          "尚未配置存储监控。",
+        ),
+      )
+    } else {
+      @html.div(
+        class="node-list",
+        [
+          for storage in state.storage_nodes => {
+            storage_node_item(state.locale, storage)
+          }
+        ],
+      )
+    },
   ])
 }
 
 ///|
 fn storage_gib(bytes : Int64) -> String {
-  let tenths = (bytes / 107374182L).max(0L)
-  "\{tenths / 10L}.\{tenths % 10L} GiB"
+  let bytes = bytes.max(0L)
+  let (unit, divisor) = if bytes >= 1125899906842624L {
+    ("PiB", 1125899906842624L)
+  } else if bytes >= 1099511627776L {
+    ("TiB", 1099511627776L)
+  } else if bytes >= 1073741824L {
+    ("GiB", 1073741824L)
+  } else if bytes >= 1048576L {
+    ("MiB", 1048576L)
+  } else if bytes >= 1024L {
+    ("KiB", 1024L)
+  } else {
+    return "\{bytes} B"
+  }
+  let tenths = bytes / divisor * 10L +
+    (bytes % divisor * 10L + divisor / 2L) / divisor
+  "\{tenths / 10L}.\{tenths % 10L} \{unit}"
+}
+
+///|
+fn node_count_label(locale : @i18n.Locale, count : Int64) -> String {
+  let (unit, divisor) = if locale.is_chinese() {
+    if count >= 100000000L {
+      ("亿", 100000000L)
+    } else if count >= 10000L {
+      ("万", 10000L)
+    } else {
+      ("", 1L)
+    }
+  } else if count >= 1000000000L {
+    ("B", 1000000000L)
+  } else if count >= 1000000L {
+    ("M", 1000000L)
+  } else if count >= 1000L {
+    ("K", 1000L)
+  } else {
+    ("", 1L)
+  }
+  if divisor == 1L {
+    return count.to_string()
+  }
+  let tenths = count / divisor * 10L +
+    (count % divisor * 10L + divisor / 2L) / divisor
+  "\{tenths / 10L}.\{tenths % 10L}\{unit}"
 }
 
 ///|
@@ -5985,11 +5913,7 @@ fn storage_node_item(
         ),
       ]),
       @html.div(class="node-summary-cell", [
-        @html.span(
-          localized(
-            locale, "Last sample (Beijing)", "最近采集（北京时间）",
-          ),
-        ),
+        @html.span(localized(locale, "Last sample", "最近采集")),
         @html.strong(@contractdoc.format_unix_ms_beijing(storage.sampled_at_ms)),
       ]),
       @html.div(class="node-summary-cell", [
@@ -6022,10 +5946,14 @@ fn storage_node_item(
             @html.progress(value=percent, max=100, "\{percent}%"),
           ]),
           @html.div(class="node-metric", [
-            @html.span(localized(locale, "Available inodes", "可用 inode")),
+            @html.span(
+              localized(
+                locale, "File entries · available / total", "文件条目 · 可用／总量",
+              ),
+            ),
             @html.strong(
               if inodes > 0L {
-                "\{available_inodes} / \{inodes}"
+                "\{node_count_label(locale, available_inodes)} / \{node_count_label(locale, inodes)}"
               } else {
                 localized(locale, "Not reported", "未上报")
               },
@@ -6074,13 +6002,6 @@ fn cluster_topology(state : ConsoleState) -> @rabbita.Html {
           @html.h2(
             id="cluster-topology-title",
             localized(state.locale, "Cluster topology", "集群拓扑"),
-          ),
-          @html.p(
-            localized(
-              state.locale,
-              "Live roles and control paths derived from this console session and enrolled-node heartbeats.",
-              "根据当前控制台会话和已注册节点心跳展示实时角色与控制链路。",
-            ),
           ),
         ]),
         @html.div(class="topology-summary", [
@@ -6559,7 +6480,12 @@ fn node_item(
             if node.power_watts < 0.0 {
               localized(locale, "Unavailable / stale", "未上报／已过期")
             } else {
-              "\{node.power_watts} W"
+              let hundredths = (node.power_watts * 100.0 + 0.5).to_int64()
+              if hundredths % 10L == 0L {
+                "\{hundredths / 100L}.\{hundredths / 10L % 10L} W"
+              } else {
+                "\{hundredths / 100L}.\{hundredths / 10L % 10L}\{hundredths % 10L} W"
+              }
             },
           ),
           @html.small(
@@ -7399,14 +7325,6 @@ fn models_view(
           id="models-title",
           localized(state.locale, "Model registry", "模型注册表"),
         ),
-        @html.p(
-          class="section-copy",
-          localized(
-            state.locale,
-            "Review serving eligibility, evaluation posture, and approved aliases.",
-            "检查服务资格、评测状态和已批准的模型别名。",
-          ),
-        ),
       ]),
       @html.span(
         class="resource-count",
@@ -7432,19 +7350,7 @@ fn models_view(
             ),
           ),
         ]),
-        @html.span(
-          class="status status-pending",
-          localized(state.locale, "Operator workflow", "运维工作流"),
-        ),
       ]),
-      @html.p(
-        class="section-copy",
-        localized(
-          state.locale,
-          "Search ModelScope, download an exact revision into the governed model store, verify every declared SHA-256, then accept its license, verify the artifact and approve it. Evaluation can be recorded later without blocking publication.",
-          "从魔搭搜索模型，将精确版本下载到受治理的模型库并验证每个文件的 SHA-256；接受许可证、验证制品并批准后即可发布。评测可随后记录，不阻塞发布。",
-        ),
-      ),
       @html.ol(class="deployment-steps model-onboarding-steps", [
         @html.li([
           @html.span("1"),
@@ -7501,7 +7407,14 @@ fn models_view(
           localized(state.locale, "Search", "搜索"),
         ),
       ]),
-      model_local_registration_form(state, emit),
+      @controls.advanced(
+        localized(
+          state.locale,
+          "Advanced: register a stored model",
+          "高级：登记已有模型",
+        ),
+        [model_local_registration_form(state, emit)],
+      ),
       @html.div(class="operation-actions", [
         @html.span(
           class="secondary",
@@ -7519,12 +7432,12 @@ fn models_view(
             )
           },
         ),
-        @html.button(
-          type_="button",
-          class="secondary-button",
-          disabled=!state.operator_authenticated || state.loading,
-          on_click=command(emit, RefreshModelImports),
+        @controls.icon_button(
+          Refresh,
           localized(state.locale, "Refresh downloads", "刷新下载任务"),
+          command(emit, RefreshModelImports),
+          disabled=!state.operator_authenticated,
+          busy=state.loading,
         ),
       ]),
       if state.model_source_results.length() == 0 {
@@ -8728,16 +8641,11 @@ fn template_registration_form(
           localized(locale, "Register a catalog template", "注册目录模板"),
         ),
       ]),
-      @html.span(
-        class="status status-pending",
-        localized(locale, "Preflight still applies", "仍需通过预检"),
-      ),
     ]),
     @html.p(
       class="section-copy",
       localized(
-        locale, "Registers one immutable model-service template. The control plane signs it, so registration alone deploys nothing: the model, the runtime, the licence and the hardware are still checked before any workload is placed.",
-        "注册一个不可变的模型服务模板。控制平面会对其签名，因此仅注册不会部署任何内容：在放置任何工作负载之前，仍会检查模型、运行时、许可证与硬件。",
+        locale, "Registering a template does not deploy a service.", "注册模板不会立即部署服务。",
       ),
     ),
     @html.form(
@@ -8780,14 +8688,6 @@ fn catalog_view(
           id="catalog-title",
           localized(state.locale, "Model service catalog", "模型服务目录"),
         ),
-        @html.p(
-          class="section-copy",
-          localized(
-            state.locale,
-            "Deploy an approved, immutable model-service template through one governed intent.",
-            "通过一个受治理的意图部署已批准且不可变的模型服务模板。",
-          ),
-        ),
       ]),
       @html.span(
         class="resource-count",
@@ -8801,10 +8701,6 @@ fn catalog_view(
     @html.div(class="operation-panel", [
       @html.div(class="operation-heading", [
         @html.div([
-          @html.p(
-            class="eyebrow",
-            localized(state.locale, "Governed deployment", "受治理的部署"),
-          ),
           @html.h3(
             localized(
               state.locale,
@@ -8813,19 +8709,7 @@ fn catalog_view(
             ),
           ),
         ]),
-        @html.span(
-          class="status status-pending",
-          localized(state.locale, "Preflight enforced", "强制预检"),
-        ),
       ]),
-      @html.p(
-        class="section-copy",
-        localized(
-          state.locale,
-          "License, verification, alias, secret, data-class and capacity blockers are checked before any assignment is published. Optional evaluation does not block deployment.",
-          "发布任何分配前都会检查许可证、验证、别名、密钥引用、数据分类与容量阻塞项；可选评测不阻塞部署。",
-        ),
-      ),
       @html.ol(class="deployment-steps", [
         @html.li([
           @html.span("1"),
@@ -8860,32 +8744,30 @@ fn catalog_view(
             input_type=Text,
             id="quick-deployment-id",
             maxlength=128,
-            attrs=@html.Attrs::build()
+            attrs=if service_name_present && !service_name_valid {
+              @html.Attrs::build()
               .aria_describedby("quick-deployment-id-help")
-              .aria_invalid(
-                if service_name_present && !service_name_valid {
-                  "true"
-                } else {
-                  "false"
-                },
-              ),
+              .aria_invalid("true")
+            } else {
+              @html.Attrs::build().aria_invalid("false")
+            },
             placeholder="text-service",
             value=state.quick_deployment_id,
             on_input=text_command(emit, value => QuickDeploymentIdChanged(value)),
           ),
-          @html.p(
-            id="quick-deployment-id-help",
-            class=if service_name_present && !service_name_valid {
-              "field-help field-error"
-            } else {
-              "field-help"
-            },
-            localized(
-              state.locale,
-              "Use 1–128 letters, numbers, hyphens, underscores, dots, or colons.",
-              "使用 1–128 个字母、数字、连字符、下划线、点或冒号。",
-            ),
-          ),
+          if service_name_present && !service_name_valid {
+            @html.p(
+              id="quick-deployment-id-help",
+              class="field-help field-error",
+              localized(
+                state.locale,
+                "Use 1–128 letters, numbers, hyphens, underscores, dots, or colons.",
+                "使用 1–128 个字母、数字、连字符、下划线、点或冒号。",
+              ),
+            )
+          } else {
+            @html.nothing
+          },
         ]),
         @html.div(class="field-group", [
           @html.label(
@@ -8898,85 +8780,88 @@ fn catalog_view(
             template_options,
           ),
         ]),
-        @html.div(class="field-group", [
-          @html.label(
-            for_="quick-topology",
-            localized(state.locale, "Topology", "拓扑"),
-          ),
-          @html.select(
-            id="quick-topology",
-            on_change=text_command(emit, value => QuickTopologyChanged(value)),
-            [
-              for choice in [SingleMachine, Cx7Pair] => {
-                @html.option(
-                  value=choice.storage_value(),
-                  selected=choice == state.quick_topology,
-                  choice.label(state.locale),
-                )
-              }
-            ],
-          ),
-          @html.p(
-            class="field-help",
-            localized(
-              state.locale,
-              "A CX7 pair is placed only when both machines name each other over the private fabric, the runtime declares multi-node support, and the installed score policy lists the profile.",
-              "仅当两台机器在私有互联上互相指认、运行时声明支持多机、且已安装的评分策略列出该拓扑时，才会按 CX7 对放置。",
-            ),
-          ),
-        ]),
-        @html.div(class="fixed-capacity", [
-          @html.div(
-            class="fixed-capacity-mark",
-            if state.quick_topology == Cx7Pair {
-              "2"
-            } else {
-              "1"
-            },
-          ),
-          @html.div([
-            @html.strong(
-              if state.quick_topology == Cx7Pair {
-                localized(
-                  state.locale,
-                  "One service · one validated CX7 pair",
-                  "一个服务 · 一个已验证的 CX7 对",
-                )
-              } else {
-                localized(
-                  state.locale,
-                  "One service · one assigned machine",
-                  "一个服务 · 一台分配机器",
-                )
-              },
-            ),
-            @html.p(
-              if state.quick_topology == Cx7Pair {
-                localized(
-                  state.locale,
-                  "Capacity is fixed. LunaNexa selects one validated CX7 pair after preflight; replicas, batch scheduling, and autoscaling are unavailable.",
-                  "容量固定。LunaNexa 在预检后选择一个已验证的 CX7 对；不提供副本、批处理调度或自动扩缩容。",
-                )
-              } else {
-                localized(
-                  state.locale,
-                  "Capacity is fixed. LunaNexa selects one eligible DGX after preflight; replicas, batch scheduling, and autoscaling are unavailable.",
-                  "容量固定。LunaNexa 在预检后选择一台符合条件的 DGX；不提供副本、批处理调度或自动扩缩容。",
-                )
-              },
-            ),
-          ]),
-        ]),
-      ]),
-      @html.div(class="operation-actions", [
-        @html.span(
-          class="secondary",
+        @controls.advanced(
           localized(
             state.locale,
-            "Creates one durable idempotent operation",
-            "创建一个持久且幂等的操作",
+            "Advanced: placement",
+            "高级：放置设置",
           ),
+          [
+            @html.div(class="field-group", [
+              @html.label(
+                for_="quick-topology",
+                localized(state.locale, "Topology", "拓扑"),
+              ),
+              @html.select(
+                id="quick-topology",
+                on_change=text_command(emit, value => {
+                  QuickTopologyChanged(value)
+                }),
+                [
+                  for choice in [SingleMachine, Cx7Pair] => {
+                    @html.option(
+                      value=choice.storage_value(),
+                      selected=choice == state.quick_topology,
+                      choice.label(state.locale),
+                    )
+                  }
+                ],
+              ),
+              @html.p(
+                class="field-help",
+                localized(
+                  state.locale,
+                  "CX7 pairs require verified fabric links, a multi-node runtime, and an eligible placement policy.",
+                  "CX7 双机对需要已验证互联、支持多机的运行时及匹配的放置策略。",
+                ),
+              ),
+            ]),
+            @html.div(class="fixed-capacity", [
+              @html.div(
+                class="fixed-capacity-mark",
+                if state.quick_topology == Cx7Pair {
+                  "2"
+                } else {
+                  "1"
+                },
+              ),
+              @html.div([
+                @html.strong(
+                  if state.quick_topology == Cx7Pair {
+                    localized(
+                      state.locale,
+                      "One service · one validated CX7 pair",
+                      "一个服务 · 一个已验证的 CX7 对",
+                    )
+                  } else {
+                    localized(
+                      state.locale,
+                      "One service · one assigned machine",
+                      "一个服务 · 一台分配机器",
+                    )
+                  },
+                ),
+                @html.p(
+                  if state.quick_topology == Cx7Pair {
+                    localized(
+                      state.locale,
+                      "Two machines are selected after preflight. Capacity is fixed.",
+                      "预检后将选择两台机器，容量固定。",
+                    )
+                  } else {
+                    localized(
+                      state.locale,
+                      "One machine is selected after preflight. Capacity is fixed.",
+                      "预检后将选择一台机器，容量固定。",
+                    )
+                  },
+                ),
+              ]),
+            ]),
+          ],
         ),
+      ]),
+      @html.div(class="operation-actions", [
         @html.button(
           type_="button",
           class="primary-button",
@@ -9036,7 +8921,18 @@ fn catalog_view(
                   ]),
                   @html.td(class="mono", template.model_selector),
                   @html.td(
-                    "\{template.runtime.name} · \{template.architecture}",
+                    @controls.advanced(
+                      localized(
+                        state.locale,
+                        "Runtime details",
+                        "运行时详情",
+                      ),
+                      [
+                        @html.p(
+                          "\{template.runtime.name} · \{template.architecture}",
+                        ),
+                      ],
+                    ),
                   ),
                   @html.td(
                     if template.rollout.automatic_promotion {
@@ -9060,18 +8956,17 @@ fn catalog_view(
         ]),
       ])
     },
-    template_registration_form(state, emit),
+    @controls.advanced(
+      localized(
+        state.locale,
+        "Advanced: register a catalog template",
+        "高级：注册目录模板",
+      ),
+      [template_registration_form(state, emit)],
+    ),
     @html.div(class="section-heading", [
       @html.div([
         @html.h2(localized(state.locale, "Service operations", "服务操作")),
-        @html.p(
-          class="section-copy",
-          localized(
-            state.locale,
-            "Restart-safe progress, endpoint and audit evidence for every model service.",
-            "查看每个模型服务的重启安全进度、端点与审计证据。",
-          ),
-        ),
       ]),
       @html.span(
         class="resource-count",
@@ -9191,14 +9086,6 @@ fn deployments_view(
             id="deployments-title",
             localized(state.locale, "Deployments", "部署"),
           ),
-          @html.p(
-            class="section-copy",
-            localized(
-              state.locale,
-              "Compare desired and observed runtime state with each placement decision.",
-              "对比每项放置决策的期望状态与实际运行时状态。",
-            ),
-          ),
         ]),
         @html.span(
           class="resource-count",
@@ -9317,14 +9204,6 @@ fn requests_view(state : ConsoleState) -> @rabbita.Html {
           id="requests-title",
           localized(state.locale, "Request operations", "请求监控"),
         ),
-        @html.p(
-          class="section-copy",
-          localized(
-            state.locale,
-            "Observe throughput and failures without exposing prompt or output content.",
-            "在不公开提示词或输出内容的前提下观察吞吐量和失败情况。",
-          ),
-        ),
       ]),
       @html.span(
         class="resource-count",
@@ -9336,14 +9215,6 @@ fn requests_view(state : ConsoleState) -> @rabbita.Html {
       ),
     ]),
     request_telemetry_chart(state),
-    @html.p(
-      class="privacy-note",
-      localized(
-        state.locale,
-        "Request detail is bounded and excludes raw payloads.",
-        "请求详情受边界限制，且不包含原始载荷。",
-      ),
-    ),
     if state.request_details.length() == 0 {
       @html.p(
         class="empty-state",
@@ -9806,14 +9677,6 @@ fn alerts_view(
           id="alerts-title",
           localized(state.locale, "Operator alert center", "运维告警中心"),
         ),
-        @html.p(
-          class="section-copy",
-          localized(
-            state.locale,
-            "Incidents are durable and deduplicated. Resolution preserves their audit history.",
-            "事件会持久化并去重；解决事件后仍保留其审计历史。",
-          ),
-        ),
       ]),
       @html.span(
         class="resource-count",
@@ -9902,8 +9765,8 @@ fn alerts_view(
           class="section-copy",
           localized(
             state.locale,
-            "Provider-neutral delivery records expose bounded state only. A dead letter must be confirmed against its current generation before redrive.",
-            "投递记录仅显示受限的供应商中立状态。死信必须按当前代次确认后才能重新投递。",
+            "Review failed deliveries before retrying.",
+            "请先核对失败的投递，再重试。",
           ),
         ),
       ]),
@@ -10025,14 +9888,6 @@ fn benchmarks_view(
             id="benchmarks-title",
             localized(state.locale, "Benchmark evidence", "基准测试证据"),
           ),
-          @html.p(
-            class="section-copy",
-            localized(
-              state.locale,
-              "Versioned runtime measurements used for placement and promotion decisions.",
-              "用于放置与提升决策的版本化运行时测量数据。",
-            ),
-          ),
         ]),
         @html.span(
           class="resource-count",
@@ -10148,8 +10003,7 @@ fn runtime_registration_form(
     @html.p(
       class="section-copy",
       localized(
-        locale, "Registers one immutable runtime image for the registry to admit. A profile is deployable only after its image digest is verified, so registration alone grants no workload.",
-        "登记一个供注册表接纳的不可变运行时镜像。只有在镜像摘要通过验证后配置才可部署，因此仅登记不会授予任何工作负载。",
+        locale, "Verify the image digest before deploying this runtime.", "部署此运行时前须验证镜像摘要。",
       ),
     ),
     @html.form(
@@ -10381,14 +10235,6 @@ fn policies_view(
           id="policies-title",
           localized(state.locale, "Policy & operations", "策略与运维"),
         ),
-        @html.p(
-          class="section-copy",
-          localized(
-            state.locale,
-            "Review effective controls and submit validated changes through the canonical API.",
-            "检查生效的控制项，并通过规范 API 提交已验证的变更。",
-          ),
-        ),
       ]),
     ]),
     @html.dl(class="policy-summary", [
@@ -10421,343 +10267,374 @@ fn policies_view(
         ),
       ]),
     ]),
-    runtime_registration_form(state, emit),
-    @html.div(class="operation-panel", [
-      @html.div(class="operation-heading", [
-        @html.div([
-          @html.p(
-            class="eyebrow",
-            localized(
-              state.locale,
-              "Validated control path",
-              "已验证的控制路径",
-            ),
-          ),
-          @html.h3(
-            localized(
-              state.locale,
-              "Typed operator operation",
-              "类型化运维操作",
-            ),
-          ),
-        ]),
-        @html.span(
-          class="status status-pending",
-          localized(state.locale, "Canonical JSON", "规范 JSON"),
-        ),
-      ]),
-      @html.p(
-        class="section-copy",
-        localized(
-          state.locale,
-          "Submit canonical JSON to the same validated API used by automation. Secret values remain in browser memory and must not be pasted into model or assignment metadata.",
-          "向自动化所使用的同一已验证 API 提交规范 JSON。机密值仅保留在浏览器内存中，不得粘贴到模型或分配元数据中。",
-        ),
+    @controls.advanced(
+      localized(
+        state.locale,
+        "Advanced: register a runtime",
+        "高级：注册运行时",
       ),
-      @html.div(class="operation-form", [
-        @html.div(class="field-group", [
-          @html.label(
-            for_="operation-name",
-            localized(state.locale, "Operation", "操作"),
+      [runtime_registration_form(state, emit)],
+    ),
+    @controls.advanced(
+      localized(
+        state.locale,
+        "Advanced: raw API operation",
+        "高级：API 运维操作",
+      ),
+      [
+        @html.div(class="operation-panel", [
+          @html.div(class="operation-heading", [
+            @html.div([
+              @html.h3(
+                localized(state.locale, "Operator operation", "运维操作"),
+              ),
+            ]),
+          ]),
+          @html.p(
+            class="section-copy",
+            localized(
+              state.locale,
+              "Do not include secret values in model or assignment metadata.",
+              "请勿在模型或分配元数据中填写机密值。",
+            ),
           ),
-          @html.select(
-            id="operation-name",
-            on_change=text_command(emit, value => OperationChanged(value)),
-            [
-              @html.option(
-                value="issue-enrollment-token",
-                selected=state.operation_name == "issue-enrollment-token",
+          @html.div(class="operation-form", [
+            @html.div(class="field-group", [
+              @html.label(
+                for_="operation-name",
+                localized(state.locale, "Operation", "操作"),
+              ),
+              @html.select(
+                id="operation-name",
+                on_change=text_command(emit, value => OperationChanged(value)),
+                [
+                  @html.option(
+                    value="issue-enrollment-token",
+                    selected=state.operation_name == "issue-enrollment-token",
+                    localized(
+                      state.locale,
+                      "Issue enrollment token",
+                      "签发注册令牌",
+                    ),
+                  ),
+                  @html.option(
+                    value="register-runtime",
+                    selected=state.operation_name == "register-runtime",
+                    localized(
+                      state.locale,
+                      "Register runtime",
+                      "注册运行时",
+                    ),
+                  ),
+                  @html.option(
+                    value="register-model",
+                    selected=state.operation_name == "register-model",
+                    localized(state.locale, "Register model", "注册模型"),
+                  ),
+                  @html.option(
+                    value="register-template",
+                    selected=state.operation_name == "register-template",
+                    localized(
+                      state.locale,
+                      "Register model-service template",
+                      "注册模型服务模板",
+                    ),
+                  ),
+                  @html.option(
+                    value="plan-deployment",
+                    selected=state.operation_name == "plan-deployment",
+                    localized(
+                      state.locale,
+                      "Preflight deployment intent",
+                      "预检部署意图",
+                    ),
+                  ),
+                  @html.option(
+                    value="deploy-service",
+                    selected=state.operation_name == "deploy-service",
+                    localized(
+                      state.locale,
+                      "Deploy model service",
+                      "部署模型服务",
+                    ),
+                  ),
+                  @html.option(
+                    value="record-license",
+                    selected=state.operation_name == "record-license",
+                    localized(state.locale, "Record license", "记录许可证"),
+                  ),
+                  @html.option(
+                    value="record-verification",
+                    selected=state.operation_name == "record-verification",
+                    localized(
+                      state.locale,
+                      "Record verification",
+                      "记录验证",
+                    ),
+                  ),
+                  @html.option(
+                    value="record-evaluation",
+                    selected=state.operation_name == "record-evaluation",
+                    localized(state.locale, "Record evaluation", "记录评测"),
+                  ),
+                  @html.option(
+                    value="approve-model",
+                    selected=state.operation_name == "approve-model",
+                    localized(state.locale, "Approve model", "批准模型"),
+                  ),
+                  @html.option(
+                    value="promote-alias",
+                    selected=state.operation_name == "promote-alias",
+                    localized(
+                      state.locale,
+                      "Promote alias",
+                      "提升模型别名",
+                    ),
+                  ),
+                  @html.option(
+                    value="set-quota",
+                    selected=state.operation_name == "set-quota",
+                    localized(state.locale, "Set quota", "设置配额"),
+                  ),
+                  @html.option(
+                    value="create-organization",
+                    selected=state.operation_name == "create-organization",
+                    localized(
+                      state.locale,
+                      "Create organization",
+                      "创建组织",
+                    ),
+                  ),
+                  @html.option(
+                    value="create-cost-center",
+                    selected=state.operation_name == "create-cost-center",
+                    localized(
+                      state.locale,
+                      "Create cost center",
+                      "创建成本中心",
+                    ),
+                  ),
+                  @html.option(
+                    value="create-project",
+                    selected=state.operation_name == "create-project",
+                    localized(
+                      state.locale,
+                      "Create commercial project",
+                      "创建商业项目",
+                    ),
+                  ),
+                  @html.option(
+                    value="record-commercial-usage",
+                    selected=state.operation_name == "record-commercial-usage",
+                    localized(
+                      state.locale,
+                      "Record commercial usage",
+                      "记录商业用量",
+                    ),
+                  ),
+                  @html.option(
+                    value="rate-commercial-usage",
+                    selected=state.operation_name == "rate-commercial-usage",
+                    localized(
+                      state.locale,
+                      "Rate commercial usage",
+                      "计费商业用量",
+                    ),
+                  ),
+                  @html.option(
+                    value="create-commercial-budget",
+                    selected=state.operation_name == "create-commercial-budget",
+                    localized(
+                      state.locale,
+                      "Create commercial budget",
+                      "创建商业预算",
+                    ),
+                  ),
+                  @html.option(
+                    value="create-commercial-quota",
+                    selected=state.operation_name == "create-commercial-quota",
+                    localized(
+                      state.locale,
+                      "Create commercial quota",
+                      "创建商业配额",
+                    ),
+                  ),
+                  @html.option(
+                    value="register-agreement-template",
+                    selected=state.operation_name ==
+                      "register-agreement-template",
+                    localized(
+                      state.locale,
+                      "Register agreement template",
+                      "注册协议模板",
+                    ),
+                  ),
+                  @html.option(
+                    value="create-agreement",
+                    selected=state.operation_name == "create-agreement",
+                    localized(
+                      state.locale,
+                      "Create digital agreement",
+                      "创建数字协议",
+                    ),
+                  ),
+                  @html.option(
+                    value="create-enterprise-membership",
+                    selected=state.operation_name ==
+                      "create-enterprise-membership",
+                    localized(
+                      state.locale,
+                      "Create enterprise membership",
+                      "创建企业成员关系",
+                    ),
+                  ),
+                  @html.option(
+                    value="revoke-enterprise-membership",
+                    selected=state.operation_name ==
+                      "revoke-enterprise-membership",
+                    localized(
+                      state.locale,
+                      "Revoke enterprise membership",
+                      "撤销企业成员关系",
+                    ),
+                  ),
+                  @html.option(
+                    value="publish-portal-agreement",
+                    selected=state.operation_name == "publish-portal-agreement",
+                    localized(
+                      state.locale,
+                      "Publish portal agreement",
+                      "发布企业门户协议",
+                    ),
+                  ),
+                  @html.option(
+                    value="register-external-record",
+                    selected=state.operation_name == "register-external-record",
+                    localized(
+                      state.locale,
+                      "Register external evidence",
+                      "登记外部证据",
+                    ),
+                  ),
+                  @html.option(
+                    value="decide-backpressure",
+                    selected=state.operation_name == "decide-backpressure",
+                    localized(
+                      state.locale,
+                      "Evaluate backpressure",
+                      "评估背压",
+                    ),
+                  ),
+                  @html.option(
+                    value="validate-transfer-grant",
+                    selected=state.operation_name == "validate-transfer-grant",
+                    localized(
+                      state.locale,
+                      "Validate transfer grant",
+                      "验证传输授权",
+                    ),
+                  ),
+                  @html.option(
+                    value="invite-user",
+                    selected=state.operation_name == "invite-user",
+                    localized(state.locale, "Invite user", "邀请用户"),
+                  ),
+                  @html.option(
+                    value="grant-access",
+                    selected=state.operation_name == "grant-access",
+                    localized(
+                      state.locale,
+                      "Grant scoped access",
+                      "授予限定范围的访问权限",
+                    ),
+                  ),
+                  @html.option(
+                    value="create-compute-lease",
+                    selected=state.operation_name == "create-compute-lease",
+                    localized(
+                      state.locale,
+                      "Create workspace lease",
+                      "创建工作区租约",
+                    ),
+                  ),
+                  @html.option(
+                    value="reserve-exclusive-lease",
+                    selected=state.operation_name == "reserve-exclusive-lease",
+                    localized(
+                      state.locale,
+                      "Reserve exclusive machine lease",
+                      "预留独占机器租约",
+                    ),
+                  ),
+                  @html.option(
+                    value="publish-assignment",
+                    selected=state.operation_name == "publish-assignment",
+                    localized(
+                      state.locale,
+                      "Publish assignment for controller signing",
+                      "发布分配以供控制器签名",
+                    ),
+                  ),
+                  @html.option(
+                    value="invoke-workload",
+                    selected=state.operation_name == "invoke-workload",
+                    localized(
+                      state.locale,
+                      "Invoke workload",
+                      "调用工作负载",
+                    ),
+                  ),
+                  @html.option(
+                    value="record-benchmark",
+                    selected=state.operation_name == "record-benchmark",
+                    localized(
+                      state.locale,
+                      "Record benchmark evidence",
+                      "记录基准测试证据",
+                    ),
+                  ),
+                ],
+              ),
+            ]),
+            @html.div(class="field-group operation-body", [
+              @html.label(
+                for_="operation-body",
                 localized(
                   state.locale,
-                  "Issue enrollment token",
-                  "签发注册令牌",
+                  "Canonical JSON body",
+                  "规范 JSON 正文",
                 ),
               ),
-              @html.option(
-                value="register-runtime",
-                selected=state.operation_name == "register-runtime",
-                localized(state.locale, "Register runtime", "注册运行时"),
+              @html.textarea(
+                id="operation-body",
+                rows=12,
+                maxlength=1048576,
+                value=state.operation_body,
+                on_input=text_command(emit, value => OperationBodyChanged(value)),
+                "",
               ),
-              @html.option(
-                value="register-model",
-                selected=state.operation_name == "register-model",
-                localized(state.locale, "Register model", "注册模型"),
+            ]),
+          ]),
+          @html.div(class="operation-actions", [
+            @html.span(
+              class="secondary",
+              localized(
+                state.locale,
+                "Validated by the same contract used by automation",
+                "使用与自动化相同的契约进行验证",
               ),
-              @html.option(
-                value="register-template",
-                selected=state.operation_name == "register-template",
-                localized(
-                  state.locale,
-                  "Register model-service template",
-                  "注册模型服务模板",
-                ),
-              ),
-              @html.option(
-                value="plan-deployment",
-                selected=state.operation_name == "plan-deployment",
-                localized(
-                  state.locale,
-                  "Preflight deployment intent",
-                  "预检部署意图",
-                ),
-              ),
-              @html.option(
-                value="deploy-service",
-                selected=state.operation_name == "deploy-service",
-                localized(
-                  state.locale,
-                  "Deploy model service",
-                  "部署模型服务",
-                ),
-              ),
-              @html.option(
-                value="record-license",
-                selected=state.operation_name == "record-license",
-                localized(state.locale, "Record license", "记录许可证"),
-              ),
-              @html.option(
-                value="record-verification",
-                selected=state.operation_name == "record-verification",
-                localized(state.locale, "Record verification", "记录验证"),
-              ),
-              @html.option(
-                value="record-evaluation",
-                selected=state.operation_name == "record-evaluation",
-                localized(state.locale, "Record evaluation", "记录评测"),
-              ),
-              @html.option(
-                value="approve-model",
-                selected=state.operation_name == "approve-model",
-                localized(state.locale, "Approve model", "批准模型"),
-              ),
-              @html.option(
-                value="promote-alias",
-                selected=state.operation_name == "promote-alias",
-                localized(state.locale, "Promote alias", "提升模型别名"),
-              ),
-              @html.option(
-                value="set-quota",
-                selected=state.operation_name == "set-quota",
-                localized(state.locale, "Set quota", "设置配额"),
-              ),
-              @html.option(
-                value="create-organization",
-                selected=state.operation_name == "create-organization",
-                localized(state.locale, "Create organization", "创建组织"),
-              ),
-              @html.option(
-                value="create-cost-center",
-                selected=state.operation_name == "create-cost-center",
-                localized(
-                  state.locale,
-                  "Create cost center",
-                  "创建成本中心",
-                ),
-              ),
-              @html.option(
-                value="create-project",
-                selected=state.operation_name == "create-project",
-                localized(
-                  state.locale,
-                  "Create commercial project",
-                  "创建商业项目",
-                ),
-              ),
-              @html.option(
-                value="record-commercial-usage",
-                selected=state.operation_name == "record-commercial-usage",
-                localized(
-                  state.locale,
-                  "Record commercial usage",
-                  "记录商业用量",
-                ),
-              ),
-              @html.option(
-                value="rate-commercial-usage",
-                selected=state.operation_name == "rate-commercial-usage",
-                localized(
-                  state.locale,
-                  "Rate commercial usage",
-                  "计费商业用量",
-                ),
-              ),
-              @html.option(
-                value="create-commercial-budget",
-                selected=state.operation_name == "create-commercial-budget",
-                localized(
-                  state.locale,
-                  "Create commercial budget",
-                  "创建商业预算",
-                ),
-              ),
-              @html.option(
-                value="create-commercial-quota",
-                selected=state.operation_name == "create-commercial-quota",
-                localized(
-                  state.locale,
-                  "Create commercial quota",
-                  "创建商业配额",
-                ),
-              ),
-              @html.option(
-                value="register-agreement-template",
-                selected=state.operation_name == "register-agreement-template",
-                localized(
-                  state.locale,
-                  "Register agreement template",
-                  "注册协议模板",
-                ),
-              ),
-              @html.option(
-                value="create-agreement",
-                selected=state.operation_name == "create-agreement",
-                localized(
-                  state.locale,
-                  "Create digital agreement",
-                  "创建数字协议",
-                ),
-              ),
-              @html.option(
-                value="create-enterprise-membership",
-                selected=state.operation_name == "create-enterprise-membership",
-                localized(
-                  state.locale,
-                  "Create enterprise membership",
-                  "创建企业成员关系",
-                ),
-              ),
-              @html.option(
-                value="revoke-enterprise-membership",
-                selected=state.operation_name == "revoke-enterprise-membership",
-                localized(
-                  state.locale,
-                  "Revoke enterprise membership",
-                  "撤销企业成员关系",
-                ),
-              ),
-              @html.option(
-                value="publish-portal-agreement",
-                selected=state.operation_name == "publish-portal-agreement",
-                localized(
-                  state.locale,
-                  "Publish portal agreement",
-                  "发布企业门户协议",
-                ),
-              ),
-              @html.option(
-                value="register-external-record",
-                selected=state.operation_name == "register-external-record",
-                localized(
-                  state.locale,
-                  "Register external evidence",
-                  "登记外部证据",
-                ),
-              ),
-              @html.option(
-                value="decide-backpressure",
-                selected=state.operation_name == "decide-backpressure",
-                localized(state.locale, "Evaluate backpressure", "评估背压"),
-              ),
-              @html.option(
-                value="validate-transfer-grant",
-                selected=state.operation_name == "validate-transfer-grant",
-                localized(
-                  state.locale,
-                  "Validate transfer grant",
-                  "验证传输授权",
-                ),
-              ),
-              @html.option(
-                value="invite-user",
-                selected=state.operation_name == "invite-user",
-                localized(state.locale, "Invite user", "邀请用户"),
-              ),
-              @html.option(
-                value="grant-access",
-                selected=state.operation_name == "grant-access",
-                localized(
-                  state.locale,
-                  "Grant scoped access",
-                  "授予限定范围的访问权限",
-                ),
-              ),
-              @html.option(
-                value="create-compute-lease",
-                selected=state.operation_name == "create-compute-lease",
-                localized(
-                  state.locale,
-                  "Create workspace lease",
-                  "创建工作区租约",
-                ),
-              ),
-              @html.option(
-                value="reserve-exclusive-lease",
-                selected=state.operation_name == "reserve-exclusive-lease",
-                localized(
-                  state.locale,
-                  "Reserve exclusive machine lease",
-                  "预留独占机器租约",
-                ),
-              ),
-              @html.option(
-                value="publish-assignment",
-                selected=state.operation_name == "publish-assignment",
-                localized(
-                  state.locale,
-                  "Publish assignment for controller signing",
-                  "发布分配以供控制器签名",
-                ),
-              ),
-              @html.option(
-                value="invoke-workload",
-                selected=state.operation_name == "invoke-workload",
-                localized(state.locale, "Invoke workload", "调用工作负载"),
-              ),
-              @html.option(
-                value="record-benchmark",
-                selected=state.operation_name == "record-benchmark",
-                localized(
-                  state.locale,
-                  "Record benchmark evidence",
-                  "记录基准测试证据",
-                ),
-              ),
-            ],
-          ),
+            ),
+            @html.button(
+              type_="button",
+              class="primary-button",
+              disabled=state.operation_body.trim() == "" || state.loading,
+              on_click=command(emit, SubmitOperation),
+              localized(state.locale, "Validate and submit", "验证并提交"),
+            ),
+          ]),
         ]),
-        @html.div(class="field-group operation-body", [
-          @html.label(
-            for_="operation-body",
-            localized(state.locale, "Canonical JSON body", "规范 JSON 正文"),
-          ),
-          @html.textarea(
-            id="operation-body",
-            rows=12,
-            maxlength=1048576,
-            value=state.operation_body,
-            on_input=text_command(emit, value => OperationBodyChanged(value)),
-            "",
-          ),
-        ]),
-      ]),
-      @html.div(class="operation-actions", [
-        @html.span(
-          class="secondary",
-          localized(
-            state.locale,
-            "Validated by the same contract used by automation",
-            "使用与自动化相同的契约进行验证",
-          ),
-        ),
-        @html.button(
-          type_="button",
-          class="primary-button",
-          disabled=state.operation_body.trim() == "" || state.loading,
-          on_click=command(emit, SubmitOperation),
-          localized(state.locale, "Validate and submit", "验证并提交"),
-        ),
-      ]),
-    ]),
+      ],
+    ),
   ])
 }
 
@@ -10776,14 +10653,6 @@ fn cost_centers_view(state : ConsoleState) -> @rabbita.Html {
               "成本中心治理",
             ),
           ),
-          @html.p(
-            class="section-copy",
-            localized(
-              state.locale,
-              "Allocate metered model usage to a tenant hierarchy before rating, budget admission, and ledger finalization.",
-              "在计费、预算准入和账本结算前，将模型用量分配至租户层级。",
-            ),
-          ),
         ]),
         @html.span(
           class="resource-count",
@@ -10794,14 +10663,6 @@ fn cost_centers_view(state : ConsoleState) -> @rabbita.Html {
           ),
         ),
       ]),
-      @html.p(
-        class="privacy-note",
-        localized(
-          state.locale,
-          "Financial exports are tenant-scoped, formula-safe, and contain immutable ledger snapshots—not prompts or model payloads.",
-          "财务导出限定租户范围、防公式注入，并仅包含不可变账本快照，不含提示词或模型载荷。",
-        ),
-      ),
       if state.cost_centers.length() == 0 {
         @html.nothing
       } else {
@@ -10910,14 +10771,6 @@ fn agreements_view(
               "数字协议生命周期",
             ),
           ),
-          @html.p(
-            class="section-copy",
-            localized(
-              state.locale,
-              "Track immutable template versions, clickwrap acceptance, signature callbacks, and separation-of-duties evidence.",
-              "跟踪不可变模板版本、点击接受、签名回调与职责分离证据。",
-            ),
-          ),
         ]),
         @html.span(
           class="resource-count",
@@ -11020,8 +10873,8 @@ fn agreements_view(
             class="section-copy",
             localized(
               state.locale,
-              "Select one eligible node, then approve the tenant request into the exclusive-node lease authority.",
-              "选择一个符合条件的节点，然后将租户申请批准到独占节点租约权限中。",
+              "Choose a node before approving the request.",
+              "批准申请前请选择一个节点。",
             ),
           ),
         ]),
@@ -11154,14 +11007,6 @@ fn qualified_services_view(state : ConsoleState) -> @rabbita.Html {
               "资质服务适配器",
             ),
           ),
-          @html.p(
-            class="section-copy",
-            localized(
-              state.locale,
-              "Inspect normalized provider capabilities and callback evidence without exposing provider references or credentials.",
-              "查看规范化供应商能力与回调证据，不暴露供应商引用或凭据。",
-            ),
-          ),
         ]),
         @html.span(
           class="resource-count",
@@ -11172,14 +11017,18 @@ fn qualified_services_view(state : ConsoleState) -> @rabbita.Html {
           ),
         ),
       ]),
-      @html.p(
-        class="privacy-note",
-        localized(
-          state.locale,
-          "LunaFide is a deterministic test simulator only. It is not a qualified trust service, payment processor, tax platform, or production security boundary.",
-          "LunaFide 仅为确定性测试模拟器，不是合格信任服务、支付处理器、税务平台或生产安全边界。",
-        ),
-      ),
+      if state.qualified_services.any(service => service.provider == "LunaFide") {
+        @html.p(
+          class="privacy-note",
+          localized(
+            state.locale,
+            "LunaFide is for testing only. It cannot process real signatures, payments, or invoices.",
+            "LunaFide 仅供测试，不能办理真实签署、支付或开票。",
+          ),
+        )
+      } else {
+        @html.nothing
+      },
       if state.qualified_services.length() == 0 {
         @html.p(
           class="empty-state",
@@ -11267,14 +11116,6 @@ fn audit_view(state : ConsoleState) -> @rabbita.Html {
         @html.h2(
           id="audit-title",
           localized(state.locale, "Audit evidence", "审计证据"),
-        ),
-        @html.p(
-          class="section-copy",
-          localized(
-            state.locale,
-            "Trace consequential changes from actor and evidence through result and receipt.",
-            "从操作者和证据追踪重要变更，直至结果与回执。",
-          ),
         ),
       ]),
       @html.span(
@@ -11715,14 +11556,6 @@ fn console_styles() -> String {
     #|.nav-link.active { background: var(--sidebar-active); color: #fff; }
     #|.nav-indicator { width: .3rem; height: .3rem; flex: none; border-radius: 999px; background: currentColor; opacity: .45; }
     #|.nav-link.active .nav-indicator { width: .38rem; height: 1.2rem; border-radius: .3rem; background: var(--accent); opacity: 1; }
-    #|.sidebar-footer {
-    #|  margin: auto .4rem 0;
-    #|  padding-top: 1rem;
-    #|  border-top: 1px solid rgba(255, 255, 255, .1);
-    #|  color: var(--sidebar-muted);
-    #|  font-size: .72rem;
-    #|}
-    #|.sidebar-footer strong { display: block; margin-bottom: .2rem; color: var(--sidebar-ink); font-size: .75rem; }
     #|.connection-panel {
     #|  grid-column: 2;
     #|  grid-row: 1;
@@ -11788,6 +11621,7 @@ fn console_styles() -> String {
     #|  border-radius: .65rem;
     #|  background: var(--surface-subtle);
     #|}
+    #|.connection-form > .connection-endpoint { grid-column: 1 / -1; overflow-wrap: anywhere; }
     #|.connection-field label, .field-group label { display: block; margin-bottom: .35rem; color: var(--muted-strong); font-size: .75rem; font-weight: 700; }
     #|.connection-field input, .field-group input, .field-group select, .field-group textarea {
     #|  width: 100%;
@@ -11814,7 +11648,6 @@ fn console_styles() -> String {
     #|}
     #|.page-eyebrow, .eyebrow { margin: 0 0 .25rem; color: var(--muted); font-size: .68rem; font-weight: 780; letter-spacing: .1em; text-transform: uppercase; }
     #|.page-heading h1 { margin: 0; font-size: 1.55rem; line-height: 1.2; letter-spacing: -.025em; }
-    #|.page-description { max-width: 46rem; margin: .35rem 0 0; color: var(--muted); }
     #|.topbar-actions { display: flex; align-items: center; gap: .6rem; flex: none; }
     #|.locale-control { display: flex; align-items: center; gap: .4rem; min-height: 44px; }
     #|.locale-control label { color: var(--muted); font-size: .72rem; font-weight: 700; }
@@ -11845,16 +11678,9 @@ fn console_styles() -> String {
     #|.health-panel-unknown .health-dot { background: var(--muted); box-shadow: 0 0 0 .2rem var(--surface-hover); }
     #|.health-panel-warning .health-dot { background: var(--warning); box-shadow: 0 0 0 .2rem var(--warning-soft); }
     #|.health-copy { max-width: 43rem; margin: .55rem 0 1.15rem 1.35rem; color: var(--muted); }
-    #|.health-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; margin: 0; }
-    #|.health-facts > div { padding: .7rem .8rem; border-left: 1px solid var(--line); }
-    #|.health-facts dt { color: var(--muted); font-size: .7rem; }
-    #|.health-facts dd { margin: .15rem 0 0; font-size: 1rem; font-weight: 750; }
     #|.activity-panel { padding: 1.25rem 1.35rem; background: linear-gradient(145deg, var(--surface), var(--surface-subtle)); }
     #|.activity-value { margin: .1rem 0 0; font-size: 2.6rem; font-weight: 780; line-height: 1; letter-spacing: -.05em; }
     #|.activity-label { margin: .35rem 0 0; color: var(--muted); }
-    #|.activity-divider { height: 1px; margin: 1.15rem 0; background: var(--line); }
-    #|.activity-note { display: grid; gap: .15rem; margin: 0; }
-    #|.activity-note span { color: var(--muted); font-size: .75rem; }
     #|.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; margin: .8rem 0 0; }
     #|.stat { position: relative; min-height: 7rem; padding: .95rem 1rem; overflow: hidden; }
     #|.stat::before { position: absolute; inset: 0 0 auto; height: .16rem; background: var(--line-strong); content: ""; }
@@ -11977,7 +11803,7 @@ fn console_styles() -> String {
     #|.empty-state-action { display: grid; justify-items: center; gap: .55rem; }
     #|.empty-state-action strong { color: var(--ink); font-size: .95rem; }
     #|.empty-state-action p { max-width: 36rem; margin: 0; }
-    #|.cluster-topology { margin-bottom: 1.5rem; overflow: hidden; border: 1px solid var(--line); border-radius: .8rem; background: var(--surface); box-shadow: var(--shadow-sm); }
+    #|.cluster-topology { container-type: inline-size; margin-bottom: 1.5rem; overflow: hidden; border: 1px solid var(--line); border-radius: .8rem; background: var(--surface); box-shadow: var(--shadow-sm); }
     #|.topology-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1.5rem; padding: 1.2rem 1.3rem; border-bottom: 1px solid var(--line); background: linear-gradient(135deg, var(--surface), var(--surface-subtle)); }
     #|.topology-heading h2 { font-size: 1.3rem; }
     #|.topology-heading p:last-child { max-width: 48rem; margin: .35rem 0 0; color: var(--muted); }
@@ -11985,7 +11811,7 @@ fn console_styles() -> String {
     #|.topology-summary-item { padding: .35rem .55rem; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--muted); font-size: .7rem; white-space: nowrap; }
     #|.topology-summary-item strong { color: var(--ink); }
     #|.topology-graph-frame { margin: 0; overflow-x: auto; background-image: linear-gradient(rgba(86, 104, 117, .05) 1px, transparent 1px), linear-gradient(90deg, rgba(86, 104, 117, .05) 1px, transparent 1px); background-size: 24px 24px; }
-    #|.topology-graph { display: grid; grid-template-columns: minmax(8rem, .72fr) minmax(3rem, .28fr) minmax(15rem, 1.15fr) minmax(3.5rem, .34fr) minmax(15rem, 1.3fr); align-items: center; min-width: 44rem; min-height: 24rem; padding: 1.5rem; }
+    #|.topology-graph { display: grid; grid-template-columns: minmax(6.25rem, .6fr) minmax(1.5rem, .18fr) minmax(12rem, 1.25fr) minmax(2.25rem, .24fr) minmax(13rem, 1.4fr); align-items: center; min-width: 0; min-height: 24rem; padding: 1.5rem; }
     #|.topology-graph-frame figcaption { padding: .65rem 1.25rem; border-top: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 92%, transparent); color: var(--muted); font-size: .68rem; }
     #|.graph-node { position: relative; z-index: 2; display: flex; align-items: center; gap: .65rem; min-width: 0; padding: .75rem; border: 1px solid var(--line); border-radius: .58rem; background: var(--surface); box-shadow: 0 .25rem .75rem rgba(15, 23, 42, .07); }
     #|.graph-node > div { display: grid; min-width: 0; flex: 1; }
@@ -11999,14 +11825,14 @@ fn console_styles() -> String {
     #|.graph-management-stack::after { position: absolute; z-index: 0; top: 4rem; bottom: 4.4rem; left: 50%; width: 2px; background: color-mix(in srgb, var(--accent) 50%, var(--line)); content: ""; }
     #|.graph-dependency-branch { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .55rem; }
     #|.graph-dependency-branch::before { position: absolute; top: -1.55rem; left: 25%; right: 25%; height: 1.55rem; border-top: 2px solid color-mix(in srgb, var(--accent) 50%, var(--line)); border-left: 2px solid color-mix(in srgb, var(--accent) 50%, var(--line)); border-right: 2px solid color-mix(in srgb, var(--accent) 50%, var(--line)); border-radius: .35rem .35rem 0 0; content: ""; }
-    #|.graph-dependency-node { padding: .55rem; box-shadow: none; }
-    #|.graph-dependency-node strong { overflow: hidden; font-size: .68rem; text-overflow: ellipsis; white-space: nowrap; }
+    #|.graph-dependency-node { align-items: flex-start; flex-direction: column; padding: .55rem; box-shadow: none; }
+    #|.graph-dependency-node strong { overflow-wrap: anywhere; font-size: .68rem; }
     #|.graph-node-symbol-data { border-radius: .4rem; background: var(--surface-subtle); color: var(--muted-strong); }
     #|.graph-node-symbol-store { border-color: color-mix(in srgb, var(--warning) 40%, var(--line)); border-radius: .4rem; background: var(--warning-soft); color: var(--warning); }
     #|.graph-edge { position: relative; z-index: 1; height: 2px; background: color-mix(in srgb, var(--muted) 58%, var(--line)); }
     #|.graph-edge::before { position: absolute; right: -.05rem; top: 50%; width: .55rem; height: .55rem; border-top: 2px solid var(--muted); border-right: 2px solid var(--muted); content: ""; transform: translateY(-50%) rotate(45deg); }
     #|.graph-edge::after { position: absolute; left: 50%; top: 50%; width: .45rem; height: .45rem; border: 2px solid var(--surface); border-radius: 999px; background: var(--accent); content: ""; transform: translate(-50%, -50%); }
-    #|.graph-edge span { position: absolute; left: 50%; bottom: .65rem; padding: .16rem .32rem; border: 1px solid var(--line); border-radius: .3rem; background: var(--surface); color: var(--muted-strong); font: 700 .58rem ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; transform: translateX(-50%); }
+    #|.graph-edge span { position: absolute; left: 50%; bottom: .65rem; width: max-content; max-width: 100%; padding: .16rem .2rem; border: 1px solid var(--line); border-radius: .3rem; background: var(--surface); color: var(--muted-strong); font: 700 .58rem ui-monospace, SFMono-Regular, Menlo, monospace; text-align: center; white-space: normal; transform: translateX(-50%); }
     #|.graph-compute-cluster { position: relative; z-index: 2; padding: .8rem .8rem .8rem 1rem; border: 1px dashed color-mix(in srgb, var(--success) 42%, var(--line)); border-radius: .65rem; background: color-mix(in srgb, var(--success-soft) 42%, var(--surface)); }
     #|.graph-cluster-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: .7rem; padding: 0 0 .6rem .35rem; }
     #|.graph-cluster-heading > div { display: grid; }
@@ -12016,8 +11842,11 @@ fn console_styles() -> String {
     #|.graph-compute-node { min-height: 3.3rem; padding: .5rem .55rem; box-shadow: none; }
     #|.graph-compute-node::before { position: absolute; top: 50%; right: 100%; width: 1rem; height: 2px; background: color-mix(in srgb, var(--success) 45%, var(--line)); content: ""; }
     #|.graph-compute-node::after { position: absolute; top: 50%; right: calc(100% + .9rem); width: .45rem; height: .45rem; border: 2px solid var(--surface); border-radius: 999px; background: var(--success); content: ""; transform: translateY(-50%); }
-    #|.graph-compute-node strong { overflow: hidden; font-size: .7rem; text-overflow: ellipsis; white-space: nowrap; }
-    #|.graph-compute-node small { color: var(--muted); font-size: .58rem; }
+    #|.graph-control-node, .graph-compute-node { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .35rem .5rem; }
+    #|.graph-control-node > .graph-node-symbol, .graph-compute-node > .graph-node-symbol { grid-row: span 2; align-self: center; }
+    #|.graph-control-node > .status, .graph-compute-node > .status { grid-column: 2; justify-self: start; }
+    #|.graph-compute-node strong { overflow-wrap: anywhere; font-size: .7rem; }
+    #|.graph-compute-node small { color: var(--muted); font-size: .58rem; letter-spacing: 0; text-transform: none; }
     #|.graph-node-symbol-compute { width: 1.8rem; height: 1.8rem; border-color: color-mix(in srgb, var(--success) 42%, var(--line)); border-radius: .4rem; background: var(--success-soft); color: var(--success); font-size: .56rem; }
     #|.graph-compute-missing { margin: .4rem 0 0 1.1rem; }
     #|.topology-missing { display: grid; gap: .45rem; margin-top: .8rem; padding: .8rem; border: 1px dashed color-mix(in srgb, var(--warning) 50%, var(--line)); border-radius: .48rem; background: var(--warning-soft); }
@@ -12065,6 +11894,13 @@ fn console_styles() -> String {
     #|.node-summary-cell > span { color: var(--muted); font-size: .67rem; font-weight: 680; }
     #|.node-summary-cell > strong { overflow: hidden; color: var(--ink); font-size: .78rem; text-overflow: ellipsis; white-space: nowrap; }
     #|.node-summary-cell > small { color: var(--muted); font-size: .66rem; }
+    #|.storage-heading { margin-top: 1.5rem; }
+    #|.storage-node-record { container-type: inline-size; }
+    #|.storage-node-record .node-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; cursor: default; }
+    #|.storage-node-record .node-identity { grid-column: span 2; }
+    #|.storage-node-record .node-summary-cell { display: grid; }
+    #|.storage-node-record .node-summary strong { overflow: visible; overflow-wrap: anywhere; text-overflow: clip; white-space: normal; }
+    #|.storage-node-record .node-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     #|.node-expand-cue { display: inline-flex; align-items: center; gap: .35rem; color: var(--accent); font-size: .72rem; font-weight: 750; }
     #|.node-expand-cue::after { content: "⌄"; font-size: .9rem; transition: transform .16s ease; }
     #|.node-record[open] .node-expand-cue::after { transform: rotate(180deg); }
@@ -12075,8 +11911,6 @@ fn console_styles() -> String {
     #|.node-identity > strong { overflow-wrap: anywhere; }
     #|.node-metric { min-width: 0; overflow-wrap: anywhere; }
     #|.node-summary-cell > small { overflow-wrap: anywhere; }
-    #|.topology-disclosure { margin-bottom: 1rem; }
-    #|.topology-disclosure > summary { min-height: 44px; padding: .7rem 1rem; cursor: pointer; border: 1px solid var(--line); border-radius: .5rem; background: var(--surface); font-weight: 650; }
     #|.readiness-item { overflow-wrap: anywhere; }
     #|.node-metric { display: grid; gap: .35rem; min-height: 7.2rem; padding: .8rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--surface); }
     #|.node-metric > span { color: var(--muted); font-size: .68rem; font-weight: 680; }
@@ -12209,7 +12043,6 @@ fn console_styles() -> String {
     #|  .brand { margin-bottom: .65rem; padding-bottom: .65rem; }
     #|  .sidebar nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .25rem; }
     #|  .nav-group-label { grid-column: 1 / -1; margin-top: .65rem; }
-    #|  .sidebar-footer { display: none; }
     #|  .workspace { order: 3; width: 100%; }
     #|  .workspace-topbar { padding: 1.25rem 1rem 1rem; }
     #|  .workspace-main { padding: 1rem 1rem 2.5rem; }
@@ -12232,8 +12065,6 @@ fn console_styles() -> String {
     #|  .topbar-actions { width: 100%; flex-wrap: wrap; justify-content: space-between; }
     #|  .locale-control { flex: 1; }
     #|  .locale-select { width: 100%; }
-    #|  .health-facts { grid-template-columns: 1fr; }
-    #|  .health-facts > div { border-left: 0; border-top: 1px solid var(--line); }
     #|  .stats, .policy-summary { grid-template-columns: 1fr; }
     #|  .readiness-list, .deployment-steps { grid-template-columns: 1fr; }
     #|  .policy-summary > div { border-right: 0; border-bottom: 1px solid var(--line); }
@@ -12257,14 +12088,27 @@ fn console_styles() -> String {
     #|  .model-onboarding-grid { grid-template-columns: 1fr; }
     #|  .model-onboarding-form .row-actions, .runtime-profile-form .operation-actions, .template-registration-form .operation-actions { display: grid; grid-template-columns: 1fr; }
     #|  .model-onboarding-form button, .runtime-profile-form .operation-actions button, .template-registration-form .operation-actions button { width: 100%; }
-    #|  .topology-graph { min-width: 44rem; padding: 1rem; }
+    #|  .topology-graph { min-width: 0; padding: 1rem; }
     #|  .node-summary { grid-template-columns: minmax(0, 1fr) auto; gap: .65rem; }
     #|  .node-summary-cell { display: none; }
+    #|  .node-record:not(.storage-node-record) .node-summary-cell:nth-child(2) { display: grid; }
+    #|  .node-record:not(.storage-node-record) .node-summary-cell:nth-child(2) > span:first-child { display: none; }
+    #|  .node-expand-cue { grid-column: 1 / -1; justify-self: end; }
     #|  .node-detail-heading, .node-detail-actions { align-items: stretch; flex-direction: column; }
     #|  .node-metrics, .node-facts { grid-template-columns: 1fr; }
     #|  .node-facts > div { border-right: 0; border-bottom: 1px solid var(--line); }
     #|  .node-facts > div:last-child { border-bottom: 0; }
     #|  .confirmation-panel { right: .75rem; bottom: .75rem; width: calc(100vw - 1.5rem); }
+    #|}
+    #|@container (max-width: 38rem) {
+    #|  .topology-graph { grid-template-columns: minmax(0, 1fr); gap: 1rem; padding: 1rem; }
+    #|  .graph-access-node { align-items: center; flex-direction: row; }
+    #|  .graph-edge { justify-self: center; width: 2px; height: 2rem; }
+    #|  .graph-edge::before { top: auto; bottom: 0; left: 50%; right: auto; transform: translateX(-50%) rotate(135deg); }
+    #|  .graph-edge span { top: 50%; bottom: auto; left: .8rem; max-width: none; white-space: nowrap; transform: translateY(-50%); }
+    #|  .storage-node-record .node-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #|  .storage-node-record .node-identity { grid-column: 1 / -1; }
+    #|  .storage-node-record .node-metrics { grid-template-columns: 1fr; }
     #|}
     #|@media (prefers-reduced-motion: reduce) {
     #|  * { scroll-behavior: auto !important; transition: none !important; }
@@ -12288,7 +12132,11 @@ fn console_view(
     CostCenters => cost_centers_view(state)
     Agreements => agreements_view(state, emit)
     OfflineCommerce => {
-      let commerce = { ..state.offline_commerce, locale: state.locale, }
+      let commerce = {
+        ..state.offline_commerce,
+        locale: state.locale,
+        contract_packets: state.contract_documents.packets,
+      }
       let page = match emit {
         Some(send) =>
           @offline_commerce.interactive_view(
@@ -12298,35 +12146,18 @@ fn console_view(
         None => @offline_commerce.view(commerce)
       }
       @html.div([
-        offline_commerce_lifecycle_graph(state),
-        page,
-        @html.section(class="data-table-panel", [
-          @html.h3(
-            localized(
-              state.locale,
-              "After undertaking approval",
-              "承诺函审批后",
-            ),
+        @html.details(class="offline-new-order", [
+          @html.summary(
+            localized(state.locale, "Lifecycle reference", "生命周期参考"),
           ),
-          @html.p(
-            localized(
-              state.locale,
-              "Once the signed document and full offline prepayment are verified, allocate the quoted number of whole nodes. The customer then starts IaaS, PaaS or MaaS from the enterprise site.",
-              "签署文件及线下足额到账核验后，下发报价对应台数的整机。客户随后在企业端自助启动 IaaS、PaaS 或 MaaS。",
-            ),
-          ),
-          @html.button(
-            type_="button",
-            class="primary-button",
-            on_click=command(emit, Navigate(Leases)),
-            localized(state.locale, "Allocate machines", "前往整机下发"),
-          ),
+          offline_commerce_lifecycle_graph(state),
         ]),
+        page,
       ])
     }
     ContractDocuments => {
       let documents = { ..state.contract_documents, locale: state.locale, }
-      match emit {
+      let page = match emit {
         Some(send) =>
           @contract_documents.interactive_view(
             documents,
@@ -12334,6 +12165,23 @@ fn console_view(
           )
         None => @contract_documents.view(documents)
       }
+      let order = documents.current_order()
+      @html.div([
+        match order {
+          Some(order) =>
+            @offline_commerce.rental_evidence_view(
+              {
+                ..state.offline_commerce,
+                locale: state.locale,
+                contract_packets: documents.packets,
+              },
+              order,
+              emit.map(send => send.map(message => OfflineCommerce(message))),
+            )
+          None => @html.nothing
+        },
+        page,
+      ])
     }
     QualifiedServices => qualified_services_view(state)
     Nodes => nodes_view(state, emit)
@@ -12352,7 +12200,8 @@ fn console_view(
       placement_visual_styles() +
       observability_visual_styles() +
       governance_visual_styles() +
-      offline_commerce_visual_styles(),
+      offline_commerce_visual_styles() +
+      @controls.styles(),
     ),
     @html.a(
       href="#main",
@@ -12395,39 +12244,20 @@ fn console_view(
         ],
       ),
       navigation(state.locale, state.route, emit),
-      @html.p(class="sidebar-footer", [
-        @html.strong(localized(state.locale, "Control plane", "控制平面")),
-        @html.span(
-          localized(
-            state.locale,
-            "Managed nodes remain isolated from application state.",
-            "受管节点始终与应用状态隔离。",
-          ),
-        ),
-      ]),
     ]),
     @html.div(class="workspace", [
       @html.header(class="workspace-topbar", [
         @html.div(class="page-heading", [
-          @html.p(
-            class="page-eyebrow",
-            localized(state.locale, "Private DGX cluster", "私有 DGX 集群"),
-          ),
           @html.h1(route_label(state.locale, state.route)),
-          @html.p(
-            class="page-description",
-            route_description(state.locale, state.route),
-          ),
         ]),
         @html.div(class="topbar-actions", [
           @html.div(class="locale-control", [
-            @html.label(
-              for_="console-locale",
-              localized(state.locale, "Language", "语言"),
-            ),
             @html.select(
               id="console-locale",
               class="locale-select",
+              attrs=@html.Attrs::build().aria_label(
+                localized(state.locale, "Interface language", "界面语言"),
+              ),
               on_change=text_command(emit, value => {
                 LocaleChanged(@i18n.parse_locale(value))
               }),
@@ -12465,15 +12295,20 @@ fn console_view(
               )
             },
           ),
-          @html.button(
-            type_="button",
-            disabled=state.loading,
-            on_click=command(emit, Refresh),
-            localized(state.locale, "Refresh", "刷新"),
+          @controls.icon_button(
+            Refresh,
+            localized(
+              state.locale,
+              "Refresh cluster status",
+              "刷新集群状态",
+            ),
+            command(emit, Refresh),
+            busy=state.loading,
           ),
         ]),
       ]),
       @html.main_(id="main", class="workspace-main", [
+        access_context_view(state, emit),
         if state.loading {
           @html.p(
             class="loading-state",

@@ -803,9 +803,7 @@ pub async fn ApiService::run_notification_reconciler_forever(
           _ => ()
         }
     }
-    ignore(@async.sleep(interval_ms)) catch {
-      _ => return
-    }
+    @async.sleep(interval_ms)
   }
 }
 

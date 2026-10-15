@@ -412,7 +412,7 @@ pub fn customize_xlsx_template(
         cell.sheet_name == replacement.sheet_name &&
         cell.row == replacement.row &&
         cell.column == replacement.column &&
-        cell.display_kind == @xlsx.Number &&
+        cell.display_kind == Number &&
         cell.resolved_text is None &&
         cell.raw_value is Some(_)
       }) {

@@ -1,4 +1,12 @@
 ///|
+async test "managed node ignores lease-only state file" {
+  let directory = @fs.tmpdir(prefix="lunanexa-node-lease-isolation-")
+  defer @fs.rmdir(directory, recursive=true)
+  let lease_guard = load_lease_guard_for_mode(directory, "spark-managed", false)
+  assert_eq(lease_guard.snapshot().node_id, "spark-managed")
+}
+
+///|
 async test "controller transport failure cannot bypass offline lease expiry" {
   let now = @async.now()
   let lease : @nodelease.ExclusiveNodeLease = {

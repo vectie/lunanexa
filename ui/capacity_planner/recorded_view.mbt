@@ -24,17 +24,12 @@ fn recorded_view(
 ) -> @rabbita.Html {
   @html.div([
     @html.h3("1. Select recorded run"),
-    @html.p(
-      "Reads exact samples from this operator console’s telemetry history. Recording a run does not establish its provenance, workload, output unit or measured memory; declare the missing context below.",
-    ),
-    @html.button(
-      type_="button",
-      on_click=send(emit, RefreshRecorded),
-      if state.refreshing {
-        "Refreshing recorded runs…"
-      } else {
-        "Refresh recorded runs"
-      },
+    @html.p("Select a run to plan capacity."),
+    @controls.icon_button(
+      Refresh,
+      "Refresh recorded runs",
+      send(emit, RefreshRecorded),
+      busy=state.refreshing,
     ),
     match state.refresh_error {
       Some(error) => @html.p(attrs=@html.Attrs::build().role("alert"), error)

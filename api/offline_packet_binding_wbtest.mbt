@@ -12,7 +12,7 @@ async test "created order-scoped packet supplies real dispatcher plan without ag
   let now = @async.now()
   let initial = {
     ..undertaking_test_order(),
-    state: @offline.Draft,
+    state: Draft,
     quote: None,
     artifact_ids: [],
   }
@@ -56,7 +56,7 @@ async test "created order-scoped packet supplies real dispatcher plan without ag
       [MasterLease],
       now,
     ),
-    state: @contractdoc.GenerationRequested,
+    state: GenerationRequested,
     values: [{ field_id: "lessee.name", value: "Technical acceptance only", }],
   }
   ignore(documents.create_packet(packet, order.purchaser_subject_ref))
@@ -84,7 +84,7 @@ async test "created order-scoped packet supplies real dispatcher plan without ag
       { ..packet, subject_ref: "other", },
       { ..packet, order_ref: "other", },
       { ..packet, template_sha256: "sha256:" + "b".repeat(64), },
-      { ..packet, state: @contractdoc.InformationDraft, },
+      { ..packet, state: InformationDraft, },
     ] {
     assert_true(offline_generation_packet([wrong], order, template) is None)
   }

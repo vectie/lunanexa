@@ -8,22 +8,21 @@ test "enterprise portal separates customer requests from operator assignment" {
   assert_true(agreements.contains("Enterprise capacity framework"))
   assert_true(agreements.contains("Review &amp; sign"))
   assert_true(requests.contains("Submit lease request"))
-  assert_true(requests.contains("Request requirements, not a specific machine"))
-  assert_true(
-    requests.contains("An operator selects one eligible DGX Spark node"),
-  )
-  assert_true(requests.contains("Password is not accepted"))
-  assert_true(requests.contains(">WebIDE</button>"))
-  assert_true(desktop.contains("SECURE WEBIDE HANDOFF"))
-  assert_true(desktop.contains("One-click connection"))
+  assert_true(requests.contains("Business justification"))
+  assert_true(requests.contains("<summary>Advanced</summary>"))
+  assert_true(requests.contains("Do not enter a password"))
+  assert_true(requests.contains(">PaaS · Workspaces</button>"))
+  assert_false(desktop.contains("SECURE WEBIDE HANDOFF"))
+  assert_true(desktop.contains("Refresh model and access"))
   assert_false(desktop.contains("href=\"/workbench/\""))
   assert_true(models.contains("Shared model catalog"))
-  assert_true(models.contains("Managed centrally"))
+  assert_false(models.contains("Managed centrally"))
+  assert_false(models.contains("65536 MiB"))
   assert_false(models.contains("/data/models"))
   assert_true(models.contains("Usage &amp; costs"))
-  assert_true(models.contains("IaaS · company machines"))
-  assert_true(models.contains("PaaS · personal applications"))
-  assert_true(models.contains("MaaS · company models"))
+  assert_true(models.contains("IaaS · Compute"))
+  assert_true(models.contains("MaaS · Model services"))
+  assert_true(models.contains("Orders and contracts"))
   assert_true(models.contains("aria-current=\"page\""))
   assert_true(models.contains("prefers-reduced-motion:reduce"))
 }
@@ -52,7 +51,7 @@ test "company administrator can invite members in UI without sharing a WebIDE" {
   let html = @enterprise.render({ ..state, route: AccountAccess, })
   assert_true(html.contains("Company members"))
   assert_true(html.contains("Create member invitation"))
-  assert_true(html.contains("Their WebIDE and chat remain personal"))
+  assert_true(html.contains("Invite a teammate as a Developer"))
   let company = state.organizations[0]
   let pending = @enterprise.render({
     ..state,
@@ -73,10 +72,10 @@ test "company administrator can invite members in UI without sharing a WebIDE" {
 test "enterprise WebIDE shows one connection status and next action" {
   let state = @enterprise.demo_state()
   let ready = @enterprise.render({ ..state, route: DesktopIde, })
-  assert_true(ready.contains("One-click connection"))
+  assert_true(ready.contains("Refresh model and access"))
   assert_false(ready.contains("Your access journey"))
-  assert_true(ready.contains("Your access is ready"))
-  assert_true(ready.contains("text.default"))
+  assert_false(ready.contains("Your access is ready"))
+  assert_true(ready.contains(">Ready</p>"))
   assert_true(ready.contains("Open Desktop WebIDE"))
   guard state.desktop_client is Some(client) else {
     fail("demo desktop client is required")
@@ -94,7 +93,7 @@ test "enterprise WebIDE shows one connection status and next action" {
   })
   assert_true(blocked.contains("Complete the MasterLease"))
   assert_true(blocked.contains("Complete MasterLease"))
-  assert_true(blocked.contains("One-click connection"))
+  assert_true(blocked.contains("Refresh model and access"))
   assert_false(blocked.contains("disabled>Complete MasterLease"))
 }
 
@@ -105,7 +104,7 @@ test "enterprise locale control renders Chinese and preserves opaque data" {
   let html = @enterprise.render({ ..chinese, route: Models, })
   assert_true(html.contains("界面语言"))
   assert_true(html.contains("共享模型目录"))
-  assert_true(html.contains("中央托管"))
+  assert_false(html.contains("中央托管"))
   assert_true(html.contains("qwen3-32b"))
   assert_true(html.contains("text.default"))
   assert_false(html.contains("/data/models"))
@@ -113,12 +112,17 @@ test "enterprise locale control renders Chinese and preserves opaque data" {
 
 ///|
 test "customer notification inbox is bilingual and keeps opaque receipts" {
-  let state = @enterprise.demo_state()
+  let state = @enterprise.demo_state_at(1786320000000L)
   let english = @enterprise.render({ ..state, route: Notifications, })
   assert_true(english.contains("Notification inbox"))
   assert_true(english.contains("Machine access is ready"))
   assert_true(english.contains("Mark as read"))
   assert_true(english.contains("Delivery preferences"))
+  assert_true(english.contains("class=\"notification-preferences\""))
+  assert_true(
+    english.contains("<summary id=\"notification-preferences-title\""),
+  )
+  assert_true(english.contains("<details class=\"notification-reference\""))
   assert_true(english.contains("Disable email"))
   assert_true(english.contains("In-app delivery always remains enabled"))
   assert_true(english.contains("exclusive-lease:demo:5"))
@@ -243,7 +247,7 @@ test "account route presents identity membership sessions and key lifecycle" {
   assert_true(html.contains("Account &amp; API keys"))
   assert_true(html.contains("Alice Chen"))
   assert_true(html.contains("alice@example.invalid"))
-  assert_true(html.contains("a newly issued API key is shown only once"))
+  assert_true(html.contains("<details class=\"key-help\""))
   assert_false(
     html.contains("Authentication is supplied by the trusted ingress"),
   )
@@ -255,7 +259,7 @@ test "account route presents identity membership sessions and key lifecycle" {
   assert_true(html.contains("Active"))
   assert_true(html.contains("Revoked"))
   assert_true(html.contains("Expired"))
-  assert_true(html.contains("Atomic rotation is not available yet"))
+  assert_true(html.contains("Create a replacement key, update your client"))
   assert_false(html.contains("secret_sha256"))
   let old_session : @enterprise.BrowserSessionView = {
     ..state.browser_sessions[0],
@@ -296,6 +300,7 @@ test "API key dialogs expose accessible semantics and one-time erasure" {
   let revealed = @enterprise.render(with_secret)
   assert_true(revealed.contains("role=\"alertdialog\""))
   assert_true(revealed.contains("Copy secret"))
+  assert_true(revealed.contains("<summary>Reveal API key</summary>"))
   assert_true(revealed.contains("lnx_example_one_time_secret"))
   let erased = with_secret.update(DismissOneTimeApiKeySecret)
   assert_false(
@@ -338,7 +343,11 @@ test "account route is bilingual and API key issue validation is bounded" {
   assert_true(chinese.contains("身份与成员资格"))
   assert_true(chinese.contains("浏览器会话"))
   assert_true(chinese.contains("创建 API 密钥"))
-  assert_true(chinese.contains("原子轮换暂不可用"))
+  assert_true(
+    chinese.contains(
+      "创建新密钥并更新客户端后，再撤销旧密钥",
+    ),
+  )
 }
 
 ///|
@@ -456,11 +465,7 @@ test "cost checkout derives authority fields and exposes complete states" {
     locale: ChineseSimplified,
   })
   assert_true(chinese.contains("支付已结算账期"))
-  assert_true(
-    chinese.contains(
-      "金额、币种、精度和可安全重试的幂等键均由已结算账期自动派生",
-    ),
-  )
+  assert_true(chinese.contains("核对总额后继续支付"))
   assert_true(chinese.contains("创建安全支付请求"))
 }
 
@@ -547,12 +552,12 @@ test "self-service entry separates shared dedicated and exclusive GPU outcomes" 
   let state = @enterprise.demo_state()
   let overview = @enterprise.render({ ..state, route: Overview, })
   assert_true(overview.contains("What do you want to run?"))
-  assert_true(overview.contains("Shared MaaS"))
-  assert_true(overview.contains("Dedicated MaaS"))
+  assert_true(overview.contains("Shared API"))
+  assert_true(overview.contains("Dedicated API"))
   assert_true(overview.contains("Exclusive GPU machine"))
-  assert_true(overview.contains("You receive an API key"))
-  assert_true(overview.contains("You receive a private endpoint"))
-  assert_true(overview.contains("Access is enabled after provisioning"))
+  assert_false(overview.contains("Start with a quota-bound key"))
+  assert_true(overview.contains("Deploy a private model endpoint"))
+  assert_true(overview.contains("Rent exclusive GPU capacity"))
   assert_true(overview.contains(">Get started</button>"))
   let chinese = @enterprise.render({
     ..state,
@@ -560,8 +565,8 @@ test "self-service entry separates shared dedicated and exclusive GPU outcomes" 
     locale: ChineseSimplified,
   })
   assert_true(chinese.contains("您希望以哪种方式运行？"))
-  assert_true(chinese.contains("共享 MaaS"))
-  assert_true(chinese.contains("专属 MaaS"))
+  assert_true(chinese.contains("共享 API"))
+  assert_true(chinese.contains("专属 API"))
   assert_true(chinese.contains("独占 GPU 机器"))
 }
 
@@ -661,15 +666,29 @@ test "dedicated machine wizard exposes SKU region duration model and signed quot
       model_selector: "",
     }),
   )
-  let quote = @enterprise.render({
+  let demo_quote = @enterprise.render({
     ..state,
     route: SelfService,
     self_service: { ..state.self_service, step: Quote, },
   })
+  assert_true(demo_quote.contains("Demo quote preview only"))
+  assert_false(demo_quote.contains(">Create order</button>"))
+  let quote = @enterprise.render({
+    ..state,
+    route: SelfService,
+    self_service: {
+      ..state.self_service,
+      step: Quote,
+      quote: state.self_service.quote.map(value => {
+        ..value,
+        quote_id: "quote-fixture",
+      }),
+    },
+  })
   assert_true(quote.contains("Review price and scope"))
   assert_true(quote.contains("CNY 1,444.80"))
   assert_true(quote.contains("sha256:demo-machine-terms"))
-  assert_true(quote.contains("Creating the order is idempotent"))
+  assert_true(quote.contains("Payment follows order creation"))
   assert_true(quote.contains("Create order"))
 }
 
@@ -771,7 +790,7 @@ test "machine order gates and provisioning remain resumable and fail closed" {
       order: Some(unpaid),
     },
   })
-  assert_true(checkout.contains("Complete commercial gates"))
+  assert_true(checkout.contains("Complete contract and payment"))
   assert_true(checkout.contains("Open secure checkout"))
   assert_true(checkout.contains("independently before capacity is reserved"))
   assert_true(checkout.contains("disabled"))
@@ -782,9 +801,7 @@ test "machine order gates and provisioning remain resumable and fail closed" {
     self_service: { ..state.self_service, step: Provisioning, },
   })
   assert_true(progress.contains("Provisioning progress"))
-  assert_true(
-    progress.contains("Artifact transfer, verification and LunaFlux deployment"),
-  )
+  assert_true(progress.contains("Model deployed"))
   assert_true(progress.contains("You can safely leave this page"))
   assert_true(progress.contains("exclusive-lease-demo"))
   assert_true(progress.contains("deployment-qwen-demo"))
@@ -896,9 +913,7 @@ test "pending organization exposes provider verification or an explicit blocker"
     organizations: [blocked],
     self_service: { ..state.self_service, step: Organization, },
   })
-  assert_true(
-    blocked_html.contains("sent to platform administrators for review"),
-  )
+  assert_true(blocked_html.contains("Waiting for company approval"))
 }
 
 ///|
@@ -914,6 +929,10 @@ test "terms unavailable keeps catalog visible but blocks clickwrap ordering" {
       terms: None,
       terms_accepted: false,
       terms_reviewed: false,
+      quote: state.self_service.quote.map(value => {
+        ..value,
+        quote_id: "quote-fixture",
+      }),
     },
   })
   assert_true(html.contains("Review price and scope"))

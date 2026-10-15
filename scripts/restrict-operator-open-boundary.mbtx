@@ -1,4 +1,4 @@
-import { "moonbitlang/async", "moonbitlang/async/fs", "moonbitlang/async/shell", "moonbitlang/core/env", "moonbitlang/core/json" }
+import { "moonbitlang/async@0.22.4", "moonbitlang/async@0.22.4/fs", "moonbitlang/async@0.22.4/shell", "moonbitlang/core/env", "moonbitlang/core/json" }
 
 async fn main {
   guard @env.args() is [_, kubeconfig, private_dir] else {

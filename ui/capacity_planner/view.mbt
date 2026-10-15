@@ -57,8 +57,9 @@ pub fn view(
     attrs=@html.Attrs::build().aria_labelledby("capacity-planner-title"),
     [
       @html.style_tag(
-        ".capacity-planner{margin-top:1.5rem;padding:1rem;border:1px solid var(--line);border-radius:.8rem}.capacity-planner h3{margin-top:1.2rem}.capacity-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem}.capacity-planner label{display:block;margin:.4rem 0}.capacity-planner input,.capacity-planner textarea,.capacity-planner select{box-sizing:border-box;width:100%;padding:.65rem;border:1px solid var(--line);border-radius:.4rem;background:var(--panel);color:var(--ink);font:inherit}.capacity-planner textarea{font-family:monospace}.capacity-planner button,.capacity-planner a{display:inline-block;margin:.6rem .5rem .6rem 0;padding:.65rem;border:1px solid var(--line);border-radius:.4rem;cursor:pointer}.capacity-run{padding:.75rem;margin:.5rem 0;border:1px solid var(--line);overflow-wrap:anywhere}.capacity-table{overflow-x:auto}.capacity-table table{width:100%;border-collapse:collapse}.capacity-table th,.capacity-table td{text-align:left;padding:.65rem;border-bottom:1px solid var(--line)}.capacity-id{overflow-wrap:anywhere}.capacity-boundary{padding:.75rem;border-left:3px solid var(--amber);color:var(--muted)}@media(max-width:52rem){.capacity-grid{grid-template-columns:1fr}}",
+        ".capacity-planner{margin-top:1.5rem;padding:1rem;border:1px solid var(--line);border-radius:.8rem}.capacity-planner h3{margin-top:1.2rem}.capacity-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem}.capacity-planner label{display:block;margin:.4rem 0}.capacity-planner input,.capacity-planner textarea,.capacity-planner select{box-sizing:border-box;width:100%;padding:.65rem;border:1px solid var(--line);border-radius:.4rem;background:var(--panel);color:var(--ink);font:inherit}.capacity-planner textarea{font-family:monospace}.capacity-planner button:not(.ln-icon-button),.capacity-planner a{display:inline-block;margin:.6rem .5rem .6rem 0;padding:.65rem;border:1px solid var(--line);border-radius:.4rem;cursor:pointer}.capacity-run{padding:.75rem;margin:.5rem 0;border:1px solid var(--line);overflow-wrap:anywhere}.capacity-table{overflow-x:auto}.capacity-table table{width:100%;border-collapse:collapse}.capacity-table th,.capacity-table td{text-align:left;padding:.65rem;border-bottom:1px solid var(--line)}.capacity-id{overflow-wrap:anywhere}.capacity-boundary{padding:.75rem;border-left:3px solid var(--amber);color:var(--muted)}@media(max-width:52rem){.capacity-grid{grid-template-columns:1fr}}",
       ),
+      @html.style_tag(@controls.styles()),
       @html.h2(
         id="capacity-planner-title",
         @i18n.copy(locale, "Capacity-plan workbench", "容量规划工作台"),
@@ -66,8 +67,8 @@ pub fn view(
       @html.p(
         class="capacity-boundary",
         @i18n.copy(
-          locale, "Local decision support only. Select recorded benchmark samples and declare missing context, then enter your objective. No allocation, provider call, price, SLA or live-capacity claim. Drafts stay in this tab; download a packet before closing.",
-          "仅本地决策辅助。导入完整基准样本，输入目标与工作负载。不分配资源，不调用提供方，不声明价格、SLA 或实时容量。草稿仅保留在此标签页，关闭前请导出。",
+          locale, "Planning only; no resources are reserved. Drafts stay in this tab—download your plan before closing.",
+          "仅用于规划，不预留资源。草稿保存在当前标签页，关闭前请下载。",
         ),
       ),
       match state.error {
@@ -161,7 +162,9 @@ pub fn view(
         ),
       ),
       @html.p(
-        "Identity fields begin with the first imported run. Review and edit them explicitly. Only exactly matching profiles, model/runtime digests, hardware, kind, workload reference and units can be compared. Origins cannot be mixed.",
+        @i18n.copy(
+          locale, "Compare matching workloads from the same evidence source.", "仅比较同一证据来源的匹配工作负载。",
+        ),
       ),
       @html.details([
         @html.summary("Workload identity (filled from the first selected run)"),
@@ -370,7 +373,9 @@ pub fn view(
         ),
       ),
       @html.p(
-        "Choose a saved packet. Reopening verifies its version, exact input digest and every recomputed recommendation before restoring the editable draft. An invalid packet leaves your current draft intact. Reopened samples remain captured evidence, even if live telemetry changed.",
+        @i18n.copy(
+          locale, "Open a saved plan to continue editing.", "打开已保存的规划以继续编辑。",
+        ),
       ),
       @html.label(for_="capacity-packet-file", "Saved planning packet file"),
       @html.input(

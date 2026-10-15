@@ -272,6 +272,14 @@ spec:
               value: deployment-v1
             - name: LUNANEXA_OPEN_TRIAL_HOURS
               value: "24"
+            # Enable with a reviewed guest network range on the identity
+            # gateway. This replaces automatic open-registration trials.
+            - name: LUNANEXA_WIFI_TRIAL_ENABLED
+              value: "0"
+            - name: LUNANEXA_WIFI_TRIAL_MAXIMUM_REQUESTS
+              value: "100"
+            - name: LUNANEXA_WIFI_TRIAL_ALLOWED_MODELS
+              value: text.qwen
             - name: LUNANEXA_OPEN_TRIAL_MAXIMUM_REQUESTS
               value: "100"
             - name: LUNANEXA_OPEN_TRIAL_ALLOWED_MODELS

@@ -48,7 +48,7 @@ test "deterministic API-key mutation fuzz rejects 10k boundary and injection var
     )
     mutations += 1
   }
-  assert_true(rejected({ ..valid_intent(), maximum_requests: 0L, }))
+  assert_true(rejected({ ..valid_intent(), maximum_requests: -1L, }))
   assert_true(rejected({ ..valid_intent(), maximum_requests: 1000000001L, }))
   assert_true(rejected({ ..valid_intent(), expires_unix_ms: 100000L, }))
   assert_true(mutations > 10000)

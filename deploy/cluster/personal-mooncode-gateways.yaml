@@ -58,7 +58,7 @@ spec:
         app.kubernetes.io/name: lunanexa-webide-gateway
     spec:
       serviceAccountName: webide-gateway
-      automountServiceAccountToken: true
+      automountServiceAccountToken: false
       nodeSelector: {kubernetes.io/hostname: ubuntu}
       securityContext:
         runAsNonRoot: true
@@ -82,6 +82,7 @@ spec:
             - {name: LUNANEXA_WEBIDE_ALLOW_INSECURE_PUBLIC_HTTP, value: "true"}
             - {name: SSL_CERT_FILE, value: /run/platform-trust/ca-bundle.crt}
           volumeMounts:
+            - {name: kubernetes-api, mountPath: /var/run/secrets/kubernetes.io/serviceaccount, readOnly: true}
             - {name: config, mountPath: /config, readOnly: true}
             - {name: trust, mountPath: /run/platform-trust, readOnly: true}
           readinessProbe:
@@ -95,6 +96,16 @@ spec:
             readOnlyRootFilesystem: true
             capabilities: {drop: [ALL]}
       volumes:
+        - name: kubernetes-api
+          projected:
+            defaultMode: 420
+            sources:
+              - serviceAccountToken: {path: token, expirationSeconds: 3600}
+              - configMap:
+                  name: kube-root-ca.crt
+                  items: [{key: ca.crt, path: ca.crt}]
+              - downwardAPI:
+                  items: [{path: namespace, fieldRef: {fieldPath: metadata.namespace}}]
         - name: config
           configMap: {name: personal-mooncode-runtime}
         - name: trust
@@ -118,7 +129,7 @@ spec:
         app.kubernetes.io/name: lunanexa-webide-gateway
     spec:
       serviceAccountName: webide-gateway
-      automountServiceAccountToken: true
+      automountServiceAccountToken: false
       nodeSelector: {kubernetes.io/hostname: ubuntu}
       securityContext:
         runAsNonRoot: true
@@ -142,6 +153,7 @@ spec:
             - {name: LUNANEXA_WEBIDE_ALLOW_INSECURE_PUBLIC_HTTP, value: "true"}
             - {name: SSL_CERT_FILE, value: /run/platform-trust/ca-bundle.crt}
           volumeMounts:
+            - {name: kubernetes-api, mountPath: /var/run/secrets/kubernetes.io/serviceaccount, readOnly: true}
             - {name: config, mountPath: /config, readOnly: true}
             - {name: trust, mountPath: /run/platform-trust, readOnly: true}
           readinessProbe:
@@ -155,6 +167,16 @@ spec:
             readOnlyRootFilesystem: true
             capabilities: {drop: [ALL]}
       volumes:
+        - name: kubernetes-api
+          projected:
+            defaultMode: 420
+            sources:
+              - serviceAccountToken: {path: token, expirationSeconds: 3600}
+              - configMap:
+                  name: kube-root-ca.crt
+                  items: [{key: ca.crt, path: ca.crt}]
+              - downwardAPI:
+                  items: [{path: namespace, fieldRef: {fieldPath: metadata.namespace}}]
         - name: config
           configMap: {name: personal-mooncode-runtime}
         - name: trust

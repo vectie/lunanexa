@@ -522,7 +522,7 @@ pub async fn OpenAiTextRuntime::invoke_at(
     raise UnsupportedCapability
   }
   let input = responses_input(request.payload)
-  let headers : Map[String, String] = {
+  let headers : @http.Headers = {
     "Content-Type": "application/json",
     "Accept": "application/json",
     "Idempotency-Key": "\{request.tenant_ref}:\{request.credential_scope}:\{request.idempotency_key}",
@@ -586,7 +586,7 @@ pub async fn OpenAiTextRuntime::invoke_stream_at(
     raise UnsupportedCapability
   }
   let input = responses_input(request.payload)
-  let headers : Map[String, String] = {
+  let headers : @http.Headers = {
     "Content-Type": "application/json",
     "Accept": "text/event-stream",
     "Idempotency-Key": "\{request.tenant_ref}:\{request.credential_scope}:\{request.idempotency_key}",

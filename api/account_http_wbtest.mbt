@@ -65,7 +65,23 @@ priv struct TrialRegistrationResponse {
   account : @account.AccountView
   session : @account.IssuedBrowserSession
   trial : @account.TrialEntitlement?
-} derive(FromJson)
+}
+
+///|
+impl FromJson for TrialRegistrationResponse with fn from_json(value, path) {
+  guard value is { "account": account, "session": session, "trial": trial, .. } else {
+    raise JsonDecodeError((path, "expected registration response"))
+  }
+  {
+    account: @json.from_json(account, path=path.add_key("account")),
+    session: @json.from_json(session, path=path.add_key("session")),
+    trial: if trial is Null {
+      None
+    } else {
+      Some(@json.from_json(trial, path=path.add_key("trial")))
+    },
+  }
+}
 
 ///|
 async test "identity exchange requires trusted transport and stored roles" {
@@ -434,15 +450,20 @@ async test "loopback identity listener admits signed registration and nothing el
     let (registered, _) = @http.post(
       "http://\{server.addr}/v1/auth/register",
       "{\"lifetime_ms\":\"60000\"}",
-      headers=signed_registration_headers(
-        assertion_secret,
-        "https://identity.example/realms/lunanexa",
-        "provider-subject-listener",
-        "listener@example.invalid",
-        "Listener User",
-        "listener-registration-nonce",
-        now,
-        now + 30000L,
+      headers=Map(
+        signed_registration_headers(
+          assertion_secret,
+          "https://identity.example/realms/lunanexa",
+          "provider-subject-listener",
+          "listener@example.invalid",
+          "Listener User",
+          "listener-registration-nonce",
+          now,
+          now + 30000L,
+        )
+        .iter()
+        .map(entry => (@http.CaseInsensitiveString(entry.0), entry.1))
+        .to_array(),
       ),
     )
     assert_eq(registered.code, 201)

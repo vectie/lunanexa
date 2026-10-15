@@ -244,17 +244,6 @@ extern "js" fn configured_endpoint() -> String =
   #| () => globalThis.LUNANEXA_API_ENDPOINT || (globalThis.location?.pathname?.startsWith("/mana/") ? `${globalThis.location.origin}/mana` : globalThis.location?.origin || "")
 
 ///|
-extern "js" fn demo_mode() -> Bool =
-  #| () => {
-  #|   try {
-  #|     const value = new URL(globalThis.location.href).searchParams.get("demo");
-  #|     return value === "1" || value === "true";
-  #|   } catch (_) {
-  #|     return false;
-  #|   }
-  #| }
-
-///|
 /// Deployment-declared open operator origin. When this meta value exactly
 /// matches the page origin, the console skips the login gate and lets the
 /// same-origin gateway attach operator authority server-side.
@@ -921,10 +910,41 @@ fn heartbeat_age_label(locale : @i18n.Locale, age_ms : Int64) -> String {
     } else {
       "Just now"
     }
-  } else if locale.is_chinese() {
-    "\{age_ms / 60000L} 分钟前"
   } else {
-    "\{age_ms / 60000L} minutes ago"
+    let minutes = age_ms / 60000L
+    let hours = minutes / 60L
+    let days = hours / 24L
+    if days > 0L {
+      let remainder = hours % 24L
+      if locale.is_chinese() {
+        if remainder == 0L {
+          "\{days} 天前"
+        } else {
+          "\{days} 天 \{remainder} 小时前"
+        }
+      } else if remainder == 0L {
+        "\{days}d ago"
+      } else {
+        "\{days}d \{remainder}h ago"
+      }
+    } else if hours > 0L {
+      let remainder = minutes % 60L
+      if locale.is_chinese() {
+        if remainder == 0L {
+          "\{hours} 小时前"
+        } else {
+          "\{hours} 小时 \{remainder} 分钟前"
+        }
+      } else if remainder == 0L {
+        "\{hours}h ago"
+      } else {
+        "\{hours}h \{remainder}m ago"
+      }
+    } else if locale.is_chinese() {
+      "\{minutes} 分钟前"
+    } else {
+      "\{minutes} min ago"
+    }
   }
 }
 
@@ -1495,6 +1515,7 @@ async fn load_console(
     compute_leases: [],
     exclusive_node_leases: [],
     resource_delivery: @ui.default_resource_delivery_panel(),
+    access_package_context: None,
     cost_centers: [],
     agreements: [],
     enterprise_lease_requests: [],
@@ -2419,7 +2440,8 @@ fn merge_contract_read(
   let matches_tenant = (packet : @contractdoc.ContractPacket) => {
     current.selected_tenant_ref.map_or(true, tenant => {
       packet.tenant_ref == tenant
-    })
+    }) &&
+    current.order_context.map_or(true, order => packet.order_ref == order)
   }
   let selected = match current.selected_packet_id {
     Some(id) =>
@@ -2443,9 +2465,12 @@ fn merge_contract_read(
       previous.revision == packet.revision
     })
   })
-  {
+  let merged = {
     ..incoming,
     locale,
+    order_context: current.order_context,
+    creation_order_ref: current.creation_order_ref,
+    creation_template_id: current.creation_template_id,
     selected_tenant_ref: match selected {
       Some(packet) => Some(packet.tenant_ref)
       None => current.selected_tenant_ref
@@ -2453,11 +2478,7 @@ fn merge_contract_read(
     search_query: current.search_query,
     selected_packet_id: selected.map(packet => packet.packet_id),
     selected_form: match selected {
-      Some(packet) if unchanged &&
-        current.selected_form.map_or(false, form => {
-          packet.active_forms.contains(form)
-        }) => current.selected_form
-      Some(packet) => packet.active_forms.get(0)
+      Some(packet) => current.form_for_packet(packet)
       None => None
     },
     draft_values: if unchanged {
@@ -2471,6 +2492,7 @@ fn merge_contract_read(
       None
     },
   }
+  merged.restore_order_context()
 }
 
 ///|
@@ -2539,33 +2561,44 @@ fn merge_console_group_read(
           current.locale,
         ),
       }
-    GroupCommerce(payload) =>
+    GroupCommerce(payload) => {
+      let previous = current.offline_commerce
+      let selected = match previous.selected_order_id {
+        Some(_) => previous.selected_order_id
+        None => payload.offline_commerce.selected_order_id
+      }
+      let commerce = {
+        ..payload.offline_commerce,
+        locale: current.locale,
+        selected_order_id: selected,
+        operator_actor_ref: previous.operator_actor_ref,
+        quote_minor_units: previous.quote_minor_units,
+        terms_digest: previous.terms_digest,
+        entitlement_ref: previous.entitlement_ref,
+        undertaking_term: previous.undertaking_term,
+        undertaking_quantity: previous.undertaking_quantity,
+      }
+      // Adopt the customer's tier on first arrival, but preserve an operator's
+      // unfinished quote when the same order refreshes in the background.
+      let commerce = match selected {
+        Some(id) if previous.selected_order_id != selected =>
+          commerce.update(SelectOrder(id))
+        _ => commerce
+      }
       {
         ..current,
         cost_centers: payload.cost_centers,
         agreements: payload.agreements,
         qualified_services: payload.qualified_services,
         enterprise_lease_requests: payload.enterprise_lease_requests,
-        offline_commerce: {
-          ..payload.offline_commerce,
-          locale: current.locale,
-          selected_order_id: match current.offline_commerce.selected_order_id {
-            Some(id) if payload.offline_commerce.orders.any(order => {
-                order.order_id == id
-              }) => Some(id)
-            _ => payload.offline_commerce.selected_order_id
-          },
-          operator_actor_ref: current.offline_commerce.operator_actor_ref,
-          quote_minor_units: current.offline_commerce.quote_minor_units,
-          terms_digest: current.offline_commerce.terms_digest,
-          entitlement_ref: current.offline_commerce.entitlement_ref,
-        },
+        offline_commerce: commerce,
         nodes: node_rows_with_lease_holders(
           current.locale,
           current.nodes,
           payload.node_lease_holders,
         ),
       }
+    }
   }
 }
 
@@ -2786,6 +2819,7 @@ fn merge_loaded_console(
     compute_leases: current.compute_leases,
     exclusive_node_leases: current.exclusive_node_leases,
     resource_delivery: current.resource_delivery,
+    access_package_context: current.access_package_context,
     deployments: current.deployments,
     service_deployments: current.service_deployments,
     cost_centers: current.cost_centers,
@@ -5187,6 +5221,11 @@ fn update_live(
         Some(group) => stale_groups.remove(group)
         None => ()
       }
+      if model.console.route == ContractDocuments ||
+        model.console.route == OfflineCommerce {
+        stale_groups.remove(ContractReads)
+        stale_groups.remove(CommerceReads)
+      }
       let next = {
         ..model,
         console: merge_loaded_console(model.console, state),
@@ -5199,6 +5238,14 @@ fn update_live(
         next.console.route,
         emit,
       )
+      let (scheduled, rental_reads) = if scheduled.console.route ==
+        ContractDocuments {
+        schedule_deferred_reads(scheduled, OfflineCommerce, emit)
+      } else if scheduled.console.route == OfflineCommerce {
+        schedule_deferred_reads(scheduled, ContractDocuments, emit)
+      } else {
+        (scheduled, @rabbita.none)
+      }
       let (scheduled, resources) = if scheduled.console.route == Overview &&
         !scheduled.demo_mode {
         resource_delivery_read(scheduled, emit)
@@ -5219,6 +5266,7 @@ fn update_live(
             cluster_poll_delay_command(cluster_generation, emit)
           },
           deferred,
+          rental_reads,
           resources,
         ]),
       )
@@ -5617,6 +5665,9 @@ fn update_live(
                 packet,
               ),
               selected_packet_id: Some(packet.packet_id),
+              selected_form: model.console.contract_documents.form_for_packet(
+                packet,
+              ),
               draft_values: packet.values.copy(),
               loading: false,
               error_message: None,
@@ -5900,6 +5951,86 @@ fn update_live(
         _ => (next, @rabbita.none)
       }
     }
+    Console(OfflineCommerce(OpenContractDocuments(order_id))) => {
+      guard model.console.offline_commerce.orders
+        .iter()
+        .find_first(order => order.order_id == order_id)
+        is Some(order) else {
+        return (model, @rabbita.none)
+      }
+      let groups = model.console_read_groups.copy()
+      groups.remove(ContractReads)
+      groups.remove(CommerceReads)
+      let next = {
+        ..model,
+        console_read_groups: groups,
+        console: {
+          ..model.console,
+          contract_documents: model.console.contract_documents.open_order(
+            order_id,
+            order.tenant_ref,
+            @offline_commerce.rental_template_id(order),
+          ),
+        },
+      }
+      update(next, Console(Navigate(ContractDocuments)), emit)
+    }
+    Console(ContractDocuments(OpenOrder(order_id))) => {
+      let groups = model.console_read_groups.copy()
+      groups.remove(ContractReads)
+      groups.remove(CommerceReads)
+      let next = {
+        ..model,
+        console_read_groups: groups,
+        console: {
+          ..model.console,
+          offline_commerce: model.console.offline_commerce.update(
+            SelectOrder(order_id),
+          ),
+        },
+      }
+      update(next, Console(Navigate(OfflineCommerce)), emit)
+    }
+    Console(OfflineCommerce(OpenAllocation(order_id))) => {
+      let next = {
+        ..model,
+        console: {
+          ..model.console,
+          resource_delivery: {
+            ..model.console.resource_delivery,
+            selected_undertaking_order: order_id,
+            undertaking_selected_nodes: [],
+            undertaking_confirmed_idle: false,
+          },
+        },
+      }
+      update(next, Console(Navigate(Leases)), emit)
+    }
+    Console(ClearAccessContext) =>
+      (
+        {
+          ..model,
+          console: { ..model.console, access_package_context: None, },
+        },
+        @rabbita.none,
+      )
+    Console(OpenAccessStep(account_id, organization_id, route)) => {
+      let console = model.console.open_access_step(
+        account_id, organization_id, route,
+      )
+      if console == model.console {
+        return (model, @rabbita.none)
+      }
+      let groups = model.console_read_groups.copy()
+      if route == Users {
+        groups.remove(AccessReads)
+      }
+      if route == ContractDocuments {
+        groups.remove(ContractReads)
+      }
+      let next = { ..model, console, console_read_groups: groups, }
+      update(next, Console(Navigate(route)), emit)
+    }
     Console(Navigate(route)) => {
       scroll_console_top()
       let next = {
@@ -5913,6 +6044,13 @@ fn update_live(
         },
       }
       let (scheduled, deferred) = schedule_deferred_reads(next, route, emit)
+      let (scheduled, contracts) = if route == OfflineCommerce {
+        schedule_deferred_reads(scheduled, ContractDocuments, emit)
+      } else if route == ContractDocuments {
+        schedule_deferred_reads(scheduled, OfflineCommerce, emit)
+      } else {
+        (scheduled, @rabbita.none)
+      }
       let (previewed, preview) = match route {
         ContractDocuments =>
           schedule_contract_preview(
@@ -5929,7 +6067,7 @@ fn update_live(
       } else {
         (previewed, @rabbita.none)
       }
-      (previewed, @rabbita.batch([deferred, preview, resources]))
+      (previewed, @rabbita.batch([deferred, contracts, preview, resources]))
     }
     Console(BeginDrain(node_id)) =>
       (
@@ -9345,6 +9483,8 @@ fn update(
       Console(LocaleChanged(_))
       | Console(CapacityPlanner(_))
       | Console(Navigate(_))
+      | Console(OpenAccessStep(_, _, _))
+      | Console(ClearAccessContext)
       | Console(AlertsWindowChanged(_))
       | Console(QuickDeploymentIdChanged(_))
       | Console(QuickTemplateChanged(_))
@@ -9595,7 +9735,6 @@ fn operator_open_matches(declared : String, page_origin : String) -> Bool {
 fn console_loading_view(
   locale : @i18n.Locale,
   detail : String,
-  open_deployment : Bool,
 ) -> @rabbita.Html {
   let copy = console_copy(
     locale, "Loading the operator console…", "正在加载运维控制台…",
@@ -9606,22 +9745,9 @@ fn console_loading_view(
       "login-shell", "display:grid;place-items:center;min-height:100vh",
     ),
     [
-      @html.div(class="login-card", [
+      @html.style_tag(login_styles()),
+      @html.div(class="login-card", style=["max-width: 28rem"], [
         @html.h2(copy),
-        @html.p(
-          class="login-help",
-          if open_deployment {
-            console_copy(
-              locale, "Fetching cluster inventory, telemetry and governance state from the controller.",
-              "正在从控制器获取集群清单、遥测与治理状态。",
-            )
-          } else {
-            console_copy(
-              locale, "Contacting the controller with the credentials from this session.",
-              "正在使用本会话的凭据连接控制器。",
-            )
-          },
-        ),
         // A read that fails while the deployment is open leaves the console
         // with nothing to show. Reporting the reason here turns a silent
         // "loading" screen into something an operator can act on.
@@ -9656,7 +9782,6 @@ fn app_view(
       return console_loading_view(
         locale,
         model.console.error_message.unwrap_or(""),
-        deployment_console_open(),
       )
     }
     return login_view(model, emit)
@@ -9677,18 +9802,11 @@ fn app_view(
               "connection-state connection-state-needed"
             },
             if model.credential.has_prefix("lnxs_") {
-              console_copy(
-                locale, "Account session active", "账户会话有效",
-              )
+              console_copy(locale, "Signed in", "已登录")
             } else if deployment_console_open() {
-              console_copy(
-                locale, "Deployment open — the same-origin proxy attaches operator authority",
-                "部署已开放 —— 同源代理会附加运维权限",
-              )
+              console_copy(locale, "Deployment access", "部署访问")
             } else if model.credential != "" && model.audit_credential != "" {
-              console_copy(
-                locale, "Local fallback active", "本地回退有效",
-              )
+              console_copy(locale, "Development access", "开发访问")
             } else {
               console_copy(locale, "Credentials required", "需要凭据")
             },
@@ -9697,9 +9815,9 @@ fn app_view(
             class="connection-summary-label",
             console_copy(locale, "Controller connection", "控制器连接"),
           ),
-          @html.span(class="connection-endpoint", model.endpoint),
         ]),
         @html.div(class="connection-form", [
+          @html.div(class="connection-endpoint", model.endpoint),
           @html.div(class="connection-field", [
             @html.label(
               for_="account-session",
@@ -9948,9 +10066,17 @@ fn localhost_dev_fallback_allowed(endpoint : String) -> Bool {
 
 ///|
 fn login_styles() -> String {
-  (
-    #|*{box-sizing:border-box}html,body,#app{min-height:100%;margin:0}body{background:#f4f6fa;color:#152033;font:14px/1.5 Inter,"PingFang SC","Noto Sans SC",system-ui,sans-serif}.login-shell{min-height:100vh;display:grid;grid-template-columns:minmax(18rem,.8fr) minmax(28rem,1.2fr);background:radial-gradient(circle at 15% 15%,rgba(69,105,233,.2),transparent 28rem),#f4f6fa}.login-context{padding:clamp(2rem,6vw,6rem);display:flex;flex-direction:column;justify-content:space-between;background:#0b1324;color:#f7f9ff}.login-brand{display:flex;align-items:center;gap:.8rem}.login-mark{width:2.7rem;height:2.7rem;border-radius:.75rem;background:#fff;color:#111a2d;display:grid;place-items:center;font-weight:900}.login-context h1{max-width:14ch;margin:.4rem 0 1rem;font-size:clamp(2rem,4vw,4.2rem);line-height:1.02}.login-context p{max-width:42rem;color:#b8c3db}.login-boundary{padding:1rem;border:1px solid #2c3d5d;border-radius:.8rem;background:rgba(255,255,255,.04)}.login-boundary strong,.login-boundary span{display:block}.login-boundary span{margin-top:.35rem;color:#aab8d3}.login-main{padding:clamp(1.5rem,6vw,6rem);display:grid;place-items:center}.login-card{width:min(34rem,100%);padding:clamp(1.4rem,3vw,2.3rem);border:1px solid #d8deea;border-radius:1rem;background:#fff;box-shadow:0 1.5rem 5rem rgba(24,39,75,.12)}.login-card-header{display:flex;justify-content:space-between;gap:1rem;align-items:start}.login-card h2{margin:.15rem 0;font-size:1.75rem}.login-card-header p{margin:.45rem 0 0;color:#63708a}.login-locale{display:grid;gap:.3rem;color:#63708a;font-size:.75rem}.login-locale select,.login-field input{min-height:44px;border:1px solid #b9c4d6;border-radius:.55rem;background:#fff;color:#152033;font:inherit}.login-locale select{padding:.5rem 1.9rem .5rem .65rem}.login-form{display:grid;gap:1rem;margin-top:1.6rem}.login-field label{display:block;margin-bottom:.35rem;font-weight:750}.login-field input{width:100%;padding:.65rem .75rem}.login-help{display:block;margin-top:.3rem;color:#63708a;font-size:.75rem}.login-endpoint{padding:.65rem .75rem;border-radius:.55rem;background:#f0f3f8;color:#53617b;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}.login-alert{padding:.75rem .85rem;border:1px solid #db8f8f;border-radius:.55rem;background:#fff3f3;color:#9a2424}.login-transport-warning{padding:.8rem;border-left:3px solid #c17a00;background:#fff8e8;color:#775000}.login-sso-link{display:flex;align-items:center;justify-content:center;min-height:44px;padding:.65rem 1rem;border:1px solid #345de0;border-radius:.55rem;background:#4569e9;color:#fff;font-weight:800;text-decoration:none}.login-sso-link:hover{background:#345de0}.login-sso-link:focus-visible{outline:3px solid #152f85;outline-offset:2px}.login-divider{display:flex;align-items:center;gap:.6rem;color:#63708a;font-size:.72rem}.login-divider::before,.login-divider::after{height:1px;flex:1;background:#d8deea;content:""}.login-actions{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-top:.4rem}.login-actions button{min-height:44px;padding:.65rem 1rem;border:1px solid #345de0;border-radius:.55rem;background:#4569e9;color:#fff;font:inherit;font-weight:800;cursor:pointer}.login-actions button:disabled{opacity:.45;cursor:not-allowed}.login-actions span{color:#63708a;font-size:.75rem}.login-dev-fallback{border:1px solid #d8deea;border-radius:.6rem;background:#f8fafc}.login-dev-fallback summary{min-height:44px;padding:.7rem .8rem;cursor:pointer;color:#53617b;font-weight:750}.login-dev-fields{display:grid;gap:.8rem;padding:.8rem;border-top:1px solid #d8deea}.login-dev-warning{margin:0;color:#8a4b00;font-size:.75rem}@media(max-width:52rem){.login-shell{grid-template-columns:1fr}.login-context{min-height:18rem;padding:2rem}.login-context h1{font-size:2.2rem}.login-main{padding:1rem}.login-card-header{display:grid}.login-locale{justify-self:start}.login-actions{align-items:stretch;flex-direction:column}.login-actions button{width:100%}}@media(prefers-reduced-motion:reduce){*{transition:none!important}}
-  )
+  let css =
+    #|*{box-sizing:border-box}html,body,#app{min-height:100%;margin:0}body{background:#f4f6fa;color:#152033;font:14px/1.5 Inter,"PingFang SC","Noto Sans SC",system-ui,sans-serif}
+    #|.login-shell{min-height:100vh;display:grid;place-items:center;padding:clamp(1rem,5vw,3rem)}.login-main{width:min(28rem,100%)}.login-card{width:100%;padding:clamp(1.25rem,4vw,2rem);border:1px solid #d8deea;border-radius:1rem;background:#fff;box-shadow:0 1rem 3rem rgba(24,39,75,.06)}
+    #|.login-brand{display:flex;align-items:center;gap:.75rem;margin-bottom:1.75rem;font-size:.85rem}.login-mark{display:grid;place-items:center}.login-card-header{display:flex;justify-content:space-between;align-items:center;gap:1rem}.login-card h1{margin:0;font-size:1.5rem;line-height:1.25}
+    #|.login-locale select,.login-field input{min-height:44px;border:1px solid #b9c4d6;border-radius:.55rem;background:#fff;color:#152033;font:inherit}.login-locale select{max-width:8rem;padding:.5rem;font-size:.8rem}.login-form{display:grid;gap:1rem;margin-top:1.5rem}.login-field label{display:block;margin-bottom:.35rem;font-weight:650}.login-field input{width:100%;padding:.65rem .75rem}.login-help{display:block;margin-top:.3rem;color:#63708a;font-size:.8rem}
+    #|.login-alert{padding:.75rem .85rem;border:1px solid #db8f8f;border-radius:.55rem;background:#fff3f3;color:#9a2424}.login-transport-warning{padding:.8rem;border-left:3px solid #c17a00;background:#fff8e8;color:#775000}
+    #|.login-sso-link{display:flex;align-items:center;justify-content:center;min-height:44px;padding:.65rem 1rem;border:1px solid #b9c4d6;border-radius:.55rem;background:transparent;color:#152033;font-weight:650;text-decoration:none}.login-sso-link:hover{background:#f0f3f8}.login-divider{display:flex;align-items:center;gap:.6rem;margin:1.15rem 0;color:#63708a;font-size:.8rem}.login-divider::before,.login-divider::after{height:1px;flex:1;background:#d8deea;content:""}
+    #|.login-actions{display:flex;margin-top:.25rem}.login-actions button{width:100%;min-height:44px;padding:.65rem 1rem;border:1px solid #345de0;border-radius:.55rem;background:#4569e9;color:#fff;font:inherit;font-weight:750;cursor:pointer}.login-actions button:disabled{opacity:.45;cursor:not-allowed}.login-card :is(button,a,input,select,summary):focus-visible{outline:2px solid #345de0;outline-offset:3px}
+    #|.login-dev-fallback{margin-top:1.5rem;border:1px solid #d8deea;border-radius:.6rem;background:#f8fafc}.login-dev-fallback summary{min-height:44px;padding:.7rem .8rem;cursor:pointer;color:#53617b;font-weight:650}.login-dev-fields{display:grid;gap:.8rem;padding:.8rem;border-top:1px solid #d8deea}.login-dev-warning{margin:0;color:#8a4b00;font-size:.8rem}
+    #|@media(max-width:32rem){.login-shell{align-items:start;padding-top:2rem}.login-card-header{flex-wrap:wrap}}@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+  css
 }
 
 ///|
@@ -9962,71 +10088,33 @@ fn login_view(
   let transport_allowed = login_transport_allowed(model.endpoint)
   @html.main_(class="login-shell", [
     @html.style_tag(login_styles()),
-    @html.section(class="login-context", [
-      @html.div(class="login-brand", [
-        @html.span(
-          class="login-mark",
-          style=[
-            "overflow: hidden", "flex-shrink: 0", "width: 3.5rem", "height: 3.5rem",
-          ],
-          [
-            @html.img(src="/mana/assets/platform-logo-light.png", alt="", style=[
-              "display: block", "width: 100%", "height: 100%", "object-fit: contain",
-              "transform: scale(1.22)", "transform-origin: center",
-            ]),
-          ],
-        ),
-        @html.strong("能源谷“创未来”生态街区"),
-      ]),
-      @html.div([
-        @html.p(
-          console_copy(
-            locale, "Private GPU infrastructure", "私有 GPU 基础设施",
-          ),
-        ),
-        @html.h1(
-          console_copy(
-            locale, "Operator access starts here.", "运维访问从这里开始。",
-          ),
-        ),
-        @html.p(
-          console_copy(
-            locale, "Cluster inventory, model governance, leases, contracts, and audit evidence stay hidden until the controller authenticates this session.",
-            "在控制器验证本次会话之前，集群清单、模型治理、租约、合同和审计证据均保持隐藏。",
-          ),
-        ),
-      ]),
-      @html.div(class="login-boundary", [
-        @html.strong(
-          console_copy(locale, "Management boundary", "管理边界"),
-        ),
-        @html.span(
-          console_copy(
-            locale, "Credentials remain in browser memory and are cleared on logout or reload.",
-            "凭据仅保留在浏览器内存中，并在退出或重新加载时清除。",
-          ),
-        ),
-      ]),
-    ]),
     @html.section(class="login-main", [
       @html.div(class="login-card", [
+        @html.div(class="login-brand", [
+          @html.span(
+            class="login-mark",
+            style=[
+              "overflow: hidden", "flex-shrink: 0", "width: 3.5rem", "height: 3.5rem",
+            ],
+            [
+              @html.img(src="/mana/assets/platform-logo-light.png", alt="", style=[
+                "display: block", "width: 100%", "height: 100%", "object-fit: contain",
+                "transform: scale(1.22)", "transform-origin: center",
+              ]),
+            ],
+          ),
+          @html.strong("能源谷“创未来”生态街区"),
+        ]),
         @html.div(class="login-card-header", [
           @html.div([
-            @html.h2(console_copy(locale, "Operator login", "运维登录")),
-            @html.p(
-              console_copy(
-                locale, "This is the operator console for platform administrators. The customer portal uses a separate browser session; signing in there does not sign you in here.",
-                "这里是平台管理员使用的运维控制台。用户门户使用独立的浏览器会话，在那里登录不会自动登录此处。",
-              ),
-            ),
+            @html.h1(console_copy(locale, "Operator login", "运维登录")),
           ]),
           @html.div(class="login-locale", [
-            @html.label(
-              for_="login-locale",
-              console_copy(locale, "Language", "语言"),
-            ),
             @html.select(
               id="login-locale",
+              attrs=@html.Attrs::build().aria_label(
+                console_copy(locale, "Language", "语言"),
+              ),
               on_change=emit.map(value => {
                 Console(LocaleChanged(@i18n.parse_locale(value)))
               }),
@@ -10045,7 +10133,6 @@ fn login_view(
             ),
           ]),
         ]),
-        @html.p(class="login-endpoint", model.endpoint),
         if !transport_allowed {
           @html.p(
             class="login-transport-warning",
@@ -10086,9 +10173,7 @@ fn login_view(
               value=model.login_username,
               auto_complete=On,
               maxlength=320,
-              attrs=@html.Attrs::build()
-                .disabled(!transport_allowed)
-                .aria_describedby("login-credentials-help"),
+              attrs=@html.Attrs::build().disabled(!transport_allowed),
               on_input=emit.map(value => LoginUsernameChanged(value)),
             ),
           ]),
@@ -10106,22 +10191,8 @@ fn login_view(
               attrs=@html.Attrs::build().disabled(!transport_allowed),
               on_input=emit.map(value => LoginPasswordChanged(value)),
             ),
-            @html.span(
-              id="login-credentials-help",
-              class="login-help",
-              console_copy(
-                locale, "The gateway checks these against the identity provider and returns a short-lived lnxs_ session. The console never sees the password or the provider's client secret.",
-                "网关用这两个字段向身份提供商换取短期 lnxs_ 会话。控制台不会接触密码，也接触不到提供商的客户端密钥。",
-              ),
-            ),
           ]),
           @html.div(class="login-actions", [
-            @html.span(
-              console_copy(
-                locale, "The console appears only after a successful authenticated load.",
-                "仅在身份验证并成功加载后显示控制台。",
-              ),
-            ),
             @html.button(
               type_="submit",
               disabled=!transport_allowed ||
@@ -10138,12 +10209,7 @@ fn login_view(
         if configured_endpoint().has_suffix("/mana") {
           @html.nothing
         } else {
-          @html.div(
-            class="login-divider",
-            console_copy(
-              locale, "or use organization sign-in", "或使用组织账户登录",
-            ),
-          )
+          @html.div(class="login-divider", console_copy(locale, "or", "或"))
         },
         if configured_endpoint().has_suffix("/mana") {
           @html.nothing
@@ -10151,9 +10217,7 @@ fn login_view(
           @html.a(
             href="/auth/oidc/start?audience=operator",
             class="login-sso-link",
-            console_copy(
-              locale, "Continue with organization sign-in", "使用组织账户继续",
-            ),
+            console_copy(locale, "Organization sign-in", "组织账户登录"),
           )
         } else {
           @html.span(
@@ -10247,7 +10311,6 @@ fn login_view(
 ///|
 fn main {
   let locale = @i18n.parse_locale(stored_locale_preference())
-  let is_demo = demo_mode()
   // "*" declares the deployment open for every origin that can reach it;
   // otherwise one of the declared exact origins must match the page.
   let open_origin = operator_open_origin()
@@ -10265,21 +10328,13 @@ fn main {
     inference_credential: "",
     inference_subject_ref: "",
     commercial_organization: "",
-    demo_mode: is_demo,
+    demo_mode: false,
     alerts_window: Today,
-    console: if is_demo {
-      {
-        ..@ui.demo_state(),
-        locale,
-        offline_commerce: { ..@ui.demo_state().offline_commerce, locale, },
-      }
-    } else {
-      {
-        ..@ui.default_state(),
-        locale,
-        loading: open_mode,
-        offline_commerce: { ..@ui.default_state().offline_commerce, locale, },
-      }
+    console: {
+      ..@ui.default_state(),
+      locale,
+      loading: open_mode,
+      offline_commerce: { ..@ui.default_state().offline_commerce, locale, },
     },
     console_read_groups: Map([]),
     next_directive_generation: 1L,
@@ -10295,9 +10350,7 @@ fn main {
       init=fn(emit) {
         (
           base_model,
-          if is_demo {
-            @rabbita.none
-          } else if open_mode {
+          if open_mode {
             // Open deployment: the same-origin gateway injects operator
             // authority into API calls, so the console loads immediately
             // without a browser-held credential.

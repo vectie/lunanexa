@@ -111,7 +111,7 @@ pub async fn S3HttpVerifier::verify(
   if !@contracts.valid_sha256_digest(expected_digest) {
     raise DigestNotPinned(expected_digest)
   }
-  let headers : Map[String, String] = { "Accept": "application/octet-stream" }
+  let headers : @http.Headers = { "Accept": "application/octet-stream" }
   if self.credential_value != "" {
     headers["Authorization"] = "Bearer \{self.credential_value}"
   }

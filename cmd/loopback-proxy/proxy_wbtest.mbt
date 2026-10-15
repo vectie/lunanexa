@@ -16,14 +16,8 @@ struct RelayFixture {
 ///|
 async fn relay_fixture() -> RelayFixture {
   {
-    upstream: @socket.TcpServer(
-      @socket.Addr::parse("127.0.0.1:0"),
-      reuse_addr=true,
-    ),
-    proxy: @socket.TcpServer(
-      @socket.Addr::parse("127.0.0.1:0"),
-      reuse_addr=true,
-    ),
+    upstream: TcpServer(@socket.Addr::parse("127.0.0.1:0"), reuse_addr=true),
+    proxy: TcpServer(@socket.Addr::parse("127.0.0.1:0"), reuse_addr=true),
   }
 }
 

@@ -6,6 +6,32 @@ fn shell_quote(value : String) -> String {
 }
 
 ///|
+fn model_api_example(base_url : String, model : String) -> String {
+  let payload : Json = {
+    "model": model,
+    "messages": [{ "role": "user", "content": "Hello" }],
+    "max_tokens": 1024,
+    "stream": false,
+  }
+  "# Set API_KEY privately before running.\ncurl --fail-with-body " +
+  shell_quote(base_url.trim_end(chars="/").to_owned() + "/chat/completions") +
+  " \\\n  -H \"Authorization: Bearer $API_KEY\" \\\n  -H 'Content-Type: application/json' \\\n  --data-binary " +
+  shell_quote(payload.stringify())
+}
+
+///|
+pub fn api_key_first_call_example(
+  state : EnterpriseState,
+  value : OneTimeApiKeySecret,
+) -> String {
+  match state.deliveries.external_model {
+    Some(service) if value.allowed_models == [service.model_alias] =>
+      model_api_example(public_maas_base_url(), service.model_alias)
+    _ => first_call_example(value)
+  }
+}
+
+///|
 pub fn first_call_example(value : OneTimeApiKeySecret) -> String {
   let endpoint = value.api_base_url
     .unwrap_or("<API entrance — ask your operator>")
@@ -152,12 +178,10 @@ fn copy_detail(
 ) -> @rabbita.Html {
   @html.span(class="copy-detail", [
     @html.span(class="mono", value),
-    @html.button(
-      type_="button",
-      class="quiet-button",
-      title=enterprise_copy(state.locale, CopyIdentifier),
-      on_click=command(emit, CopyDetail(value)),
-      enterprise_copy(state.locale, Copy),
+    @controls.icon_button(
+      Copy,
+      enterprise_copy(state.locale, CopyIdentifier),
+      command(emit, CopyDetail(value)),
     ),
   ])
 }

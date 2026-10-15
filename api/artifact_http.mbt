@@ -414,6 +414,7 @@ async fn ApiService::serve_artifact(
   request : @http.Request,
   connection : @http.ServerConnection,
 ) -> Bool {
+  let headers = application_headers(request.headers)
   if !request.path.has_prefix(artifact_route_prefix) {
     return false
   }
@@ -435,7 +436,7 @@ async fn ApiService::serve_artifact(
     return true
   }
   let now = @async.now()
-  guard self.artifact_assignment(request.headers, key, now) is Some(assignment) else {
+  guard self.artifact_assignment(headers, key, now) is Some(assignment) else {
     send_artifact_error(
       connection, 401, "a live node-bound assignment and transfer grant are required",
     )
@@ -479,7 +480,7 @@ async fn ApiService::serve_artifact(
     )
     return true
   }
-  guard range_start(request.headers, size) is Some(start) else {
+  guard range_start(headers, size) is Some(start) else {
     send_artifact_error(connection, 416, "artifact range is invalid")
     return true
   }
@@ -491,7 +492,7 @@ async fn ApiService::serve_artifact(
   }
   let remaining = size - start
   let status = if start == 0L { 200 } else { 206 }
-  let headers : Map[String, String] = {
+  let headers : @http.Headers = {
     "Content-Type": "application/octet-stream",
     "Content-Length": remaining.to_string(),
     "Accept-Ranges": "bytes",

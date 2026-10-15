@@ -9,6 +9,8 @@ pub(all) struct Profile {
   maximum_fps : Int
   maximum_steps : Int
   sound_supported : Bool
+  image_reference_supported : Bool?
+  image_reference_required : Bool?
 } derive(Eq, ToJson, FromJson)
 
 ///|

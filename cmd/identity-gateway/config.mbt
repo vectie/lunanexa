@@ -101,6 +101,7 @@ fn load_config() -> GatewayConfig raise {
       operator_cookie_secret: "",
       enterprise_cookie_secret: "",
       assertion_secret: "",
+      wifi_trial_source_cidrs: [],
       database_url: "",
       relay_endpoint: "",
       control_endpoint,
@@ -199,6 +200,14 @@ fn load_config() -> GatewayConfig raise {
   let assertion_secret = required_environment(
     "LUNANEXA_IDENTITY_ASSERTION_SECRET",
   )
+  let wifi_trial_source_cidrs = optional_environment(
+      "LUNANEXA_WIFI_TRIAL_SOURCE_CIDRS",
+    )
+    .map(value => value.split(",").map(part => part.trim().to_owned()).collect())
+    .unwrap_or([])
+  guard wifi_trial_source_cidrs.all(cidr => parse_wifi_cidr(cidr) is Some(_)) else {
+    raise Failure("invalid guest Wi-Fi source CIDR")
+  }
   let operator_client_id = required_environment(
     "LUNANEXA_OIDC_OPERATOR_CLIENT_ID",
   )
@@ -308,6 +317,7 @@ fn load_config() -> GatewayConfig raise {
     operator_cookie_secret,
     enterprise_cookie_secret,
     assertion_secret,
+    wifi_trial_source_cidrs,
     database_url: required_environment("LUNANEXA_IDENTITY_GATEWAY_DATABASE_URL"),
     relay_endpoint,
     control_endpoint,

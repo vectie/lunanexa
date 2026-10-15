@@ -1,4 +1,4 @@
-import { "moonbitlang/async", "moonbitlang/async/fs", "moonbitlang/async/shell", "moonbitlang/core/env", "moonbitlang/core/json" }
+import { "moonbitlang/async@0.22.4", "moonbitlang/async@0.22.4/fs", "moonbitlang/async@0.22.4/shell", "moonbitlang/core/env", "moonbitlang/core/json" }
 async fn main {
   guard @env.args() is [_, grant_file, evidence_file, artifact_id] else {fail("Usage: verify-offline-customer-download.mbtx PRIVATE_GRANT_JSON EVIDENCE_JSON ARTIFACT_ID")}
   guard !artifact_id.is_empty() && artifact_id.all(c => c is ('a'..='z' | 'A'..='Z' | '0'..='9' | '-')) else {fail("Invalid artifact ID")}

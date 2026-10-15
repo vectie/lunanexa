@@ -3,7 +3,7 @@ async fn post_internal(
   endpoint : String,
   path : String,
   body : String,
-  headers : Map[String, String],
+  headers : @http.Headers,
 ) -> (@http.Response, String) {
   let (origin, base_path) = endpoint_origin_and_path(endpoint, false)
   guard base_path == "/" else {
@@ -23,7 +23,7 @@ fn assertion_headers(
   issued : Int64,
   expires : Int64,
   nonce : String,
-) -> Map[String, String] {
+) -> @http.Headers {
   // Only the configured, verified provider may retain its pre-migration account
   // namespace. JWT validation continues to use the actual discovery issuer.
   let identity = if identity.issuer == config.issuer {
@@ -46,7 +46,7 @@ fn assertion_headers(
       @utf8.encode(canonical).exact_view(),
     ),
   )
-  let headers : Map[String, String] = {
+  let headers : @http.Headers = {
     "Accept": "application/json",
     "Content-Type": "application/json",
     "X-LunaNexa-Identity-Issuer": identity.issuer,
@@ -192,14 +192,12 @@ async fn revoke_controller_session(
 }
 
 ///|
-fn relay_identity_headers(
-  headers : Map[String, String],
-) -> Map[String, String]? {
+fn relay_identity_headers(headers : @http.Headers) -> @http.Headers? {
   let names = [
     "X-LunaNexa-Identity-Issuer", "X-LunaNexa-Identity-Subject", "X-LunaNexa-Identity-Issued-At",
     "X-LunaNexa-Identity-Expires-At", "X-LunaNexa-Identity-Nonce", "X-LunaNexa-Identity-Signature",
   ]
-  let forwarded : Map[String, String] = {
+  let forwarded : @http.Headers = {
     "Accept": "application/json",
     "Content-Type": "application/json",
   }

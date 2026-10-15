@@ -547,7 +547,7 @@ async fn ApiService::handle_delivery(
         deliveries.observe(
           created.operation_id,
           created.generation,
-          @delivery.Observation::Reserved(
+          Reserved(
             reservation_id=reservation.request.reservation_id,
             node_ids=reservation.request.node_ids,
           ),

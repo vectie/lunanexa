@@ -94,7 +94,7 @@ async test "generated OFL preview accepts exact current values without reopening
       [MasterLease],
       1L,
     ),
-    state: @contractdoc.Generated,
+    state: Generated,
     revision: 6L,
     values: [
       { field_id: "lessee.name", value: "技术验收样例", },
@@ -150,7 +150,7 @@ async test "generated OFL preview accepts exact current values without reopening
         changes,
       )
     catch {
-      @preview.ContractPreviewError::InvalidDraft(_) => ()
+      InvalidDraft(_) => ()
       error => fail("unexpected preview error: \{Repr(error)}")
     } noraise {
       _ => fail("frozen preview accepted an edit or foreign field")

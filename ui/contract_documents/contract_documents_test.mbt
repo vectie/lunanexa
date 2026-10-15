@@ -19,6 +19,48 @@ fn packet(
 }
 
 ///|
+test "form navigation preserves the selected form and drafts across revisions" {
+  let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
+  let multi = {
+    ..packet(InformationDraft),
+    active_forms: [MasterLease, ReservationApplication, AccessConfirmation],
+  }
+  for actor in [@contractdoc.CustomerMessenger, ManagerOperator] {
+    let base = {
+      ..@contract_documents.default_state(English),
+      actor_owner: actor,
+      manifest: Some(manifest),
+      packets: [multi],
+      selected_packet_id: Some(multi.packet_id),
+      selected_form: Some(ReservationApplication),
+    }
+    let edited = base.update(
+      FieldChanged("reservation.organization_name", "Draft company"),
+    )
+    let revision = { ..multi, revision: multi.revision + 1L, }
+    assert_eq(edited.form_for_packet(revision), Some(ReservationApplication))
+    assert_eq(
+      edited.update(SelectPacket(multi.packet_id)).draft_values,
+      edited.draft_values,
+    )
+    let filtered = edited.update(SearchChanged(""))
+    assert_eq(filtered.selected_form, Some(ReservationApplication))
+    assert_eq(filtered.draft_values, edited.draft_values)
+    let html = @contract_documents.render(edited)
+    assert_true(html.contains("Previous form"))
+    assert_eq(html.contains("Next form"), actor == ManagerOperator)
+    assert_true(html.contains("aria-current=\"step\""))
+    let next = edited.update(SelectForm(MasterLease))
+    assert_eq(next.draft_values, edited.draft_values)
+    assert_eq(next.selected_form, Some(MasterLease))
+    let removed = { ..multi, active_forms: [MasterLease], }
+    assert_eq(edited.form_for_packet(removed), Some(MasterLease))
+    let different = { ..multi, packet_id: "another-packet", }
+    assert_eq(edited.form_for_packet(different), Some(MasterLease))
+  }
+}
+
+///|
 test "contract collection renders source labels and preserves offline signatures" {
   let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
   let html = @contract_documents.render({
@@ -33,7 +75,7 @@ test "contract collection renders source labels and preserves offline signatures
   assert_true(html.contains("乙方单位名称"))
   assert_false(html.contains("甲方单位名称"))
   assert_false(html.contains("法定代表人或授权代表"))
-  assert_true(html.contains("这里只显示由您这一方填写的字段"))
+  assert_true(html.contains("请填写您负责的资料后确认"))
 }
 
 ///|
@@ -121,9 +163,9 @@ test "contract timeline renders recorded events as an accessible fact graph" {
   )
   assert_true(html.contains("Draft created"))
   assert_true(html.contains("Information updated"))
-  assert_true(html.contains("recorded facts only"))
-  assert_true(html.contains("Copy actor ID"))
-  assert_true(html.contains("Copy packet ID"))
+  assert_true(html.contains("<details class=\"contract-timeline\""))
+  assert_true(html.contains("aria-label=\"Copy actor ID\""))
+  assert_true(html.contains("aria-label=\"Copy packet ID\""))
   assert_false(html.contains("values_sha256"))
   assert_false(html.contains("artifact_sha256"))
 }
@@ -261,8 +303,9 @@ test "customer and operator share one packet with role-owned fields and live pre
   assert_true(html.contains("乙方单位名称"))
   assert_false(html.contains("甲方单位名称"))
   assert_false(html.contains("合同编号"))
-  assert_true(html.contains("MOONLEAF LIVE PREVIEW"))
-  assert_true(html.contains("使用 MoonLeaf 渲染当前角色草稿"))
+  assert_true(html.contains("文件预览"))
+  assert_true(html.contains("请选择要预览的表单"))
+  assert_false(html.contains("MOONLEAF LIVE PREVIEW"))
   assert_false(html.contains("contract-previews/"))
   assert_false(html.contains("readonly"))
 
@@ -834,7 +877,7 @@ test "customer sees approval progress obligations and expiry without operator ac
       },
     ],
   })
-  assert_true(html.contains("合同状态"))
+  assert_true(html.contains("接下来需要做什么"))
   assert_true(html.contains("等待第二人复核"))
   assert_true(html.contains("催办"))
   assert_true(html.contains("剩余 12 天"))

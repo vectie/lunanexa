@@ -1,6 +1,6 @@
 import {
-  "moonbitlang/async", "moonbitlang/async/fs", "moonbitlang/async/shell",
-  "moonbitlang/core/env", "moonbitlang/core/json", "moonbitlang/x/sys",
+  "moonbitlang/async@0.22.4", "moonbitlang/async@0.22.4/fs", "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env", "moonbitlang/core/json", "moonbitlang/x@0.5.5/sys",
 }
 
 async fn kube(k : String, args : Array[String]) -> String {

@@ -47,12 +47,8 @@ fn required_environment(name : String) -> String raise {
 }
 
 ///|
-fn bearer_authorized(headers : Map[String, String], token : String) -> Bool {
-  let value = match headers.get("Authorization") {
-    Some(value) => Some(value)
-    None => headers.get("authorization")
-  }
-  value == Some("Bearer \{token}")
+fn bearer_authorized(headers : @http.Headers, token : String) -> Bool {
+  headers.get("Authorization") == Some("Bearer \{token}")
 }
 
 ///|

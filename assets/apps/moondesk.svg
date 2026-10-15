@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">MoonDesk app icon</title>
+  <rect width="512" height="512" rx="116" fill="#080b0d"/>
+  <circle cx="256" cy="256" r="166" fill="none" stroke="#d8b56a" stroke-width="18" stroke-linecap="round" stroke-dasharray="820 224" transform="rotate(-35 256 256)"/>
+  <circle cx="382" cy="149" r="13" fill="#8ec97f"/>
+  <g fill="none" stroke="#f0f4f2" stroke-width="20" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="154" y="176" width="204" height="160" rx="18"/>
+    <path d="M154 224h204M206 336v28M306 336v28M184 364h144"/>
+    <circle cx="184" cy="200" r="6" fill="#8ec97f" stroke="none"/>
+    <path d="M194 270h54M194 300h90"/>
+  </g>
+</svg>

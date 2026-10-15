@@ -16,7 +16,7 @@ fn endpoint(base : String, path : String) -> String {
 }
 
 ///|
-fn node_headers(node_id : String, token : String) -> Map[String, String] {
+fn node_headers(node_id : String, token : String) -> @http.Headers {
   {
     "Authorization": "Node \{token}",
     "X-LunaNexa-Node-Id": node_id,

@@ -18,6 +18,7 @@ pub(all) struct OfflineCommerceState {
   reversals : Array[@offline.CommercialReversal]
   artifacts : Array[OfflineArtifactSummary]
   templates : Array[@offline.DocumentTemplate]
+  contract_packets : Array[@contractdoc.ContractPacket]
   selected_order_id : String?
   project_id : String
   service_code : String
@@ -111,6 +112,9 @@ pub extend OfflineArtifactSummary with Eq::{not_equal, equal}
 
 ///|
 pub(all) enum OfflineCommerceMessage {
+  OpenContractDocuments(String)
+  OpenAllocation(String)
+  OpenMachineAccess(String)
   SelectOrder(String)
   CreateOrder
   RequestEvidenceUpload(String, @offline.DocumentArtifactKind)
@@ -149,6 +153,7 @@ pub fn default_state(
     reversals: [],
     artifacts: [],
     templates: [],
+    contract_packets: [],
     selected_order_id: None,
     project_id: "",
     service_code: "exclusive-dgx",
@@ -243,6 +248,33 @@ pub fn demo_state(
   } else {
     base_order
   }
+  let rental_quote = order.quote.unwrap()
+  let rental = {
+    ..order,
+    order_id: "order-demo-undertaking",
+    idempotency_key: "demo-undertaking",
+    expires_unix_ms: @contractdoc.calendar_date_days("2026-11-01").unwrap() *
+    86400000L,
+    requested_undertaking_term: Some("month"),
+    state: PendingEvidenceUpload,
+    artifact_ids: [],
+    entitlement_ref: None,
+    quote: Some({
+      ..rental_quote,
+      quote_id: "quote-demo-undertaking",
+      terms_digest: @contractdoc.undertaking_manifest().sha256,
+      lines: [
+        {
+          ..rental_quote.lines[0],
+          unit: "month",
+          unit_price: { minor_units: 129000L, currency: "CNY", scale: 2, },
+          line_total: { minor_units: 129000L, currency: "CNY", scale: 2, },
+        },
+      ],
+      subtotal: { minor_units: 129000L, currency: "CNY", scale: 2, },
+      total: { minor_units: 129000L, currency: "CNY", scale: 2, },
+    }),
+  }
   let reversals : Array[@offline.CommercialReversal] = if operator {
     [
       {
@@ -266,7 +298,7 @@ pub fn demo_state(
   }
   {
     ..default_state(locale, audience),
-    orders: [order],
+    orders: [order, rental],
     reversals,
     artifacts: [
       {
@@ -301,6 +333,7 @@ pub fn OfflineCommerceState::update(
   message : OfflineCommerceMessage,
 ) -> OfflineCommerceState {
   match message {
+    OpenContractDocuments(_) | OpenAllocation(_) | OpenMachineAccess(_) => self
     SelectOrder(order_id) => {
       // Opening an order adopts the tier the customer asked for, so the
       // operator's picker starts on the same selection instead of a default
@@ -894,6 +927,10 @@ fn customer_actions(
     order.state == PendingEvidenceUpload ||
     order.state == NeedsCorrection {
     for kind in @offline.required_evidence(order.policy) {
+      if kind == ExecutedAgreementEvidence &&
+        order.requested_undertaking_term is Some(_) {
+        continue
+      }
       let artifact_kind = match kind {
         ExecutedAgreementEvidence =>
           @offline.DocumentArtifactKind::ExecutedContractScan
@@ -949,13 +986,13 @@ fn customer_actions(
           Revoked | Expired | Cancelled | Rejected =>
             copy(
               state.locale,
-              "This order has ended and will not open access automatically. Review its status above; submit a new request or contact your administrator if access is still needed.",
-              "此订单已结束，不会自动开通权限。请查看上方状态；如仍需使用，请重新申请或联系管理员。",
+              "This order has ended. To continue, create a new order or contact your administrator.",
+              "订单已结束。如需继续使用，请重新下单或联系管理员。",
             )
           _ =>
             copy(
               state.locale,
-              "No customer action is required at this stage. We will notify you when the next step is ready.",
+              "No action needed. We will notify you when the next step is ready.",
               "当前阶段无需客户操作。下一步可办理时，我们会通知您。",
             )
         },
@@ -973,17 +1010,19 @@ fn operator_actions(
 ) -> @rabbita.Html {
   let actions = []
   actions.push(
-    @html.div(class="offline-field", [
-      @html.label(
-        for_="offline-operator-actor",
-        copy(state.locale, "Operator actor reference", "运营人员引用"),
-      ),
-      @html.input(
-        id="offline-operator-actor",
-        value=state.operator_actor_ref,
-        maxlength=160,
-        on_input=text_command(emit, value => OperatorActorChanged(value)),
-      ),
+    @controls.advanced(copy(state.locale, "Operator details", "运营信息"), [
+      @html.div(class="offline-field", [
+        @html.label(
+          for_="offline-operator-actor",
+          copy(state.locale, "Operator actor reference", "运营人员引用"),
+        ),
+        @html.input(
+          id="offline-operator-actor",
+          value=state.operator_actor_ref,
+          maxlength=160,
+          on_input=text_command(emit, value => OperatorActorChanged(value)),
+        ),
+      ]),
     ]),
   )
   if order.state == Draft {
@@ -1071,75 +1110,70 @@ fn operator_actions(
             "按承诺函价目报价",
           ),
         ),
-        @html.p(
-          copy(
-            state.locale,
-            "The approved Attachment 2 source digest is linked automatically. Confirm rental dates in the document before tenant submission.",
-            "自动关联附件 2 原件摘要。使用方提交前，请在文档中确认实际租期。",
-          ),
-        ),
       ]),
     )
-    actions.push(
-      @html.div(class="offline-field", [
-        @html.label(
-          for_="offline-quote-minor-units",
-          copy(
-            state.locale,
-            "Price (minor units)",
-            "价格（最小货币单位）",
-          ),
-        ),
-        @html.input(
-          id="offline-quote-minor-units",
-          value=state.quote_minor_units,
-          inputmode="numeric",
-          maxlength=18,
-          on_input=text_command(emit, value => QuoteMinorUnitsChanged(value)),
-        ),
-      ]),
-    )
-    actions.push(
-      @html.div(class="offline-field", [
-        @html.label(
-          for_="offline-terms-digest",
-          copy(
-            state.locale,
-            "Approved legal terms / snapshot SHA-256",
-            "已批准法律条款/快照 SHA-256",
-          ),
-        ),
-        @html.input(
-          id="offline-terms-digest",
-          value=state.terms_digest,
-          maxlength=71,
-          placeholder="sha256:…",
-          on_input=text_command(emit, value => TermsDigestChanged(value)),
-        ),
-      ]),
-    )
-    actions.push(
-      @html.button(
-        type_="button",
-        class="primary-action",
-        disabled=state.loading ||
-          state.operator_actor_ref.trim() == "" ||
-          state.quote_minor_units.trim() == "" ||
-          !@offline.valid_sha256(state.terms_digest.trim().to_owned()),
-        on_click=command(
-          emit,
-          BeginConfirmation(
-            QuoteOrder(
-              order.order_id,
-              state.terms_digest.trim().to_owned(),
-              state.quote_minor_units.trim().to_owned(),
-              state.operator_actor_ref.trim().to_owned(),
+    if order.requested_undertaking_term is None {
+      actions.push(
+        @html.div(class="offline-field", [
+          @html.label(
+            for_="offline-quote-minor-units",
+            copy(
+              state.locale,
+              "Price (minor units)",
+              "价格（最小货币单位）",
             ),
           ),
+          @html.input(
+            id="offline-quote-minor-units",
+            value=state.quote_minor_units,
+            inputmode="numeric",
+            maxlength=18,
+            on_input=text_command(emit, value => QuoteMinorUnitsChanged(value)),
+          ),
+        ]),
+      )
+      actions.push(
+        @html.div(class="offline-field", [
+          @html.label(
+            for_="offline-terms-digest",
+            copy(
+              state.locale,
+              "Approved legal terms / snapshot SHA-256",
+              "已批准法律条款/快照 SHA-256",
+            ),
+          ),
+          @html.input(
+            id="offline-terms-digest",
+            value=state.terms_digest,
+            maxlength=71,
+            placeholder="sha256:…",
+            on_input=text_command(emit, value => TermsDigestChanged(value)),
+          ),
+        ]),
+      )
+      actions.push(
+        @html.button(
+          type_="button",
+          class="primary-action",
+          disabled=state.loading ||
+            state.operator_actor_ref.trim() == "" ||
+            state.quote_minor_units.trim() == "" ||
+            !@offline.valid_sha256(state.terms_digest.trim().to_owned()),
+          on_click=command(
+            emit,
+            BeginConfirmation(
+              QuoteOrder(
+                order.order_id,
+                state.terms_digest.trim().to_owned(),
+                state.quote_minor_units.trim().to_owned(),
+                state.operator_actor_ref.trim().to_owned(),
+              ),
+            ),
+          ),
+          copy(state.locale, "Create immutable quote", "创建不可变报价"),
         ),
-        copy(state.locale, "Create immutable quote", "创建不可变报价"),
-      ),
-    )
+      )
+    }
   }
   if order.state == Quoted {
     actions.push(
@@ -1151,7 +1185,11 @@ fn operator_actions(
           emit,
           BeginConfirmation(BeginOrder(order.order_id, order.generation)),
         ),
-        copy(state.locale, "Start workflow", "启动流程"),
+        copy(
+          state.locale,
+          "Send quote & start documents",
+          "发送报价并准备文件",
+        ),
       ),
     )
   }
@@ -1204,7 +1242,8 @@ fn operator_actions(
       ),
     )
   }
-  if order.state == UnderReconciliation {
+  if order.state == UnderReconciliation &&
+    order.requested_undertaking_term is None {
     let target = order.technical_acceptance_waiver.map_or(
       state.entitlement_ref,
       w => w.authority_target_ref,
@@ -1451,21 +1490,9 @@ fn order_detail(
     value.order_id == order.order_id
   })
   @html.div(class="offline-detail-stack", [
+    rental_handoff(state, emit, order),
     @html.section(class="offline-order-hero", [
-      @html.div([
-        @html.p(
-          class="eyebrow",
-          copy(state.locale, "HYBRID ORDER", "线上线下协同订单"),
-        ),
-        @html.h2(order.order_id),
-        @html.p(
-          copy(
-            state.locale,
-            "Online configuration and tracking; offline seal, treasury, and invoice controls remain unchanged.",
-            "线上完成配置与跟踪；线下盖章、资金与开票流程保持不变。",
-          ),
-        ),
-      ]),
+      @html.div([@html.h2(order.order_id)]),
       @html.span(
         class="status-pill",
         technical_order_status(state.locale, order),
@@ -1555,13 +1582,6 @@ fn order_detail(
           @html.h3(
             copy(state.locale, "Documents and evidence", "文档与凭证"),
           ),
-          @html.p(
-            copy(
-              state.locale,
-              "Generated sources, print copy, uploads, safety checks, and review stay linked to this order.",
-              "生成源文件、打印件、上传材料、安全检查与审核均关联到此订单。",
-            ),
-          ),
         ]),
         @html.span("\{artifacts.length()}"),
       ]),
@@ -1582,47 +1602,7 @@ fn create_order_form(
 ) -> @rabbita.Html {
   @html.section(class="offline-create-form", [
     @html.h3(copy(state.locale, "Configure a new order", "配置新订单")),
-    @html.p(
-      copy(
-        state.locale,
-        "Start with service intent. Pricing, the contract packet, and every required offline control are added as explicit later stages.",
-        "请先填写服务意向。报价、合同材料与所需线下控制会在后续阶段逐项明确添加。",
-      ),
-    ),
     @html.div(class="offline-form-grid", [
-      @html.div(class="offline-field", [
-        @html.label(
-          for_="offline-project",
-          copy(state.locale, "Project ID", "项目 ID"),
-        ),
-        @html.input(
-          id="offline-project",
-          value=state.project_id,
-          maxlength=160,
-          on_input=text_command(emit, value => ProjectChanged(value)),
-        ),
-      ]),
-      @html.div(class="offline-field", [
-        @html.label(
-          for_="offline-service",
-          copy(state.locale, "Service", "服务"),
-        ),
-        @html.input(
-          id="offline-service",
-          value=state.service_code,
-          maxlength=160,
-          on_input=text_command(emit, value => ServiceChanged(value)),
-        ),
-      ]),
-      @html.div(class="offline-field", [
-        @html.label(for_="offline-sla", "SLA"),
-        @html.input(
-          id="offline-sla",
-          value=state.sla_code,
-          maxlength=160,
-          on_input=text_command(emit, value => SlaChanged(value)),
-        ),
-      ]),
       @html.div(class="offline-field", [
         @html.label(
           for_="offline-undertaking-term",
@@ -1648,10 +1628,45 @@ fn create_order_form(
           class="field-help",
           copy(
             state.locale,
-            "The fixed undertaking tariff. The draft allows 31 days for signing and review before the selected rental term; the signed dates must fit within its authority deadline.",
-            "承诺函固定档位。草稿在所选租期外预留 31 天签署审批时间；签署租期须在订单授权截止前结束。",
+            "The signed rental term must end before the order's authorization deadline.",
+            "签署租期须在订单授权截止前结束。",
           ),
         ),
+      ]),
+      @controls.advanced(copy(state.locale, "Advanced", "高级设置"), [
+        @html.div(class="offline-field", [
+          @html.label(
+            for_="offline-project",
+            copy(state.locale, "Project ID", "项目 ID"),
+          ),
+          @html.input(
+            id="offline-project",
+            value=state.project_id,
+            maxlength=160,
+            on_input=text_command(emit, value => ProjectChanged(value)),
+          ),
+        ]),
+        @html.div(class="offline-field", [
+          @html.label(
+            for_="offline-service",
+            copy(state.locale, "Service", "服务"),
+          ),
+          @html.input(
+            id="offline-service",
+            value=state.service_code,
+            maxlength=160,
+            on_input=text_command(emit, value => ServiceChanged(value)),
+          ),
+        ]),
+        @html.div(class="offline-field", [
+          @html.label(for_="offline-sla", "SLA"),
+          @html.input(
+            id="offline-sla",
+            value=state.sla_code,
+            maxlength=160,
+            on_input=text_command(emit, value => SlaChanged(value)),
+          ),
+        ]),
       ]),
     ]),
     @html.button(
@@ -1746,8 +1761,8 @@ fn confirmation_description(
       )
     BeginOrder(_, _) =>
       copy(
-        locale, "This generation-fenced transition starts internal approval or offline execution. Refresh if the order changed.",
-        "此操作受状态版本保护，并将进入内部审批或线下办理；如订单已变化，请先刷新。",
+        locale, "Submit this quote for approval or offline signing. Refresh if the order has changed.",
+        "提交此报价以进入审批或线下签署。如订单已变化，请先刷新。",
       )
     ReleaseVerifiedPacket(_, _) =>
       copy(
@@ -1867,21 +1882,14 @@ fn offline_view(
     #|.offline-commerce-workspace{display:grid;gap:1.1rem}.offline-new-order summary{min-height:2.75rem;display:flex;align-items:center;padding:.6rem .8rem;border:1px solid var(--line,#d5dee4);border-radius:.6rem;cursor:pointer}.offline-new-order[open] summary{margin-bottom:.6rem}.offline-order-layout{display:grid;grid-template-columns:minmax(13rem,.28fr) minmax(0,1fr);gap:1rem}.offline-order-list{display:grid;align-content:start;gap:.45rem}.offline-order-item{min-height:4.5rem;padding:.75rem;border:1px solid var(--line,#d5dee4);border-radius:.6rem;background:transparent;color:inherit;text-align:left;display:grid;gap:.15rem;cursor:pointer}.offline-order-item.is-active{border-color:var(--mint,#35bd8d);background:rgba(53,189,141,.08)}.offline-order-item span,.offline-order-item small,.offline-action-note{color:var(--muted,#80949c)}.offline-detail-stack{display:grid;gap:1rem}.offline-order-hero,.offline-card-heading,.section-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem}.offline-order-hero h2,.offline-card-heading h4,.section-heading h2,.section-heading h3{margin:.1rem 0}.offline-commerce-steps{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:.4rem;padding:0;list-style:none}.offline-commerce-steps li{display:grid;gap:.25rem;color:var(--muted,#80949c)}.offline-commerce-steps li span{width:2rem;height:2rem;border:1px solid var(--line,#d5dee4);border-radius:50%;display:grid;place-items:center}.offline-commerce-steps .is-current span,.offline-commerce-steps .is-complete span{border-color:var(--mint,#35bd8d);color:var(--mint,#168363)}.offline-two-column,.offline-artifact-grid,.offline-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem}.offline-panel,.offline-artifact-card,.offline-create-form{padding:1rem;border:1px solid var(--line,#d5dee4);border-radius:.7rem;background:var(--panel,#fff)}.offline-panel dl>div,.offline-artifact-facts>div{display:flex;justify-content:space-between;gap:.5rem;padding:.35rem 0}.offline-panel dd,.offline-artifact-facts dd{margin:0;overflow-wrap:anywhere}.offline-policy-list{display:grid;gap:.4rem;padding:0;list-style:none}.offline-policy-list li{display:grid;grid-template-columns:auto 1fr;column-gap:.5rem}.offline-policy-list small{grid-column:2;color:var(--muted,#80949c)}.offline-actions,.review-actions,.offline-confirmation-actions{display:flex;align-items:flex-end;flex-wrap:wrap;gap:.55rem}.offline-field{display:grid;gap:.3rem;min-width:12rem}.offline-field input{min-height:2.75rem;padding:.6rem .7rem;border:1px solid var(--line,#d5dee4);border-radius:.45rem;background:var(--bg,#fff);color:inherit}.offline-confirmation{position:sticky;bottom:1rem;margin-left:auto;max-width:42rem;padding:1rem;border:1px solid var(--amber,#b88300);border-radius:.7rem;background:var(--panel,#fff);box-shadow:0 1rem 3rem rgba(0,0,0,.25);z-index:5}.offline-confirmation code{display:block;padding:.65rem;margin:.6rem 0;border-radius:.4rem;background:rgba(128,148,156,.12);overflow-wrap:anywhere}.offline-confirmation-actions{justify-content:flex-end}.empty-state{padding:1rem;border:1px dashed var(--line,#d5dee4);border-radius:.7rem}@media(max-width:70rem){.offline-commerce-steps{grid-template-columns:repeat(3,minmax(0,1fr))}.offline-order-layout{grid-template-columns:1fr}.offline-order-list{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:40rem){.offline-order-list,.offline-commerce-steps,.offline-two-column,.offline-artifact-grid,.offline-form-grid{grid-template-columns:1fr}.offline-order-hero,.section-heading{flex-direction:column}.offline-confirmation{position:relative;bottom:auto}.offline-confirmation-actions{display:grid}}@media(prefers-reduced-motion:reduce){.offline-commerce-workspace *{transition:none!important;animation:none!important}}
     #|.offline-readiness-panel{display:grid;gap:.75rem;padding:1rem;border:1px solid var(--line,#d5dee4);border-radius:.7rem;background:var(--panel,#fff)}.offline-readiness-status{display:flex;align-items:center;flex-wrap:wrap;gap:.5rem}.offline-readiness-status code{padding:.2rem .45rem;border-radius:.35rem;background:rgba(128,148,156,.12);font-size:.72rem;overflow-wrap:anywhere}.offline-readiness-capabilities{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.45rem;padding:0;list-style:none}.offline-readiness-capabilities li{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:.5rem;align-items:baseline;padding:.5rem .6rem;border:1px solid var(--line,#d5dee4);border-radius:.5rem;color:var(--muted,#80949c)}.offline-readiness-capabilities li.complete{border-color:color-mix(in srgb,var(--mint,#35bd8d) 32%,var(--line,#d5dee4));background:rgba(53,189,141,.08);color:var(--mint,#168363)}.offline-readiness-mark{font-weight:800}.offline-readiness-capability{display:grid;min-width:0}.offline-readiness-capability small{color:var(--muted,#80949c);overflow-wrap:anywhere}.offline-readiness-facts{grid-column:2;display:flex;flex-wrap:wrap;gap:.5rem;font-size:.68rem}.offline-readiness-facts .is-present{color:var(--mint,#168363)}.offline-readiness-evidence{grid-column:2;padding:.2rem .4rem;border-radius:.35rem;background:rgba(128,148,156,.12);color:var(--muted,#80949c);font-size:.68rem;overflow-wrap:anywhere}.offline-readiness-blockers{display:grid;gap:.3rem;padding:0;list-style:none}.offline-readiness-blockers code{display:inline-block;padding:.2rem .4rem;border-radius:.35rem;background:rgba(128,148,156,.12)}@media(max-width:40rem){.offline-readiness-capabilities{grid-template-columns:1fr}}
   let selected : @offline.CommercialOrder? = match state.selected_order_id {
-    Some(id) =>
-      match state.orders.iter().find_first(order => order.order_id == id) {
-        Some(order) => Some(order)
-        None => state.orders.get(0)
-      }
+    Some(id) => state.orders.iter().find_first(order => order.order_id == id)
     None => state.orders.get(0)
   }
   @html.section(class="offline-commerce-workspace", [
     @html.style_tag(stylesheet),
+    @html.style_tag(@controls.styles()),
     @html.header(class="section-heading", [
       @html.div([
-        @html.p(
-          class="eyebrow",
-          copy(state.locale, "COMMERCIAL WORKFLOW", "商务办理流程"),
-        ),
         @html.h2(
           if state.audience == CustomerCommerce {
             copy(
@@ -1897,20 +1905,12 @@ fn offline_view(
             )
           },
         ),
-        @html.p(
-          copy(
-            state.locale,
-            "Every stage is explicit. Uploading a document never silently activates capacity.",
-            "每个阶段均清晰可见；上传文件不会自动开通算力。",
-          ),
-        ),
       ]),
-      @html.button(
-        type_="button",
-        class="quiet-button",
-        disabled=state.loading,
-        on_click=command(emit, Refresh),
-        copy(state.locale, "Refresh", "刷新"),
+      @controls.icon_button(
+        Refresh,
+        copy(state.locale, "Refresh orders", "刷新订单"),
+        command(emit, Refresh),
+        busy=state.loading,
       ),
     ]),
     // Without this the route has no failure channel at all: every rejected
@@ -1947,7 +1947,24 @@ fn offline_view(
     // Readiness is an operator concern: the enterprise portal renders the same
     // view for customers, who must not see internal adapter evidence.
     if state.audience == OperatorCommerce {
-      readiness_panel(state)
+      @html.details(class="offline-new-order", [
+        @html.summary(
+          if state.readiness_status == OfflineCommerceReady {
+            copy(
+              state.locale,
+              "Commerce readiness · Ready",
+              "商务就绪状态 · 已就绪",
+            )
+          } else {
+            copy(
+              state.locale,
+              "Commerce readiness · Needs attention",
+              "商务就绪状态 · 待处理",
+            )
+          },
+        ),
+        readiness_panel(state),
+      ])
     } else {
       @html.nothing
     },
@@ -1992,6 +2009,19 @@ fn offline_view(
       ),
       match selected {
         Some(order) => order_detail(state, emit, order)
+        None if state.selected_order_id is Some(_) =>
+          @html.div(class="empty-state", [
+            @html.h3(
+              copy(state.locale, "Order unavailable", "订单暂不可用"),
+            ),
+            @html.p(
+              copy(
+                state.locale,
+                "Refresh or choose another order.",
+                "请刷新或选择其他订单。",
+              ),
+            ),
+          ])
         None =>
           @html.div(class="empty-state", [
             @html.h3(
@@ -1999,13 +2029,6 @@ fn offline_view(
                 state.locale,
                 "No commercial orders yet",
                 "暂无商务订单",
-              ),
-            ),
-            @html.p(
-              copy(
-                state.locale,
-                "Create an order to configure service, SLA, pricing, and required offline evidence.",
-                "创建订单后，可配置服务、SLA、报价与所需线下凭证。",
               ),
             ),
             if state.audience == CustomerCommerce {

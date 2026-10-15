@@ -79,8 +79,8 @@ test "one HTTPS host keeps management and user sessions in separate paths" {
 
 ///|
 test "enterprise machine channel only forwards one-time redemption and API-key inference" {
-  let empty : Map[String, String] = Map([])
-  let keyed = { "Authorization": "Bearer lnx_test-only" }
+  let empty : @http.Headers = Map([])
+  let keyed : @http.Headers = { "Authorization": "Bearer lnx_test-only" }
   assert_true(
     enterprise_machine_request_allowed(
       Enterprise,

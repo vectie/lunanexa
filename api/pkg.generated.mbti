@@ -71,6 +71,8 @@ pub struct ApiService {
   open_trial_lifetime_ms : Int64
   open_trial_maximum_requests : Int64
   open_trial_allowed_models : Array[String]
+  wifi_trial_maximum_requests : Int64
+  wifi_trial_allowed_models : Array[String]
   access_store : @access.AccessStore?
   allow_legacy_unbound_access : Bool
   private_cloud_workspace_access : Bool
@@ -115,6 +117,8 @@ pub struct ApiService {
   reconciliation_only : Bool
   runtime : @runtimes.OpenAiTextRuntime
   external_text_route : ExternalTextRoute?
+  external_media_providers : Array[ExternalMediaProvider]
+  client_model_policies : Map[String, Array[String]]
   external_text_control : (async (String) -> String)?
   operator_token : String
   retire_bootstrap_operator_token : Bool
@@ -188,6 +192,7 @@ pub fn ApiService::with_artifact_root(Self, String) -> Self
 pub fn ApiService::with_assignment_signing_secret(Self, String) -> Self
 pub fn ApiService::with_client_handoff_store(Self, @vectie/lunanexa/workspace/client_handoff/store.ClientHandoffStore, @client_handoff.ClientLaunchConfig, allowed_http_launch_origins? : Array[String], allowed_http_api_origins? : Array[String]) -> Self raise Failure
 pub fn ApiService::with_client_launch_catalog(Self, Array[@client_handoff.ClientLaunchConfig], allowed_http_launch_origins? : Array[String], allowed_http_api_origins? : Array[String]) -> Self raise Failure
+pub fn ApiService::with_client_model_policies(Self, Map[String, Array[String]]) -> Self raise
 pub fn ApiService::with_commercial_persistence(Self, @commercial.CommercialStore, @integrations.IntegrationStore, @database.PostgresDatabase) -> Self
 pub fn ApiService::with_commercial_provider_adapter(Self, String, String, String, String) -> Self raise Failure
 pub fn ApiService::with_contract_approval_threshold(Self, Int64) -> Self
@@ -202,6 +207,7 @@ pub fn ApiService::with_entitlement_authority_callback_token(Self, String) -> Se
 pub fn ApiService::with_exclusive_lease_store(Self, @vectie/lunanexa/nodelease/store.FileExclusiveLeaseStore) -> Self
 pub fn ApiService::with_exclusive_lease_unit_price(Self, @commercial.FixedMoney) -> Self raise
 pub fn ApiService::with_external_export_proof_token(Self, String) -> Self
+pub fn ApiService::with_external_media_providers(Self, Array[ExternalMediaProvider]) -> Self raise
 pub fn ApiService::with_external_observability_collector_configured(Self, Bool) -> Self
 pub fn ApiService::with_external_text_control(Self, async (String) -> String) -> Self
 pub fn ApiService::with_external_text_route(Self, String, String, String, String, String, String, String, String) -> Self raise
@@ -241,6 +247,7 @@ pub fn ApiService::with_services(@vectie/lunanexa/store.FileStore, @registry.Fil
 pub fn ApiService::with_signature_verifier(Self, @registry.CosignVerifier) -> Self
 pub fn ApiService::with_technical_acceptance_authorization(Self, @offline.TechnicalAcceptanceAuthorization) -> Self raise Failure
 pub fn ApiService::with_technical_store(Self, @vectie/lunanexa/technical/store.TechnicalStore) -> Self
+pub fn ApiService::with_wifi_trial(Self, Int64, Array[String]) -> Self raise Failure
 pub fn ApiService::with_workspace_directory(Self, @directory.FileWorkspaceDirectory, Bool) -> Self
 
 pub(all) struct CancellationReceipt {
@@ -253,6 +260,19 @@ pub fn CancellationReceipt::from_json(Json, @json.JsonPath) -> Self raise @json.
 pub fn CancellationReceipt::not_equal(Self, Self) -> Bool
 pub fn CancellationReceipt::to_json(Self) -> Json
 pub fn CancellationReceipt::to_repr(Self) -> @debug.Repr
+
+pub(all) struct ExternalMediaProvider {
+  provider_id : String
+  generation : Int64
+  active : Bool
+  tenant_ref : String
+  node_id : String
+  artifact_digest : String
+  origin : String
+  bearer_file : String?
+  profile : @provider.Profile
+} derive(@json.FromJson)
+pub fn ExternalMediaProvider::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
 
 type ExternalTextRoute
 

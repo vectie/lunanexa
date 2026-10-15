@@ -1,5 +1,10 @@
 # UI production validation: 50-scenario campaign
 
+> Historical evidence from 2026-08-20. The demo browser mode described below
+> was retired on 2026-10-14; these are not instructions for current acceptance.
+> Validate the deployed `/user/`, `/mana/`, and `/docs/` sites at
+> `https://suanli.kechuangfuwu.com:8443` according to `docs/PLAN.md`.
+
 Date: 2026-08-20  
 Target: LunaNexa management console, enterprise portal, developer workbench,
 cluster installer, contract/MoonLeaf workflow, and documentation site

@@ -29,6 +29,20 @@ or a delivery request. Stopping an instance retains user data according to its
 published policy and does not automatically evict public weights. Node release
 follows confirmed workload termination and cleanup, not merely lease expiry.
 
+### Guest Wi-Fi QR trial
+
+An optional venue profile exposes a QR URL into the enterprise browser portal.
+The code carries a public URL only. A visitor connects to the approved guest
+Wi-Fi, signs in with a verified account, and explicitly redeems a one-hour
+shared-inference trial. The trusted browser gateway checks the ingress-observed
+client IP against configured guest-network egress CIDRs and signs a short-lived,
+session-bound assertion. The controller accepts redemption only with that
+assertion. The existing durable trial store enforces one trial per account,
+expiry, allowed models and request quota; retries do not extend it. No node
+lease, model weight, or machine credential is granted. This profile disables
+automatic trial creation at registration. QR possession, query parameters,
+browser headers and a claimed SSID are never admission evidence.
+
 ## 1. Purpose
 
 Human-facing operator and customer timestamps and alert calendar grouping use
@@ -112,6 +126,32 @@ profile has one active WebIDE identity; switching or logging out closes its old
 gateway session. Sessions are ephemeral and fail closed after a gateway restart;
 workflows and uploaded/generated files remain in the workspace volume.
 
+The four application cards launch published, authenticated personal workspaces.
+Hosted ComfyUI uses `/comfyui/connect`; its CPU workspace and saved workflows
+do not require stopping a company model or reserving a GPU pair. Legacy direct
+GPU ComfyUI pages remain delivery-bound. A card is ready only with current
+workspace authority and a serving model; unavailable profiles must not be made
+clickable by inventing a configuration or bypassing their gateway.
+
+ComfyUI's shared media profile has its own model policy and uses the trial
+inference pool, independently of a company's reserved text service. Its editor
+and files remain in the personal CPU workspace. Separately operated media
+providers are explicitly registered with an approved artifact, tenant, node,
+generation and server-side credential reference. A healthy endpoint advertising
+the exact provider model is required before a new launch or job is admitted.
+This registration never fabricates a managed deployment or a GPU reservation.
+Retired provider generations may remain configured for durable job cleanup;
+they do not accept new jobs. Paid dedicated requests cannot fall back to this
+shared pool. Each user needs an active `VideoGenerate` workspace capability;
+text permissions and existing company allocations remain independent.
+
+Reference-image support is explicit in the approved media profile. Only bounded
+embedded PNG and uncompressed PCM WAV references are accepted. Host paths,
+external URLs, arbitrary overrides and unqualified reference inputs stay
+rejected. Canonical request bytes, including embedded references, count against
+the workspace input budget and the global HTTP request limit. Provider tokens,
+private model names and upstream job identifiers never reach the browser.
+
 Hosted MoonRobo is a third customer WebIDE profile. It runs MoonRobo's native
 Rabbita cockpit and HTTP host in a pinned, CPU-only personal application image
 on the workspace-host role. LunaNexa owns the lease-bound launch gateway,
@@ -161,6 +201,20 @@ email-bound Developer invitations in the enterprise UI. Each member's WebIDE
 and saved application work is personal; machine leases and model endpoints
 belong to the selected company and may be shared under its authorization.
 
+Both portals keep primary actions, required customer choices, current status,
+validation errors, prices and consequential confirmations visible. Optional
+technical settings, raw identifiers, manual registration and raw API operations
+use collapsed Advanced disclosures. Collapsing a disclosure preserves draft
+values. Repeated implementation and policy explanations do not belong in the
+default task view; concise help remains where it prevents an input error or
+explains an unavailable next step.
+
+The management node page starts with an always-visible topology, followed by
+compute inventory and then storage monitoring. Display capacities in scaled
+binary units, large file-entry counts in compact locale-aware units, and
+heartbeat ages in minutes, hours or days. A stale node's device inventory is
+historical evidence, not a current health assertion.
+
 The enterprise portal accepts only tenant-scoped commercial intent. It never
 accepts a node ID, GPU ID, host address or raw access secret. It offers shared
 MaaS, a prepaid dedicated model endpoint, and a prepaid bare accelerator
@@ -175,6 +229,14 @@ is not rated into a second payable ledger. A dedicated API key is durably bound
 to the exact active order and deployment; inference cannot fall back to shared
 capacity when that order ends or its routing cannot be enforced. See
 `docs/SELF_SERVICE_MACHINE_ORDERING.md`.
+
+Keys scoped exclusively to an explicitly registered company-owned private model
+have no request-count cap when the caller has current private-cloud access.
+`maximum_requests: 0` denotes unlimited requests; usage remains counted.
+The server verifies the tenant and every model alias before applying this policy.
+Shared and trial keys retain finite quotas. Key expiry, revocation, membership,
+model scope and infrastructure admission continue to apply. The customer key
+form and key card omit request-credit controls for these private-model keys.
 
 ### Topology contract
 

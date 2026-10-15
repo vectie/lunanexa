@@ -206,6 +206,12 @@ async test "HTTP grants authenticate issuer and reject foreign capability replay
 
 ///|
 async test "subprocess output is bounded before collection completes" {
+  let (empty_status, empty_bytes) = bounded_command_output("printf", [""], 0)
+  assert_eq(empty_status, 0)
+  assert_eq(empty_bytes, b"")
+  let (failed_status, failed_bytes) = bounded_command_output("false", [], 0)
+  assert_eq(failed_status, 1)
+  assert_eq(failed_bytes, b"")
   let (status, bytes) = bounded_command_output("printf", ["abcdef"], 6)
   assert_eq(status, 0)
   assert_eq(bytes, b"abcdef")

@@ -9,6 +9,23 @@ pub fn ApiService::with_private_cloud_workspace_access(
 }
 
 ///|
+/// The registered private endpoint is tenant-bound. An empty model scope or a
+/// shared/foreign alias never inherits unlimited request access.
+fn ApiService::private_model_key_scope(
+  self : ApiService,
+  tenant_ref : String,
+  models : Array[String],
+) -> Bool {
+  match self.external_text_route {
+    Some(route) =>
+      route.tenant_ref == tenant_ref &&
+      models.length() > 0 &&
+      models.all(model => model == route.model_alias)
+    None => false
+  }
+}
+
+///|
 async fn ApiService::private_workspace_key_authorized(
   self : ApiService,
   key_id : String,

@@ -1,4 +1,5 @@
 import {
+  "vectie/lunanexa/ui/controls",
   "vectie/lunanexa/account/identity",
   "vectie/lunanexa/contractdoc",
   "vectie/lunanexa/contracts",

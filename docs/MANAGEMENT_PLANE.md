@@ -98,6 +98,40 @@ on the machine held by its exclusive lease.
 
 ## Monitoring surfaces
 
+### Interface language and controls
+
+Follow MoonVis's `docs/ICON_LANGUAGE.md`: remove repeated information before
+replacing labels. Every default screen should expose the current task, its
+inputs, current state, and next action. Architecture explanations, security
+implementation details, audience boundaries, and descriptions that repeat a
+heading belong in product documentation rather than persistent page chrome.
+
+Login shows the product identity, sign-in or registration title, labeled
+fields, and account actions. Password requirements appear only beside the
+registration password field. Trial prerequisites appear only for trial entry.
+Errors and exceptional transport warnings remain visible when applicable.
+
+Use a consistent 18px outline glyph in a minimum 44px target for repeated
+refresh controls and copying the immediately adjacent value. Keep localized
+accessible names, tooltips, focus, disabled and busy states. Retain short text
+for primary navigation, sign-in, creation, ownership, status, unfamiliar
+operations, and actions with consequences. Do not replace removed explanatory
+paragraphs with a wall of information icons.
+
+Apply the same rules to accounts, leases, model onboarding, deployments,
+monitoring, policies, billing, agreements, contract documents, and orders.
+Keep operator measurements, blockers, and audit evidence available. Enterprise
+pages lead with the user's status and next action; omit internal state-machine,
+adapter, signing-hash, and rendering-engine explanations. Preserve exact
+amounts, ownership, access scope, expiry, and action consequences.
+
+Use native disclosures for optional connection help, key replacement guidance,
+notification preferences, and cleanup policy. Validation, missing prerequisites,
+one-time secret warnings, and destructive-action confirmations stay beside the
+relevant task. Static process promises must not look like live status badges.
+
+### Audience-specific monitoring
+
 The operator overview presents a fleet status wall from node heartbeats,
 bounded telemetry, exclusive leases, and whole-node reservation records. It
 shows last reported device inventory and distinguishes an active allocation,

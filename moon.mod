@@ -14,7 +14,8 @@ preferred_target = "native"
 
 import {
   "moonbit-community/rabbita@0.14.0",
-  "moonbitlang/async@0.20.3",
-  "moonbitlang/x@0.4.50",
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/x@0.5.5",
   "vectie/moonleaf@0.1.15",
+  "PaiGack/moonbitqrcode@0.1.0",
 }

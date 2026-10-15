@@ -4,6 +4,16 @@ This is a documentation-first MoonBit repository. Read `README.mbt.md`,
 `docs/PRODUCT_CONTRACT.md`, `docs/ARCHITECTURE.md`, and `docs/PLAN.md` before
 adding implementation.
 
+## Supported public sites
+
+Optimize and validate the deployed sites at
+`https://suanli.kechuangfuwu.com:8443/user/`, `/mana/`, and `/docs/`.
+These are the customer portal, management portal, and documentation site.
+Do not deploy or use a standalone enterprise/console demo or `?demo=1`
+browser session as a product preview or acceptance target. Demo state helpers
+are test fixtures only. Internal `enterprise` and `console` bundle names still
+serve the supported portals; do not remove their production services.
+
 ## Non-negotiable boundary
 
 LunaNexa is the model-as-a-service plane between model consumers and the GPU
@@ -51,8 +61,11 @@ working, then run the phase gate once the phase is complete:
 moon info
 moon fmt
 moon check --target native --deny-warn
-moon test --target native --deny-warn
+moon run scripts/test-native.mbtx
 ```
+
+The native runner builds the CLI fixture executables and invokes the complete
+native workspace test suite, including workspace dependency tests.
 
 Any contract or cluster-boundary change additionally runs contract fixtures,
 dependency isolation checks, response leak scans, restart reconciliation, and
@@ -60,15 +73,12 @@ the relevant UI-to-UI scenario described in `docs/PLAN.md`.
 
 ### Prerequisites the toolchain does not supply
 
-Most packages never declared the C link flags that the native backend needs, so
-on a Linux build host the phase gate fails before it tests anything unless the
-environment supplies them:
+Linux native links and the large API test binary need these settings:
 
-- **`-pthread -ldl` on every native link.** Without it, most packages fail with
-  `undefined reference to 'pthread_setspecific'`. A `cc` wrapper that appends
-  those flags, pointed at by `MOON_CC`, unblocks the whole module without
-  editing 40 manifests; declaring the flags in each package's `moon.pkg` is the
-  durable fix and is still outstanding.
+- **`-pthread -ldl` on every native link.** These flags are declared in the
+  module's package manifests. Preserve them when adding or changing a native
+  package. Other workspace modules may still need a host compiler wrapper
+  supplying these flags when running the complete workspace suite.
 - **A large stack for the linker, plus `ulimit -s unlimited`.** Linking the
   `api` test binary otherwise kills `moonc` with a `Stack overflow` ICE.
 

@@ -14,11 +14,11 @@ fn owner_nonce() -> String raise LifecycleError {
   // repository for the same reason.
   let bytes = Bytes::make(32, 0)
   if fill_secure_random(bytes) != 0 {
-    raise LifecycleError::InvalidResource
+    raise InvalidResource
   }
   let nonce = @crypto.bytes_to_hex_string(bytes)
   if !@contracts.valid_sha256_digest("sha256:" + nonce) {
-    raise LifecycleError::InvalidResource
+    raise InvalidResource
   }
   nonce
 }

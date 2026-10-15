@@ -117,7 +117,24 @@ async fn ApiService::serving_client_model_aliases(
   approved : Array[String],
   tenant_ref? : String = "",
 ) -> Array[String] {
+  let external_media : Array[String] = []
+  for provider in self.external_media_providers {
+    if provider.active &&
+      provider.tenant_ref == tenant_ref &&
+      self.external_media_ready(provider) &&
+      !external_media.contains(provider.profile.model) {
+      external_media.push(provider.profile.model)
+    }
+  }
   guard self.deployment_store is Some(deployments) else {
+    if !self.external_media_providers.is_empty() {
+      if self.external_text_route is Some(route) &&
+        route.tenant_ref == tenant_ref &&
+        self.external_text_ready() {
+        external_media.push(route.model_alias)
+      }
+      return approved.filter(model => external_media.contains(model))
+    }
     return match self.external_text_route {
       Some(route) if tenant_ref == route.tenant_ref &&
         self.external_text_ready() =>
@@ -134,6 +151,11 @@ async fn ApiService::serving_client_model_aliases(
       template.model_selector
     }
   ]
+  for model in external_media {
+    if !serving.contains(model) {
+      serving.push(model)
+    }
+  }
   if self.delivery_store is Some(deliveries) {
     for operation in deliveries.operations() {
       if operation.intent.kind == ModelApi &&
@@ -379,6 +401,7 @@ async fn ApiService::handle_client_handoff(
         subject_ref,
       )
       let views = configs.map(config => {
+        let aliases = self.client_models(config.client_id, aliases)
         let launch_uri = self.client_launch_uri(config, subject_ref)
         let model_required = !self.gpu_container_offering.map_or(false, offering => {
           offering.client_id == config.client_id
@@ -430,9 +453,12 @@ async fn ApiService::handle_client_handoff(
           false,
         )
       }
-      let serving_aliases = self.serving_client_model_aliases(
-        access_package_approved_aliases(self.registry),
-        tenant_ref=portal_view.membership.tenant_ref,
+      let serving_aliases = self.client_models(
+        intent.client_id,
+        self.serving_client_model_aliases(
+          access_package_approved_aliases(self.registry),
+          tenant_ref=portal_view.membership.tenant_ref,
+        ),
       )
       for model in intent.allowed_models {
         if !self.configured_model_allowed(model) ||

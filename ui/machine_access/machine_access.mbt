@@ -392,7 +392,6 @@ fn machine_card(
             ])
           None => @html.p(machine_message(state.locale, InvalidConnection))
         },
-        @html.p(machine_message(state.locale, CredentialIssuerExplanation)),
         @html.a(
           class="issuer-link",
           href=access.issuer_redirect_url,
@@ -473,11 +472,9 @@ fn machine_access_view(
     #|.machine-access-view{display:grid;gap:1rem}.machine-access-intro{display:flex;justify-content:space-between;gap:1rem;align-items:end}.machine-access-intro h2{margin:0}.machine-access-intro p{max-width:48rem;margin:.35rem 0 0;color:var(--muted,#64748b)}.machine-count{padding:.28rem .55rem;border:1px solid var(--line,#d6dde4);border-radius:999px}.machine-access-list{display:grid;gap:.85rem}.machine-access-card{display:grid;gap:1rem;padding:1.15rem;border:1px solid var(--line,#d6dde4);border-radius:.8rem;background:var(--panel,#fff)}.machine-heading{display:flex;justify-content:space-between;gap:1rem;align-items:start}.machine-heading h3{margin:.15rem 0 0}.machine-eyebrow{margin:0;color:var(--mint,#168363);font-size:.68rem;font-weight:850;letter-spacing:.08em}.machine-state{padding:.3rem .55rem;border:1px solid var(--line,#d6dde4);border-radius:999px;color:var(--amber,#9a6700)}.machine-facts{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.6rem;margin:0}.machine-facts>div{padding:.75rem;border:1px solid var(--line,#d6dde4);border-radius:.6rem}.machine-facts dt,.credential-details dt{color:var(--muted,#64748b);font-size:.68rem}.machine-facts dd,.credential-details dd{margin:.2rem 0 0;overflow-wrap:anywhere}.machine-mono,.machine-access-card code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}.handoff-panel,.termination-panel{padding:.85rem;border-left:3px solid var(--mint,#168363);background:rgba(22,131,99,.08)}.credential-details{display:grid;grid-template-columns:2fr 1fr 4fr;gap:.6rem}.handoff-panel p,.termination-panel p,.machine-muted{color:var(--muted,#64748b)}.termination-panel{border-left-color:#d85b5b;background:rgba(216,91,91,.08);display:grid;gap:.55rem}.termination-panel p{margin:0}.termination-panel input{min-height:2.75rem;padding:.6rem .7rem;border:1px solid var(--line,#d6dde4);border-radius:.45rem;background:var(--bg,#fff);color:inherit}.termination-actions{display:flex;justify-content:flex-end;gap:.5rem}.danger-button,.quiet-button,.redeem-button{min-height:2.75rem;padding:.6rem .85rem;border:1px solid #d85b5b;border-radius:.5rem;background:#d85b5b;color:#fff;font:inherit;font-weight:800;cursor:pointer}.redeem-button{border-color:var(--mint,#168363);background:var(--mint,#168363)}.danger-button:disabled,.redeem-button:disabled{opacity:.45;cursor:not-allowed}.quiet-button{border-color:var(--line,#d6dde4);background:transparent;color:inherit}.machine-empty{padding:1rem;border:1px dashed var(--line,#d6dde4);border-radius:.7rem;color:var(--muted,#64748b)}@media(max-width:70rem){.machine-facts{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:38rem){.machine-access-intro,.machine-heading{align-items:stretch;flex-direction:column}.machine-facts,.credential-details{grid-template-columns:1fr}.termination-actions{display:grid}}@media(prefers-reduced-motion:reduce){.machine-access-view *{transition:none!important;animation:none!important}}
   @html.section(class="machine-access-view", [
     @html.style_tag(stylesheet),
+    @html.style_tag(@controls.styles()),
     @html.header(class="machine-access-intro", [
-      @html.div([
-        @html.h2(machine_message(state.locale, LabelMymachineaccess)),
-        @html.p(machine_message(state.locale, ExclusiveAccessBoundary)),
-      ]),
+      @html.div([@html.h2(machine_message(state.locale, LabelMymachineaccess))]),
       @html.span(
         class="machine-count",
         copy(

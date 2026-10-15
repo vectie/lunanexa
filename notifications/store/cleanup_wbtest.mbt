@@ -133,10 +133,9 @@ async test "all ten notification mutations roll back and release after persisten
     // A second failure exposes a leaked lock that the first call alone misses.
     for _ in 0..<2 {
       try operation() catch {
+        @os_error.OSError(_, ..) as error => assert_true(error.is_ENOTDIR())
         error =>
-          if !"\{Repr(error)}".contains("async/os_error.OSError") {
-            fail("Operation \{index} did not reach persistence: \{Repr(error)}")
-          }
+          fail("Operation \{index} did not reach persistence: \{Repr(error)}")
       } noraise {
         _ => fail("persistence unexpectedly succeeded")
       }

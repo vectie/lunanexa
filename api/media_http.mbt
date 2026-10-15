@@ -118,6 +118,17 @@ fn MediaBinding::identity(self : MediaBinding) -> String {
     "origin": self.origin,
     "profile": self.profile.to_json(),
   }
+  // Preserve the identity of pre-reference-image job bindings.
+  if self.profile.image_reference_supported is None &&
+    material is Object(fields) &&
+    fields.get("profile") is Some(Object(profile)) {
+    profile.remove("image_reference_supported") |> ignore
+  }
+  if self.profile.image_reference_required is None &&
+    material is Object(fields) &&
+    fields.get("profile") is Some(Object(profile)) {
+    profile.remove("image_reference_required") |> ignore
+  }
   if self.instance_id is Some(instance_id) && material is Object(fields) {
     fields["instance_id"] = instance_id.to_json()
   }
@@ -221,12 +232,16 @@ async fn ApiService::media_all_bindings(
   self : ApiService,
   fixed : Array[MediaBinding],
   templates : Array[MediaTemplateBinding],
+  now_unix_ms? : Int64,
 ) -> Array[MediaBinding] {
   let result = fixed.copy()
+  for provider in self.external_media_providers {
+    result.push(provider.binding())
+  }
   guard self.deployment_store is Some(deployments) else { return result }
   let assignments = self.store.assignments()
   let heartbeats = self.store.heartbeats()
-  let now = @async.now()
+  let now = now_unix_ms.unwrap_or(@async.now())
   // Historical operations are retained by the deployment store. Reconstruct
   // old immutable binding IDs too, so expiry cleanup still targets the original
   // generation after an order ends. Retain old versioned profiles until cleanup.
@@ -468,6 +483,18 @@ async fn ApiService::media_execution_authorized(
   model : String,
   context : @media_jobs.ExecutionContext,
 ) -> Bool {
+  if self.external_media_providers
+    .iter()
+    .find_first(provider => {
+      provider.provider_id == context.deployment_id &&
+      provider.generation == context.generation &&
+      provider.node_id == context.node_id &&
+      provider.profile.model == model &&
+      context.instance_id is None
+    })
+    is Some(provider) {
+    return self.external_media_approved(provider)
+  }
   if self.delivery_store is Some(deliveries) &&
     deliveries.model_service(context.deployment_id) is Some(service) {
     let runtime = service.runtime
@@ -571,6 +598,19 @@ async fn ApiService::media_authorized(
   if !self.media_order_matches(owner, binding.execution_context()) {
     return false
   }
+  if self.external_media_providers
+    .iter()
+    .find_first(provider => {
+      provider.provider_id == binding.deployment_id &&
+      provider.generation == binding.deployment_generation &&
+      provider.node_id == binding.node_id &&
+      provider.profile == binding.profile
+    })
+    is Some(provider) {
+    return provider.active &&
+      provider.tenant_ref == owner.tenant_ref &&
+      self.external_media_ready(provider)
+  }
   if self.delivery_store is Some(deliveries) &&
     deliveries.model_service(binding.deployment_id) is Some(service) {
     let consumers = deliveries.operations()
@@ -611,6 +651,20 @@ async fn ApiService::media_order_matches(
   owner : @media_jobs.Owner,
   context : @media_jobs.ExecutionContext,
 ) -> Bool {
+  if self.external_media_providers
+    .iter()
+    .find_first(provider => {
+      provider.provider_id == context.deployment_id &&
+      provider.generation == context.generation &&
+      provider.node_id == context.node_id
+    })
+    is Some(provider) {
+    return owner.authority is PrivateWorkspace(_) &&
+      provider.tenant_ref == owner.tenant_ref &&
+      provider.generation == context.generation &&
+      provider.node_id == context.node_id &&
+      context.instance_id is None
+  }
   if self.delivery_store is Some(deliveries) &&
     deliveries.model_service(context.deployment_id) is Some(service) {
     let consumers = deliveries.operations()
@@ -1067,6 +1121,7 @@ async fn ApiService::serve_media_content(
   request : @http.Request,
   connection : @http.ServerConnection,
 ) -> Unit {
+  let headers = application_headers(request.headers)
   if self.reconciliation_only || !self.store.current_epoch_is_durable() {
     return send_listener_reply(
       connection,
@@ -1076,7 +1131,7 @@ async fn ApiService::serve_media_content(
     )
   }
   guard self.media is Some(media) &&
-    self.media_owner(request.headers) is Some((owner, _)) else {
+    self.media_owner(headers) is Some((owner, _)) else {
     return send_listener_reply(
       connection,
       api_error(
@@ -1090,7 +1145,7 @@ async fn ApiService::serve_media_content(
   try {
     let stored = media.jobs.get(id, owner)
     guard self.api_key_authorization(
-        request.headers,
+        headers,
         Inference,
         model=stored.model,
         false,
@@ -1100,9 +1155,9 @@ async fn ApiService::serve_media_content(
     }
     ignore(
       media.runtime.content(id, owner, 1073741824L, bytes => {
-        if self.media_owner(request.headers) is None ||
+        if self.media_owner(headers) is None ||
           self.api_key_authorization(
-            request.headers,
+            headers,
             Inference,
             model=stored.model,
             false,

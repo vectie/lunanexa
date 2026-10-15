@@ -104,6 +104,16 @@ it does not limit an order to one node. The new delivery reservation owns the
 whole selected node set. Assigned nodes prepare only the required approved
 models, while verified idle public caches follow a separate retention policy.
 
+## Supported public sites
+
+- Customer portal: <https://suanli.kechuangfuwu.com:8443/user/>
+- Management portal: <https://suanli.kechuangfuwu.com:8443/mana/>
+- Documentation: <https://suanli.kechuangfuwu.com:8443/docs/>
+
+Use these deployed sites for product review and acceptance. Standalone browser
+demos and the `?demo=1` mode are retired. Internal `enterprise` and `console`
+bundle names serve the customer and management portals respectively.
+
 ## Local validation
 
 Run the consolidated repository gate:
@@ -117,6 +127,22 @@ JavaScript console, and scans dependencies, deployment images, secrets,
 contracts, and public responses. It deliberately does not claim any physical
 deployment profile or named-human release gate.
 
+For just the native checks and complete test suite:
+
+```sh
+moon info
+moon fmt
+moon check --target native --deny-warn
+moon run scripts/test-native.mbtx
+```
+
+The native test runner builds the four CLI executables and supplies their
+checked-in fixtures and temporary evidence directories. It retains evidence on
+failure. `LUNANEXA_NATIVE_TARGET_DIR` selects another build directory and
+`LUNANEXA_NATIVE_JOBS` controls build concurrency (default: 2). On toolchains
+whose direct native compiler is slow on the API tests, set
+`MOONBIT_NEW_NATIVE=0` to use the native C backend.
+
 For local four-node behavior without DGX hardware, run
 `sh scripts/four-node-simulation.sh`. It exercises isolated node identities,
 signed reconciliation, strict runtime routing, queueing, failure, drain and
@@ -129,8 +155,10 @@ composed synthetic production-fault campaign. The resulting summary keeps real
 mTLS, container-engine, DGX, thermal and human-approval claims explicitly false.
 
 Native executables live in `cmd/control`, `cmd/node`, `cmd/lease-helper`,
-`cmd/lease-helper-client`, `cmd/cli`, `cmd/benchmark`, `cmd/evidence`, and
-`cmd/recovery`. The Rabbita operator site
+`cmd/lease-helper-client`, `cmd/cli`, `cmd/benchmark`, `cmd/evidence`,
+`cmd/recovery`, and `cmd/qr-trial`. The QR generator produces a printable
+guest trial SVG from the public enterprise URL; see the
+[guest Wi-Fi QR trial guide](docs/QR_TRIAL.md). The Rabbita operator site
 lives in `cmd/console`; the enterprise portal lives in `cmd/enterprise`, with
 the same-site WebIDE in `cmd/workbench` and a one-click, provider-neutral
 handoff into an administrator-approved desktop WebIDE. All surfaces consume one
@@ -188,6 +216,7 @@ signature, payment or tax-invoice providers.
 - [Ascend 310P3 temporary-compute qualification](docs/ASCEND_310P3_TEMPORARY_COMPUTE.md)
 - [LunaFlux runtime qualification for LunaNexa](docs/LUNAFLUX_RUNTIME_QUALIFICATION.md)
 - [Developer workspaces and integrations](docs/WORKSPACES.md)
+- [Guest Wi-Fi QR trial](docs/QR_TRIAL.md)
 - [Management plane and one-click model services](docs/MANAGEMENT_PLANE.md)
 - [Exclusive DGX node leases](docs/EXCLUSIVE_NODE_LEASES.md)
 - [Exclusive lease production use-case matrix](docs/EXCLUSIVE_LEASE_USE_CASES.md)

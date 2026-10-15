@@ -28,7 +28,7 @@ test "local declarations and observed bytes produce a reopenable existing Candid
   assert_eq(model.artifact.size_bytes, 3L)
   assert_eq(model.provenance, metadata.provenance)
   assert_eq(model.compatible_architectures, ["aarch64", "x86_64"])
-  assert_eq(model.state, @contracts.Candidate)
+  assert_eq(model.state, Candidate)
   assert_true(@contracts.valid_candidate_model(model))
   assert_eq(metadata.to_json(), original)
   assert_eq(@model_intake.review(draft, []).new_count, 1)
@@ -36,7 +36,7 @@ test "local declarations and observed bytes produce a reopenable existing Candid
     @model_intake.registration_request(draft, [], "local-model", "v1"),
     model,
   )
-  let registered = { ..model, state: @contracts.Approved, }
+  let registered = { ..model, state: Approved, }
   assert_eq(
     @model_intake.review(draft, [registered]).already_registered_count,
     1,
@@ -68,7 +68,7 @@ test "local artifact content changes surface in existing review without upgradin
     4L,
   )
   assert_eq(@model_intake.review(successor, previous.models).new_count, 1)
-  assert_eq(successor.models[0].state, @contracts.Candidate)
+  assert_eq(successor.models[0].state, Candidate)
 }
 
 ///|

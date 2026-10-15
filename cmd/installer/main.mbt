@@ -7,7 +7,7 @@ fn required_environment(name : String) -> String raise {
 }
 
 ///|
-fn cors_headers(origin : String) -> Map[String, String] {
+fn cors_headers(origin : String) -> @http.Headers {
   {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Headers": "Authorization, Content-Type",

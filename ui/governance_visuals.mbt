@@ -494,13 +494,6 @@ fn cost_center_hierarchy_graph(state : ConsoleState) -> @rabbita.Html {
         rows,
       ),
     ]),
-    @html.figcaption(
-      governance_copy(
-        state.locale,
-        "Roots and unresolved parent references are explicit. Spend and budget strings are not parsed or converted into invented values.",
-        "根节点与无法解析的父级引用均被明确标出。支出与预算字符串不会被解析或转换为臆造数值。",
-      ),
-    ),
   ])
 }
 
@@ -742,13 +735,6 @@ fn agreement_lifecycle_graph(state : ConsoleState) -> @rabbita.Html {
         rows,
       ),
     ]),
-    @html.figcaption(
-      governance_copy(
-        state.locale,
-        "The graph presents recorded current states and references only; unsupported stages are never marked complete.",
-        "图中仅展示已记录的当前状态与引用；不受投影支持的阶段绝不会被标记为已完成。",
-      ),
-    ),
   ])
 }
 

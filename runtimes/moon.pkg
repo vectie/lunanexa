@@ -14,3 +14,7 @@ supported_targets = "native"
 import {
   "moonbitlang/async",
 } for "test"
+
+options(
+  link: { "native": { "cc-link-flags": "-pthread -ldl" } },
+)

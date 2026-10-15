@@ -106,14 +106,8 @@ async fn exercise_adapter(
   @async.with_task_group <| group => {
     group.spawn_bg(no_wait=true, allow_failure=true) <| () => {
       server.run_forever(allow_failure=true) <| ((request, _, connection) => {
-        let authorization = request.headers
-          .iter()
-          .find_first(item => item.0.to_lower() == "authorization")
-          .map(item => item.1)
-        let idempotency_key = request.headers
-          .iter()
-          .find_first(item => item.0.to_lower() == "idempotency-key")
-          .map(item => item.1)
+        let authorization = request.headers.get("authorization")
+        let idempotency_key = request.headers.get("idempotency-key")
         authority_ok[0] = authorization ==
           Some("Bearer 01234567890123456789012345678901") &&
           idempotency_key == Some("delivery-notice-worker-email")

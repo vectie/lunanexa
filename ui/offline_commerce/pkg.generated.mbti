@@ -6,6 +6,7 @@ import {
   "moonbit-community/rabbita/html",
   "moonbitlang/core/debug",
   "vectie/lunanexa/commercial/offline",
+  "vectie/lunanexa/contractdoc",
   "vectie/lunanexa/ui/i18n",
 }
 
@@ -17,6 +18,12 @@ pub fn demo_state(@i18n.Locale, OfflineCommerceAudience) -> OfflineCommerceState
 pub fn interactive_view(OfflineCommerceState, @cmd.Emit[OfflineCommerceMessage]) -> @html.Html
 
 pub fn render(OfflineCommerceState) -> String
+
+pub fn rental_evidence_view(OfflineCommerceState, String, @cmd.Emit[OfflineCommerceMessage]?) -> @html.Html
+
+pub fn rental_packet(OfflineCommerceState, @offline.CommercialOrder) -> @contractdoc.ContractPacket?
+
+pub fn rental_template_id(@offline.CommercialOrder) -> String
 
 pub fn undertaking_tier_label(@i18n.Locale, @offline.UndertakingTermTier) -> String
 
@@ -79,6 +86,9 @@ pub fn OfflineCommerceConsequentialAction::not_equal(Self, Self) -> Bool
 pub fn OfflineCommerceConsequentialAction::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OfflineCommerceMessage {
+  OpenContractDocuments(String)
+  OpenAllocation(String)
+  OpenMachineAccess(String)
   SelectOrder(String)
   CreateOrder
   RequestEvidenceUpload(String, @offline.DocumentArtifactKind)
@@ -111,6 +121,7 @@ pub(all) struct OfflineCommerceState {
   reversals : Array[@offline.CommercialReversal]
   artifacts : Array[OfflineArtifactSummary]
   templates : Array[@offline.DocumentTemplate]
+  contract_packets : Array[@contractdoc.ContractPacket]
   selected_order_id : String?
   project_id : String
   service_code : String

@@ -77,20 +77,21 @@ test "redeemed access shows safe connection metadata without raw secret" {
   assert_true(html.contains("ssh -p 2222 alice@machine.example"))
   assert_true(html.contains("href=\"https://ssh-ca.example/redeem/safe\""))
   assert_true(html.contains("Continue to credential issuer"))
-  assert_true(html.contains("Copy SSH command"))
+  assert_true(html.contains("aria-label=\"Copy SSH command\""))
   assert_true(html.contains("Copy host fingerprint"))
   assert_true(html.contains("Copy host"))
   assert_true(html.contains("Copy port"))
   assert_true(html.contains("Copy username"))
   assert_true(html.contains("Copy tunnel command"))
-  assert_true(html.contains("Next steps"))
+  assert_true(html.contains("<details class=\"machine-next-steps\""))
+  assert_true(html.contains("Connection help"))
   assert_true(html.contains("-L 127.0.0.1:8181:127.0.0.1:8181 -p 2222"))
   assert_true(html.contains("alice@machine.example"))
-  assert_true(html.contains("do not disable host-key verification"))
-  assert_true(html.contains("Download workflows"))
+  assert_true(html.contains("If it differs, stop and contact your operator"))
+  assert_true(html.contains("Download your files before expiry"))
   assert_true(html.contains("Machine access remaining"))
   assert_true(html.contains("Connection details retrieval remaining"))
-  assert_true(html.contains("not a promise of instant physical disk erasure"))
+  assert_true(html.contains("files may not be recoverable"))
   assert_false(html.contains("node_id"))
   assert_false(html.contains("private_key"))
   assert_false(html.contains("lnxh_safe"))
@@ -154,8 +155,8 @@ test "redeemed access shows safe connection metadata without raw secret" {
   assert_true(two_clocks.contains("10 min remaining"))
   let chinese = @machine_access.render({ ..state, locale: ChineseSimplified, })
   assert_true(chinese.contains("复制隧道命令"))
-  assert_true(chinese.contains("不要关闭主机密钥验证"))
-  assert_true(chinese.contains("请在机器访问结束前下载"))
+  assert_true(chinese.contains("请核对 SSH 主机指纹"))
+  assert_true(chinese.contains("请在到期前下载文件"))
 }
 
 ///|
@@ -168,7 +169,7 @@ test "recoverable access offers the same post-reload retrieval action" {
   let html = @machine_access.render(state)
   assert_true(html.contains("Access details recoverable"))
   assert_true(html.contains("Recover access details"))
-  assert_true(html.contains("does not issue another credential"))
+  assert_true(html.contains("without issuing a new credential"))
 }
 
 ///|
@@ -222,9 +223,6 @@ test "machine copy message is side effect only and renewal is honest" {
   let html = @machine_access.render(state)
   assert_true(html.contains("机器还能使用多久"))
   assert_true(html.contains("连接信息还能领取多久"))
-  assert_true(html.contains("此处不提供机器自助延期"))
-  assert_true(
-    html.contains("只有已分配的独占租约才提供 SSH 访问"),
-  )
-  assert_true(html.contains("请提前下载成果"))
+  assert_true(html.contains("延期须经批准并更新到租约中才生效"))
+  assert_true(html.contains("请在到期前下载文件"))
 }

@@ -444,10 +444,26 @@ async fn ApiService::handle_enterprise_portal(
       } noraise {
         value => value
       }
+      let private_access = self.private_workspace_authorized(
+        view.membership.tenant_ref,
+        subject_ref,
+        @async.now(),
+      )
       json_reply(
         200,
         access
         .views_for_subject(view.membership.tenant_ref, subject_ref)
+        .map(key => {
+          if private_access &&
+            self.private_model_key_scope(
+              view.membership.tenant_ref,
+              key.allowed_models,
+            ) {
+            { ..key, maximum_requests: 0L, }
+          } else {
+            key
+          }
+        })
         .to_json(),
       )
     }
@@ -485,11 +501,23 @@ async fn ApiService::handle_enterprise_portal(
         )
       }
       let now = @async.now()
-      let contract_active = self.private_workspace_authorized(
+      let private_access = self.private_workspace_authorized(
+        view.membership.tenant_ref,
+        subject_ref,
+        now,
+      )
+      let unlimited_requests = private_access &&
+        self.private_model_key_scope(
           view.membership.tenant_ref,
-          subject_ref,
-          now,
-        ) ||
+          intent.allowed_models,
+        )
+      if intent.maximum_requests == 0L && !unlimited_requests {
+        return api_error(
+          403, "RequestQuotaRequired", "unlimited keys require an authorized company-owned model",
+          false,
+        )
+      }
+      let contract_active = private_access ||
         (match self.contract_document_store {
           Some(contract_store) =>
             self.has_effective_rental_authority(
@@ -512,6 +540,7 @@ async fn ApiService::handle_enterprise_portal(
           value.project_id == intent.project_id &&
           value.api_key_id is None &&
           intent.expires_unix_ms <= value.expires_unix_ms &&
+          intent.maximum_requests > 0L &&
           intent.maximum_requests <= value.maximum_requests &&
           intent.scopes.all(scope => scope == ModelList || scope == Inference) &&
           intent.allowed_models.length() > 0 &&
@@ -603,7 +632,11 @@ async fn ApiService::handle_enterprise_portal(
             scopes: intent.scopes,
             allowed_models: intent.allowed_models,
             expires_unix_ms: effective_expires_unix_ms,
-            maximum_requests: intent.maximum_requests,
+            maximum_requests: if unlimited_requests {
+              0L
+            } else {
+              intent.maximum_requests
+            },
           },
           now,
         )
@@ -651,9 +684,10 @@ async fn ApiService::handle_enterprise_portal(
         "credential": issued.public_view().credential.to_json(),
         "secret": issued.secret,
         "allowed_models": issued.credential.allowed_models.to_json(),
-        "api_base_url": self.client_launch_config
-        .map(config => config.public_api_base_url)
-        .to_json(),
+        "api_base_url": match self.client_launch_config {
+          Some(config) => Json::string(config.public_api_base_url)
+          None => Json::null()
+        },
       })
     }
     (Post, _) if path.has_prefix("/v1/portal/self/api-keys/") &&

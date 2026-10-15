@@ -21,11 +21,37 @@ test "commerce refresh preserves the selected order instead of selecting history
   }
   let merged = merge_console_group_read(current, GroupCommerce(payload))
   assert_eq(merged.offline_commerce.selected_order_id, Some(selected.order_id))
+  let incoming = {
+    ..payload,
+    offline_commerce: {
+      ..payload.offline_commerce,
+      orders: [{ ..demo.orders[0], requested_undertaking_term: Some("day"), }],
+    },
+  }
+  let first = merge_console_group_read(
+    @ui.default_state(),
+    GroupCommerce(incoming),
+  )
+  assert_eq(first.offline_commerce.undertaking_term, "day")
+  let edited = {
+    ..first,
+    offline_commerce: first.offline_commerce
+    .update(UndertakingTermChanged("year"))
+    .update(UndertakingQuantityChanged("2")),
+  }
+  let refreshed = merge_console_group_read(edited, GroupCommerce(incoming))
+  assert_eq(refreshed.offline_commerce.undertaking_term, "year")
+  assert_eq(refreshed.offline_commerce.undertaking_quantity, "2")
   let removed = merge_console_group_read(
     current,
     GroupCommerce({ ..payload, offline_commerce: demo, }),
   )
-  assert_eq(removed.offline_commerce.selected_order_id, demo.selected_order_id)
+  assert_eq(removed.offline_commerce.selected_order_id, Some(selected.order_id))
+  assert_true(
+    @offline_commerce.render(removed.offline_commerce).contains(
+      "Order unavailable",
+    ),
+  )
 }
 
 ///|

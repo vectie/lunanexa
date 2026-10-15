@@ -67,7 +67,7 @@ test "timeline validates width count and windows without overflow" {
     try
       @commercial.explore_usage_timeline(source, report_query(), width)
     catch {
-      @commercial.InvalidInput(_) => ()
+      InvalidInput(_) => ()
       _ => fail("unexpected commercial error")
     } noraise {
       _ => fail("expected rejected width")
@@ -96,7 +96,7 @@ test "timeline validates width count and windows without overflow" {
       1L,
     )
   catch {
-    @commercial.InvalidInput(_) => ()
+    InvalidInput(_) => ()
     _ => fail("unexpected commercial error")
   } noraise {
     _ => fail("expected rejected window")

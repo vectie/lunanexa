@@ -1722,5 +1722,5 @@ test "browser undertaking creation intent omits absent predecessor" {
   }
   let intent : ContractPacketIntent = @json.from_json(body)
   assert_eq(intent.preceding_packet_ref, None)
-  assert_eq(intent.active_forms, [@contractdoc.MasterLease])
+  assert_eq(intent.active_forms, [MasterLease])
 }

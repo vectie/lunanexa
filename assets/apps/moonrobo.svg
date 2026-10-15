@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">MoonRobo app icon</title>
+  <rect width="512" height="512" rx="116" fill="#080b0d"/>
+  <circle cx="256" cy="256" r="166" fill="none" stroke="#d8b56a" stroke-width="18" stroke-linecap="round" stroke-dasharray="820 224" transform="rotate(-35 256 256)"/>
+  <circle cx="382" cy="149" r="13" fill="#8ec97f"/>
+  <g fill="none" stroke="#f0f4f2" stroke-width="20" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="164" y="206" width="184" height="130" rx="28"/>
+    <circle cx="214" cy="266" r="14" fill="#8ec97f" stroke="none"/>
+    <circle cx="298" cy="266" r="14" fill="#8ec97f" stroke="none"/>
+    <path d="M216 306h80M256 206v-34M228 172h56M146 250v46M366 250v46"/>
+  </g>
+</svg>

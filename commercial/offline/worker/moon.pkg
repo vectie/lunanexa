@@ -16,3 +16,7 @@ import {
   "moonbitlang/core/encoding/utf8",
   "vectie/moonleaf/opc",
 } for "test"
+
+options(
+  link: { "native": { "cc-link-flags": "-pthread -ldl" } },
+)

@@ -1,7 +1,7 @@
 import {
-  "moonbitlang/async",
-  "moonbitlang/async/fs",
-  "moonbitlang/async/shell",
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
   "moonbitlang/core/env",
 }
 
@@ -167,13 +167,26 @@ async fn main {
   guard files.exit_code() == 0 else { fail("Isolation scan could not enumerate source files") }
   let paths = files.stdout().split("\u0000").filter(path => path != "").map(path => path.to_owned()).collect()
   let mut failed = false
-  let dependency_args = ["-i", "-l", "(^|[\"/])(moongate|moonsuite|moonclaw|moondesk|moontown)([\"/]|$)"]
-  for path in paths { dependency_args.push(path) }
+  let products = "(moongate|moonsuite|moonclaw|moondesk|moonrobo|moontown)"
+  let dependency_args = ["-i", "-l", "(^|[\"/])" + products + "([\"/]|$)"]
+  let profile_sources : Array[String] = []
+  for path in paths {
+    // Static client IDs and public route names are part of the published
+    // browser handoff contract. They are not source dependencies. Manifests
+    // remain checked everywhere, including these adapter/UI packages.
+    let profile = path.has_suffix(".mbt") && (["/ui/", "/workspace/webide/", "/workspace/client_handoff/", "/cmd/webide-gateway/", "/cmd/enterprise/"].any(part => path.contains(part)) || path.has_suffix("/api/client_handoff_http_test.mbt"))
+    if profile { profile_sources.push(path) } else { dependency_args.push(path) }
+  }
   let dependency = @shell.Cmd("rg", dependency_args).output()
   if dependency.exit_code() == 0 {
     println("Product-specific dependency found in: " + dependency.stdout())
     failed = true
   } else if dependency.exit_code() != 1 { fail("Dependency scan could not read source files") }
+  if !profile_sources.is_empty() {
+    let imports = @shell.Cmd("rg", ["-U", "-i", "-l", "(?:import\\s*\\{[^}]*|using[^\\n]*)[\"/]" + products + "([\"/]|$)", ..profile_sources]).output()
+    if imports.exit_code() == 0 { println("Product-specific import found in: " + imports.stdout()); failed = true }
+    else if imports.exit_code() != 1 { fail("Profile import scan could not read source files") }
+  }
   for path in paths {
     let source = @fs.read_file(path).text()
     for line in scan_source(source, internal_records=path.has_prefix(root + "/node/kubernetes/")) {

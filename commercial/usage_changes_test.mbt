@@ -143,7 +143,7 @@ test "both snapshots must independently pass usage validation before comparison"
     try
       @commercial.compare_usage_snapshots(before, after, report_query())
     catch {
-      @commercial.InvalidInput(_) => ()
+      InvalidInput(_) => ()
       _ => fail("unexpected error")
     } noraise {
       _ => fail("expected duplicate rejection")

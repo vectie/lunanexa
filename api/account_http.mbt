@@ -4,6 +4,7 @@ fn account_path(path : String) -> Bool {
   path == "/v1/auth/register" ||
   path == "/v1/auth/self" ||
   path == "/v1/auth/trial" ||
+  path == "/v1/auth/wifi-trial:redeem" ||
   path == "/v1/auth/sessions" ||
   path == "/v1/auth/sessions:revoke-all" ||
   path == "/v1/auth/logout" ||
@@ -130,6 +131,35 @@ fn parse_identity_time(value : String) -> Int64? {
   Some(@string.parse_int64(value)) catch {
     _ => None
   }
+}
+
+///|
+/// A browser cannot assert its own network. Only the trusted gateway may sign
+/// the authenticated session after checking the ingress-supplied client IP.
+fn ApiService::trusted_wifi_trial_assertion(
+  self : ApiService,
+  headers : Map[String, String],
+  now : Int64,
+) -> Bool {
+  guard self.identity_assertion_secret.length() >= 32 &&
+    bearer_secret(headers) is Some(bearer) &&
+    header(headers, "X-LunaNexa-Wifi-Trial-Issued-At") is Some(issued_raw) &&
+    header(headers, "X-LunaNexa-Wifi-Trial-Signature") is Some(signature) &&
+    parse_identity_time(issued_raw) is Some(issued) else {
+    return false
+  }
+  if issued > now + 5000L || issued < now - 30000L {
+    return false
+  }
+  let canonical = "lunanexa.wifi-trial.v1\n\{bearer}\n\{issued_raw}"
+  let digest = @crypto.bytes_to_hex_string(
+    @crypto.hmac(
+      @crypto.SHA256::new(),
+      @utf8.encode(self.identity_assertion_secret).exact_view(),
+      @utf8.encode(canonical).exact_view(),
+    ),
+  )
+  constant_time_identity_equal(signature, "sha256:\{digest}")
 }
 
 ///|
@@ -288,8 +318,11 @@ async fn ApiService::ensure_open_trial(
   self : ApiService,
   account : @account.AccountView,
   now : Int64,
+  lifetime_ms : Int64,
+  maximum_requests : Int64,
+  allowed_models : Array[String],
 ) -> @account.TrialEntitlement? {
-  if self.open_trial_lifetime_ms == 0L {
+  if lifetime_ms == 0L {
     return None
   }
   guard self.account_store is Some(accounts) &&
@@ -305,9 +338,9 @@ async fn ApiService::ensure_open_trial(
       organization_id: "trial-org-\{fingerprint}",
       tenant_ref: "trial-tenant-\{fingerprint}",
       project_id: "trial-project-\{fingerprint}",
-      allowed_models: self.open_trial_allowed_models,
-      maximum_requests: self.open_trial_maximum_requests,
-      expires_unix_ms: now + self.open_trial_lifetime_ms,
+      allowed_models,
+      maximum_requests,
+      expires_unix_ms: now + lifetime_ms,
     },
     now,
   )
@@ -560,7 +593,15 @@ async fn ApiService::handle_accounts(
         } noraise {
           value => value
         }
-        let trial = try self.ensure_open_trial(registered.account, now) catch {
+        let trial = try
+          self.ensure_open_trial(
+            registered.account,
+            now,
+            self.open_trial_lifetime_ms,
+            self.open_trial_maximum_requests,
+            self.open_trial_allowed_models,
+          )
+        catch {
           _ =>
             return api_error(
               503, "TrialProvisioningPending", "the account is registered; retry sign-in to finish the bounded trial workspace",
@@ -723,6 +764,61 @@ async fn ApiService::handle_accounts(
       )
     }
     match (verb, path) {
+      (Post, "/v1/auth/wifi-trial:redeem") => {
+        if self.wifi_trial_maximum_requests == 0L {
+          return api_error(
+            503, "WifiTrialUnavailable", "visitor trial is not configured", false,
+          )
+        }
+        let now = @async.now()
+        if !self.trusted_wifi_trial_assertion(headers, now) {
+          return api_error(
+            403, "WifiTrialNetworkRequired", "connect to the approved guest Wi-Fi and retry",
+            false,
+          )
+        }
+        match accounts.trial_for_account(authorization.account.account_id) {
+          Some(existing) => {
+            if existing.expires_unix_ms - existing.starts_unix_ms != 3600000L {
+              return api_error(
+                409, "TrialAlreadyUsed", "this account already has a different trial",
+                false,
+              )
+            }
+            return json_reply(200, existing.to_json())
+          }
+          None => ()
+        }
+        let trial = try
+          self.ensure_open_trial(
+            authorization.account,
+            now,
+            3600000L,
+            self.wifi_trial_maximum_requests,
+            self.wifi_trial_allowed_models,
+          )
+        catch {
+          _ =>
+            return api_error(
+              503, "WifiTrialProvisioningPending", "trial provisioning is pending; retry while on guest Wi-Fi",
+              true,
+            )
+        } noraise {
+          value => value
+        }
+        guard trial is Some(value) else {
+          return api_error(
+            503, "WifiTrialUnavailable", "visitor trial is not configured", false,
+          )
+        }
+        self.operator_audit_as(
+          authorization.account.subject_ref,
+          "account.wifi-trial-redeem",
+          value.trial_id,
+          "guest-network:gateway-attested",
+        )
+        return json_reply(201, value.to_json())
+      }
       (Get, "/v1/auth/trial") => {
         let trial = accounts.trial_for_account(authorization.account.account_id)
         return json_reply(200, trial.to_json())

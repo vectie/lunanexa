@@ -215,6 +215,7 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
       },
     ],
     resource_delivery: @ui.default_resource_delivery_panel(),
+    access_package_context: None,
     compute_leases: [
       {
         lease_id: "lease-1",
@@ -387,7 +388,9 @@ test "commercial and qualified-service routes expose bounded evidence" {
   assert_true(qualified.contains("LunaFide"))
   assert_true(qualified.contains("TestOnly"))
   assert_true(qualified.contains("Not ready"))
-  assert_true(qualified.contains("not a qualified trust service"))
+  assert_true(
+    qualified.contains("cannot process real signatures, payments, or invoices"),
+  )
 }
 
 ///|
@@ -666,7 +669,15 @@ test "storage node monitoring is separate from four GPU compute nodes" {
   assert_true(html.contains("Storage nodes"))
   assert_true(html.contains("management-storage"))
   assert_true(html.contains("768.0 GiB"))
-  assert_true(html.contains("Available inodes"))
+  assert_true(html.contains("1.0 TiB"))
+  assert_true(html.contains("File entries"))
+  assert_true(html.contains("800.0K / 1.0M"))
+  let topology_at = html.find("id=\"cluster-topology-title\"").unwrap()
+  let inventory_at = html.find("id=\"nodes-title\"").unwrap()
+  let storage_at = html.find(">Storage nodes<").unwrap()
+  assert_true(topology_at < inventory_at)
+  assert_true(inventory_at < storage_at)
+  assert_false(html.contains("topology-disclosure"))
   assert_true(html.contains(" compute nodes"))
   assert_eq(state.overview.total_nodes, 4)
   let unavailable = @ui.render({
@@ -737,7 +748,7 @@ test "catalog route exposes governed one-click deployment controls" {
   let html = @ui.render({ ..console_state(Catalog), confirmation: None, })
   assert_true(html.contains("Model service catalog"))
   assert_true(html.contains("One-click model service"))
-  assert_true(html.contains("Preflight enforced"))
+  assert_false(html.contains("Preflight enforced"))
   assert_true(html.contains("Select approved template"))
   assert_true(html.contains("Preflight and deploy"))
   assert_true(html.contains("quick-deployment-id"))
@@ -1275,7 +1286,7 @@ test "language selector remains available through loading and error states" {
     error_message: Some("controller/raw-error"),
     confirmation: None,
   })
-  assert_true(html.contains("for=\"console-locale\""))
+  assert_true(html.contains("aria-label=\"界面语言\""))
   assert_true(html.contains("id=\"console-locale\""))
   assert_true(html.contains("正在加载当前集群状态"))
   assert_true(html.contains("无法完成此操作：controller/raw-error"))
@@ -1343,9 +1354,7 @@ test "platform blockers remain visible without disabling catalog navigation" {
   assert_true(blocked.contains("CommercialProviderAdapterUnavailable"))
   assert_true(blocked.contains("separate from catalog access"))
   assert_true(
-    blocked.contains(
-      "controller checks authorization and model/resource readiness before deployment",
-    ),
+    blocked.contains("Choose a template, then review the deployment plan."),
   )
   assert_false(blocked.contains("Ready for one-click deployment"))
   let mut action = ""
@@ -1494,7 +1503,8 @@ test "leases route keeps owner, resource, status, expiry, and action together" {
     ),
   })
   assert_true(html.contains("Lease operations"))
-  assert_true(html.contains("Fail-closed cleanup boundary"))
+  assert_true(html.contains("<details class=\"lease-cleanup-policy\""))
+  assert_true(html.contains("Cleanup policy"))
   assert_true(html.contains("Exclusive machine leases"))
   assert_true(html.contains("exclusive-lease-1"))
   assert_true(html.contains("Terminate &amp; clean…"))
@@ -1592,7 +1602,7 @@ test "management routes render explicit empty states" {
 ///|
 test "policies route exposes keyboard-accessible typed operations" {
   let html = @ui.render(console_state(Policies))
-  assert_true(html.contains("Typed operator operation"))
+  assert_true(html.contains("Operator operation"))
   assert_true(html.contains("operation-name"))
   assert_true(html.contains("operation-body"))
   assert_true(html.contains("Create enterprise membership"))
@@ -1807,7 +1817,7 @@ test "requests route renders bounded payload-free receipt detail" {
   assert_true(html.contains("workload.invoke"))
   assert_true(html.contains("text.default"))
   assert_true(html.contains("workload:1"))
-  assert_true(html.contains("excludes raw payloads"))
+  assert_false(html.contains("excludes raw payloads"))
   assert_true(html.contains("Latest live stream"))
   assert_true(html.contains("hello"))
 }
@@ -2219,8 +2229,10 @@ test "the template form groups every field, prefilled from what the console know
   let base = console_state(Catalog)
   let html = @ui.render({ ..base, template_draft: registered_template_draft(), })
   assert_true(html.contains("Register a catalog template"))
-  assert_true(html.contains("Preflight still applies"))
-  assert_true(html.contains("Registers one immutable model-service template."))
+  assert_false(html.contains("Preflight still applies"))
+  assert_true(
+    html.contains("Registering a template does not deploy a service."),
+  )
   for
     id in [
       "template-registration-title", "template-model-picker", "template-runtime-picker",

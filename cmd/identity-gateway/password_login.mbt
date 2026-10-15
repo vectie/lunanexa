@@ -202,9 +202,9 @@ fn password_grant_body(
 /// three mean the credentials were not accepted.
 fn password_token_failure(status : Int) -> PasswordLoginError {
   if status == 400 || status == 401 || status == 403 {
-    PasswordLoginError::InvalidCredentials
+    InvalidCredentials
   } else {
-    PasswordLoginError::UpstreamUnavailable
+    UpstreamUnavailable
   }
 }
 
@@ -213,10 +213,9 @@ fn password_token_failure(status : Int) -> PasswordLoginError {
 /// username, and the password are never echoed.
 fn password_login_failure_response(error : PasswordLoginError) -> (Int, String) {
   match error {
-    PasswordLoginError::InvalidCredentials => (401, "invalid-credentials")
-    PasswordLoginError::IdentityRejected => (401, "identity-rejected")
-    PasswordLoginError::UpstreamUnavailable =>
-      (503, "identity-provider-unavailable")
+    InvalidCredentials => (401, "invalid-credentials")
+    IdentityRejected => (401, "identity-rejected")
+    UpstreamUnavailable => (503, "identity-provider-unavailable")
   }
 }
 
@@ -235,20 +234,20 @@ async fn password_token_exchange(
     password_grant_body(client_id, username, password),
     basic_authorization(client_id, config.client_secret(audience)),
   ) catch {
-    _ => raise PasswordLoginError::UpstreamUnavailable
+    _ => raise UpstreamUnavailable
   }
   guard response.code == 200 else {
     raise password_token_failure(response.code)
   }
   let token : OidcTokenResponse = @json.from_json(@json.parse(response_body)) catch {
-    _ => raise PasswordLoginError::UpstreamUnavailable
+    _ => raise UpstreamUnavailable
   }
   guard token.token_type.to_lower() == "bearer" &&
     token.access_token.length() >= 32 &&
     token.access_token.length() <= 8192 &&
     token.id_token.length() >= 64 &&
     token.id_token.length() <= 8192 else {
-    raise PasswordLoginError::UpstreamUnavailable
+    raise UpstreamUnavailable
   }
   token
 }
@@ -269,14 +268,14 @@ fn password_identity_cookie(
   guard user.email is Some(email) &&
     safe_registration_claim(email, 320) &&
     email.contains("@") else {
-    raise PasswordLoginError::IdentityRejected
+    raise IdentityRejected
   }
   let display_name = match user.name {
     Some(value) => value
     None => user.preferred_username.unwrap_or(email)
   }
   guard safe_registration_claim(display_name, 128) else {
-    raise PasswordLoginError::IdentityRejected
+    raise IdentityRejected
   }
   {
     kind: "identity",
@@ -312,9 +311,7 @@ async fn complete_password_login(
   password : String,
   now_unix_ms : Int64,
 ) -> GatewayCookie raise PasswordLoginError {
-  let discovery = discover(config) catch {
-    _ => raise PasswordLoginError::UpstreamUnavailable
-  }
+  let discovery = discover(config) catch { _ => raise UpstreamUnavailable }
   let token = password_token_exchange(
     config, discovery, audience, username, password,
   )
@@ -325,7 +322,7 @@ async fn complete_password_login(
     None,
     now_unix_ms,
   ) catch {
-    _ => raise PasswordLoginError::IdentityRejected
+    _ => raise IdentityRejected
   }
   let user = verified_userinfo(
     config,
@@ -335,7 +332,7 @@ async fn complete_password_login(
     claims.sub,
     now_unix_ms,
   ) catch {
-    _ => raise PasswordLoginError::IdentityRejected
+    _ => raise IdentityRejected
   }
   password_identity_cookie(
     config,

@@ -326,6 +326,8 @@ pub(all) enum ConsoleMessage {
   ResourceDelivery(ResourceDeliveryMessage)
   LocaleChanged(@i18n.Locale)
   Navigate(OperatorRoute)
+  OpenAccessStep(String, String, OperatorRoute)
+  ClearAccessContext
   AlertsWindowChanged(AlertsWindow)
   BeginCordon(String)
   BeginUncordon(String)
@@ -469,6 +471,7 @@ pub(all) struct ConsoleState {
   account_invite : AccountInviteDraft
   access_package_draft : AccessPackageDraft
   access_packages : Array[AccessPackageView]
+  access_package_context : (String, String)?
   users : Array[UserAccessRow]
   pending_organizations : Array[PendingOrganizationRow]
   access_grants : Array[AccessGrantRow]
@@ -509,6 +512,7 @@ pub(all) struct ConsoleState {
 } derive(Eq)
 pub fn ConsoleState::equal(Self, Self) -> Bool
 pub fn ConsoleState::not_equal(Self, Self) -> Bool
+pub fn ConsoleState::open_access_step(Self, String, String, OperatorRoute) -> Self
 
 pub(all) struct CostCenterRow {
   cost_center_id : String

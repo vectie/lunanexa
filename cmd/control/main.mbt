@@ -1385,23 +1385,6 @@ async fn main {
     .with_access_store(access_store)
     .with_account_store(account_store, identity_assertion_secret)
     .with_access_onboarding_store(access_onboarding_store)
-    .with_open_registration_trial(
-      @string.parse_int64(
-        @env.get_env_var("LUNANEXA_OPEN_TRIAL_HOURS").unwrap_or("24"),
-      ) *
-      3600000L,
-      @string.parse_int64(
-        @env.get_env_var("LUNANEXA_OPEN_TRIAL_MAXIMUM_REQUESTS").unwrap_or(
-          "100",
-        ),
-      ),
-      @env.get_env_var("LUNANEXA_OPEN_TRIAL_ALLOWED_MODELS")
-      .unwrap_or("text.qwen")
-      .split(",")
-      .map(value => value.trim().to_owned())
-      .filter(value => value != "")
-      .collect(),
-    )
     .with_technical_store(technical_operations)
     .with_deployment_store(
       deployment_store,
@@ -1501,6 +1484,40 @@ async fn main {
     })
     .with_provider_callback_secrets(configured_provider_callback_secrets)
     .with_global_admin_settings(global_settings)
+  let initial_service = if @env.get_env_var("LUNANEXA_WIFI_TRIAL_ENABLED") ==
+    Some("1") {
+    initial_service.with_wifi_trial(
+      @string.parse_int64(
+        @env.get_env_var("LUNANEXA_WIFI_TRIAL_MAXIMUM_REQUESTS").unwrap_or(
+          "100",
+        ),
+      ),
+      @env.get_env_var("LUNANEXA_WIFI_TRIAL_ALLOWED_MODELS")
+      .unwrap_or("text.qwen")
+      .split(",")
+      .map(value => value.trim().to_owned())
+      .filter(value => value != "")
+      .collect(),
+    )
+  } else {
+    initial_service.with_open_registration_trial(
+      @string.parse_int64(
+        @env.get_env_var("LUNANEXA_OPEN_TRIAL_HOURS").unwrap_or("24"),
+      ) *
+      3600000L,
+      @string.parse_int64(
+        @env.get_env_var("LUNANEXA_OPEN_TRIAL_MAXIMUM_REQUESTS").unwrap_or(
+          "100",
+        ),
+      ),
+      @env.get_env_var("LUNANEXA_OPEN_TRIAL_ALLOWED_MODELS")
+      .unwrap_or("text.qwen")
+      .split(",")
+      .map(value => value.trim().to_owned())
+      .filter(value => value != "")
+      .collect(),
+    )
+  }
   let initial_service = match
     @env.get_env_var("LUNANEXA_GPU_CONTAINER_OFFERING_JSON") {
     Some(raw) =>
@@ -1609,6 +1626,29 @@ async fn main {
       )
     None => authority_service
   }
+  let service = match
+    @env.get_env_var("LUNANEXA_EXTERNAL_MEDIA_PROVIDERS_FILE") {
+    Some(path) => {
+      let raw = @fs.read_file(path).text()
+      guard raw.length() <= 1048576 else {
+        raise Failure("external media configuration is too large")
+      }
+      let providers : Array[@api.ExternalMediaProvider] = @json.from_json(
+        @json.parse(raw),
+      )
+      service.with_external_media_providers(providers)
+    }
+    None => service
+  }
+  let service = match @env.get_env_var("LUNANEXA_CLIENT_MODEL_POLICIES_JSON") {
+    Some(raw) => {
+      guard raw.length() <= 65536 else {
+        raise Failure("client model policies are too large")
+      }
+      service.with_client_model_policies(@json.from_json(@json.parse(raw)))
+    }
+    None => service
+  }
   let service = match @env.get_env_var("LUNANEXA_MEDIA_BINDINGS_FILE") {
     Some(path) => {
       guard management_database is Some(database) else {
@@ -1655,7 +1695,7 @@ async fn main {
       service.has_external_text_route() => {
       let token = raw_token.trim().to_owned()
       service.with_external_text_control(action => {
-        let headers = { "authorization": "Bearer " + token }
+        let headers : @http.Headers = { "authorization": "Bearer " + token }
         let (response, body) = if action == "stop" {
           @http.post(origin + "/v1/glm-control", Json::null(), headers~)
         } else if action == "start" {

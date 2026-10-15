@@ -57,6 +57,8 @@ pub struct ApiService {
   open_trial_lifetime_ms : Int64
   open_trial_maximum_requests : Int64
   open_trial_allowed_models : Array[String]
+  wifi_trial_maximum_requests : Int64
+  wifi_trial_allowed_models : Array[String]
   access_store : @access.AccessStore?
   allow_legacy_unbound_access : Bool
   private_cloud_workspace_access : Bool
@@ -103,6 +105,8 @@ pub struct ApiService {
   reconciliation_only : Bool
   runtime : @runtimes.OpenAiTextRuntime
   external_text_route : ExternalTextRoute?
+  external_media_providers : Array[ExternalMediaProvider]
+  client_model_policies : Map[String, Array[String]]
   external_text_control : (async (String) -> String)?
   operator_token : String
   retire_bootstrap_operator_token : Bool
@@ -166,6 +170,8 @@ pub fn ApiService::new(
     open_trial_lifetime_ms: 0L,
     open_trial_maximum_requests: 0L,
     open_trial_allowed_models: [],
+    wifi_trial_maximum_requests: 0L,
+    wifi_trial_allowed_models: [],
     access_store: None,
     allow_legacy_unbound_access: false,
     private_cloud_workspace_access: false,
@@ -211,6 +217,8 @@ pub fn ApiService::new(
     reconciliation_only: false,
     runtime,
     external_text_route: None,
+    external_media_providers: [],
+    client_model_policies: Map([]),
     external_text_control: None,
     operator_token,
     retire_bootstrap_operator_token: false,
@@ -273,6 +281,8 @@ pub fn ApiService::with_registry(
     open_trial_lifetime_ms: 0L,
     open_trial_maximum_requests: 0L,
     open_trial_allowed_models: [],
+    wifi_trial_maximum_requests: 0L,
+    wifi_trial_allowed_models: [],
     access_store: None,
     allow_legacy_unbound_access: false,
     private_cloud_workspace_access: false,
@@ -318,6 +328,8 @@ pub fn ApiService::with_registry(
     reconciliation_only: false,
     runtime,
     external_text_route: None,
+    external_media_providers: [],
+    client_model_policies: Map([]),
     external_text_control: None,
     operator_token,
     retire_bootstrap_operator_token: false,
@@ -381,6 +393,8 @@ pub fn ApiService::with_services(
     open_trial_lifetime_ms: 0L,
     open_trial_maximum_requests: 0L,
     open_trial_allowed_models: [],
+    wifi_trial_maximum_requests: 0L,
+    wifi_trial_allowed_models: [],
     access_store: None,
     allow_legacy_unbound_access: false,
     private_cloud_workspace_access: false,
@@ -426,6 +440,8 @@ pub fn ApiService::with_services(
     reconciliation_only: false,
     runtime,
     external_text_route: None,
+    external_media_providers: [],
+    client_model_policies: Map([]),
     external_text_control: None,
     operator_token,
     retire_bootstrap_operator_token: false,
@@ -491,6 +507,8 @@ pub fn ApiService::with_control_plane(
     open_trial_lifetime_ms: 0L,
     open_trial_maximum_requests: 0L,
     open_trial_allowed_models: [],
+    wifi_trial_maximum_requests: 0L,
+    wifi_trial_allowed_models: [],
     access_store: None,
     allow_legacy_unbound_access: false,
     private_cloud_workspace_access: false,
@@ -536,6 +554,8 @@ pub fn ApiService::with_control_plane(
     reconciliation_only: false,
     runtime,
     external_text_route: None,
+    external_media_providers: [],
+    client_model_policies: Map([]),
     external_text_control: None,
     operator_token,
     retire_bootstrap_operator_token: false,
@@ -639,7 +659,8 @@ pub fn ApiService::with_open_registration_trial(
   maximum_requests : Int64,
   allowed_models : Array[String],
 ) -> ApiService raise Failure {
-  if lifetime_ms < 3600000L ||
+  if self.wifi_trial_maximum_requests != 0L ||
+    lifetime_ms < 3600000L ||
     lifetime_ms > 2592000000L ||
     maximum_requests <= 0L ||
     maximum_requests > 10000L ||
@@ -654,6 +675,30 @@ pub fn ApiService::with_open_registration_trial(
     open_trial_lifetime_ms: lifetime_ms,
     open_trial_maximum_requests: maximum_requests,
     open_trial_allowed_models: allowed_models,
+  }
+}
+
+///|
+/// Enables a separate, one-hour visitor entitlement. Redemption also requires
+/// a fresh assertion from the trusted browser gateway about guest Wi-Fi origin.
+pub fn ApiService::with_wifi_trial(
+  self : ApiService,
+  maximum_requests : Int64,
+  allowed_models : Array[String],
+) -> ApiService raise Failure {
+  if self.open_trial_lifetime_ms != 0L ||
+    maximum_requests <= 0L ||
+    maximum_requests > 10000L ||
+    allowed_models.length() == 0 ||
+    allowed_models.length() > 16 ||
+    allowed_models.any(model => !@contracts.valid_identifier(model)) ||
+    allowed_models.any(model => allowed_models.count(model) != 1) {
+    raise Failure("invalid Wi-Fi trial policy")
+  }
+  {
+    ..self,
+    wifi_trial_maximum_requests: maximum_requests,
+    wifi_trial_allowed_models: allowed_models,
   }
 }
 
@@ -2177,8 +2222,7 @@ async fn ApiService::invoke_with_bounded_retry(
   let alternate_id = if alternate == "" { "runtime-default" } else { alternate }
   try self.runtime.invoke_at(request, primary) catch {
     error => {
-      if @async.is_cancellation_error(error) ||
-        !retryable_runtime_error(error) ||
+      if !retryable_runtime_error(error) ||
         !@scheduler.retry_allowed(
           request.idempotency_key,
           1,
@@ -2221,8 +2265,7 @@ async fn ApiService::invoke_stream_with_bounded_retry(
     })
   catch {
     error => {
-      if @async.is_cancellation_error(error) ||
-        !retryable_runtime_error(error) ||
+      if !retryable_runtime_error(error) ||
         !@scheduler.retry_allowed(
           request.idempotency_key,
           1,
@@ -2585,7 +2628,7 @@ async fn ApiService::invoke_workload(
       let completed = @async.now()
       let effective_started = if started == 0L { completed } else { started }
       let timed_out = error is @async.TimeoutError
-      let cancelled = !timed_out && @async.is_cancellation_error(error)
+      let cancelled = error is @async.WaitedTaskAlreadyCancelled
       let retryable = !timed_out && !cancelled && retryable_runtime_error(error)
       let receipt = if cancelled {
         "cancel:\{request.workload_id}:\{digest_hex(request.workload_id)}"
@@ -3046,7 +3089,7 @@ async fn ApiService::stream_workload(
       let completed = @async.now()
       let effective_started = if started == 0L { completed } else { started }
       let timed_out = error is @async.TimeoutError
-      let cancelled = !timed_out && @async.is_cancellation_error(error)
+      let cancelled = error is @async.WaitedTaskAlreadyCancelled
       let retryable = !timed_out && !cancelled && retryable_runtime_error(error)
       let receipt = if cancelled {
         "cancel:\{request.workload_id}:\{digest_hex(request.workload_id)}"
@@ -5376,6 +5419,7 @@ pub async fn ApiService::serve_identity_on(
   server : @http.Server,
 ) -> Unit {
   server.run_forever(allow_failure=true) <| ((request, reader, connection) => {
+    let headers = application_headers(request.headers)
     if request.meth != Post ||
       (
         request.path != "/v1/auth/register" &&
@@ -5414,7 +5458,7 @@ pub async fn ApiService::serve_identity_on(
     let reply = self.handle_with_transport(
       Post,
       request.path,
-      request.headers,
+      headers,
       body,
       true,
     )
@@ -5437,6 +5481,7 @@ pub async fn ApiService::serve_on(
 ) -> Unit {
   self.refresh_deployment_operations()
   server.run_forever(allow_failure=true) <| ((request, reader, connection) => {
+    let headers = application_headers(request.headers)
     let allow_asserted_subject = loopback_client(connection.client_addr())
     if self.serve_artifact(request, connection) {
       return
@@ -5493,7 +5538,7 @@ pub async fn ApiService::serve_on(
           self.handle_with_transport(
             Post,
             request.path,
-            request.headers,
+            headers,
             request_body,
             allow_asserted_subject,
           ),
@@ -5521,7 +5566,7 @@ pub async fn ApiService::serve_on(
         return
       }
       let key_check = self.api_key_check(
-        request.headers,
+        headers,
         Inference,
         None,
         Some(value.model),
@@ -5539,7 +5584,7 @@ pub async fn ApiService::serve_on(
           return
         }
         KeyDenied => {
-          if !bearer_authorized(request.headers, self.inference_token) {
+          if !bearer_authorized(headers, self.inference_token) {
             send_listener_reply(
               connection,
               api_error(
@@ -5551,14 +5596,14 @@ pub async fn ApiService::serve_on(
           }
           {
             key_id: "static-inference-authority",
-            tenant_ref: header(request.headers, "x-lunanexa-tenant").unwrap_or(
+            tenant_ref: header(headers, "x-lunanexa-tenant").unwrap_or(
               "default-tenant",
             ),
             subject_ref: "static-inference-subject",
-            organization_id: header(request.headers, "x-lunanexa-organization").unwrap_or(
+            organization_id: header(headers, "x-lunanexa-organization").unwrap_or(
               "default-organization",
             ),
-            project_id: header(request.headers, "x-lunanexa-project").unwrap_or(
+            project_id: header(headers, "x-lunanexa-project").unwrap_or(
               "default-project",
             ),
           }
@@ -5568,7 +5613,7 @@ pub async fn ApiService::serve_on(
       let (workload, request_digest) = openai_workload(
         value,
         authority,
-        request.headers,
+        headers,
         true,
         now,
         self.global_settings.request_budgets,
@@ -5587,7 +5632,7 @@ pub async fn ApiService::serve_on(
       } noraise {
         _ => ()
       }
-      let workspace_headers = request.headers.copy()
+      let workspace_headers = headers.copy()
       workspace_headers["X-LunaNexa-Subject"] = authority.subject_ref
       let (workspace_error, reserved) = self.workspace_admit(
         workspace_headers, workload, true,
@@ -5637,7 +5682,7 @@ pub async fn ApiService::serve_on(
         connection.end_response()
         return
       }
-      if !bearer_authorized(request.headers, self.inference_token) {
+      if !bearer_authorized(headers, self.inference_token) {
         let reply = api_error(
           401, "Unauthenticated", "valid inference authority is required", false,
         )
@@ -5721,9 +5766,7 @@ pub async fn ApiService::serve_on(
         return
       }
       let (workspace_error, reserved) = self.workspace_admit(
-        request.headers,
-        workload,
-        allow_asserted_subject,
+        headers, workload, allow_asserted_subject,
       )
       if workspace_error is Some(reply) {
         connection.send_response(reply.status, reason(reply.status), extra_headers={
@@ -5738,10 +5781,10 @@ pub async fn ApiService::serve_on(
         key_id: "static-inference-authority",
         tenant_ref: workload.tenant_ref,
         subject_ref: "static-inference-subject",
-        organization_id: header(request.headers, "x-lunanexa-organization").unwrap_or(
+        organization_id: header(headers, "x-lunanexa-organization").unwrap_or(
           "default-organization",
         ),
-        project_id: header(request.headers, "x-lunanexa-project").unwrap_or(
+        project_id: header(headers, "x-lunanexa-project").unwrap_or(
           "default-project",
         ),
       }
@@ -5792,7 +5835,7 @@ pub async fn ApiService::serve_on(
     let reply = self.handle_with_transport(
       verb,
       request.path,
-      request.headers,
+      headers,
       body,
       allow_asserted_subject,
     )

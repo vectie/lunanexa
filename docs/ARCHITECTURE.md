@@ -201,6 +201,17 @@ with administrator-granted workspace access; commercial order-bound credentials
 never acquire that exemption. The default profile retains contract admission.
 Product-specific translation stays outside LunaNexa's source boundary.
 
+Published clients may have separate model scopes. A shared media editor can
+use qualified trial providers while text applications retain the company's
+reserved text model. External media provider configuration is loaded before
+the durable media runtime is constructed. Each provider has an approved
+artifact, tenant, node and generation, a loopback relay to its fixed upstream,
+and a mounted credential reference. Readiness probes the actual model listing;
+job ownership, capability budgets and immutable runtime attribution remain in
+LunaNexa. These providers do not masquerade as reconciled node assignments.
+Reference images cross the contract as bounded embedded data and become
+provider multipart files only after the approved profile validates them.
+
 The enterprise portal writes only tenant-scoped intent. It does not accept a
 node ID or raw access secret. The operator console selects one eligible node;
 the controller then creates a credential reference and reserves the existing

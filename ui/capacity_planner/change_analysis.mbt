@@ -100,7 +100,7 @@ fn change_view(state : State, emit : @rabbita.Emit[Message]?) -> @rabbita.Html {
   @html.section([
     @html.h3("Compare a baseline with a candidate"),
     @html.p(
-      "Prepare or reopen the baseline packet, select a run and capture it. Then reopen or author the candidate packet below and compare. Model, runtime, hardware and concurrency changes are listed explicitly. Both runs use the captured baseline objective; the candidate packet's objective is not substituted. The baseline survives packet reopening and draft edits in this tab.",
+      "Capture a baseline, then select a candidate. Both use the baseline objective.",
     ),
     match change.error {
       Some(error) => @html.p(attrs=@html.Attrs::build().role("alert"), error)

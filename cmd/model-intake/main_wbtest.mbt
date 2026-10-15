@@ -44,7 +44,7 @@ async test "actual CSV edit import reopen review and exact existing-contract req
   let loaded = @model_intake.import_draft(@fs.read_file(draft).text())
   assert_eq(loaded.models.length(), 3)
   for model in loaded.models {
-    assert_eq(model.state, @contracts.Candidate)
+    assert_eq(model.state, Candidate)
   }
   let (_, repeated, _) = invoke(["import", csv, mapping])
   assert_eq(repeated, draft_text)
@@ -90,7 +90,7 @@ async test "actual CSV edit import reopen review and exact existing-contract req
   assert_eq(model.artifact.size_bytes.to_string(), "9007199254740993")
   // Use the exact shared predicate called by ModelRegistry::register_model.
   assert_true(@contracts.valid_candidate_model(model))
-  assert_eq(model.state, @contracts.Candidate)
+  assert_eq(model.state, Candidate)
   let refreshed = evidence + "/refreshed-registry.json"
   save(
     refreshed,

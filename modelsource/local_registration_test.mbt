@@ -16,7 +16,7 @@ test "local directories are validated as store-relative keys" {
     ignore(@modelsource.local_artifact_uri("../stepfun"))
     false
   } catch {
-    @modelsource.ModelSourceError::InvalidRepositoryPath => true
+    InvalidRepositoryPath => true
     _ => false
   } noraise {
     value => value
@@ -58,7 +58,7 @@ test "component manifests select only the named upstream subtree" {
     )
     false
   } catch {
-    @modelsource.ModelSourceError::InvalidUpstreamResponse => true
+    InvalidUpstreamResponse => true
     _ => false
   } noraise {
     value => value
@@ -250,7 +250,7 @@ test "a store-directory entry keeps byte counts on the Int64 wire form" {
     ignore(@modelsource.local_directory_entry("../escape", 1, 1L, false))
     false
   } catch {
-    @modelsource.ModelSourceError::InvalidRepositoryPath => true
+    InvalidRepositoryPath => true
     _ => false
   } noraise {
     value => value

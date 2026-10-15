@@ -405,7 +405,7 @@ fn ArtifactMaterializer::s3_headers(
   self : ArtifactMaterializer,
   object_key : String,
   now_unix_ms : Int64,
-) -> Map[String, String] raise ArtifactMaterializationError {
+) -> @http.Headers raise ArtifactMaterializationError {
   guard self.s3_sigv4 is Some(config) else { return Map([]) }
   if !self.endpoint.has_prefix("https://") && !self.allow_http_loopback {
     raise InvalidConfiguration
@@ -416,7 +416,7 @@ fn ArtifactMaterializer::s3_headers(
   let payload_hash = "UNSIGNED-PAYLOAD"
   let mut canonical_headers = "host:\{host}\nx-amz-content-sha256:\{payload_hash}\nx-amz-date:\{timestamp}\n"
   let mut signed_headers = "host;x-amz-content-sha256;x-amz-date"
-  let headers : Map[String, String] = {
+  let headers : @http.Headers = {
     "Accept": "application/octet-stream",
     "Host": host,
     "X-Amz-Content-Sha256": payload_hash,
@@ -562,7 +562,7 @@ async fn ArtifactMaterializer::download(
       remove_if_present(partial_path)
     }
   }
-  let headers : Map[String, String] = self.s3_headers(object_key, @async.now())
+  let headers = self.s3_headers(object_key, @async.now())
   if self.s3_sigv4 is None && self.credential != "" {
     if self.node_id == "" {
       headers["Authorization"] = "Bearer \{self.credential}"
@@ -588,7 +588,7 @@ async fn ArtifactMaterializer::download(
   }
   if offset > 0L && !append {
     offset = 0L
-    digest.reset()
+    @crypto.CryptoHasher::reset(digest)
   }
   let file = @fs.open(
     partial_path,

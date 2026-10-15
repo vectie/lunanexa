@@ -2,9 +2,14 @@ import {
   "vectie/lunanexa/commercial/offline",
   "vectie/lunanexa/contractdoc",
   "vectie/lunanexa/ui/i18n",
+  "vectie/lunanexa/ui/controls",
   "moonbitlang/core/string",
   "moonbit-community/rabbita",
   "moonbit-community/rabbita/html",
 }
 
 supported_targets = "js+native"
+
+options(
+  link: { "native": { "cc-link-flags": "-pthread -ldl" } },
+)

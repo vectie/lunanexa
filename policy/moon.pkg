@@ -4,3 +4,7 @@ import {
   "moonbitlang/core/encoding/utf8",
   "moonbitlang/x/crypto",
 }
+
+options(
+  link: { "native": { "cc-link-flags": "-pthread -ldl" } },
+)

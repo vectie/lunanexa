@@ -339,7 +339,7 @@ test "delivery operations appear only under their matching product" {
 test "personal MoonDesk hides exclusive-delivery setup until it is relevant" {
   let state = @enterprise.demo_state()
   let personal = @enterprise.render({ ..state, route: DesktopIde, })
-  assert_true(personal.contains("One-click connection"))
+  assert_true(personal.contains("Refresh model and access"))
   assert_false(personal.contains("Dedicated application workspaces"))
   let models = @enterprise.render({ ..state, route: Models, })
   assert_false(models.contains("Dedicated model API"))
@@ -349,7 +349,7 @@ test "personal MoonDesk hides exclusive-delivery setup until it is relevant" {
     deliveries: { ..state.deliveries, loaded: true, },
   })
   assert_true(machine.contains("GPU container deliveries"))
-  assert_true(machine.contains("Request resources"))
+  assert_true(machine.contains("Rent machines"))
 }
 
 ///|
@@ -396,6 +396,7 @@ test "shared external GLM stop belongs to company administrator in MaaS" {
     state: "Running",
     can_stop: true,
     ready: true,
+    context_window_tokens: Some(65536),
   }
   let panel = {
     ..state.deliveries,
@@ -405,7 +406,10 @@ test "shared external GLM stop belongs to company administrator in MaaS" {
   let owner = @enterprise.render({ ..state, route: Models, deliveries: panel, })
   assert_true(owner.contains("Stop GLM service"))
   assert_true(owner.contains("Running on the Spark pair"))
-  assert_true(owner.contains("/user/v1/chat/completions"))
+  assert_true(owner.contains("/user/v1"))
+  assert_true(owner.contains("Public API (OpenAI compatible)"))
+  assert_true(owner.contains("Authorization: Bearer &lt;API_KEY&gt;"))
+  assert_true(owner.contains("Context: 64K"))
   assert_true(owner.contains("Copy API endpoint"))
   let confirm = panel.update(RequestStopExternal)
   assert_true(

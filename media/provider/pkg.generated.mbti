@@ -40,6 +40,8 @@ pub(all) struct Profile {
   maximum_fps : Int
   maximum_steps : Int
   sound_supported : Bool
+  image_reference_supported : Bool?
+  image_reference_required : Bool?
 } derive(Eq, ToJson, @json.FromJson)
 pub fn Profile::equal(Self, Self) -> Bool
 pub fn Profile::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError

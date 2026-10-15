@@ -39,6 +39,46 @@ physical or commercial launch readiness.
 
 ## Working policy
 
+Public portal verification (2026-10-14): the supported sites are
+`https://suanli.kechuangfuwu.com:8443/user/`, `/mana/`, and `/docs/`.
+Customer and management paths map to the enterprise and console bundles.
+Browser demo mode is retired: do not deploy standalone demos, enable query-based
+fixture sessions, or use them for UX acceptance. Unit-test fixtures remain
+available only to tests. Browser releases must compare the SHA-256 of the
+publicly served bundles with the tested build and verify the actual login and
+authenticated pages. Retain the previous immutable images for rollback.
+
+Customer navigation prioritizes the three service entries: IaaS compute,
+MaaS model services and PaaS workspaces. Orders, contracts and administration
+follow these entries. Keep service names visible beside short task labels;
+icons must not replace these product distinctions. Documentation links point
+to the supported `/docs/` site.
+
+Application journey continuity (2026-10-14): retain resource and service choices
+across IaaS, MaaS and PaaS pages. A model-to-application handoff carries its model
+scope into the selected published client; a missing or incompatible model must
+not silently fall back to shared inference. Ready applications open from their
+own action, while workspace provisioning keeps its separate readiness checks.
+Operators retain the intended user and organization through access, contract,
+model deployment and resource allocation, with a direct return to access status.
+Existing services precede new-service controls. Legal approval, resource
+allocation, service startup and application launch remain explicit decisions.
+Validate navigation, multiple choices, stale reads, organization changes and
+unavailable dependencies locally; real application sessions and GPU workloads
+remain part of the separately authorized physical campaign.
+
+Rental journey continuity (2026-10-13): company verification preserves the
+current purchase and returns undertaking customers to their rental order.
+Order links retain the tenant, order and template edition through document
+preparation, evidence review and whole-node allocation. Payment review belongs
+beside signed-document approval. Company verification and uploaded-scan checks
+refresh in place with bounded, session-fenced reads; attestation, payment
+verification and allocation remain explicit actions. Regression coverage must
+include multiple orders, late reads, rejected scans, company switching and
+unchanged signing/payment/resource gates. Local browser fixtures and native
+tests establish implementation behavior; physical activation and real payment
+or rendered-document evidence require a separately authorized live campaign.
+
 The parallel undertaking-letter rental slice is specified in
 [`UNDERTAKING_RENTAL.md`](UNDERTAKING_RENTAL.md). Implement the tenant submission,
 manager approval, source-template rendering and existing delivery integration as
@@ -424,6 +464,12 @@ Production gate still required:
 
 - public OIDC first sign-in may create a LunaNexa account and bounded shared
   trial without granting machine access;
+- the optional guest Wi-Fi QR profile starts the same bounded trial only after
+  verified sign-in and a gateway-attested guest-network request; its fixed
+  lifetime is one hour, and automatic registration trials are disabled in this
+  profile. Acceptance runs the browser flow from an allowed guest egress and a
+  disallowed egress, then checks account, workspace and model-access expiry
+  before and after controller restart;
 - authenticated users may create an individual or company customer organization
   with legal profile, default cost center/project and owner roles, or join an
   existing organization using a one-time email-bound invitation;

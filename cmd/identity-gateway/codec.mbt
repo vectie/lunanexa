@@ -143,15 +143,12 @@ fn canonical_api_path(request_target : String) -> String? {
 }
 
 ///|
-fn header(headers : Map[String, String], name : String) -> String? {
-  match headers.get(name) {
-    Some(value) => Some(value)
-    None => headers.get(name.to_lower())
-  }
+fn header(headers : @http.Headers, name : String) -> String? {
+  headers.get(name)
 }
 
 ///|
-fn cookie_value(headers : Map[String, String], name : String) -> String? {
+fn cookie_value(headers : @http.Headers, name : String) -> String? {
   guard header(headers, "Cookie") is Some(raw) else { return None }
   for part in raw.split(";") {
     let trimmed = part.trim()

@@ -199,14 +199,6 @@ test "machine static catalog preserves English and Chinese labels" {
   assert_eq(machine_message(English, LabelHostkey), "Host key")
   assert_eq(machine_message(ChineseSimplified, LabelHostkey), "主机密钥")
   assert_eq(
-    machine_message(English, CredentialIssuerExplanation),
-    "Continue through the approved credential issuer. Verify the host key before connecting; no password or private key is displayed here.",
-  )
-  assert_eq(
-    machine_message(ChineseSimplified, CredentialIssuerExplanation),
-    "请继续前往已批准的凭据签发方。连接前请核对主机密钥；此处不会显示密码或私钥。",
-  )
-  assert_eq(
     machine_message(English, ContinueToIssuer),
     "Continue to credential issuer",
   )
@@ -260,14 +252,6 @@ test "machine static catalog preserves English and Chinese labels" {
   assert_eq(
     machine_message(ChineseSimplified, LabelMymachineaccess),
     "我的机器访问",
-  )
-  assert_eq(
-    machine_message(English, ExclusiveAccessBoundary),
-    "Exclusive machine access is separate from your model API quota and hosted WebIDE/ComfyUI workspace. Only an assigned exclusive lease grants SSH access.",
-  )
-  assert_eq(
-    machine_message(ChineseSimplified, ExclusiveAccessBoundary),
-    "独占机器访问与模型 API 额度、托管 WebIDE/ComfyUI 工作区相互独立。只有已分配的独占租约才提供 SSH 访问。",
   )
   assert_eq(
     machine_message(English, NoAssignedMachine),
@@ -326,7 +310,6 @@ test "every machine message has both nonempty locale values" {
     LabelHost,
     LabelPort,
     LabelHostkey,
-    CredentialIssuerExplanation,
     ContinueToIssuer,
     RecoverableDetailsHeading,
     LabelAccessisready,
@@ -335,7 +318,6 @@ test "every machine message has both nonempty locale values" {
     HandoffUnavailableExplanation,
     AccessClosingExplanation,
     LabelMymachineaccess,
-    ExclusiveAccessBoundary,
     NoAssignedMachine,
     MachineTime,
     HandoffTime,

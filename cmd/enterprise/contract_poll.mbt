@@ -103,7 +103,7 @@ fn start_contract_poll(
       ),
     )
   } else {
-    (next, @rabbita.none)
+    start_rental_wait(next, emit)
   }
 }
 

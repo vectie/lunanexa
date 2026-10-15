@@ -31,7 +31,7 @@ async fn contract_bridge_fixture(
     ..undertaking_test_order(),
     quote: None,
     artifact_ids: [],
-    state: @offline.Draft,
+    state: Draft,
   }
   ignore(commerce.create_order(initial))
   let quoted = commerce.quote_order(
@@ -74,7 +74,7 @@ async fn contract_bridge_fixture(
       [MasterLease],
       now,
     ),
-    state: @contractdoc.InformationConfirmed,
+    state: InformationConfirmed,
     values_sha256: Some("sha256:" + "a".repeat(64)),
     values: [{ field_id: "lessee.name", value: "Original confirmed company", }],
   }
@@ -214,7 +214,7 @@ async test "MoonEdit generate queues frozen pair and recovers packet commit afte
   assert_eq(clicked.status, 202, msg=clicked.body)
   assert_eq(commerce.snapshot().generation_requests.length(), 2)
   let frozen = documents.packet(packet.packet_id).unwrap()
-  assert_eq(frozen.state, @contractdoc.GenerationRequested)
+  assert_eq(frozen.state, GenerationRequested)
   // Exact click retry is not a second revision/request pair.
   assert_eq(
     service.handle(
@@ -257,7 +257,7 @@ async test "MoonEdit generate queues frozen pair and recovers packet commit afte
   )
   assert_eq(
     documents.packet(packet.packet_id).unwrap().state,
-    @contractdoc.GenerationRequested,
+    GenerationRequested,
   )
   // Both objects stay durable if the final packet commit fails.
   @fs.mkdir(dir + "/documents.json.next")
@@ -273,7 +273,7 @@ async test "MoonEdit generate queues frozen pair and recovers packet commit afte
   assert_eq(commerce.snapshot().artifacts.length(), 2)
   assert_eq(
     documents.packet(packet.packet_id).unwrap().state,
-    @contractdoc.GenerationRequested,
+    GenerationRequested,
   )
   @fs.rmdir(dir + "/documents.json.next")
   let reopened_commerce = @offline_store.OfflineCommerceStore::open(
@@ -287,7 +287,7 @@ async test "MoonEdit generate queues frozen pair and recovers packet commit afte
     .with_contract_document_store(reopened_documents)
   restarted.reconcile_offline_contract_packets()
   let completed = reopened_documents.packet(packet.packet_id).unwrap()
-  assert_eq(completed.state, @contractdoc.Generated)
+  assert_eq(completed.state, Generated)
   assert_eq(completed.artifacts.length(), 2)
   assert_true(
     completed.artifacts.all(a => {
@@ -339,7 +339,7 @@ async test "contract bridge rejects stale revision missing page proof and mismat
   }
   assert_eq(
     documents.packet(packet.packet_id).unwrap().state,
-    @contractdoc.GenerationRequested,
+    GenerationRequested,
   )
   ignore(
     documents.fail_generation(
@@ -359,10 +359,7 @@ async test "contract bridge rejects stale revision missing page proof and mismat
     ({ "request": requests[0].to_json(), "markers": ["{{lessee.name}}"] } : Json).stringify(),
   )
   assert_eq(response.status, 409)
-  assert_eq(
-    documents.packet(packet.packet_id).unwrap().state,
-    @contractdoc.GenerationFailed,
-  )
+  assert_eq(documents.packet(packet.packet_id).unwrap().state, GenerationFailed)
 }
 
 ///|
@@ -389,7 +386,7 @@ async test "contract bridge resumes enqueue failure and preserves legacy packet 
   assert_true(failed.body.contains("ContractGenerationEnqueuePending"))
   assert_eq(
     documents.packet(packet.packet_id).unwrap().state,
-    @contractdoc.GenerationRequested,
+    GenerationRequested,
   )
   assert_eq(commerce.snapshot().generation_requests.length(), 0)
   @fs.rmdir(dir + "/commerce.json.next")

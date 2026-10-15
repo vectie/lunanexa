@@ -1,0 +1,183 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, kubeconfig, backup] else {
+    fail(
+      "Usage: retire-browser-demos.mbtx KUBECONFIG NEW_PRIVATE_BACKUP_DIRECTORY",
+    )
+  }
+  @fs.mkdir(backup, permission=0o700)
+  let k = ["--kubeconfig", kubeconfig, "-n", "lunanexa"]
+  let gateways = [
+    "lunanexa-console-public-gateway", "lunanexa-workbench-public-gateway",
+  ]
+  for name in gateways {
+    let current = @shell.Cmd(
+      "kubectl",
+      [..k, "get", "deployment", name, "--ignore-not-found", "-o", "json"],
+    ).output()
+    current.check()
+    if current.stdout().trim().is_empty() {
+      continue
+    }
+    guard @json.parse(current.stdout()) is { "spec": { "replicas": 0, .. }, .. } else {
+      fail("Refusing to delete an active gateway: " + name)
+    }
+    @fs.write_file(
+      backup + "/" + name + ".json",
+      current.stdout(),
+      create_mode=CreateNew,
+      permission=0o600,
+    )
+  }
+  // The old proxy also carries application traffic. Retire only its browser
+  // routes and reload in place, preserving API and application connections.
+  let current = @shell.Cmd(
+    "kubectl",
+    [..k, "get", "configmap", "operator-4173-proxy", "-o", "json"],
+  ).output()
+  current.check()
+  let document = @json.parse(current.stdout())
+  guard document is { "data": Object(data), .. } &&
+    data.get("nginx.conf") is Some(String(config)) else {
+    fail("Missing legacy proxy configuration")
+  }
+  let paths = [
+    "= /console/", "= /console/index.html", "/console/", "= /enterprise", "= /enterprise/index.html",
+    "/enterprise/", "/assets/",
+  ]
+  let retired = config
+    .split("\n")
+    .map(line => {
+      for path in paths {
+        if line.trim().has_prefix("location " + path + " {") {
+          return "    location " + path + " { return 410; }"
+        }
+      }
+      if line.trim().has_prefix("#") &&
+        (
+          line.contains("demo") ||
+          line.contains("Demo") ||
+          line.contains("fixture") ||
+          line.contains("real tenant data") ||
+          line.contains("real session") ||
+          line.contains("here also fired")
+        ) {
+        return ""
+      }
+      if line.contains(
+          "location = / { return 302 http://$host:$server_port/console/; }",
+        ) {
+        "    location = / { return 308 https://suanli.kechuangfuwu.com:8443/mana/; }"
+      } else if line.contains("location = / { return 302 /enterprise/; }") {
+        "    location = / { return 308 https://suanli.kechuangfuwu.com:8443/user/; }"
+      } else {
+        line.to_owned()
+      }
+    })
+    .to_array()
+    .join("\n")
+  guard !retired.contains("proxy_pass http://lunanexa-console:") &&
+    !retired.contains("proxy_pass http://lunanexa-enterprise:") &&
+    !retired.contains("root /srv/portal") else {
+    fail("Unrecognized legacy browser route; inspect before removal")
+  }
+  @fs.write_file(
+    backup + "/operator-4173-proxy-before.json",
+    current.stdout(),
+    create_mode=CreateNew,
+    permission=0o600,
+  )
+  data["nginx.conf"] = Json::string(retired)
+  let next = backup + "/operator-4173-proxy-retired.json"
+  @fs.write_file(
+    next,
+    document.stringify(),
+    create_mode=CreateNew,
+    permission=0o600,
+  )
+  @shell.Cmd("kubectl", [..k, "replace", "-f", next]).run()
+  let mut ready = false
+  for _ in 0..<90 {
+    let mounted = @shell.Cmd(
+      "kubectl",
+      [
+        ..k, "exec", "deployment/operator-4173-proxy", "--", "cat", "/etc/nginx/custom/nginx.conf",
+      ],
+    ).output()
+    mounted.check()
+    if mounted.stdout() == retired {
+      @shell.Cmd(
+        "kubectl",
+        [
+          ..k, "exec", "deployment/operator-4173-proxy", "--", "nginx", "-t", "-c",
+          "/etc/nginx/custom/nginx.conf",
+        ],
+      ).run()
+      @shell.Cmd(
+        "kubectl",
+        [
+          ..k, "exec", "deployment/operator-4173-proxy", "--", "nginx", "-s", "reload",
+          "-c", "/etc/nginx/custom/nginx.conf",
+        ],
+      ).run()
+      ready = true
+      break
+    }
+    @async.sleep(1000)
+  }
+  guard ready else {
+    fail("Proxy configuration did not propagate; no reload performed")
+  }
+  for name in gateways {
+    @shell.Cmd(
+      "kubectl",
+      [..k, "delete", "deployment", name, "--ignore-not-found", "--wait=true"],
+    ).run()
+    @shell.Cmd(
+      "kubectl",
+      [..k, "delete", "networkpolicy", name, "--ignore-not-found"],
+    ).run()
+  }
+  let old_service = @shell.Cmd(
+    "kubectl",
+    [
+      ..k, "get", "service", "lunanexa-workbench-public", "--ignore-not-found", "-o",
+      "json",
+    ],
+  ).output()
+  old_service.check()
+  if !old_service.stdout().trim().is_empty() {
+    guard @json.parse(old_service.stdout())
+      is {
+        "spec": {
+          "selector": { "app": "lunanexa-workbench-public-gateway", .. },
+          ..
+        },
+        ..
+      } else {
+      fail("Workbench service has a different owner; not removed")
+    }
+    @fs.write_file(
+      backup + "/lunanexa-workbench-public.json",
+      old_service.stdout(),
+      create_mode=CreateNew,
+      permission=0o600,
+    )
+    @shell.Cmd(
+      "kubectl",
+      [..k, "delete", "service", "lunanexa-workbench-public"],
+    ).run()
+  }
+  println(
+    "Retired standalone browser gateways and legacy portal routes; canonical sites preserved.",
+  )
+}

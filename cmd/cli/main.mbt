@@ -16,7 +16,7 @@ fn endpoint(base : String, path : String) -> String {
 }
 
 ///|
-fn bearer(token : String) -> Map[String, String] {
+fn bearer(token : String) -> @http.Headers {
   {
     "Authorization": "Bearer \{token}",
     "Accept": "application/json",

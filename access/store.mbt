@@ -5,6 +5,21 @@ enum AccessPersistence {
 }
 
 ///|
+/// Keep the v1 durable record readable by previous controllers. Public views
+/// expose zero; authorization treats this ceiling as unbounded, including when
+/// the saturating usage counter reaches it.
+let unlimited_request_ceiling : Int64 = 9223372036854775807L
+
+///|
+fn public_request_limit(limit : Int64) -> Int64 {
+  if limit == unlimited_request_ceiling {
+    0L
+  } else {
+    limit
+  }
+}
+
+///|
 pub struct AccessStore {
   persistence : AccessPersistence
   issuer_secret : String
@@ -71,7 +86,7 @@ pub fn validate_api_key_intent(
     intent.allowed_models.any(model => intent.allowed_models.count(model) != 1) ||
     intent.expires_unix_ms <= now_unix_ms ||
     intent.expires_unix_ms - now_unix_ms > 31536000000L ||
-    intent.maximum_requests <= 0L ||
+    intent.maximum_requests < 0L ||
     intent.maximum_requests > 1000000000L {
     raise InvalidInput("invalid API key intent")
   }
@@ -128,9 +143,12 @@ fn AccessStore::restore(
       !credential.secret_sha256.has_prefix("sha256:") ||
       credential.issued_unix_ms <= 0L ||
       credential.expires_unix_ms <= credential.issued_unix_ms ||
-      credential.maximum_requests <= 0L ||
+      credential.maximum_requests < 0L ||
       credential.consumed_requests < 0L ||
-      credential.consumed_requests > credential.maximum_requests {
+      (
+        credential.maximum_requests > 0L &&
+        credential.consumed_requests > credential.maximum_requests
+      ) {
       raise InvalidSnapshot("invalid API credential")
     }
     self.credentials[credential.key_id] = credential
@@ -250,7 +268,11 @@ pub async fn AccessStore::issue(
     allowed_models: intent.allowed_models,
     issued_unix_ms: now_unix_ms,
     expires_unix_ms: intent.expires_unix_ms,
-    maximum_requests: intent.maximum_requests,
+    maximum_requests: if intent.maximum_requests == 0L {
+      unlimited_request_ceiling
+    } else {
+      intent.maximum_requests
+    },
     consumed_requests: 0L,
     revoked_unix_ms: None,
   }
@@ -317,6 +339,9 @@ pub async fn AccessStore::revoke_subject(
 }
 
 ///|
+/// The optional unlimited policy is supplied only by a trusted caller after
+/// checking current private-model authority. Scope, revocation and expiry are
+/// always enforced. Consumption persists the effective policy for old keys.
 pub async fn AccessStore::authorize(
   self : AccessStore,
   secret : String,
@@ -326,6 +351,7 @@ pub async fn AccessStore::authorize(
   now_unix_ms : Int64,
   consume : Bool,
   reserve_quota? : async (Int64) -> Bool,
+  unlimited_requests? : Bool = false,
 ) -> ApiAuthorization {
   if secret.length() != 68 || !secret.has_prefix("lnx_") {
     raise Unauthorized
@@ -359,7 +385,11 @@ pub async fn AccessStore::authorize(
     .unwrap_or(false) {
     raise Unauthorized
   }
-  if consume && current.consumed_requests >= current.maximum_requests {
+  if consume &&
+    !unlimited_requests &&
+    current.maximum_requests > 0L &&
+    current.maximum_requests != unlimited_request_ceiling &&
+    current.consumed_requests >= current.maximum_requests {
     raise QuotaExceeded
   }
   if consume {
@@ -373,7 +403,16 @@ pub async fn AccessStore::authorize(
     }
     self.credentials[current.key_id] = {
       ..current,
-      consumed_requests: current.consumed_requests + 1L,
+      maximum_requests: if unlimited_requests {
+        unlimited_request_ceiling
+      } else {
+        current.maximum_requests
+      },
+      consumed_requests: if current.consumed_requests == 9223372036854775807L {
+        current.consumed_requests
+      } else {
+        current.consumed_requests + 1L
+      },
     }
     self.persist()
   }
@@ -409,7 +448,7 @@ pub async fn AccessStore::views(self : AccessStore) -> Array[ApiCredentialView] 
     allowed_models: value.allowed_models,
     issued_unix_ms: value.issued_unix_ms,
     expires_unix_ms: value.expires_unix_ms,
-    maximum_requests: value.maximum_requests,
+    maximum_requests: public_request_limit(value.maximum_requests),
     consumed_requests: value.consumed_requests,
     revoked_unix_ms: value.revoked_unix_ms,
   })
@@ -429,7 +468,7 @@ pub fn IssuedApiKey::public_view(self : IssuedApiKey) -> IssuedApiKeyView {
       allowed_models: self.credential.allowed_models,
       issued_unix_ms: self.credential.issued_unix_ms,
       expires_unix_ms: self.credential.expires_unix_ms,
-      maximum_requests: self.credential.maximum_requests,
+      maximum_requests: public_request_limit(self.credential.maximum_requests),
       consumed_requests: self.credential.consumed_requests,
       revoked_unix_ms: self.credential.revoked_unix_ms,
     },

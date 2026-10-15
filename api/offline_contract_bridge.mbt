@@ -78,7 +78,7 @@ async fn ApiService::enqueue_offline_contract_packet(
   self : ApiService,
   packet : @contractdoc.ContractPacket,
 ) -> Unit {
-  guard packet.state == @contractdoc.GenerationRequested &&
+  guard packet.state == GenerationRequested &&
     packet.values_sha256 is Some(_) &&
     self.offline_commerce_store is Some(commerce) else {
     fail("contract generation binding is incomplete")
@@ -87,7 +87,7 @@ async fn ApiService::enqueue_offline_contract_packet(
   guard order.quote is Some(quote) else { fail("contract quote missing") }
   let manifest = @contractdoc.manifest_for_template_id(packet.template_id)
   let binding : Json = { "packet": packet.to_json() }
-  for kind in [@offline.EditableContractDocx, @offline.PrintReadyContractPdf] {
+  for kind in [@offline.EditableContractDocx, PrintReadyContractPdf] {
     let artifact_id = @offline_store.contract_archive_artifact_id(
       packet.packet_id,
       packet.revision,
@@ -126,7 +126,7 @@ async fn ApiService::complete_offline_contract_packet(
   self : ApiService,
   packet : @contractdoc.ContractPacket,
 ) -> Bool {
-  guard packet.state == @contractdoc.GenerationRequested &&
+  guard packet.state == GenerationRequested &&
     self.offline_commerce_store is Some(commerce) &&
     self.contract_document_store is Some(documents) else {
     return false
@@ -146,7 +146,7 @@ async fn ApiService::complete_offline_contract_packet(
     return false
   }
   let generated : Array[@contractdoc.ContractGeneratedArtifact] = []
-  for kind in [@offline.EditableContractDocx, @offline.PrintReadyContractPdf] {
+  for kind in [@offline.EditableContractDocx, PrintReadyContractPdf] {
     let artifact_id = @offline_store.contract_archive_artifact_id(
       packet.packet_id,
       packet.revision,

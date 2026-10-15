@@ -574,7 +574,7 @@ async fn ApiService::delivery_runtime_observed(
 /// cannot satisfy this probe: the provider must list the expected model.
 async fn delivery_media_ready(binding : MediaBinding) -> Bool {
   @async.with_timeout(10000, () => {
-    let headers : Map[String, String] = { "Accept": "application/json" }
+    let headers : @http.Headers = { "Accept": "application/json" }
     if binding.bearer is Some(token) {
       headers["Authorization"] = "Bearer \{token}"
     }
@@ -670,7 +670,7 @@ pub async fn ApiService::reconcile_deliveries(self : ApiService) -> Unit {
       self.reconcile_stopping_model_service(service)
     } else if service.runtime.stage is (Ready | LoadingModel) {
       self.reconcile_active_model_service(service) catch {
-        error => if @async.is_cancellation_error(error) { raise error }
+        _ => ()
         // Preserve the assignment for a later retry. Admission still needs
         // fresh epoch and node evidence and fails closed meanwhile.
       }
@@ -1063,10 +1063,7 @@ pub async fn ApiService::reconcile_deliveries(self : ApiService) -> Unit {
         )
       }
     } catch {
-      error => {
-        if @async.is_cancellation_error(error) {
-          raise error
-        }
+      _ =>
         // Preserve stage while a runtime is loading; template publication errors
         // are actionable and retryable from the same resource reservation.
         if operation.stage == PreparingModel {
@@ -1089,7 +1086,6 @@ pub async fn ApiService::reconcile_deliveries(self : ApiService) -> Unit {
             ),
           )
         }
-      }
     }
   }
 }

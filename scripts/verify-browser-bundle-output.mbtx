@@ -1,35 +1,67 @@
 ///|
 import {
-  "moonbitlang/async",
-  "moonbitlang/async/fs",
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
   "moonbitlang/core/env",
-  "moonbitlang/x/crypto",
+  "moonbitlang/x@0.5.5/crypto",
 }
 
 ///|
 fn browser_build_root(workspace : Bool) -> String {
-  "_build/browser-compiled/js/release/build" + (if workspace { "/vectie/lunanexa" } else { "" })
+  "_build/browser-compiled/js/release/build" +
+  (if workspace { "/vectie/lunanexa" } else { "" })
 }
 
 ///|
 async fn main {
-  assert_eq(browser_build_root(true), "_build/browser-compiled/js/release/build/vectie/lunanexa")
-  assert_eq(browser_build_root(false), "_build/browser-compiled/js/release/build")
+  assert_eq(
+    browser_build_root(true),
+    "_build/browser-compiled/js/release/build/vectie/lunanexa",
+  )
+  assert_eq(
+    browser_build_root(false),
+    "_build/browser-compiled/js/release/build",
+  )
   guard @env.args() is [_, repo, output] else {
     fail("usage: verify-browser-bundle-output.mbtx REPO_ROOT OUTPUT_ROOT")
   }
   let root = repo + "/" + browser_build_root(@fs.exists(repo + "/moon.work"))
-  for (package_name, surface, filename) in [
-    ("console", "console", "console.js"),
-    ("enterprise", "enterprise", "enterprise.js"),
-    ("workbench", "workbench", "workbench.js"),
-    ("installer-ui", "installer", "installer-ui.js"),
-  ] {
+  for
+    (package_name, surface, filename) in [
+      ("console", "console", "console.js"),
+      ("enterprise", "enterprise", "enterprise.js"),
+      ("workbench", "workbench", "workbench.js"),
+      ("installer-ui", "installer", "installer-ui.js"),
+    ] {
     let source = @fs.read_file(root + "/cmd/" + package_name + "/" + filename).binary()
     let packaged = @fs.read_file(output + "/" + surface + "/" + filename).binary()
-    let digest = @crypto.bytes_to_hex_string(@crypto.sha256(source.to_fixedarray()))
-    assert_eq(digest, @crypto.bytes_to_hex_string(@crypto.sha256(packaged.to_fixedarray())))
-    assert_true(@fs.read_file(output + "/" + surface + "/index.html").text().contains("?v=" + digest))
+    let digest = @crypto.bytes_to_hex_string(
+      @crypto.sha256(source.to_fixedarray()),
+    )
+    assert_eq(
+      digest,
+      @crypto.bytes_to_hex_string(@crypto.sha256(packaged.to_fixedarray())),
+    )
+    assert_true(
+      @fs.read_file(output + "/" + surface + "/index.html")
+      .text()
+      .contains("?v=" + digest),
+    )
+    if surface != "installer" {
+      // Fixtures may support unit tests, but browser entry points must always
+      // bootstrap real sessions. Reject stale demo-capable release artifacts.
+      let entry = @fs.read_file(repo + "/cmd/" + package_name + "/main.mbt").text()
+      let parts = entry.split("fn main {").to_array()
+      assert_eq(parts.length(), 2)
+      let startup = parts[1]
+      assert_true(startup.contains("demo_mode: false"))
+      assert_false(startup.contains("demo_state"))
+      assert_false(startup.contains("is_demo"))
+      let bundle = @fs.read_file(output + "/" + surface + "/" + filename).text()
+      assert_false(bundle.contains("searchParams.get(\"demo\")"))
+      assert_false(bundle.contains("searchParams.get('demo')"))
+      assert_false(bundle.contains("?demo="))
+    }
     println(surface + " verified source/bundle/html SHA-256 " + digest)
   }
 }

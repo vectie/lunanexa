@@ -118,7 +118,7 @@ pub(all) struct IssuedApiKeyView {
   credential : ApiCredentialView
   secret : String
   api_base_url : String?
-} derive(Debug, Eq, FromJson)
+} derive(Debug, Eq)
 
 ///|
 pub(all) enum AccountRole {
@@ -209,6 +209,7 @@ pub(all) struct EnterpriseState {
   desktop_client : EnterpriseDesktopClient?
   desktop_clients : Array[EnterpriseDesktopClient]
   webide_order_id : String?
+  webide_model_alias : String?
   desktop_connect_phase : DesktopConnectPhase
   deliveries : DeliveryPanel
   self_service : SelfServiceState
@@ -260,6 +261,9 @@ pub(all) enum EnterpriseMessage {
   ManageWebIde(String)
   RefreshDesktopStatus
   SelectWebIde(String)
+  OpenApplication(String)
+  UseModelInApplication(String)
+  CreateModelApiKey(String)
   SelectWebIdeOrder(String)
   Delivery(DeliveryMessage)
   MarkNotificationRead(String, Int64)
@@ -324,6 +328,7 @@ pub fn default_state(now_unix_ms : Int64) -> EnterpriseState {
     desktop_client: None,
     desktop_clients: [],
     webide_order_id: None,
+    webide_model_alias: None,
     desktop_connect_phase: NotStarted,
     deliveries: default_delivery_panel(),
     self_service: default_self_service_state(),
@@ -341,7 +346,13 @@ pub fn default_state(now_unix_ms : Int64) -> EnterpriseState {
 
 ///|
 pub fn demo_state() -> EnterpriseState {
-  let now = 1786320000000L
+  demo_state_at(1790755200000L)
+}
+
+///|
+/// The live demo uses the actual browser clock for expiring access. The
+/// fixed-clock wrapper above keeps repeatable examples and tests.
+pub fn demo_state_at(now : Int64) -> EnterpriseState {
   let manifest = @contractdoc.youthpolicy_remote_lease_manifest()
   let undertaking_manifest = @contractdoc.undertaking_manifest()
   let undertaking_draft = try! @contractdoc.new_packet(
@@ -362,7 +373,7 @@ pub fn demo_state() -> EnterpriseState {
       { field_id: "lessee.name", value: "Northstar Research", },
       { field_id: "undertaking.signed_date", value: "2026-09-16", },
       { field_id: "lease.start_date", value: "2026-09-17", },
-      { field_id: "lease.end_date", value: "2026-10-17", },
+      { field_id: "lease.end_date", value: "2026-10-16", },
       { field_id: "lease.total_rent", value: "1290.00", },
     ],
     state: ReadyForConfirmation,
@@ -830,7 +841,7 @@ pub fn demo_state() -> EnterpriseState {
     desktop_client: Some({
       client_id: "desktop-workspace",
       display_name: "Desktop WebIDE",
-      launch_uri: "/workbench/?demo=1",
+      launch_uri: "https://workspace.example.invalid/",
       handoff_lifetime_ms: 120000L,
       connected_handoffs: 0,
       contract_ready: true,
@@ -894,6 +905,31 @@ pub fn EnterpriseState::update(
   message : EnterpriseMessage,
 ) -> EnterpriseState {
   match message {
+    UseModelInApplication(model_name) => self.open_model_application(model_name)
+    CreateModelApiKey(model_name) => {
+      if self.loading ||
+        !(application_model_available(self, model_name) ||
+        self.deliveries.external_model.map_or(false, service => {
+          service.ready && service.model_alias == model_name
+        })) {
+        return self
+      }
+      {
+        ..self,
+        route: Models,
+        api_key_issue_draft: {
+          ..self.api_key_issue_draft,
+          display_name: model_name,
+          allowed_models: model_name,
+          model_list_scope: true,
+          inference_scope: true,
+        },
+        api_key_issue_open: true,
+        error_message: None,
+        success_message: None,
+      }
+    }
+    OpenApplication(client_id) => self.update(SelectWebIde(client_id))
     Delivery(message) =>
       { ..self, deliveries: self.deliveries.update(message), }
     SelectWebIdeOrder(order_id) => {
@@ -907,6 +943,7 @@ pub fn EnterpriseState::update(
         } else {
           Some(order_id)
         },
+        webide_model_alias: None,
         desktop_connect_phase: NotStarted,
         success_message: None,
         error_message: None,
@@ -920,21 +957,23 @@ pub fn EnterpriseState::update(
         self.desktop_clients
         .filter(client => client.client_id == client_id)
         .get(0) {
-        Some(client) =>
-          {
-            ..self,
-            desktop_client: Some(client),
-            desktop_connect_phase: NotStarted,
-            success_message: None,
-            error_message: None,
-          }
+        Some(client) => self.select_application_client(client)
         None => self
       }
     }
     Navigate(route) => {
-      let offline_commerce = self.offline_commerce.update(
-        @offline_commerce.OfflineCommerceMessage::ClearNotice,
-      )
+      if route == OfflineCommerce && !customer_organization_ready(self) {
+        return {
+          ..self,
+          route: SelfService,
+          self_service: {
+            ..self.self_service,
+            step: Organization,
+            return_to_rental: true,
+          },
+        }
+      }
+      let offline_commerce = self.offline_commerce.update(ClearNotice)
       let dedicated = if route == AccountAccess {
         self.self_service.order.filter(order => {
           order.kind == DedicatedMaaS && order.status == ActiveOrder
@@ -980,20 +1019,13 @@ pub fn EnterpriseState::update(
       }
     SelfService(SelectProduct(product)) => {
       let selected = self.self_service.update(SelectProduct(product))
-      let organization_ready = has_customer_membership(self) &&
-        (match self.membership {
-          Some(membership) =>
-            self.organizations.any(value => {
-              value.organization.organization_id == membership.organization_id &&
-              value.organization.state == Active
-            })
-          None => false
-        })
+      let organization_ready = customer_organization_ready(self)
       {
         ..self,
         route: SelfService,
         self_service: {
           ..selected,
+          return_to_rental: false,
           step: if organization_ready {
             Capacity
           } else {
@@ -1014,13 +1046,34 @@ pub fn EnterpriseState::update(
       match selection {
         Some(value) => {
           let project_id = value.default_project_id.unwrap_or("")
+          if self.membership.map_or(false, previous => {
+              previous.organization_id == organization_id &&
+              previous.tenant_ref == value.membership.tenant_ref
+            }) {
+            return {
+              ..self,
+              membership: Some(value.membership),
+              selected_organization_id: Some(organization_id),
+              self_service: {
+                ..self.self_service,
+                action_loading: false,
+                action_error: None,
+              },
+            }
+          }
           {
             ..self,
             membership: Some(value.membership),
             selected_organization_id: Some(organization_id),
             project_id,
+            webide_order_id: None,
+            webide_model_alias: None,
+            desktop_client: None,
+            desktop_clients: [],
+            desktop_connect_phase: NotStarted,
             member_invite_email: "",
             member_invite_secret: None,
+            contract_documents: @contract_documents.default_state(self.locale),
             offline_commerce: {
               ..self.offline_commerce,
               project_id,
@@ -1048,6 +1101,10 @@ pub fn EnterpriseState::update(
             ..self,
             selected_organization_id: None,
             membership: None,
+            webide_order_id: None,
+            webide_model_alias: None,
+            desktop_client: None,
+            desktop_clients: [],
             member_invite_email: "",
             member_invite_secret: None,
             self_service: {
@@ -1068,18 +1125,22 @@ pub fn EnterpriseState::update(
           }
       }
     }
-    SelfService(RequestQuote) =>
-      {
-        ..self,
-        self_service: { ..self.self_service.update(RequestQuote), step: Quote, },
-      }
-    SelfService(CreateMachineOrder) =>
+    SelfService(PreviousSelfServiceStep) if self.self_service.step == Capacity &&
+      customer_organization_ready(self) =>
       {
         ..self,
         self_service: {
-          ..self.self_service.update(CreateMachineOrder),
-          step: ContractPayment,
+          ..self.self_service,
+          step: ChooseService,
+          action_error: None,
         },
+      }
+    SelfService(ContinueWithOrganization) if self.self_service.return_to_rental &&
+      customer_organization_ready(self) =>
+      {
+        ..self,
+        route: OfflineCommerce,
+        self_service: { ..self.self_service, return_to_rental: false, },
       }
     SelfService(message) =>
       { ..self, self_service: self.self_service.update(message), }
@@ -1219,6 +1280,35 @@ pub fn EnterpriseState::update(
       { ..self, loading: true, success_message: None, error_message: None, }
     MachineAccess(message) =>
       { ..self, machine_access: self.machine_access.update(message), }
+    OfflineCommerce(OpenContractDocuments(order_id)) =>
+      match
+        self.offline_commerce.orders
+        .iter()
+        .find_first(order => order.order_id == order_id) {
+        Some(order) =>
+          {
+            ..self,
+            route: ContractDocuments,
+            contract_documents: self.contract_documents.open_order(
+              order_id,
+              order.tenant_ref,
+              @offline_commerce.rental_template_id(order),
+            ),
+          }
+        None => self
+      }
+    OfflineCommerce(OpenMachineAccess(order_id)) =>
+      {
+        ..self,
+        route: MachineAccess,
+        offline_commerce: self.offline_commerce.update(SelectOrder(order_id)),
+      }
+    ContractDocuments(OpenOrder(order_id)) =>
+      {
+        ..self,
+        route: OfflineCommerce,
+        offline_commerce: self.offline_commerce.update(SelectOrder(order_id)),
+      }
     OfflineCommerce(message) =>
       { ..self, offline_commerce: self.offline_commerce.update(message), }
     ContractDocuments(message) =>
@@ -1517,38 +1607,23 @@ fn navigation(
   for
     route in [
       EnterpriseRoute::Overview,
-      SelfService,
       MachineAccess,
-      LeaseRequests,
-      OfflineCommerce,
-      DesktopIde,
       Models,
-      AccountAccess,
+      DesktopIde,
+      SelfService,
       Agreements,
+      OfflineCommerce,
       ContractDocuments,
+      LeaseRequests,
+      AccountAccess,
       Costs,
       Notifications,
     ] {
     let group = match route {
-      Overview => Some(copy(state.locale, "Start", "开始"))
-      MachineAccess =>
-        Some(
-          copy(state.locale, "IaaS · company machines", "IaaS · 企业机器"),
-        )
-      DesktopIde =>
-        Some(
-          copy(
-            state.locale,
-            "PaaS · personal applications",
-            "PaaS · 个人应用",
-          ),
-        )
-      Models =>
-        Some(
-          copy(state.locale, "MaaS · company models", "MaaS · 企业模型"),
-        )
-      Agreements =>
-        Some(copy(state.locale, "Company administration", "企业管理"))
+      MachineAccess => Some(copy(state.locale, "Services", "服务"))
+      SelfService =>
+        Some(copy(state.locale, "Orders and contracts", "订单与合同"))
+      AccountAccess => Some(copy(state.locale, "Administration", "管理"))
       _ => None
     }
     if group is Some(label) {
@@ -1608,10 +1683,12 @@ fn navigation(
       ),
       items,
     ),
-    @html.div(class="trust-note", [
-      @html.strong(enterprise_copy(state.locale, CustomerBoundary)),
-      @html.p(enterprise_copy(state.locale, CatalogOrdersAreSelfServiceManaged)),
-    ]),
+    @html.a(
+      class="nav-item nav-link",
+      href="/docs/",
+      style=["margin-top: 1rem"],
+      copy(state.locale, "Documentation", "使用文档"),
+    ),
   ])
 }
 
@@ -1638,19 +1715,9 @@ fn page_header(
     )
   }
   @html.header(class="enterprise-topbar", [
-    @html.div([
-      @html.p(
-        class="eyebrow",
-        enterprise_copy(state.locale, EnterpriseControlCenter),
-      ),
-      @html.h1(route_label(state.locale, state.route)),
-    ]),
+    @html.div([@html.h1(route_label(state.locale, state.route))]),
     @html.div(class="topbar-actions", [
       @html.div(class="locale-control", [
-        @html.label(
-          for_="enterprise-locale",
-          enterprise_copy(state.locale, Language),
-        ),
         @html.select(
           id="enterprise-locale",
           on_change=text_command(emit, value => {
@@ -1693,13 +1760,6 @@ fn page_header(
       } else {
         @html.nothing
       },
-      @html.div(class="topbar-meta", [
-        @html.span(class="status-dot", ""),
-        @html.span(
-          class="role-pill",
-          enterprise_copy(state.locale, TenantScoped),
-        ),
-      ]),
     ]),
   ])
 }
@@ -1716,7 +1776,11 @@ fn overview_view(
     .filter(value => value.state == Submitted)
     .length()
   let trial_panel = match state.trial {
-    Some(trial) if trial.revoked_unix_ms is None => {
+    Some(trial) if trial.revoked_unix_ms is None &&
+      state.membership.map_or(false, membership => {
+        membership.organization_id == trial.organization_id &&
+        membership.tenant_ref == trial.tenant_ref
+      }) => {
       let active = trial.expires_unix_ms > state.machine_access.now_unix_ms
       let consumed = match trial.api_key_id {
         Some(key_id) =>
@@ -1755,7 +1819,7 @@ fn overview_view(
           if active {
             @html.a(
               class="quiet-button external-action",
-              href="/workbench/?trial=1",
+              href="/user/workbench/?trial=1",
               enterprise_copy(state.locale, TryAPromptInTheWorkbench),
             )
           } else {
@@ -1783,10 +1847,6 @@ fn overview_view(
     product_choices(state, emit, true),
     @html.section(class="welcome-panel", [
       @html.div([
-        @html.p(
-          class="eyebrow",
-          enterprise_copy(state.locale, YourLunanexaTenant),
-        ),
         @html.h2(enterprise_copy(state.locale, NeedAManagedCapacityException)),
         @html.p(enterprise_copy(state.locale, UseThisPathWhenTheSelf)),
       ]),
@@ -1874,7 +1934,8 @@ fn api_key_state(
     (enterprise_copy(locale, Revoked), "revoked")
   } else if key.expires_unix_ms <= now_unix_ms {
     (enterprise_copy(locale, Expired), "expired")
-  } else if key.consumed_requests >= key.maximum_requests {
+  } else if key.maximum_requests > 0L &&
+    key.consumed_requests >= key.maximum_requests {
     (enterprise_copy(locale, QuotaExhausted), "expired")
   } else {
     (enterprise_copy(locale, Active), "active")
@@ -1907,20 +1968,16 @@ fn api_key_issue_dialog(
           id="api-key-issue-description",
           enterprise_copy(state.locale, TheSecretIsShownOnceTrial),
         ),
+        match state.error_message {
+          Some(message) =>
+            @html.p(
+              class="notice is-error",
+              attrs=@html.Attrs::build().role("alert"),
+              message,
+            )
+          None => @html.nothing
+        },
         @html.div(class="account-form", [
-          @html.div(class="field", [
-            @html.label(
-              for_="api-key-project-id",
-              enterprise_copy(state.locale, BillingProject),
-            ),
-            @html.input(
-              id="api-key-project-id",
-              value=state.project_id,
-              maxlength=256,
-              required=true,
-              on_input=text_command(emit, value => ProjectChanged(value)),
-            ),
-          ]),
           @html.div(class="field", [
             @html.label(
               for_="api-key-display-name",
@@ -1936,151 +1993,171 @@ fn api_key_issue_dialog(
               }),
             ),
           ]),
-          @html.fieldset(class="scope-picker", [
-            @html.legend(enterprise_copy(state.locale, Scopes)),
-            @html.button(
-              type_="button",
-              class=if draft.model_list_scope {
-                "scope-toggle is-selected"
-              } else {
-                "scope-toggle"
-              },
-              attrs=@html.Attrs::build().aria_pressed(
-                if draft.model_list_scope {
-                  "true"
-                } else {
-                  "false"
-                },
-              ),
-              on_click=command(emit, ToggleApiKeyModelListScope),
-              enterprise_copy(state.locale, ModelList),
-            ),
-            @html.button(
-              type_="button",
-              class=if draft.inference_scope {
-                "scope-toggle is-selected"
-              } else {
-                "scope-toggle"
-              },
-              attrs=@html.Attrs::build().aria_pressed(
-                if draft.inference_scope {
-                  "true"
-                } else {
-                  "false"
-                },
-              ),
-              on_click=command(emit, ToggleApiKeyInferenceScope),
-              enterprise_copy(state.locale, Inference),
-            ),
-          ]),
           @html.div(class="field", [
             @html.label(
-              for_="api-key-models",
-              enterprise_copy(state.locale, AllowedModels),
+              for_="api-key-lifetime",
+              enterprise_copy(state.locale, Lifetime),
             ),
-            @html.input(
-              id="api-key-models",
-              value=draft.allowed_models,
-              placeholder=enterprise_copy(
-                state.locale,
-                OptionalCommaSeparatedAliases,
-              ),
-              on_input=text_command(emit, value => {
-                ApiKeyAllowedModelsChanged(value)
+            @html.select(
+              id="api-key-lifetime",
+              on_change=text_command(emit, value => {
+                ApiKeyLifetimeChanged(
+                  match value {
+                    "1" => 1
+                    "7" => 7
+                    "90" => 90
+                    "365" => 365
+                    _ => 30
+                  },
+                )
               }),
-            ),
-            @html.small(
-              enterprise_copy(state.locale, LeaveEmptyToAllowEveryModel),
+              [
+                @html.option(
+                  value="1",
+                  selected=draft.lifetime_days == 1,
+                  enterprise_copy(state.locale, Day),
+                ),
+                @html.option(
+                  value="7",
+                  selected=draft.lifetime_days == 7,
+                  enterprise_copy(state.locale, Days),
+                ),
+                @html.option(
+                  value="30",
+                  selected=draft.lifetime_days == 30,
+                  enterprise_copy(state.locale, Days101),
+                ),
+                @html.option(
+                  value="90",
+                  selected=draft.lifetime_days == 90,
+                  enterprise_copy(state.locale, Days102),
+                ),
+                @html.option(
+                  value="365",
+                  selected=draft.lifetime_days == 365,
+                  enterprise_copy(state.locale, Year),
+                ),
+              ],
             ),
           ]),
-          @html.div(class="account-form-grid", [
-            @html.div(class="field", [
-              @html.label(
-                for_="api-key-lifetime",
-                enterprise_copy(state.locale, Lifetime),
-              ),
-              @html.select(
-                id="api-key-lifetime",
-                on_change=text_command(emit, value => {
-                  ApiKeyLifetimeChanged(
-                    match value {
-                      "1" => 1
-                      "7" => 7
-                      "90" => 90
-                      "365" => 365
-                      _ => 30
+          @html.details(class="api-key-advanced", [
+            @html.summary(enterprise_copy(state.locale, AdvancedSettings)),
+            @html.div(class="account-form", [
+              @html.div(class="field", [
+                @html.label(
+                  for_="api-key-project-id",
+                  enterprise_copy(state.locale, BillingProject),
+                ),
+                @html.input(
+                  id="api-key-project-id",
+                  value=state.project_id,
+                  maxlength=256,
+                  required=true,
+                  on_input=text_command(emit, value => ProjectChanged(value)),
+                ),
+              ]),
+              @html.fieldset(class="scope-picker", [
+                @html.legend(enterprise_copy(state.locale, Scopes)),
+                @html.button(
+                  type_="button",
+                  class=if draft.model_list_scope {
+                    "scope-toggle is-selected"
+                  } else {
+                    "scope-toggle"
+                  },
+                  attrs=@html.Attrs::build().aria_pressed(
+                    if draft.model_list_scope {
+                      "true"
+                    } else {
+                      "false"
                     },
-                  )
-                }),
-                [
-                  @html.option(
-                    value="1",
-                    selected=draft.lifetime_days == 1,
-                    enterprise_copy(state.locale, Day),
                   ),
-                  @html.option(
-                    value="7",
-                    selected=draft.lifetime_days == 7,
-                    enterprise_copy(state.locale, Days),
-                  ),
-                  @html.option(
-                    value="30",
-                    selected=draft.lifetime_days == 30,
-                    enterprise_copy(state.locale, Days101),
-                  ),
-                  @html.option(
-                    value="90",
-                    selected=draft.lifetime_days == 90,
-                    enterprise_copy(state.locale, Days102),
-                  ),
-                  @html.option(
-                    value="365",
-                    selected=draft.lifetime_days == 365,
-                    enterprise_copy(state.locale, Year),
-                  ),
-                ],
-              ),
-            ]),
-            @html.div(class="field", [
-              @html.label(
-                for_="api-key-maximum-requests",
-                enterprise_copy(state.locale, RequestQuota),
-              ),
-              @html.select(
-                id="api-key-maximum-requests",
-                on_change=text_command(emit, value => {
-                  ApiKeyMaximumRequestsChanged(
-                    match value {
-                      "100" => 100L
-                      "1000" => 1000L
-                      "100000" => 100000L
-                      _ => 10000L
+                  on_click=command(emit, ToggleApiKeyModelListScope),
+                  enterprise_copy(state.locale, ModelList),
+                ),
+                @html.button(
+                  type_="button",
+                  class=if draft.inference_scope {
+                    "scope-toggle is-selected"
+                  } else {
+                    "scope-toggle"
+                  },
+                  attrs=@html.Attrs::build().aria_pressed(
+                    if draft.inference_scope {
+                      "true"
+                    } else {
+                      "false"
                     },
-                  )
-                }),
-                [
-                  @html.option(
-                    value="100",
-                    selected=draft.maximum_requests == 100L,
-                    "100",
                   ),
-                  @html.option(
-                    value="1000",
-                    selected=draft.maximum_requests == 1000L,
-                    "1,000",
+                  on_click=command(emit, ToggleApiKeyInferenceScope),
+                  enterprise_copy(state.locale, Inference),
+                ),
+              ]),
+              @html.div(class="field", [
+                @html.label(
+                  for_="api-key-models",
+                  enterprise_copy(state.locale, AllowedModels),
+                ),
+                @html.input(
+                  id="api-key-models",
+                  value=draft.allowed_models,
+                  placeholder=enterprise_copy(
+                    state.locale,
+                    OptionalCommaSeparatedAliases,
                   ),
-                  @html.option(
-                    value="10000",
-                    selected=draft.maximum_requests == 10000L,
-                    "10,000",
+                  on_input=text_command(emit, value => {
+                    ApiKeyAllowedModelsChanged(value)
+                  }),
+                ),
+                @html.small(
+                  enterprise_copy(state.locale, LeaveEmptyToAllowEveryModel),
+                ),
+              ]),
+              if api_key_uses_reserved_model(state) {
+                @html.nothing
+              } else {
+                @html.div(class="field", [
+                  @html.label(
+                    for_="api-key-maximum-requests",
+                    enterprise_copy(state.locale, RequestQuota),
                   ),
-                  @html.option(
-                    value="100000",
-                    selected=draft.maximum_requests == 100000L,
-                    "100,000",
+                  @html.select(
+                    id="api-key-maximum-requests",
+                    on_change=text_command(emit, value => {
+                      ApiKeyMaximumRequestsChanged(
+                        match value {
+                          "100" => 100L
+                          "1000" => 1000L
+                          "100000" => 100000L
+                          _ => 10000L
+                        },
+                      )
+                    }),
+                    [
+                      @html.option(
+                        value="100",
+                        selected=draft.maximum_requests == 100L,
+                        "100",
+                      ),
+                      @html.option(
+                        value="1000",
+                        selected=draft.maximum_requests == 1000L,
+                        "1,000",
+                      ),
+                      @html.option(
+                        value="10000",
+                        selected=draft.maximum_requests == 10000L,
+                        "10,000",
+                      ),
+                      @html.option(
+                        value="100000",
+                        selected=draft.maximum_requests == 100000L,
+                        "100,000",
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ])
+              },
             ]),
           ]),
         ]),
@@ -2118,6 +2195,9 @@ fn one_time_secret_dialog(
   guard state.one_time_api_key_secret is Some(value) else {
     return @html.nothing
   }
+  let private_model = state.deliveries.external_model.map_or(false, service => {
+    value.allowed_models == [service.model_alias]
+  })
   @html.div(class="modal-backdrop", [
     @html.section(
       class="confirmation-dialog account-dialog",
@@ -2153,23 +2233,41 @@ fn one_time_secret_dialog(
             @html.dd([copy_detail(state, emit, value.key_id)]),
           ]),
         ]),
-        @html.pre(class="one-time-secret", value.secret),
-        @html.section(class="first-call-guide", [
-          @html.h3(enterprise_copy(state.locale, MakeYourFirstCall)),
-          @html.p(message(state.locale, FirstCallSetup)),
-          if value.api_base_url is None {
+        @html.details([
+          @html.summary(
+            copy(state.locale, "Reveal API key", "显示 API 密钥"),
+          ),
+          @html.pre(class="one-time-secret", value.secret),
+        ]),
+        @html.details(class="first-call-guide", [
+          @html.summary(enterprise_copy(state.locale, MakeYourFirstCall)),
+          @html.p(
+            if private_model {
+              copy(
+                state.locale,
+                "Set API_KEY in your terminal, then run the example.",
+                "在终端设置 API_KEY 后运行示例。",
+              )
+            } else {
+              message(state.locale, FirstCallSetup)
+            },
+          ),
+          if !private_model && value.api_base_url is None {
             @html.p(message(state.locale, MissingApiEntrance))
           } else {
             @html.nothing
           },
-          @html.pre(class="mono", first_call_example(value)),
-          @html.button(
-            type_="button",
-            class="quiet-button",
-            on_click=command(emit, CopyFirstCallExample),
+          @html.pre(class="mono", api_key_first_call_example(state, value)),
+          @controls.icon_button(
+            Copy,
             enterprise_copy(state.locale, CopyFirstCallExample),
+            command(emit, CopyFirstCallExample),
           ),
-          @html.p(message(state.locale, FirstCallErrors)),
+          if private_model {
+            @html.nothing
+          } else {
+            @html.p(message(state.locale, FirstCallErrors))
+          },
         ]),
         @html.div(class="dialog-actions", [
           @html.button(
@@ -2286,16 +2384,7 @@ fn account_access_view(
   @html.div(class="page-stack account-access-page", [
     @html.section(class="account-identity", [
       @html.div(class="section-heading", [
-        @html.div([
-          @html.p(
-            class="eyebrow",
-            enterprise_copy(state.locale, AuthenticatedAccount),
-          ),
-          @html.h2(enterprise_copy(state.locale, IdentityMembership)),
-          @html.p(
-            enterprise_copy(state.locale, AuthenticationIsSuppliedByTheTrusted),
-          ),
-        ]),
+        @html.div([@html.h2(enterprise_copy(state.locale, IdentityMembership))]),
         @html.span(
           class=if membership.active {
             "state-pill account-state-active"
@@ -2415,8 +2504,8 @@ fn account_access_view(
             @html.p(
               copy(
                 state.locale,
-                "Invite a teammate to this company as a Developer. Their WebIDE and chat remain personal; company models and machines are shared by authorization.",
-                "邀请同事以开发者身份加入企业。各人的 WebIDE 和聊天独立；模型与机器由企业授权共享。",
+                "Invite a teammate as a Developer.",
+                "邀请同事以开发者身份加入企业。",
               ),
             ),
           ]),
@@ -2488,12 +2577,7 @@ fn account_access_view(
     },
     @html.section(class="api-key-panel", [
       @html.div(class="section-heading", [
-        @html.div([
-          @html.h2(enterprise_copy(state.locale, ApiKeys)),
-          @html.p(
-            enterprise_copy(state.locale, KeysAreSubjectBoundExpiringModel),
-          ),
-        ]),
+        @html.div([@html.h2(enterprise_copy(state.locale, ApiKeys))]),
         @html.button(
           type_="button",
           class="primary-button",
@@ -2516,9 +2600,9 @@ fn account_access_view(
           enterprise_copy(state.locale, CreateApiKey),
         ),
       ]),
-      @html.p(class="rotation-note", [
-        @html.strong(enterprise_copy(state.locale, Rotation)),
-        @html.span(
+      @html.details(class="key-help", [
+        @html.summary(enterprise_copy(state.locale, Rotation)),
+        @html.p(
           if state.trial is Some(trial) && trial.revoked_unix_ms is None {
             message(state.locale, TrialSecret)
           } else {
@@ -2545,7 +2629,10 @@ fn account_access_view(
                 @html.div(class="api-key-card-heading", [
                   @html.div([
                     @html.h3(key.display_name),
-                    copy_detail(state, emit, key.key_id),
+                    @controls.advanced(
+                      enterprise_copy(state.locale, AdvancedSettings),
+                      [copy_detail(state, emit, key.key_id)],
+                    ),
                   ]),
                   @html.span(
                     class="state-pill api-key-state-\{status_class}",
@@ -2581,24 +2668,31 @@ fn account_access_view(
                       ),
                     ),
                   ]),
-                  @html.div([
-                    @html.dt(enterprise_copy(state.locale, Requests)),
-                    @html.dd(
-                      "\{key.consumed_requests} / \{key.maximum_requests}",
-                    ),
-                    @html.dd(
-                      if key.maximum_requests <= 0L ||
-                        key.consumed_requests >= key.maximum_requests {
-                        enterprise_copy(state.locale, QuotaExhausted148)
-                      } else if key.consumed_requests >=
-                        key.maximum_requests - key.maximum_requests / 5L {
-                        enterprise_copy(state.locale, WarningLessThanRemaining)
-                      } else {
-                        enterprise_copy(state.locale, QuotaAvailable)
-                      },
-                    ),
-                    @html.dd([quota_indicator(state.locale, key)]),
-                  ]),
+                  if key.maximum_requests == 0L {
+                    @html.nothing
+                  } else {
+                    @html.div([
+                      @html.dt(enterprise_copy(state.locale, Requests)),
+                      @html.dd(
+                        "\{key.consumed_requests} / \{key.maximum_requests}",
+                      ),
+                      @html.dd(
+                        if key.maximum_requests <= 0L ||
+                          key.consumed_requests >= key.maximum_requests {
+                          enterprise_copy(state.locale, QuotaExhausted148)
+                        } else if key.consumed_requests >=
+                          key.maximum_requests - key.maximum_requests / 5L {
+                          enterprise_copy(
+                            state.locale,
+                            WarningLessThanRemaining,
+                          )
+                        } else {
+                          enterprise_copy(state.locale, QuotaAvailable)
+                        },
+                      ),
+                      @html.dd([quota_indicator(state.locale, key)]),
+                    ])
+                  },
                 ]),
                 @html.div(class="api-key-actions", [
                   @html.button(
@@ -2637,26 +2731,40 @@ fn agreements_view(
         @html.h2(
           enterprise_copy(state.locale, AgreementsRequiringYourOrganization),
         ),
-        @html.p(
-          enterprise_copy(state.locale, ReviewTheImmutableDocumentHashBefore),
-        ),
       ]),
       @html.div(class="section-actions", [
         @html.span(class="count-pill", "\{state.agreements.length()}"),
-        @html.button(
-          type_="button",
-          class="quiet-button compact-button",
-          disabled=state.provider_requests_loading,
-          on_click=command(emit, RefreshProviderRequests),
-          if state.provider_requests_loading {
-            enterprise_copy(state.locale, Refreshing)
-          } else {
-            enterprise_copy(state.locale, RefreshStatus)
-          },
+        @controls.icon_button(
+          Refresh,
+          enterprise_copy(state.locale, RefreshStatus),
+          command(emit, RefreshProviderRequests),
+          busy=state.provider_requests_loading,
         ),
       ]),
     ]),
     @html.div(class="record-list", records),
+    if state.self_service.order is Some(_) &&
+      state.self_service.step == ContractPayment {
+      @html.div(class="wizard-actions", [
+        @html.button(
+          type_="button",
+          class="primary-button",
+          on_click=command(emit, Navigate(SelfService)),
+          copy(state.locale, "Continue order", "继续订单"),
+        ),
+      ])
+    } else if state.agreements.any(agreement => agreement.state == Executed) {
+      @html.div(class="wizard-actions", [
+        @html.button(
+          type_="button",
+          class="primary-button",
+          on_click=command(emit, Navigate(LeaseRequests)),
+          enterprise_copy(state.locale, RequestManagedCapacity),
+        ),
+      ])
+    } else {
+      @html.nothing
+    },
   ])
 }
 
@@ -2800,15 +2908,7 @@ fn lease_requests_view(
   })
   @html.div(class="lease-layout", [
     @html.section(class="request-form", [
-      @html.p(
-        class="eyebrow",
-        enterprise_copy(state.locale, ManagedCapacityRequest),
-      ),
       @html.h2(enterprise_copy(state.locale, RequestAManuallyAssignedWorkspace)),
-      @html.p(
-        enterprise_copy(state.locale, RequestRequirementsNotASpecificMachine),
-      ),
-      @html.p(enterprise_copy(state.locale, DescribeYourWorkloadAndModelsThe)),
       if !has_executed_agreement {
         @html.div(class="notice is-error", [
           @html.p(
@@ -2825,18 +2925,6 @@ fn lease_requests_view(
         @html.span("")
       },
       @html.div(class="form-grid", [
-        @html.div(class="field", [
-          @html.label(
-            for_="lease-project",
-            enterprise_copy(state.locale, ProjectId),
-          ),
-          @html.input(
-            id="lease-project",
-            value=state.project_id,
-            maxlength=160,
-            on_input=text_command(emit, value => ProjectChanged(value)),
-          ),
-        ]),
         @html.div(class="field", [
           @html.label(
             for_="lease-username",
@@ -2902,10 +2990,20 @@ fn lease_requests_view(
             "",
           ),
         ]),
-      ]),
-      @html.div(class="request-boundary", [
-        @html.strong(enterprise_copy(state.locale, WhatHappensNext)),
-        @html.p(enterprise_copy(state.locale, TheRequestEntersTheOperatorQueue)),
+        @controls.advanced(enterprise_copy(state.locale, AdvancedSettings), [
+          @html.div(class="field", [
+            @html.label(
+              for_="lease-project",
+              enterprise_copy(state.locale, ProjectId),
+            ),
+            @html.input(
+              id="lease-project",
+              value=state.project_id,
+              maxlength=160,
+              on_input=text_command(emit, value => ProjectChanged(value)),
+            ),
+          ]),
+        ]),
       ]),
       @html.button(
         type_="button",
@@ -2932,12 +3030,6 @@ fn lease_requests_view(
                     request_state_label(state.locale, request.state),
                   ),
                 ]),
-                @html.p(
-                  enterprise_copy(
-                    state.locale,
-                    AnOperatorReviewsPolicyHealthAnd,
-                  ),
-                ),
                 @html.p(request.submission.justification),
                 @html.dl(class="record-meta", [
                   @html.div([
@@ -3050,7 +3142,9 @@ fn costs_view(
       @html.tr([
         @html.td([
           @html.strong(center.display_name),
-          copy_detail(state, emit, center.cost_center_id),
+          @controls.advanced(enterprise_copy(state.locale, AdvancedSettings), [
+            copy_detail(state, emit, center.cost_center_id),
+          ]),
         ]),
         @html.td(center.project_count.to_string()),
         @html.td(center.provisional_spend),
@@ -3073,21 +3167,16 @@ fn costs_view(
     @html.section(class="section-heading", [
       @html.div([
         @html.h2(enterprise_copy(state.locale, UsageAndCostAllocation)),
-        @html.p(
-          enterprise_copy(state.locale, TenantScopedProjectionsFromTheCentral),
-        ),
       ]),
     ]),
     @html.div(class="metric-grid", [
       @html.div(class="metric", [
         @html.span(enterprise_copy(state.locale, ProvisionalCharges)),
         @html.strong(state.provisional_spend),
-        @html.small(enterprise_copy(state.locale, CentralLedgerProjection)),
       ]),
       @html.div(class="metric", [
         @html.span(enterprise_copy(state.locale, CostCenters)),
         @html.strong(state.cost_centers.length().to_string()),
-        @html.small(enterprise_copy(state.locale, TenantScoped)),
       ]),
     ]),
     @html.section(class="checkout-panel", [
@@ -3095,20 +3184,13 @@ fn costs_view(
         @html.div([
           @html.p(class="eyebrow", enterprise_copy(state.locale, OnlinePayment)),
           @html.h3(enterprise_copy(state.locale, PayAFinalizedBillingPeriod)),
-          @html.p(
-            enterprise_copy(state.locale, AmountCurrencyScaleAndRetrySafe),
-          ),
+          @html.p(enterprise_copy(state.locale, ReviewTotalBeforePayment)),
         ]),
-        @html.button(
-          type_="button",
-          class="quiet-button compact-button",
-          disabled=state.provider_requests_loading,
-          on_click=command(emit, RefreshProviderRequests),
-          if state.provider_requests_loading {
-            enterprise_copy(state.locale, Refreshing)
-          } else {
-            enterprise_copy(state.locale, RefreshPaymentStatus)
-          },
+        @controls.icon_button(
+          Refresh,
+          enterprise_copy(state.locale, RefreshPaymentStatus),
+          command(emit, RefreshProviderRequests),
+          busy=state.provider_requests_loading,
         ),
       ]),
       match state.payment_checkout_quote {
@@ -3250,28 +3332,11 @@ fn models_view(
         emit,
         model.model_id,
         model.alias_name.unwrap_or(model.version),
-        "\{model.minimum_memory_mib} MiB",
         model.alias_name is Some(_),
       )
     }
   ]
   @html.div(class="page-stack", [
-    @html.section(class="section-heading", [
-      @html.div([
-        @html.h2(enterprise_copy(state.locale, SharedModelCatalog)),
-        @html.p(
-          enterprise_copy(state.locale, OneManagementPlaneCatalogFeedsPortal),
-        ),
-      ]),
-    ]),
-    if cards.length() == 0 {
-      @html.p(
-        class="empty",
-        enterprise_copy(state.locale, NoApprovedModelsAreEntitledFor),
-      )
-    } else {
-      @html.div(class="model-grid", cards)
-    },
     if state.deliveries.company_workspace.map_or(false, value => {
         value.status != "NoCompanyMachines"
       }) ||
@@ -3286,6 +3351,27 @@ fn models_view(
     } else {
       @html.nothing
     },
+    if state.deliveries.external_model is Some(_) {
+      @controls.advanced(enterprise_copy(state.locale, SharedModelCatalog), [
+        @html.div(class="model-grid", cards),
+      ])
+    } else {
+      @html.section([
+        @html.div(class="section-heading", [
+          @html.h2(enterprise_copy(state.locale, SharedModelCatalog)),
+        ]),
+        if cards.length() == 0 {
+          @html.p(
+            class="empty",
+            enterprise_copy(state.locale, NoApprovedModelsAreEntitledFor),
+          )
+        } else {
+          @html.div(class="model-grid", cards)
+        },
+      ])
+    },
+    api_key_issue_dialog(state, emit),
+    one_time_secret_dialog(state, emit),
   ])
 }
 
@@ -3296,7 +3382,10 @@ pub fn webide_launch_selection(
   state : EnterpriseState,
 ) -> (String?, String, Array[String])? {
   guard state.desktop_client is Some(client) &&
-    client.client_id != "comfyui" &&
+    // The hosted ComfyUI gateway has a fixed public base path. Legacy direct
+    // GPU pages still require a delivery; they are not personal workspaces.
+    !(client.client_id == "comfyui" &&
+    !client.launch_uri.has_suffix("/comfyui/connect")) &&
     // A loopback MoonDesk is one machine-wide profile, not a tenant-isolated
     // hosted workspace. Never issue another person's handoff into it.
     !(client.client_id == "desktop-workspace" &&
@@ -3312,6 +3401,13 @@ pub fn webide_launch_selection(
     None =>
       if state.project_id.is_empty() {
         None
+      } else if state.webide_model_alias is Some(model_name) {
+        if application_model_available(state, model_name) &&
+          client.approved_model_aliases.contains(model_name) {
+          Some((None, state.project_id, [model_name]))
+        } else {
+          None
+        }
       } else {
         Some((None, state.project_id, client.approved_model_aliases))
       }
@@ -3336,7 +3432,9 @@ pub fn personal_webide_control_uri(client : EnterpriseDesktopClient) -> String? 
   if (
       client.client_id != "desktop-workspace" &&
       client.client_id != "moonrobo" &&
-      client.client_id != "moontown"
+      client.client_id != "moontown" &&
+      !(client.client_id == "comfyui" &&
+      client.launch_uri.has_suffix("/comfyui/connect"))
     ) ||
     !client.launch_uri.has_suffix("/connect") {
     return None
@@ -3370,167 +3468,66 @@ fn desktop_connect_progress_view(
   state : EnterpriseState,
   emit : @rabbita.Emit[EnterpriseMessage]?,
 ) -> @rabbita.Html {
-  let client = state.desktop_client
-  let model_ready = client.map_or(false, value => value.models_ready)
-  let access_ready = client.map_or(false, value => value.workspace_ready)
-  let percent = match state.desktop_connect_phase {
-    IssuingHandoff => 50
-    ClientOpened => 75
-    NotStarted | ConnectFailed =>
-      if model_ready && access_ready {
-        25
-      } else {
-        0
-      }
-  }
+  let name = state.desktop_client.map_or("", client => client.display_name)
   let status = match state.desktop_connect_phase {
     IssuingHandoff =>
-      copy(
-        state.locale,
-        "Model and access checked. Issuing a single-use connection…",
-        "模型与权限已检查，正在签发一次性连接…",
-      )
+      copy(state.locale, "Opening \{name}…", "正在打开 \{name}…")
     ClientOpened =>
-      if client.map_or(false, value => value.client_id == "moonrobo") {
-        copy(
-          state.locale,
-          "Handoff issued. Continue in MoonRobo to see connection progress.",
-          "一次性交接已签发。请在 MoonRobo 查看连接进度。",
-        )
-      } else if client.map_or(false, value => value.client_id == "moontown") {
-        copy(
-          state.locale,
-          "Handoff issued. Continue in your personal MoonTown workspace.",
-          "一次性交接已签发。请在个人 MoonTown 工作空间继续。",
-        )
-      } else {
-        copy(
-          state.locale,
-          "Handoff issued. Continue in MoonDesk to see redemption and MoonGate progress.",
-          "一次性交接已签发。请在 MoonDesk 查看核销与 MoonGate 接通进度。",
-        )
-      }
+      copy(state.locale, "Continue in \{name}.", "请在 \{name} 中继续。")
     ConnectFailed =>
       copy(
         state.locale,
-        "Connection stopped. See the error above, then retry from this button.",
-        "连接已停在失败步骤。请查看上方错误，再从此按钮重试。",
+        "Could not open the application. Retry when ready.",
+        "无法打开应用，就绪后可重试。",
       )
     NotStarted =>
-      if !model_ready {
+      if webide_launch_selection(state) is Some(_) {
+        copy(state.locale, "Ready", "已就绪")
+      } else if state.desktop_client is None {
         copy(
           state.locale,
-          "Waiting for a serving model.",
-          "等待可调用模型。",
+          "Choose an application or model.",
+          "请选择应用或模型。",
         )
-      } else if !access_ready {
+      } else if !state.desktop_client.map_or(false, client => {
+          client.workspace_ready
+        }) {
         copy(
           state.locale,
-          "No active workspace access: not yet enabled, expired, or revoked.",
-          "无有效工作区权限：尚未开通、已到期或已撤销。",
+          "Workspace access is not active: not enabled, expired, or revoked.",
+          "工作区权限无效：未开通、已到期或已撤销。",
         )
       } else {
         copy(
           state.locale,
-          "Model and access are ready. Click once to connect.",
-          "模型与权限已就绪。点击一次开始贯通连接。",
+          "Waiting for a serving model compatible with this application.",
+          "等待此应用支持的可调用模型。",
         )
       }
   }
   @html.section(class="workflow-panel", [
-    @html.h2(copy(state.locale, "One-click connection", "一键贯通认证")),
-    @html.p(
-      copy(state.locale, "Available model: ", "可用模型：") +
-      client.map_or("", value => value.approved_model_aliases.join(", ")),
-    ),
-    @html.p(
-      attrs=@html.Attrs::build().role("status").aria_live("polite"),
-      status,
-    ),
-    @html.button(
-      type_="button",
-      class="quiet-button",
-      disabled=state.loading,
-      on_click=command(emit, RefreshDesktopStatus),
-      if state.loading {
-        copy(
-          state.locale,
-          "Checking model and access…",
-          "正在检查模型与权限…",
-        )
-      } else {
-        copy(
-          state.locale,
-          "Refresh model and access",
-          "刷新模型与权限状态",
-        )
-      },
-    ),
-    @html.span(
-      class="quota-track",
-      attrs=@html.Attrs::build()
-        .role("progressbar")
-        .aria_label(copy(state.locale, "Connection progress", "贯通进度"))
-        .aria_valuemin("0")
-        .aria_valuemax("100")
-        .aria_valuenow(percent.to_string()),
-      [@html.span(class="quota-fill", style=["width:\{percent}%"], "")],
-    ),
-    @html.ol(class="workflow-steps", [
-      @html.li(class=if model_ready { "is-complete" } else { "is-current" }, [
-        @html.span("1"),
-        @html.strong(copy(state.locale, "Serving model", "可调用模型")),
-      ]),
-      @html.li(
-        class=if access_ready {
-          "is-complete"
-        } else if model_ready {
-          "is-current"
-        } else {
-          ""
-        },
-        [
-          @html.span("2"),
-          @html.strong(
-            copy(state.locale, "Account and lease", "账户与租约"),
-          ),
-        ],
+    @html.div(class="section-heading", [
+      @html.p(
+        attrs=@html.Attrs::build().role("status").aria_live("polite"),
+        status,
       ),
-      @html.li(
-        class=if state.desktop_connect_phase == ClientOpened {
-          "is-complete"
-        } else if state.desktop_connect_phase == IssuingHandoff {
-          "is-current"
+      @controls.icon_button(
+        Refresh,
+        if state.loading {
+          copy(
+            state.locale,
+            "Checking model and access…",
+            "正在检查模型与权限…",
+          )
         } else {
-          ""
+          copy(
+            state.locale,
+            "Refresh model and access",
+            "刷新模型与权限状态",
+          )
         },
-        [
-          @html.span("3"),
-          @html.strong(
-            copy(state.locale, "One-time handoff", "一次性交接"),
-          ),
-        ],
-      ),
-      @html.li(
-        class=if state.desktop_connect_phase == ClientOpened {
-          "is-current"
-        } else {
-          ""
-        },
-        [
-          @html.span("4"),
-          @html.strong(
-            if client.map_or(false, value => value.client_id == "moonrobo") {
-              copy(state.locale, "MoonRobo cockpit", "MoonRobo 控制台")
-            } else if client.map_or(false, value => {
-                value.client_id == "moontown"
-              }) {
-              copy(state.locale, "MoonTown workspace", "MoonTown 工作空间")
-            } else {
-              copy(state.locale, "MoonGate and Code", "MoonGate 与 Code")
-            },
-          ),
-        ],
+        command(emit, RefreshDesktopStatus),
+        busy=state.loading,
       ),
     ]),
   ])
@@ -3542,7 +3539,8 @@ fn desktop_ide_view(
   emit : @rabbita.Emit[EnterpriseMessage]?,
 ) -> @rabbita.Html {
   let is_comfyui = state.desktop_client.map_or(false, client => {
-    client.client_id == "comfyui"
+    client.client_id == "comfyui" &&
+    !client.launch_uri.has_suffix("/comfyui/connect")
   })
   let (name, contract_ready, workspace_ready, models_ready, ready) = match
     state.desktop_client {
@@ -3560,7 +3558,14 @@ fn desktop_ide_view(
   let available = ready &&
     !state.loading &&
     webide_launch_selection(state) is Some(_)
-  let next_action = if state.desktop_client is None {
+  let next_action = if state.desktop_client is None &&
+    state.webide_model_alias is Some(_) {
+    copy(
+      state.locale,
+      "No application supports this model. Choose another model.",
+      "暂无应用支持此模型，请选择其他模型。",
+    )
+  } else if state.desktop_client is None {
     enterprise_copy(state.locale, YourOperatorMustFinishDesktopIntegration)
   } else if state.desktop_client is Some(client) &&
     client.client_id == "desktop-workspace" &&
@@ -3570,15 +3575,14 @@ fn desktop_ide_view(
     ) {
     copy(
       state.locale,
-      "This legacy local MoonDesk shares one data directory. Hosted one-click access is paused until each account has its own container and saved volume; existing files were not deleted.",
-      "旧版本机 MoonDesk 共用同一数据目录。已暂停一键打开，待每个账户接入独立容器和持久化卷；现有文件未删除。",
+      "MoonDesk access is paused. Contact your administrator to restore your workspace; your saved files are preserved.",
+      "MoonDesk 访问已暂停。请联系管理员恢复工作区；已保存的文件仍保留。",
     )
-  } else if state.desktop_client is Some(client) &&
-    client.client_id == "comfyui" {
+  } else if is_comfyui {
     copy(
       state.locale,
-      "ComfyUI needs an active GPU delivery. Select an authorized resource and published template in Dedicated application workspaces below, then open it from that delivery. A workspace lease alone does not reserve a machine.",
-      "ComfyUI 需要有效的 GPU 交付。请在下方「PaaS · 专属应用工作区」选择已授权资源和已发布模板，再从该交付打开。仅有工作区租约不会预留机器。",
+      "Set up a GPU workspace below, then open ComfyUI from that workspace.",
+      "请先在下方配置 GPU 工作区，再从该工作区打开 ComfyUI。",
     )
   } else if !contract_ready {
     enterprise_copy(state.locale, CompleteTheMasterleaseEverythingElseStays)
@@ -3593,178 +3597,190 @@ fn desktop_ide_view(
   } else if state.webide_order_id is Some(_) &&
     webide_launch_selection(state) is None {
     enterprise_copy(state.locale, TheSelectedPaidEndpointIsUnavailable)
+  } else if state.webide_model_alias is Some(_) &&
+    webide_launch_selection(state) is None {
+    copy(
+      state.locale,
+      "Choose an application that supports the selected model.",
+      "请选择支持所选模型的应用。",
+    )
   } else {
     enterprise_copy(state.locale, YourAccessIsReadyOpenThe)
   }
   @html.div(class="page-stack", [
-    if state.desktop_clients.length() > 1 {
-      @html.section(class="workflow-panel", [
-        @html.h2(enterprise_copy(state.locale, ChooseYourWebide)),
-        @html.p(
-          enterprise_copy(
-            state.locale,
-            OpenYourPreferredWorkspaceCreativeWorkflows,
-          ),
-        ),
-        @html.div(
-          class="api-key-actions",
-          [
-            for client in state.desktop_clients => {
-              let selected = state.desktop_client.map_or(false, current => {
-                current.client_id == client.client_id
-              })
+    application_cards(state, emit),
+    if !is_comfyui {
+      application_model_context(state, emit)
+    } else {
+      @html.nothing
+    },
+    @html.details(class="application-settings", open=!available, [
+      @html.summary(copy(state.locale, "Workspace settings", "工作区设置")),
+      @html.div(class="application-settings-content", [
+        if !is_comfyui &&
+          (
+            state.webide_order_id is Some(_) ||
+            webide_orders(state).any(order => order.kind == DedicatedMaaS)
+          ) {
+          @html.section(class="workflow-panel", [
+            @html.label(
+              for_="webide-model-source",
+              enterprise_copy(state.locale, ModelSource),
+            ),
+            @html.select(
+              id="webide-model-source",
+              disabled=state.loading,
+              on_change=text_command(emit, value => SelectWebIdeOrder(value)),
+              [
+                @html.option(
+                  value="",
+                  selected=state.webide_order_id is None &&
+                    state.webide_model_alias is None,
+                  enterprise_copy(state.locale, AuthorizedSharedModels),
+                ),
+                ..match state.webide_model_alias {
+                  Some(model_name) =>
+                    [
+                      @html.option(
+                        value="model:" + model_name,
+                        selected=true,
+                        disabled=true,
+                        model_name,
+                      ),
+                    ]
+                  None => []
+                },
+                ..match state.webide_order_id {
+                  Some(id) if !webide_orders(state).any(order => {
+                      order.order_id == id && order.kind == DedicatedMaaS
+                    }) =>
+                    [
+                      @html.option(
+                        value=id,
+                        disabled=true,
+                        selected=true,
+                        enterprise_copy(
+                          state.locale,
+                          SelectedOrderIsUnavailable,
+                        ),
+                      ),
+                    ]
+                  _ => []
+                },
+                ..[
+                  for order in webide_orders(state) if order.kind ==
+                  DedicatedMaaS => {
+                    @html.option(
+                      value=order.order_id,
+                      disabled=order.status != ActiveOrder,
+                      selected=state.webide_order_id == Some(order.order_id),
+                      order.gpu_sku +
+                      " · " +
+                      order.model_selector.unwrap_or("") +
+                      " · " +
+                      order.order_id,
+                    )
+                  }
+                ],
+              ],
+            ),
+          ])
+        } else {
+          @html.nothing
+        },
+        @html.section(class="welcome-panel", [
+          @html.div([
+            @html.h2(
+              if state.desktop_client is None {
+                enterprise_copy(state.locale, ChooseYourWebide)
+              } else {
+                copy(
+                  state.locale,
+                  "Continue working in \{name}",
+                  "在 \{name} 中继续工作",
+                )
+              },
+            ),
+            if !available {
+              @html.p(next_action)
+            } else {
+              @html.nothing
+            },
+          ]),
+          if is_comfyui {
+            @html.nothing
+          } else if state.desktop_client is None &&
+            state.webide_model_alias is Some(_) {
+            @html.button(
+              type_="button",
+              class="primary-action",
+              on_click=command(emit, Navigate(Models)),
+              copy(state.locale, "Choose another model", "选择其他模型"),
+            )
+          } else if !contract_ready && state.desktop_client is Some(_) {
+            @html.button(
+              type_="button",
+              class="primary-action",
+              on_click=command(emit, Navigate(ContractDocuments)),
+              enterprise_copy(state.locale, CompleteMasterlease),
+            )
+          } else if !workspace_ready && state.desktop_client is Some(_) {
+            @html.button(
+              type_="button",
+              class="primary-action",
+              on_click=command(emit, Navigate(OfflineCommerce)),
+              copy(state.locale, "View orders", "查看订单"),
+            )
+          } else {
+            @html.button(
+              type_="button",
+              class="primary-action",
+              disabled=!available,
+              on_click=command(emit, LaunchDesktopClient),
+              if state.loading {
+                enterprise_copy(state.locale, Connecting)
+              } else {
+                copy(state.locale, "Open \{name}", "打开 \{name}")
+              },
+            )
+          },
+          match state.desktop_client {
+            Some(client) if personal_webide_control_uri(client) is Some(url) =>
               @html.button(
                 type_="button",
-                class=if selected {
-                  "scope-toggle is-selected"
-                } else {
-                  "scope-toggle"
-                },
-                disabled=state.loading,
-                attrs=@html.Attrs::build().aria_pressed(
-                  if selected {
-                    "true"
-                  } else {
-                    "false"
-                  },
+                class="quiet-button external-action",
+                on_click=command(emit, ManageWebIde(url)),
+                copy(
+                  state.locale,
+                  "Manage / stop my WebIDE",
+                  "管理／停止我的 WebIDE",
                 ),
-                on_click=command(emit, SelectWebIde(client.client_id)),
-                client.display_name,
               )
-            }
-          ],
-        ),
-      ])
-    } else {
-      @html.span("")
-    },
-    if !is_comfyui &&
-      (
-        state.webide_order_id is Some(_) ||
-        webide_orders(state).any(order => order.kind == DedicatedMaaS)
-      ) {
-      @html.section(class="workflow-panel", [
-        @html.label(
-          for_="webide-model-source",
-          enterprise_copy(state.locale, ModelSource),
-        ),
-        @html.select(
-          id="webide-model-source",
-          disabled=state.loading,
-          on_change=text_command(emit, value => SelectWebIdeOrder(value)),
-          [
-            @html.option(
-              value="",
-              selected=state.webide_order_id is None,
-              enterprise_copy(state.locale, AuthorizedSharedModels),
-            ),
-            ..match state.webide_order_id {
-              Some(id) if !webide_orders(state).any(order => {
-                  order.order_id == id && order.kind == DedicatedMaaS
-                }) =>
-                [
-                  @html.option(
-                    value=id,
-                    disabled=true,
-                    selected=true,
-                    enterprise_copy(state.locale, SelectedOrderIsUnavailable),
-                  ),
-                ]
-              _ => []
-            },
-            ..[
-              for order in webide_orders(state) if order.kind == DedicatedMaaS => {
-                @html.option(
-                  value=order.order_id,
-                  disabled=order.status != ActiveOrder,
-                  selected=state.webide_order_id == Some(order.order_id),
-                  order.gpu_sku +
-                  " · " +
-                  order.model_selector.unwrap_or("") +
-                  " · " +
-                  order.order_id,
-                )
-              }
-            ],
-          ],
-        ),
-        @html.p(enterprise_copy(state.locale, DedicatedOrdersStayBoundToTheir)),
-      ])
-    } else {
-      @html.nothing
-    },
-    @html.section(class="welcome-panel", [
-      @html.div([
-        @html.p(
-          class="eyebrow",
-          enterprise_copy(state.locale, SecureWebideHandoff),
-        ),
-        @html.h2(
-          copy(
-            state.locale,
-            "Continue working in \{name}",
-            "在 \{name} 中继续工作",
-          ),
-        ),
-        @html.p(next_action),
-      ]),
-      if is_comfyui {
-        @html.nothing
-      } else if !contract_ready && state.desktop_client is Some(_) {
-        @html.button(
-          type_="button",
-          class="primary-action",
-          on_click=command(emit, Navigate(ContractDocuments)),
-          enterprise_copy(state.locale, CompleteMasterlease),
-        )
-      } else {
-        @html.button(
-          type_="button",
-          class="primary-action",
-          disabled=!available,
-          on_click=command(emit, LaunchDesktopClient),
-          if state.loading {
-            enterprise_copy(state.locale, Connecting)
-          } else {
-            copy(state.locale, "Open \{name}", "打开 \{name}")
+            _ => @html.nothing
           },
-        )
-      },
-      match state.desktop_client {
-        Some(client) if personal_webide_control_uri(client) is Some(url) =>
-          @html.button(
-            type_="button",
-            class="quiet-button external-action",
-            on_click=command(emit, ManageWebIde(url)),
-            copy(
-              state.locale,
-              "Manage / stop my WebIDE",
-              "管理／停止我的 WebIDE",
-            ),
-          )
-        _ => @html.nothing
-      },
+        ]),
+        if !is_comfyui {
+          desktop_connect_progress_view(state, emit)
+        } else {
+          @html.nothing
+        },
+        if is_comfyui ||
+          state.deliveries.company_workspace.map_or(false, value => {
+            value.status != "NoCompanyMachines"
+          }) ||
+          state.deliveries.operations.any(value => value.kind == "Workspace") ||
+          (
+            !state.deliveries.options.reservations.is_empty() &&
+            state.deliveries.options.templates.any(value => {
+              value.kind == "Workspace"
+            })
+          ) {
+          delivery_panel_view(state.deliveries, state.locale, emit, "Workspace")
+        } else {
+          @html.nothing
+        },
+      ]),
     ]),
-    if !is_comfyui {
-      desktop_connect_progress_view(state, emit)
-    } else {
-      @html.nothing
-    },
-    if is_comfyui ||
-      state.deliveries.company_workspace.map_or(false, value => {
-        value.status != "NoCompanyMachines"
-      }) ||
-      state.deliveries.operations.any(value => value.kind == "Workspace") ||
-      (
-        !state.deliveries.options.reservations.is_empty() &&
-        state.deliveries.options.templates.any(value => {
-          value.kind == "Workspace"
-        })
-      ) {
-      delivery_panel_view(state.deliveries, state.locale, emit, "Workspace")
-    } else {
-      @html.nothing
-    },
   ])
 }
 
@@ -3774,60 +3790,82 @@ fn model_card(
   emit : @rabbita.Emit[EnterpriseMessage]?,
   name : String,
   kind : String,
-  size : String,
   callable : Bool,
 ) -> @rabbita.Html {
-  @html.article(class="model-card", [
-    @html.div(class="model-icon", "M"),
-    @html.h3(name),
-    @html.p(kind),
-    if callable {
-      @html.button(
-        type_="button",
-        class="quiet-button",
-        on_click=command(emit, CopyDetail(kind)),
-        enterprise_copy(state.locale, CopyModelAlias),
-      )
-    } else {
-      @html.p(enterprise_copy(state.locale, NoCallableAliasPublished))
-    },
-    @html.p(
+  @html.article(
+    class="model-card",
+    style=[
+      "display: flex", "flex-direction: column", "gap: .55rem", "min-width: 0",
+    ],
+    [
+      @html.h3(style=["margin: 0", "overflow-wrap: anywhere"], name),
+      @html.div(class="copy-detail", [
+        @html.span(class="mono", kind),
+        if callable {
+          @controls.icon_button(
+            Copy,
+            enterprise_copy(state.locale, CopyModelAlias) + ": " + kind,
+            command(emit, CopyDetail(kind)),
+          )
+        } else {
+          @html.nothing
+        },
+      ]),
+      if callable {
+        @html.nothing
+      } else {
+        @html.p(enterprise_copy(state.locale, NoCallableAliasPublished))
+      },
       if kind.has_prefix("text.") {
-        enterprise_copy(state.locale, TextGeneration)
+        @html.p(enterprise_copy(state.locale, TextGeneration))
       } else if kind.has_prefix("video.") {
-        enterprise_copy(state.locale, VideoGeneration)
+        @html.p(enterprise_copy(state.locale, VideoGeneration))
       } else if kind.has_prefix("image.") {
-        enterprise_copy(state.locale, ImageGeneration)
+        @html.p(enterprise_copy(state.locale, ImageGeneration))
       } else {
-        enterprise_copy(state.locale, CheckTheApprovedCapabilityBeforeCalling)
+        @html.nothing
       },
-    ),
-    @html.dl([
-      @html.div([
-        @html.dt(enterprise_copy(state.locale, Availability)),
-        @html.dd(enterprise_copy(state.locale, ManagedCentrally)),
-      ]),
-      @html.div([
-        @html.dt(enterprise_copy(state.locale, Artifact)),
-        @html.dd(size),
-      ]),
-    ]),
-    @html.span(
-      class="entitled",
-      if callable &&
-        state.api_keys.any(key => {
-          key.revoked_unix_ms is None &&
-          key.expires_unix_ms > state.machine_access.now_unix_ms &&
-          key.scopes.contains(Inference) &&
-          key.consumed_requests < key.maximum_requests &&
-          (key.allowed_models.is_empty() || key.allowed_models.contains(kind))
-        }) {
-        enterprise_copy(state.locale, AllowedByAnActiveApiKey)
+      @html.span(
+        class="entitled",
+        style=["position: static", "align-self: flex-start", "max-width: 100%"],
+        if callable &&
+          state.api_keys.any(key => {
+            key.revoked_unix_ms is None &&
+            key.expires_unix_ms > state.machine_access.now_unix_ms &&
+            key.scopes.contains(Inference) &&
+            (
+              key.maximum_requests == 0L ||
+              key.consumed_requests < key.maximum_requests
+            ) &&
+            (key.allowed_models.is_empty() || key.allowed_models.contains(kind))
+          }) {
+          enterprise_copy(state.locale, AllowedByAnActiveApiKey)
+        } else {
+          enterprise_copy(state.locale, NoActiveApiKeyAllowsThis)
+        },
+      ),
+      if callable {
+        @html.div(class="api-key-actions", style=["margin-top: auto"], [
+          @html.button(
+            type_="button",
+            class="primary-button",
+            disabled=state.loading,
+            on_click=command(emit, UseModelInApplication(kind)),
+            copy(state.locale, "Use in an application", "在应用中使用"),
+          ),
+          @html.button(
+            type_="button",
+            class="quiet-button",
+            disabled=state.loading,
+            on_click=command(emit, CreateModelApiKey(kind)),
+            copy(state.locale, "Create API key", "创建 API 密钥"),
+          ),
+        ])
       } else {
-        enterprise_copy(state.locale, NoActiveApiKeyAllowsThis)
+        @html.nothing
       },
-    ),
-  ])
+    ],
+  )
 }
 
 ///|
@@ -3894,11 +3932,7 @@ fn notification_detail(
   locale : @i18n.Locale,
   record : @notifications.NotificationRecord,
 ) -> String {
-  let reference = match record.event.parameters.get("lease_ref") {
-    Some(value) => value
-    None => record.event.parameters.get("agreement_ref").unwrap_or("")
-  }
-  let explanation = match record.event.code {
+  match record.event.code {
     "LeaseRequestApproved" =>
       enterprise_copy(locale, AnOperatorApprovedYourCapacityRequest)
     "LeaseAccessReady" =>
@@ -3926,11 +3960,6 @@ fn notification_detail(
     "AccessCredentialsRevoked" =>
       enterprise_copy(locale, YourApiCredentialsWereRevokedBecause)
     _ => enterprise_copy(locale, OpenTheRelatedRecordForDetails)
-  }
-  if reference == "" {
-    explanation
-  } else {
-    "\{explanation} · \{reference}"
   }
 }
 
@@ -3975,6 +4004,7 @@ fn notification_preference_row(
     @html.div(class="record-actions", [
       @html.button(
         type_="button",
+        class="quiet-button",
         disabled=state.loading,
         on_click=command(emit, SetNotificationEmail(topic, !enabled)),
         copy(
@@ -4003,26 +4033,19 @@ fn notifications_view(
   let unread = state.notifications.count_if(record => record.lifecycle == Unread)
   @html.div(class="page-stack", [
     @html.section(class="section-heading", [
-      @html.div([
-        @html.h2(enterprise_copy(state.locale, NotificationInbox)),
-        @html.p(
-          enterprise_copy(
-            state.locale,
-            DurableUpdatesForAgreementsMachineAccess,
-          ),
-        ),
-      ]),
+      @html.div([@html.h2(enterprise_copy(state.locale, NotificationInbox))]),
       @html.span(
         class="count-pill",
         copy(state.locale, "\{unread} unread", "\{unread} 条未读"),
       ),
     ]),
-    @html.section(
+    @html.details(
+      class="notification-preferences",
       attrs=@html.Attrs::build().aria_labelledby(
         "notification-preferences-title",
       ),
       [
-        @html.h2(
+        @html.summary(
           id="notification-preferences-title",
           enterprise_copy(state.locale, DeliveryPreferences),
         ),
@@ -4111,12 +4134,48 @@ fn notifications_view(
                         ),
                       ),
                     ]),
-                    @html.div([
-                      @html.dt(enterprise_copy(state.locale, Receipt)),
-                      @html.dd([
-                        copy_detail(state, emit, record.event.source_receipt),
-                      ]),
-                    ]),
+                  ]),
+                  @html.details(class="notification-reference", [
+                    @html.summary(
+                      copy(state.locale, "Reference details", "参考详情"),
+                    ),
+                    @html.dl(
+                      class="record-meta",
+                      [
+                        @html.div([
+                          @html.dt(enterprise_copy(state.locale, Receipt)),
+                          @html.dd([
+                            copy_detail(
+                              state,
+                              emit,
+                              record.event.source_receipt,
+                            ),
+                          ]),
+                        ]),
+                        ..[
+                          for
+                            (key, label) in [
+                              (
+                                "lease_ref",
+                                enterprise_copy(state.locale, Lease),
+                              ),
+                              (
+                                "agreement_ref",
+                                enterprise_copy(state.locale, Agreements),
+                              ),
+                            ] => {
+                            if record.event.parameters.get(key) is Some(value) {
+                              @html.div([
+                                @html.dt(label),
+                                @html.dd([copy_detail(state, emit, value)]),
+                              ])
+                            } else {
+                              @html.nothing
+                            }
+                          }
+                        ],
+                      ],
+                    ),
                   ]),
                 ]),
                 if record.lifecycle == Unread {
@@ -4163,25 +4222,95 @@ fn content(
     DesktopIde => desktop_ide_view(state, emit)
     MachineAccess => {
       let machine = { ..state.machine_access, locale: state.locale, }
+      let reservations = state.deliveries.options.reservations.filter(item => {
+        item.expires_at_ms > state.machine_access.now_unix_ms
+      })
       @html.div(class="page-stack", [
-        match emit {
-          Some(send) =>
-            @machine_access.interactive_view(
-              machine,
-              send.map(message => MachineAccess(message)),
-            )
-          None => @machine_access.view(machine)
+        if !reservations.is_empty() {
+          @html.section(class="welcome-panel", [
+            @html.div(
+              [
+                @html.h2(
+                  copy(
+                    state.locale,
+                    "Company reserved machines",
+                    "公司预留机器",
+                  ),
+                ),
+                ..reservations.map(item => {
+                  @html.p(
+                    "\{item.node_count} " +
+                    copy(
+                      state.locale,
+                      "machines · until ",
+                      "台 · 到期于 ",
+                    ) +
+                    @contractdoc.format_unix_ms_beijing(item.expires_at_ms),
+                  )
+                }),
+                if machine.machines.is_empty() {
+                  @html.p(
+                    copy(
+                      state.locale,
+                      "Compute reserved; direct machine sign-in is not enabled.",
+                      "算力已预留；尚未开通直接登录机器。",
+                    ),
+                  )
+                } else {
+                  @html.nothing
+                },
+              ],
+            ),
+            match state.deliveries.external_model {
+              Some(service) =>
+                @html.button(
+                  type_="button",
+                  class="primary-button",
+                  on_click=command(emit, Navigate(Models)),
+                  copy(state.locale, "Open model API", "打开模型 API") +
+                  " · " +
+                  service.model_alias,
+                )
+              None => @html.nothing
+            },
+          ])
+        } else {
+          @html.nothing
         },
-        delivery_panel_view(
-          state.deliveries,
-          state.locale,
-          emit,
-          "GpuContainer",
-        ),
+        if machine.machines.is_empty() && !reservations.is_empty() {
+          @html.nothing
+        } else {
+          match emit {
+            Some(send) =>
+              @machine_access.interactive_view(
+                machine,
+                send.map(message => MachineAccess(message)),
+              )
+            None => @machine_access.view(machine)
+          }
+        },
+        if !reservations.is_empty() &&
+          state.deliveries.external_model is Some(_) &&
+          !state.deliveries.options.templates.any(item => {
+            item.kind == "GpuContainer"
+          }) {
+          @html.nothing
+        } else {
+          delivery_panel_view(
+            state.deliveries,
+            state.locale,
+            emit,
+            "GpuContainer",
+          )
+        },
       ])
     }
     OfflineCommerce => {
-      let commerce = { ..state.offline_commerce, locale: state.locale, }
+      let commerce = {
+        ..state.offline_commerce,
+        locale: state.locale,
+        contract_packets: state.contract_documents.packets,
+      }
       match emit {
         Some(send) =>
           @offline_commerce.interactive_view(
@@ -4193,7 +4322,7 @@ fn content(
     }
     ContractDocuments => {
       let documents = { ..state.contract_documents, locale: state.locale, }
-      match emit {
+      let page = match emit {
         Some(send) =>
           @contract_documents.interactive_view(
             documents,
@@ -4201,6 +4330,23 @@ fn content(
           )
         None => @contract_documents.view(documents)
       }
+      let order = documents.current_order()
+      @html.div(class="page-stack", [
+        match order {
+          Some(order) =>
+            @offline_commerce.rental_evidence_view(
+              {
+                ..state.offline_commerce,
+                locale: state.locale,
+                contract_packets: documents.packets,
+              },
+              order,
+              emit.map(send => send.map(message => OfflineCommerce(message))),
+            )
+          None => @html.nothing
+        },
+        page,
+      ])
     }
   }
 }
@@ -4211,7 +4357,7 @@ fn enterprise_view(
   emit : @rabbita.Emit[EnterpriseMessage]?,
 ) -> @rabbita.Html {
   let stylesheet =
-    #|:root{color-scheme:dark;--bg:#071016;--panel:#0d1820;--panel2:#111f29;--line:#223743;--ink:#ecf5f2;--muted:#91a7ad;--mint:#7ee0bd;--mint2:#35bd8d;--amber:#f1c66c}*{box-sizing:border-box}html{background:var(--bg);scroll-behavior:smooth}body{margin:0;background:radial-gradient(circle at 85% -10%,rgba(53,189,141,.12),transparent 30rem),var(--bg);color:var(--ink);font:14px/1.5 Inter,"PingFang SC","Noto Sans SC",system-ui,sans-serif}.skip-link{position:fixed;left:1rem;top:-5rem;z-index:100;padding:.65rem .9rem;background:var(--mint);color:#04251a}.skip-link:focus{top:1rem}.enterprise-root{min-height:100vh;display:grid;grid-template-columns:16rem minmax(0,1fr)}.enterprise-sidebar{position:sticky;top:0;height:100vh;padding:1.25rem 1rem;border-right:1px solid var(--line);background:rgba(7,16,22,.92);display:flex;flex-direction:column}.enterprise-brand{display:flex;gap:.75rem;align-items:center;padding:.5rem;color:var(--ink);text-decoration:none}.brand-mark{width:2.2rem;height:2.2rem;border-radius:.65rem;background:var(--mint);color:#08251c;display:grid;place-items:center;font-weight:900}.enterprise-brand span:last-child{display:flex;flex-direction:column}.enterprise-brand small{color:var(--muted)}.enterprise-sidebar nav{display:grid;gap:.3rem;margin-top:2rem}.nav-item{min-height:2.75rem;padding:.65rem .8rem;border:1px solid transparent;border-radius:.55rem;background:transparent;color:var(--muted);text-align:left;font:inherit;font-weight:700;cursor:pointer}.nav-item:hover,.nav-item:focus-visible{border-color:var(--line);color:var(--ink)}.nav-item.is-active{background:rgba(126,224,189,.1);border-color:rgba(126,224,189,.25);color:var(--mint)}.nav-link{display:flex;align-items:center;text-decoration:none}.trust-note{margin-top:auto;padding:.85rem;border:1px solid var(--line);border-radius:.7rem;background:var(--panel)}.trust-note strong{font-size:.75rem}.trust-note p{margin:.35rem 0 0;color:var(--muted);font-size:.72rem}.enterprise-main{min-width:0}.enterprise-topbar{min-height:6rem;padding:1.25rem 2rem;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:1rem}.eyebrow{margin:0 0 .2rem;color:var(--mint);font-size:.66rem;font-weight:850;letter-spacing:.12em}.enterprise-topbar h1{margin:0;font-size:1.65rem}.topbar-actions,.topbar-meta{display:flex;align-items:center;gap:.75rem}.topbar-meta{color:var(--muted)}.locale-control{display:flex;align-items:center;gap:.4rem}.locale-control label{color:var(--muted);font-size:.7rem}.locale-control select{min-height:44px;padding:.5rem 1.8rem .5rem .65rem;border:1px solid #35505f;border-radius:.45rem;background:#09151c;color:var(--ink);font:inherit}.status-dot{width:.5rem;height:.5rem;border-radius:50%;background:var(--mint2)}.role-pill,.count-pill,.state-pill,.entitled{padding:.28rem .5rem;border:1px solid var(--line);border-radius:999px;font-size:.67rem}.enterprise-content{max-width:90rem;margin:0 auto;padding:2rem}.page-stack{display:grid;gap:1.25rem}.welcome-panel,.workflow-panel,.request-form,.request-history,.data-table-panel{border:1px solid var(--line);border-radius:.85rem;background:linear-gradient(145deg,rgba(17,31,41,.96),rgba(10,22,29,.96));padding:1.35rem}.welcome-panel{display:flex;justify-content:space-between;gap:2rem;align-items:end}.welcome-panel h2{max-width:50rem;margin:.2rem 0 .5rem;font-size:clamp(1.6rem,3vw,2.6rem);line-height:1.1}.welcome-panel p:last-child{max-width:48rem;margin:0;color:var(--muted)}.primary-action,.primary-button{min-height:2.75rem;padding:.65rem 1rem;border:1px solid var(--mint2);border-radius:.55rem;background:var(--mint);color:#06251a;font:inherit;font-weight:850;cursor:pointer}.primary-action:disabled,.primary-button:disabled,.quiet-button:disabled{opacity:.42;cursor:not-allowed}.quiet-button{min-height:2.75rem;padding:.65rem 1rem;border:1px solid var(--line);border-radius:.55rem;background:var(--panel2);color:var(--ink);font:inherit;font-weight:700;cursor:pointer}.metric-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.8rem}.metric{min-height:8rem;padding:1rem;border:1px solid var(--line);border-radius:.75rem;background:var(--panel)}.metric span,.metric small{display:block;color:var(--muted)}.metric strong{display:block;margin:.45rem 0;font-size:1.8rem}.workflow-panel h2,.section-heading h2,.request-form h2,.request-history h2{margin:0}.workflow-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1rem;padding:0;list-style:none}.workflow-steps li{display:flex;gap:.7rem}.workflow-steps>li>span{flex:0 0 2rem;height:2rem;border:1px solid var(--line);border-radius:50%;display:grid;place-items:center;color:var(--muted);font-weight:800}.workflow-steps .is-complete>span{background:var(--mint);color:#06251a}.workflow-steps .is-current>span{border-color:var(--amber);color:var(--amber)}.workflow-steps p{margin:.25rem 0 0;color:var(--muted);font-size:.75rem}.section-heading{display:flex;justify-content:space-between;gap:1rem;align-items:center}.section-heading p{margin:.3rem 0 0;color:var(--muted)}.record-list{display:grid;gap:.75rem}.record-card{display:flex;justify-content:space-between;gap:1.5rem;padding:1.1rem;border:1px solid var(--line);border-radius:.75rem;background:var(--panel)}.record-main{min-width:0}.record-title{display:flex;align-items:center;gap:.7rem}.record-title h3{margin:0}.record-card p{color:var(--muted)}.state-pill{color:var(--amber)}.record-meta{display:flex;flex-wrap:wrap;gap:1rem;margin:0}.record-meta div{min-width:9rem}.record-meta dt{color:var(--muted);font-size:.65rem}.record-meta dd{margin:.15rem 0 0}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}.record-actions{max-width:16rem;display:flex;flex-direction:column;align-items:flex-end;gap:.5rem}.record-actions small{color:var(--muted);text-align:right}.lease-layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(20rem,.65fr);gap:1rem}.request-form>p{color:var(--muted)}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.85rem;margin:1.25rem 0}.field-wide{grid-column:1/-1}.field label{display:block;margin-bottom:.35rem;font-weight:750}.field input,.field textarea{width:100%;min-height:2.8rem;padding:.65rem .75rem;border:1px solid #35505f;border-radius:.5rem;background:#09151c;color:var(--ink);font:inherit}.field textarea{min-height:7rem;resize:vertical}.field small{display:block;margin-top:.3rem;color:var(--muted)}.request-boundary{margin:1rem 0;padding:.8rem;border-left:3px solid var(--mint);background:rgba(126,224,189,.06)}.request-boundary p{margin:.25rem 0 0}.request-history .record-card{display:block}.compact .record-meta{display:grid;gap:.5rem}.empty{color:var(--muted)}.data-table-panel{overflow-x:auto}table{width:100%;border-collapse:collapse}th,td{padding:.75rem;border-bottom:1px solid var(--line);text-align:left}th{color:var(--muted);font-size:.7rem}.model-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.8rem}.model-card{position:relative;padding:1rem;border:1px solid var(--line);border-radius:.75rem;background:var(--panel)}.model-card h3{margin:.8rem 0 .2rem}.model-card p{margin:0;color:var(--muted)}.model-card dl div{display:flex;justify-content:space-between;gap:.5rem}.model-card dt{color:var(--muted)}.model-card dd{margin:0}.model-icon{width:2.5rem;height:2.5rem;border-radius:.6rem;background:rgba(126,224,189,.13);display:grid;place-items:center;color:var(--mint);font-weight:900}.entitled{position:absolute;right:1rem;top:1rem;color:var(--mint)}.notice{margin:0 2rem;padding:.75rem 1rem;border:1px solid rgba(126,224,189,.35);border-radius:.6rem;background:rgba(126,224,189,.08);color:var(--mint)}.notice.is-error,.notice.error{border-color:rgba(241,111,111,.4);background:rgba(241,111,111,.08);color:#f5a0a0}.contract-documents{display:grid;gap:1rem}.contract-documents-header{display:flex;justify-content:space-between;align-items:end;gap:2rem;padding:1.35rem;border:1px solid var(--line);border-radius:.85rem;background:linear-gradient(145deg,rgba(17,31,41,.96),rgba(10,22,29,.96))}.contract-documents-header h1{margin:.15rem 0 .45rem}.contract-documents-header p:last-child{max-width:55rem;margin:0;color:var(--muted)}.contract-workspace{border:1px solid var(--line);border-radius:.85rem;background:var(--panel);overflow:hidden}.contract-progress{display:flex;flex-wrap:wrap;gap:.75rem;padding:.85rem 1rem;border-bottom:1px solid var(--line);color:var(--muted)}.contract-progress strong{color:var(--mint);margin-right:auto}.contract-editor-layout{display:grid;grid-template-columns:minmax(15rem,.32fr) minmax(0,1fr)}.contract-form-nav{padding:.8rem;border-right:1px solid var(--line);display:grid;align-content:start;gap:.4rem}.contract-form-tab{min-height:3.2rem;padding:.6rem .75rem;border:1px solid transparent;border-radius:.5rem;background:transparent;color:var(--ink);font:inherit;text-align:left;display:flex;flex-direction:column;cursor:pointer}.contract-form-tab small{color:var(--muted)}.contract-form-tab.is-active{border-color:rgba(126,224,189,.35);background:rgba(126,224,189,.08)}.contract-form-panel{min-width:0;padding:1.25rem}.contract-form-heading{max-width:48rem}.contract-form-heading h2{margin:.15rem 0}.contract-form-heading p:last-child{color:var(--muted)}.contract-field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.9rem;margin:1.2rem 0}.contract-field label{display:flex;justify-content:space-between;gap:.5rem;margin-bottom:.35rem;font-weight:750}.contract-field label small{color:var(--muted);font-weight:500}.contract-field input,.contract-field select,.contract-field textarea{width:100%;min-height:44px;padding:.65rem .75rem;border:1px solid #35505f;border-radius:.5rem;background:#09151c;color:var(--ink);font:inherit}.contract-field textarea{min-height:7rem;resize:vertical}.contract-offline-field{padding:.8rem;border:1px dashed #51636d;border-radius:.5rem;background:rgba(145,167,173,.05)}.contract-offline-field p{margin:.25rem 0 0;color:var(--muted)}.contract-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.65rem;padding-top:1rem;border-top:1px solid var(--line)}.modal-backdrop{position:fixed;inset:0;z-index:50;padding:1rem;background:rgba(0,0,0,.7);display:grid;place-items:center}.confirmation-dialog{width:min(36rem,100%);padding:1.4rem;border:1px solid #416454;border-radius:.8rem;background:#0d1820;box-shadow:0 1.5rem 5rem rgba(0,0,0,.5)}.confirmation-dialog h2{margin-top:0}.confirmation-dialog p{color:var(--muted)}.dialog-actions{display:flex;justify-content:flex-end;gap:.6rem}.empty-state{padding:2rem;border:1px dashed var(--line);border-radius:.8rem;color:var(--muted)}html[lang^=zh] .eyebrow{letter-spacing:.04em}@media(max-width:74rem){.metric-grid,.model-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.workflow-steps{grid-template-columns:repeat(2,minmax(0,1fr))}.lease-layout{grid-template-columns:1fr}}@media(max-width:52rem){.enterprise-root{display:block}.enterprise-sidebar{position:relative;height:auto;border-right:0;border-bottom:1px solid var(--line)}.enterprise-sidebar nav{grid-template-columns:repeat(3,minmax(0,1fr));margin-top:1rem}.trust-note{margin-top:1rem}.enterprise-topbar{padding:1rem;align-items:flex-start}.topbar-actions{align-items:flex-end;flex-direction:column}.topbar-meta{display:none}.enterprise-content{padding:1rem}.welcome-panel,.record-card,.contract-documents-header{align-items:stretch;flex-direction:column}.metric-grid,.model-grid,.workflow-steps,.form-grid,.contract-field-grid{grid-template-columns:1fr}.contract-editor-layout{grid-template-columns:1fr}.contract-form-nav{border-right:0;border-bottom:1px solid var(--line)}.field-wide{grid-column:auto}.record-actions{max-width:none;align-items:stretch}.record-actions small{text-align:left}}@media(max-width:32rem){.enterprise-sidebar nav{grid-template-columns:1fr 1fr}.enterprise-topbar{flex-wrap:wrap}.enterprise-topbar h1{font-size:1.35rem}.topbar-actions,.locale-control{width:100%;align-items:stretch}.locale-control{display:grid}.locale-control select{width:100%}.dialog-actions{display:grid}.contract-actions>*{width:100%}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important;animation:none!important}}
+    #|:root{color-scheme:dark;--bg:#071016;--panel:#0d1820;--panel2:#111f29;--line:#223743;--ink:#ecf5f2;--muted:#91a7ad;--mint:#7ee0bd;--mint2:#35bd8d;--amber:#f1c66c}*{box-sizing:border-box}html{background:var(--bg);scroll-behavior:smooth}body{margin:0;background:radial-gradient(circle at 85% -10%,rgba(53,189,141,.12),transparent 30rem),var(--bg);color:var(--ink);font:14px/1.5 Inter,"PingFang SC","Noto Sans SC",system-ui,sans-serif}.skip-link{position:fixed;left:1rem;top:-5rem;z-index:100;padding:.65rem .9rem;background:var(--mint);color:#04251a}.skip-link:focus{top:1rem}.enterprise-root{min-height:100vh;display:grid;grid-template-columns:16rem minmax(0,1fr)}.enterprise-sidebar{position:sticky;top:0;height:100vh;padding:1.25rem 1rem;border-right:1px solid var(--line);background:rgba(7,16,22,.92);display:flex;flex-direction:column}.enterprise-brand{display:flex;gap:.75rem;align-items:center;padding:.5rem;color:var(--ink);text-decoration:none}.brand-mark{width:2.2rem;height:2.2rem;border-radius:.65rem;background:var(--mint);color:#08251c;display:grid;place-items:center;font-weight:900}.enterprise-brand span:last-child{display:flex;flex-direction:column}.enterprise-brand small{color:var(--muted)}.enterprise-sidebar nav{display:grid;gap:.3rem;margin-top:2rem}.nav-item{min-height:2.75rem;padding:.65rem .8rem;border:1px solid transparent;border-radius:.55rem;background:transparent;color:var(--muted);text-align:left;font:inherit;font-weight:700;cursor:pointer}.nav-item:hover,.nav-item:focus-visible{border-color:var(--line);color:var(--ink)}.nav-item.is-active{background:rgba(126,224,189,.1);border-color:rgba(126,224,189,.25);color:var(--mint)}.nav-link{display:flex;align-items:center;text-decoration:none}.enterprise-main{min-width:0}.enterprise-topbar{min-height:6rem;padding:1.25rem 2rem;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:1rem}.eyebrow{margin:0 0 .2rem;color:var(--mint);font-size:.66rem;font-weight:850;letter-spacing:.12em}.enterprise-topbar h1{margin:0;font-size:1.65rem}.topbar-actions{display:flex;align-items:center;gap:.75rem}.locale-control{display:flex;align-items:center;gap:.4rem}.locale-control select{min-height:44px;padding:.5rem 1.8rem .5rem .65rem;border:1px solid #35505f;border-radius:.45rem;background:#09151c;color:var(--ink);font:inherit}.role-pill,.count-pill,.state-pill,.entitled{padding:.28rem .5rem;border:1px solid var(--line);border-radius:999px;font-size:.67rem}.enterprise-content{max-width:90rem;margin:0 auto;padding:2rem}.page-stack{display:grid;gap:1.25rem}.welcome-panel,.workflow-panel,.request-form,.request-history,.data-table-panel{border:1px solid var(--line);border-radius:.85rem;background:linear-gradient(145deg,rgba(17,31,41,.96),rgba(10,22,29,.96));padding:1.35rem}.welcome-panel{display:flex;justify-content:space-between;gap:2rem;align-items:end}.welcome-panel h2{max-width:50rem;margin:.2rem 0 .5rem;font-size:clamp(1.6rem,3vw,2.6rem);line-height:1.1}.welcome-panel p:last-child{max-width:48rem;margin:0;color:var(--muted)}.primary-action,.primary-button{min-height:2.75rem;padding:.65rem 1rem;border:1px solid var(--mint2);border-radius:.55rem;background:var(--mint);color:#06251a;font:inherit;font-weight:850;cursor:pointer}.primary-action:disabled,.primary-button:disabled,.quiet-button:disabled{opacity:.42;cursor:not-allowed}.quiet-button{min-height:2.75rem;padding:.65rem 1rem;border:1px solid var(--line);border-radius:.55rem;background:var(--panel2);color:var(--ink);font:inherit;font-weight:700;cursor:pointer}.metric-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.8rem}.metric{min-height:8rem;padding:1rem;border:1px solid var(--line);border-radius:.75rem;background:var(--panel)}.metric span,.metric small{display:block;color:var(--muted)}.metric strong{display:block;margin:.45rem 0;font-size:1.8rem}.workflow-panel h2,.section-heading h2,.request-form h2,.request-history h2{margin:0}.workflow-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1rem;padding:0;list-style:none}.workflow-steps li{display:flex;gap:.7rem}.workflow-steps>li>span{flex:0 0 2rem;height:2rem;border:1px solid var(--line);border-radius:50%;display:grid;place-items:center;color:var(--muted);font-weight:800}.workflow-steps .is-complete>span{background:var(--mint);color:#06251a}.workflow-steps .is-current>span{border-color:var(--amber);color:var(--amber)}.workflow-steps p{margin:.25rem 0 0;color:var(--muted);font-size:.75rem}.section-heading{display:flex;justify-content:space-between;gap:1rem;align-items:center}.section-heading p{margin:.3rem 0 0;color:var(--muted)}.record-list{display:grid;gap:.75rem}.record-card{display:flex;justify-content:space-between;gap:1.5rem;padding:1.1rem;border:1px solid var(--line);border-radius:.75rem;background:var(--panel)}.record-main{min-width:0}.record-title{display:flex;align-items:center;gap:.7rem}.record-title h3{margin:0}.record-card p{color:var(--muted)}.state-pill{color:var(--amber)}.record-meta{display:flex;flex-wrap:wrap;gap:1rem;margin:0}.record-meta div{min-width:9rem}.record-meta dt{color:var(--muted);font-size:.65rem}.record-meta dd{margin:.15rem 0 0}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}.record-actions{max-width:16rem;display:flex;flex-direction:column;align-items:flex-end;gap:.5rem}.record-actions small{color:var(--muted);text-align:right}.lease-layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(20rem,.65fr);gap:1rem}.request-form>p{color:var(--muted)}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.85rem;margin:1.25rem 0}.field-wide{grid-column:1/-1}.field label{display:block;margin-bottom:.35rem;font-weight:750}.field input,.field textarea{width:100%;min-height:2.8rem;padding:.65rem .75rem;border:1px solid #35505f;border-radius:.5rem;background:#09151c;color:var(--ink);font:inherit}.field textarea{min-height:7rem;resize:vertical}.field small{display:block;margin-top:.3rem;color:var(--muted)}.request-boundary{margin:1rem 0;padding:.8rem;border-left:3px solid var(--mint);background:rgba(126,224,189,.06)}.request-boundary p{margin:.25rem 0 0}.request-history .record-card{display:block}.compact .record-meta{display:grid;gap:.5rem}.empty{color:var(--muted)}.data-table-panel{overflow-x:auto}table{width:100%;border-collapse:collapse}th,td{padding:.75rem;border-bottom:1px solid var(--line);text-align:left}th{color:var(--muted);font-size:.7rem}.model-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.8rem}.model-card{position:relative;padding:1rem;border:1px solid var(--line);border-radius:.75rem;background:var(--panel)}.model-card h3{margin:.8rem 0 .2rem}.model-card p{margin:0;color:var(--muted)}.model-card dl div{display:flex;justify-content:space-between;gap:.5rem}.model-card dt{color:var(--muted)}.model-card dd{margin:0}.model-icon{width:2.5rem;height:2.5rem;border-radius:.6rem;background:rgba(126,224,189,.13);display:grid;place-items:center;color:var(--mint);font-weight:900}.entitled{position:absolute;right:1rem;top:1rem;color:var(--mint)}.notice{margin:0 2rem;padding:.75rem 1rem;border:1px solid rgba(126,224,189,.35);border-radius:.6rem;background:rgba(126,224,189,.08);color:var(--mint)}.notice.is-error,.notice.error{border-color:rgba(241,111,111,.4);background:rgba(241,111,111,.08);color:#f5a0a0}.contract-documents{display:grid;gap:1rem}.contract-documents-header{display:flex;justify-content:space-between;align-items:end;gap:2rem;padding:1.35rem;border:1px solid var(--line);border-radius:.85rem;background:linear-gradient(145deg,rgba(17,31,41,.96),rgba(10,22,29,.96))}.contract-documents-header h1{margin:.15rem 0 .45rem}.contract-documents-header p:last-child{max-width:55rem;margin:0;color:var(--muted)}.contract-workspace{border:1px solid var(--line);border-radius:.85rem;background:var(--panel);overflow:hidden}.contract-progress{display:flex;flex-wrap:wrap;gap:.75rem;padding:.85rem 1rem;border-bottom:1px solid var(--line);color:var(--muted)}.contract-progress strong{color:var(--mint);margin-right:auto}.contract-editor-layout{display:grid;grid-template-columns:minmax(15rem,.32fr) minmax(0,1fr)}.contract-form-nav{padding:.8rem;border-right:1px solid var(--line);display:grid;align-content:start;gap:.4rem}.contract-form-tab{min-height:3.2rem;padding:.6rem .75rem;border:1px solid transparent;border-radius:.5rem;background:transparent;color:var(--ink);font:inherit;text-align:left;display:flex;flex-direction:column;cursor:pointer}.contract-form-tab small{color:var(--muted)}.contract-form-tab.is-active{border-color:rgba(126,224,189,.35);background:rgba(126,224,189,.08)}.contract-form-panel{min-width:0;padding:1.25rem}.contract-form-heading{max-width:48rem}.contract-form-heading h2{margin:.15rem 0}.contract-form-heading p:last-child{color:var(--muted)}.contract-field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.9rem;margin:1.2rem 0}.contract-field label{display:flex;justify-content:space-between;gap:.5rem;margin-bottom:.35rem;font-weight:750}.contract-field label small{color:var(--muted);font-weight:500}.contract-field input,.contract-field select,.contract-field textarea{width:100%;min-height:44px;padding:.65rem .75rem;border:1px solid #35505f;border-radius:.5rem;background:#09151c;color:var(--ink);font:inherit}.contract-field textarea{min-height:7rem;resize:vertical}.contract-offline-field{padding:.8rem;border:1px dashed #51636d;border-radius:.5rem;background:rgba(145,167,173,.05)}.contract-offline-field p{margin:.25rem 0 0;color:var(--muted)}.contract-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.65rem;padding-top:1rem;border-top:1px solid var(--line)}.modal-backdrop{position:fixed;inset:0;z-index:50;padding:1rem;background:rgba(0,0,0,.7);display:grid;place-items:center}.confirmation-dialog{width:min(36rem,100%);padding:1.4rem;border:1px solid #416454;border-radius:.8rem;background:#0d1820;box-shadow:0 1.5rem 5rem rgba(0,0,0,.5)}.confirmation-dialog h2{margin-top:0}.confirmation-dialog p{color:var(--muted)}.dialog-actions{display:flex;justify-content:flex-end;gap:.6rem}.empty-state{padding:2rem;border:1px dashed var(--line);border-radius:.8rem;color:var(--muted)}html[lang^=zh] .eyebrow{letter-spacing:.04em}@media(max-width:74rem){.metric-grid,.model-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.workflow-steps{grid-template-columns:repeat(2,minmax(0,1fr))}.lease-layout{grid-template-columns:1fr}}@media(max-width:52rem){.enterprise-root{display:block}.enterprise-sidebar{position:relative;height:auto;border-right:0;border-bottom:1px solid var(--line)}.enterprise-sidebar nav{grid-template-columns:repeat(3,minmax(0,1fr));margin-top:1rem}.trust-note{margin-top:1rem}.enterprise-topbar{padding:1rem;align-items:flex-start}.topbar-actions{align-items:flex-end;flex-direction:column}.topbar-meta{display:none}.enterprise-content{padding:1rem}.welcome-panel,.record-card,.contract-documents-header{align-items:stretch;flex-direction:column}.metric-grid,.model-grid,.workflow-steps,.form-grid,.contract-field-grid{grid-template-columns:1fr}.contract-editor-layout{grid-template-columns:1fr}.contract-form-nav{border-right:0;border-bottom:1px solid var(--line)}.field-wide{grid-column:auto}.record-actions{max-width:none;align-items:stretch}.record-actions small{text-align:left}}@media(max-width:32rem){.enterprise-sidebar nav{grid-template-columns:1fr 1fr}.enterprise-topbar{flex-wrap:wrap}.enterprise-topbar h1{font-size:1.35rem}.topbar-actions,.locale-control{width:100%;align-items:stretch}.locale-control{display:grid}.locale-control select{width:100%}.dialog-actions{display:grid}.contract-actions>*{width:100%}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important;animation:none!important}}
   let account_styles =
     #|.danger-button{min-height:2.75rem;padding:.65rem 1rem;border:1px solid #7f4148;border-radius:.55rem;background:#27151a;color:#ffb2b8;font:inherit;font-weight:750;cursor:pointer}.danger-button:disabled{opacity:.42;cursor:not-allowed}.account-identity,.api-key-panel{padding:1.35rem;border:1px solid var(--line);border-radius:.85rem;background:linear-gradient(145deg,rgba(17,31,41,.96),rgba(10,22,29,.96))}.account-facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.75rem;margin:1.1rem 0}.account-facts>div{min-width:0;padding:.7rem;border:1px solid var(--line);border-radius:.55rem;background:rgba(7,16,22,.5)}.account-facts dt{color:var(--muted);font-size:.68rem}.account-facts dd{margin:.2rem 0 0}.role-list,.api-key-actions{display:flex;flex-wrap:wrap;gap:.5rem}.account-state-active,.api-key-state-active{color:var(--mint)}.account-state-inactive,.api-key-state-expired{color:var(--amber)}.api-key-state-revoked{color:#ffadb3}.rotation-note{display:flex;gap:.65rem;padding:.8rem;border-left:3px solid var(--amber);background:rgba(241,198,108,.06);color:var(--muted)}.rotation-note strong{color:var(--amber)}.api-key-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem}.api-key-card{padding:1rem;border:1px solid var(--line);border-radius:.75rem;background:var(--panel)}.api-key-card-heading{display:flex;justify-content:space-between;gap:1rem}.api-key-card h3{margin:0}.secondary{color:var(--muted);font-size:.7rem}.api-key-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.api-key-actions{justify-content:flex-end}.account-dialog{max-height:calc(100vh - 2rem);overflow:auto}.account-form{display:grid;gap:.8rem}.account-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem}.account-form .field select{width:100%;min-height:44px;padding:.6rem;border:1px solid #35505f;border-radius:.5rem;background:#09151c;color:var(--ink);font:inherit}.scope-picker{display:flex;flex-wrap:wrap;gap:.5rem;border:1px solid var(--line);border-radius:.55rem;padding:.75rem}.scope-picker legend{padding:0 .35rem;color:var(--muted)}.scope-toggle{min-height:44px;padding:.55rem .75rem;border:1px solid var(--line);border-radius:.5rem;background:var(--panel2);color:var(--ink);font:inherit}.scope-toggle.is-selected{border-color:var(--mint2);background:rgba(126,224,189,.1);color:var(--mint)}.one-time-secret{padding:1rem;border:1px solid var(--mint2);border-radius:.55rem;background:#06100d;color:#a8f4d5;white-space:pre-wrap;overflow-wrap:anywhere}.confirmation-scope{padding:.7rem;border:1px solid var(--line);border-radius:.5rem}@media(max-width:52rem){.account-facts,.api-key-list,.account-form-grid{grid-template-columns:1fr}.account-access-page .section-heading{align-items:stretch;flex-direction:column}.api-key-actions>*{width:100%}}@media(max-width:32rem){.account-dialog .dialog-actions>*{width:100%}}
   let provider_styles =
@@ -4237,6 +4383,7 @@ fn enterprise_view(
     None => @html.nothing
   }
   let error_notice = match state.error_message {
+    Some(_) if state.api_key_issue_open => @html.nothing
     Some(value) =>
       @html.p(
         class="notice is-error",
@@ -4248,8 +4395,15 @@ fn enterprise_view(
   @html.div(class="enterprise-root", [
     @html.style_tag(stylesheet),
     @html.style_tag(account_styles),
+    @html.style_tag(
+      ".api-key-advanced{border-top:1px solid var(--line);margin-top:.25rem}.api-key-advanced>summary{min-height:44px;padding:.65rem 0;cursor:pointer;color:var(--muted);font-weight:700}.api-key-advanced>summary:hover{color:var(--ink)}.api-key-advanced>summary:focus-visible{outline:2px solid var(--mint);outline-offset:3px}.api-key-advanced>.account-form{padding:.35rem 0 .75rem}",
+    ),
     @html.style_tag(provider_styles),
     @html.style_tag(service_status_styles),
+    @html.style_tag(@controls.styles()),
+    @html.style_tag(
+      ".key-help>summary,.notification-preferences>summary,.notification-reference>summary,.first-call-guide>summary{box-sizing:border-box;min-height:44px;padding:.65rem 0;cursor:pointer;color:var(--ink)}.key-help>summary:focus-visible,.notification-preferences>summary:focus-visible,.notification-reference>summary:focus-visible,.first-call-guide>summary:focus-visible{outline:2px solid var(--mint);outline-offset:3px}.notification-preferences>.record-list{padding-left:0;list-style:none}.notification-reference{color:var(--muted)}",
+    ),
     @html.style_tag(self_service_styles()),
     @html.style_tag(
       ".confirmation-dialog{max-height:calc(100dvh - 2rem);overflow:auto}.first-call-guide pre{white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%;font-size:.75rem}.copy-detail{display:inline-flex;flex-wrap:wrap;align-items:center;gap:.5rem}.copy-detail .quiet-button{min-height:44px}.quota-track{display:block;height:.55rem;background:#223743;min-width:8rem;border-radius:.3rem;overflow:hidden}.quota-fill{display:block;height:100%;background:#7ee0bd}.quota-warning .quota-fill{background:#f1c66c}",

@@ -31,8 +31,9 @@ test "the provider subject field previews the reference the account store will p
 ///|
 test "an empty provider subject explains what to paste instead of deriving" {
   let html = render({ ..default_state(), route: Users, })
-  assert_true(html.contains("Paste the provider"))
-  assert_true(html.contains("not the derived reference"))
+  assert_true(
+    html.contains("Use the original subject issued by the identity provider"),
+  )
   assert_false(html.contains("Derives subject-"))
 }
 

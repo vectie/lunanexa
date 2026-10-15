@@ -11,7 +11,7 @@ async test "external text route requires an approved alias and observed model" {
           "/health" => "ok"
           "/v1/models" =>
             if model_present[0] {
-              "{\"data\":[{\"id\":\"served-test\"}]}"
+              "{\"data\":[{\"id\":\"other\",\"max_model_len\":8192},{\"id\":\"served-test\",\"max_model_len\":65536}]}"
             } else {
               "{\"data\":[]}"
             }
@@ -49,6 +49,7 @@ async test "external text route requires an approved alias and observed model" {
       "sha256:" + "a".repeat(64),
     )
     assert_true(service.external_text_ready())
+    assert_eq(service.external_text_observation(), (true, Some(65536)))
     assert_eq(
       service.serving_client_model_aliases(
         ["qwen.default"],
@@ -65,6 +66,7 @@ async test "external text route requires an approved alias and observed model" {
     )
     model_present[0] = false
     assert_true(!service.external_text_ready())
+    assert_eq(service.external_text_observation(), (false, None))
     assert_eq(
       service.serving_client_model_aliases(
         ["qwen.default"],
@@ -73,6 +75,16 @@ async test "external text route requires an approved alias and observed model" {
       [],
     )
   }
+}
+
+///|
+test "external context metadata rejects malformed and unbounded limits" {
+  for value in [0.0, -1.0, 65536.5, 10485761.0] {
+    assert_eq(external_model_context({ "max_model_len": value }), None)
+  }
+  assert_eq(external_model_context({ "max_model_len": "65536" }), None)
+  assert_eq(external_model_context({ "id": "model" }), None)
+  assert_eq(external_model_context({ "max_model_len": 65536 }), Some(65536))
 }
 
 ///|
@@ -158,7 +170,7 @@ async test "only the owning company administrator can start and stop its shared 
         active: true,
         created_unix_ms: @async.now(),
       },
-      @portal.EnterpriseMembership::{
+      {
         membership_id: "member-user",
         tenant_ref: "tenant-a",
         organization_id: "org-a",
@@ -167,7 +179,7 @@ async test "only the owning company administrator can start and stop its shared 
         active: true,
         created_unix_ms: @async.now(),
       },
-      @portal.EnterpriseMembership::{
+      {
         membership_id: "member-other",
         tenant_ref: "tenant-b",
         organization_id: "org-b",

@@ -41,6 +41,21 @@ spec:
     replacement: 'https://suanli.example.com${1}/user/'
     permanent: true
 ---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: lunanexa-public-workbench, namespace: lunanexa}
+spec:
+  podSelector:
+    matchLabels: {app: lunanexa-workbench}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: kube-system}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: traefik}
+      ports: [{protocol: TCP, port: 8080}]
+---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata: {name: lunanexa-public-apps, namespace: lunanexa}
@@ -74,6 +89,13 @@ spec:
         - {name: lunanexa-public-mana-strip}
         - {name: lunanexa-public-console-prefix}
       services: [{name: lunanexa-identity-gateway-suanli, port: 8081}]
+    # Static workbench shell belongs to the customer site. Session bootstrap
+    # and all authenticated requests still use /user/auth and /user/v1 above.
+    - match: Host(`suanli.example.com`) && PathPrefix(`/user/workbench/`)
+      kind: Rule
+      priority: 90
+      middlewares: [{name: lunanexa-public-user-strip}]
+      services: [{name: lunanexa-workbench, port: 8080}]
     - match: Host(`suanli.example.com`) && PathPrefix(`/user/`)
       kind: Rule
       priority: 20

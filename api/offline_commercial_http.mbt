@@ -167,12 +167,12 @@ fn offline_blocker_applies(
   code : String,
   required : Array[@offline.OfflineCommerceCapability],
 ) -> Bool {
-  let artifact = required.contains(@offline.OoxmlWorker) ||
-    required.contains(@offline.PdfRenderer)
-  let entitlement = required.contains(@offline.EntitlementAuthority)
+  let artifact = required.contains(OoxmlWorker) ||
+    required.contains(PdfRenderer)
+  let entitlement = required.contains(EntitlementAuthority)
   match code {
     "ReadinessTemplateApprovalScopeMissing" =>
-      artifact || required.contains(@offline.ApprovedLegalTemplates)
+      artifact || required.contains(ApprovedLegalTemplates)
     "ReadinessArtifactDispatcherSuccessStale"
     | "ReadinessEntitlementDispatcherSuccessStale"
     | "ReadinessOfflineWorkRetryExhausted" => false
@@ -182,9 +182,8 @@ fn offline_blocker_applies(
     | "ReadinessEntitlementAuthorityCallbackUnavailable"
     | "ReadinessOfflineReconcilerDegraded" => entitlement
     "ReadinessArtifactScannerCallbackUnavailable" =>
-      required.contains(@offline.MalwareScanner)
-    "ReadinessTransferAdapterUnavailable" =>
-      required.contains(@offline.ObjectStorage)
+      required.contains(MalwareScanner)
+    "ReadinessTransferAdapterUnavailable" => required.contains(ObjectStorage)
     _ =>
       code.has_prefix("Readiness") ||
       required.any(capability => readiness_blocker(capability) == code)
@@ -439,9 +438,8 @@ async fn request_offline_transfer_adapter(
     raise Failure::Failure("offline transfer adapter rejected intent")
   }
   let content_type = head.headers
-    .iter()
-    .find_first(entry => entry.0.to_lower() == "content-type")
-    .map(entry => entry.1.to_lower())
+    .get("content-type")
+    .map(value => value.to_lower())
   if !content_type.map_or(false, value => value.has_prefix("application/json")) {
     raise Failure::Failure("offline transfer adapter response type rejected")
   }

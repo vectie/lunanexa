@@ -17,9 +17,9 @@ fn valid_trial_browser_session(
 }
 
 ///|
-extern "js" fn trial_browser_session_promise() -> @js.Promise =
-  #| async () => {
-  #|   const response = await fetch("/auth/session", {
+extern "js" fn trial_browser_session_promise(endpoint : String) -> @js.Promise =
+  #| async endpoint => {
+  #|   const response = await fetch(endpoint + "/auth/session", {
   #|     method: "GET", headers: {"Accept": "application/json"},
   #|     credentials: "same-origin", cache: "no-store", redirect: "error"
   #|   });
@@ -32,9 +32,9 @@ extern "js" fn trial_browser_session_promise() -> @js.Promise =
 ///|
 // Re-bootstrap each operation: no reusable session token enters app state,
 // storage, URLs or exports; gateway logout/expiry is checked before every call.
-async fn load_trial_browser_session() -> TrialBrowserSession {
+async fn load_trial_browser_session(endpoint : String) -> TrialBrowserSession {
   try {
-    let text : String = trial_browser_session_promise().wait().cast()
+    let text : String = trial_browser_session_promise(endpoint).wait().cast()
     let session : TrialBrowserSession = @json.from_json(@json.parse(text))
     guard valid_trial_browser_session(session, current_unix_ms()) else {
       fail("invalid or expired browser session")

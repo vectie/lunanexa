@@ -231,11 +231,25 @@ fn fleet_node_card(
       @html.div(
         class="fleet-devices",
         [
-          for device in node.accelerators => {
+          for index, device in node.accelerators => {
             @html.div(class="fleet-device", [
-              @html.strong(device.device_id),
+              @html.strong(title=device.device_id, "GPU \{index + 1}"),
               @html.span(
-                if device.healthy {
+                if node.state == Unreachable {
+                  if device.healthy {
+                    localized(
+                      state.locale,
+                      "Last inventory: healthy",
+                      "最近清单：健康",
+                    )
+                  } else {
+                    localized(
+                      state.locale,
+                      "Last inventory: unhealthy",
+                      "最近清单：异常",
+                    )
+                  }
+                } else if device.healthy {
                   localized(state.locale, "Healthy", "健康")
                 } else {
                   localized(state.locale, "Unhealthy", "异常")
@@ -295,18 +309,9 @@ fn fleet_overview(
     [
       @html.div(class="section-heading", [
         @html.div([
-          @html.p(class="eyebrow", localized(state.locale, "Fleet", "集群")),
           @html.h2(
             id="fleet-overview-title",
             localized(state.locale, "Node status wall", "节点状态总览"),
-          ),
-          @html.p(
-            class="section-copy",
-            localized(
-              state.locale,
-              "Observed resource evidence and allocation authority. Placement requires a controller preflight.",
-              "查看资源观测与分配授权；实际放置仍需控制器预检。",
-            ),
           ),
         ]),
         @html.button(

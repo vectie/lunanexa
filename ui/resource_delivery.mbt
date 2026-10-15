@@ -134,6 +134,7 @@ pub fn ResourceDeliveryPanel::update(
       {
         ..self,
         selected_lease: value,
+        selected_nodes: [],
         confirmed_idle: false,
         reservation_id: "",
       }
@@ -288,7 +289,36 @@ fn resource_delivery_view(
   state : ConsoleState,
   emit : @rabbita.Emit[ConsoleMessage]?,
 ) -> @rabbita.Html {
-  let panel = state.resource_delivery
+  let current = state.resource_delivery
+  let focused = state.access_packages
+    .iter()
+    .find_first(item => {
+      Some((item.account_id, item.organization_id)) ==
+      state.access_package_context
+    })
+  let panel = match focused {
+    Some(item) =>
+      {
+        ..current,
+        leases: current.leases.filter(lease => {
+          Some(lease.lease_id) == item.lease_id &&
+          lease.organization_id == item.organization_id &&
+          lease.tenant_ref == item.tenant_ref
+        }),
+        reservations: current.reservations.filter(row => {
+          row.request.organization_id == item.organization_id &&
+          row.request.tenant_ref == item.tenant_ref &&
+          Some(row.request.lease_id) == item.lease_id
+        }),
+        deliveries: [],
+      }
+    None =>
+      if state.access_package_context is Some(_) {
+        { ..current, leases: [], reservations: [], deliveries: [], }
+      } else {
+        current
+      }
+  }
   @html.section(class="data-table-panel", [
     @html.div(class="section-heading", [
       @html.h2(
@@ -298,19 +328,18 @@ fn resource_delivery_view(
           "整机资源交付",
         ),
       ),
-      @html.button(
-        type_="button",
-        class="quiet-button",
-        disabled=panel.loading,
-        on_click=command(emit, ResourceDelivery(RefreshResources)),
-        localized(state.locale, "Refresh", "刷新"),
+      @controls.icon_button(
+        Refresh,
+        localized(state.locale, "Refresh resources", "刷新资源"),
+        command(emit, ResourceDelivery(RefreshResources)),
+        busy=panel.loading,
       ),
     ]),
     @html.p(
       localized(
         state.locale,
-        "Reserve whole nodes for an existing active workspace authorization. This does not extend the lease or start workloads.",
-        "为已有有效工作区授权预留整台节点；不延长租期，也不立即启动工作负载。",
+        "Reserve nodes for an active workspace. The lease end date stays the same.",
+        "为有效工作区预留节点，租约到期时间不变。",
       ),
     ),
     if panel.loading {
@@ -329,161 +358,187 @@ fn resource_delivery_view(
       Some(error) => @html.p(attrs=@html.Attrs::build().role("alert"), error)
       None => @html.nothing
     },
-    @html.h3(
-      localized(state.locale, "Undertaking allocation", "承诺函整机下发"),
-    ),
-    @html.p(
-      localized(
-        state.locale,
-        "After the signed undertaking, manager approval and full offline-payment review, select exactly the quoted number of idle enterprise-pool nodes. Trial nodes remain untouched. Access activation may take time; the same action can be continued safely.",
-        "承诺函签署、甲方审批及线下足额到账核验完成后，从企业专属池选择与报价台数一致的空闲节点；试用节点不参与下发。权限激活可能需要等待；可安全继续同一操作。",
-      ),
-    ),
-    if panel.loaded && panel.undertaking_orders.is_empty() {
-      @html.p(
-        localized(
-          state.locale,
-          "No undertaking order has been submitted yet.",
-          "暂无已提交的承诺函订单。",
-        ),
-      )
-    } else if panel.loaded {
-      @html.div(class="form-grid", [
-        @html.label(
-          for_="undertaking-allocation-order",
-          localized(state.locale, "Undertaking order", "承诺函订单"),
-        ),
-        @html.select(
-          id="undertaking-allocation-order",
-          disabled=panel.loading,
-          on_change=text_command(emit, value => {
-            ResourceDelivery(SelectUndertakingOrder(value))
-          }),
-          [
-            @html.option(
-              value="",
-              selected=panel.selected_undertaking_order == "",
-              localized(state.locale, "Choose an order", "选择订单"),
-            ),
-            ..panel.undertaking_orders.map(row => {
-              @html.option(
-                value=row.order_id,
-                selected=row.order_id == panel.selected_undertaking_order,
-                "\{row.organization_id} · \{row.order_id} · \{row.node_count} " +
-                localized(state.locale, "nodes", "台") +
-                " · " +
-                undertaking_allocation_status(state.locale, row.status),
-              )
-            }),
-          ],
-        ),
-        match
-          panel.undertaking_orders
-          .iter()
-          .find_first(row => row.order_id == panel.selected_undertaking_order) {
-          Some(row) =>
-            @html.div([
-              @html.p(
-                undertaking_allocation_status(state.locale, row.status) +
-                " · \{row.node_count} " +
-                localized(state.locale, "nodes required", "台机器"),
-              ),
-              @html.p(
-                localized(
-                  state.locale,
-                  "Signed rental term ends: ",
-                  "已签租期结束：",
-                ) +
-                row.expires_unix_ms.map_or(
-                  localized(state.locale, "not signed yet", "尚未签署"),
-                  value => @contractdoc.format_unix_ms_beijing(value),
-                ),
-              ),
-              if row.status == "Allocated" {
-                @html.p(
-                  localized(
-                    state.locale,
-                    "Assigned nodes: ",
-                    "已下发节点：",
-                  ) +
-                  row.node_ids.join(", "),
-                )
-              } else {
-                @html.nothing
-              },
-            ])
-          None => @html.nothing
-        },
-        @html.div(
-          class="record-actions",
-          state.nodes.map(node => {
-            let available = resource_node_selectable(
-              node,
-              panel.reservations,
-              true,
-            )
-            @html.button(
-              type_="button",
-              class="quiet-button",
-              disabled=panel.loading || !available,
-              attrs=@html.Attrs::build().aria_pressed(
-                panel.undertaking_selected_nodes
-                .contains(node.node_id)
-                .to_string(),
-              ),
-              on_click=command(
-                emit,
-                ResourceDelivery(ToggleUndertakingNode(node.node_id)),
-              ),
-              node.node_id +
-              (if available {
-                ""
-              } else {
-                " · " + undertaking_node_unavailable_reason(state.locale, node)
-              }),
-            )
-          }),
+    if state.access_package_context is None {
+      @html.fragment([
+        @html.h3(
+          localized(
+            state.locale,
+            "Undertaking allocation",
+            "承诺函整机下发",
+          ),
         ),
         @html.p(
           localized(
             state.locale,
-            "Confirm host-native and Kubernetes tasks are stopped; 0% GPU utilization alone is not proof of idleness.",
-            "确认宿主机和 Kubernetes 任务均已停止；GPU 0% 利用率不代表机器空闲。",
+            "After approval and full payment, select the quoted number of idle enterprise nodes. Activation may take time; you can resume it here.",
+            "完成审批与全额收款后，按报价数量选择空闲企业节点。开通可能需要时间，可在此继续。",
           ),
         ),
-        @html.button(
-          type_="button",
-          class="quiet-button",
-          disabled=panel.loading,
-          attrs=@html.Attrs::build().aria_pressed(
-            panel.undertaking_confirmed_idle.to_string(),
-          ),
-          on_click=command(emit, ResourceDelivery(ConfirmUndertakingIdle)),
-          if panel.undertaking_confirmed_idle {
+        if panel.loaded && panel.undertaking_orders.is_empty() {
+          @html.p(
             localized(
               state.locale,
-              "Idle review confirmed",
-              "已确认所选节点空闲",
-            )
-          } else {
-            localized(
-              state.locale,
-              "Confirm selected nodes are idle",
-              "确认所选节点空闲",
-            )
-          },
-        ),
-        @html.button(
-          type_="button",
-          class="primary-button",
-          disabled=!undertaking_allocation_available(panel),
-          on_click=command(emit, ResourceDelivery(AllocateUndertaking)),
-          localized(
-            state.locale,
-            "Allocate selected nodes",
-            "下发所选整机",
-          ),
-        ),
+              "No undertaking order has been submitted yet.",
+              "暂无已提交的承诺函订单。",
+            ),
+          )
+        } else if panel.loaded {
+          @html.div(class="form-grid", [
+            @html.label(
+              for_="undertaking-allocation-order",
+              localized(state.locale, "Undertaking order", "承诺函订单"),
+            ),
+            @html.select(
+              id="undertaking-allocation-order",
+              disabled=panel.loading,
+              on_change=text_command(emit, value => {
+                ResourceDelivery(SelectUndertakingOrder(value))
+              }),
+              [
+                @html.option(
+                  value="",
+                  selected=panel.selected_undertaking_order == "",
+                  localized(state.locale, "Choose an order", "选择订单"),
+                ),
+                ..panel.undertaking_orders.map(row => {
+                  @html.option(
+                    value=row.order_id,
+                    selected=row.order_id == panel.selected_undertaking_order,
+                    "\{row.organization_id} · \{row.order_id} · \{row.node_count} " +
+                    localized(state.locale, "nodes", "台") +
+                    " · " +
+                    undertaking_allocation_status(state.locale, row.status),
+                  )
+                }),
+              ],
+            ),
+            match
+              panel.undertaking_orders
+              .iter()
+              .find_first(row => {
+                row.order_id == panel.selected_undertaking_order
+              }) {
+              Some(row) =>
+                @html.div([
+                  @html.p(
+                    undertaking_allocation_status(state.locale, row.status) +
+                    " · \{row.node_count} " +
+                    localized(state.locale, "nodes required", "台机器"),
+                  ),
+                  @html.button(
+                    type_="button",
+                    class="quiet-button",
+                    on_click=command(
+                      emit,
+                      ContractDocuments(OpenOrder(row.order_id)),
+                    ),
+                    localized(
+                      state.locale,
+                      "Review rental order",
+                      "核对租赁订单",
+                    ),
+                  ),
+                  @html.p(
+                    localized(
+                      state.locale,
+                      "Signed rental term ends: ",
+                      "已签租期结束：",
+                    ) +
+                    row.expires_unix_ms.map_or(
+                      localized(state.locale, "not signed yet", "尚未签署"),
+                      value => @contractdoc.format_unix_ms_beijing(value),
+                    ),
+                  ),
+                  if row.status == "Allocated" {
+                    @html.p(
+                      localized(
+                        state.locale,
+                        "Assigned nodes: ",
+                        "已下发节点：",
+                      ) +
+                      row.node_ids.join(", "),
+                    )
+                  } else {
+                    @html.nothing
+                  },
+                ])
+              None => @html.nothing
+            },
+            @html.div(
+              class="record-actions",
+              state.nodes.map(node => {
+                let available = resource_node_selectable(
+                  node,
+                  panel.reservations,
+                  true,
+                )
+                @html.button(
+                  type_="button",
+                  class="quiet-button",
+                  disabled=panel.loading || !available,
+                  attrs=@html.Attrs::build().aria_pressed(
+                    panel.undertaking_selected_nodes
+                    .contains(node.node_id)
+                    .to_string(),
+                  ),
+                  on_click=command(
+                    emit,
+                    ResourceDelivery(ToggleUndertakingNode(node.node_id)),
+                  ),
+                  node.node_id +
+                  (if available {
+                    ""
+                  } else {
+                    " · " +
+                    undertaking_node_unavailable_reason(state.locale, node)
+                  }),
+                )
+              }),
+            ),
+            @html.p(
+              localized(
+                state.locale,
+                "Confirm host-native and Kubernetes tasks are stopped; 0% GPU utilization alone is not proof of idleness.",
+                "确认宿主机和 Kubernetes 任务均已停止；GPU 0% 利用率不代表机器空闲。",
+              ),
+            ),
+            @html.button(
+              type_="button",
+              class="quiet-button",
+              disabled=panel.loading,
+              attrs=@html.Attrs::build().aria_pressed(
+                panel.undertaking_confirmed_idle.to_string(),
+              ),
+              on_click=command(emit, ResourceDelivery(ConfirmUndertakingIdle)),
+              if panel.undertaking_confirmed_idle {
+                localized(
+                  state.locale,
+                  "Idle review confirmed",
+                  "已确认所选节点空闲",
+                )
+              } else {
+                localized(
+                  state.locale,
+                  "Confirm selected nodes are idle",
+                  "确认所选节点空闲",
+                )
+              },
+            ),
+            @html.button(
+              type_="button",
+              class="primary-button",
+              disabled=!undertaking_allocation_available(panel),
+              on_click=command(emit, ResourceDelivery(AllocateUndertaking)),
+              localized(
+                state.locale,
+                "Allocate selected nodes",
+                "下发所选整机",
+              ),
+            ),
+          ])
+        } else {
+          @html.nothing
+        },
       ])
     } else {
       @html.nothing
@@ -492,13 +547,21 @@ fn resource_delivery_view(
       localized(state.locale, "Other resource grants", "其他资源授权"),
     ),
     if panel.loaded && panel.leases.is_empty() {
-      @html.p(
-        localized(
-          state.locale,
-          "No active Developer lease is available. Enable the intended user's bounded authorization first.",
-          "暂无有效 Developer 租约。请先为目标用户开通限时权限。",
+      @html.div([
+        @html.p(
+          localized(
+            state.locale,
+            "No active Developer lease is available. Enable the intended user's bounded authorization first.",
+            "暂无有效 Developer 租约。请先为目标用户开通限时权限。",
+          ),
         ),
-      )
+        @html.button(
+          type_="button",
+          class="quiet-button",
+          on_click=command(emit, Navigate(Users)),
+          localized(state.locale, "Open user access", "打开用户权限"),
+        ),
+      ])
     } else if panel.loaded {
       @html.div(class="form-grid", [
         @html.label(
@@ -521,6 +584,23 @@ fn resource_delivery_view(
               selected=panel.selected_lease == "",
               localized(state.locale, "Choose authorization", "选择授权"),
             ),
+            ..if panel.selected_lease != "" &&
+              !panel.leases.any(lease => lease.key == panel.selected_lease) {
+              [
+                @html.option(
+                  value=panel.selected_lease,
+                  selected=true,
+                  disabled=true,
+                  localized(
+                    state.locale,
+                    "Selected access unavailable — refresh user access",
+                    "所选权限不可用，请刷新用户权限",
+                  ),
+                ),
+              ]
+            } else {
+              []
+            },
             ..panel.leases.map(lease => {
               @html.option(
                 value=lease.key,
@@ -603,6 +683,18 @@ fn resource_delivery_view(
       @html.nothing
     },
     @html.h3(localized(state.locale, "Reservations", "资源预留")),
+    if panel.reservations.any(row => row.state == "Reserved") {
+      @html.p(
+        attrs=@html.Attrs::build().role("status"),
+        localized(
+          state.locale,
+          "Resources reserved. The user can now choose a GPU container, model API or application workspace in the enterprise portal.",
+          "资源已预留，用户可在企业门户选择 GPU 容器、模型 API 或应用工作区。",
+        ),
+      )
+    } else {
+      @html.nothing
+    },
     @html.ul(
       panel.reservations.map(row => {
         @html.li(
@@ -612,35 +704,41 @@ fn resource_delivery_view(
         )
       }),
     ),
-    @html.h3(localized(state.locale, "Delivery progress", "交付进度")),
-    @html.ul(
-      panel.deliveries.map(row => {
-        @html.li([
-          @html.strong(
-            "\{row.template_id}@\{row.template_version} · \{row.kind}",
-          ),
-          @html.p(
-            "\{row.stage} · \{row.node_count} " +
-            localized(state.locale, "nodes", "台"),
-          ),
-          if row.cache_hit {
-            @html.p(
-              localized(
-                state.locale,
-                "Verified cache reused",
-                "复用已验证缓存",
+    if state.access_package_context is None {
+      @html.fragment([
+        @html.h3(localized(state.locale, "Delivery progress", "交付进度")),
+        @html.ul(
+          panel.deliveries.map(row => {
+            @html.li([
+              @html.strong(
+                "\{row.template_id}@\{row.template_version} · \{row.kind}",
               ),
-            )
-          } else {
-            @html.p("\{row.transferred_bytes / 1048576L} MiB")
-          },
-          match row.failure_code {
-            Some(code) => @html.p(code)
-            None => @html.nothing
-          },
-        ])
-      }),
-    ),
+              @html.p(
+                "\{row.stage} · \{row.node_count} " +
+                localized(state.locale, "nodes", "台"),
+              ),
+              if row.cache_hit {
+                @html.p(
+                  localized(
+                    state.locale,
+                    "Verified cache reused",
+                    "复用已验证缓存",
+                  ),
+                )
+              } else {
+                @html.p("\{row.transferred_bytes / 1048576L} MiB")
+              },
+              match row.failure_code {
+                Some(code) => @html.p(code)
+                None => @html.nothing
+              },
+            ])
+          }),
+        ),
+      ])
+    } else {
+      @html.nothing
+    },
   ])
 }
 

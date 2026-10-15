@@ -148,12 +148,26 @@ async fn ApiService::api_key_check(
             }
           None => self.allow_legacy_unbound_access
         }
-        let contract_active = self.private_workspace_key_authorized(
-            preview.key_id,
-            preview.tenant_ref,
-            preview.subject_ref,
-            now,
-          ) ||
+        let private_access = self.private_workspace_key_authorized(
+          preview.key_id,
+          preview.tenant_ref,
+          preview.subject_ref,
+          now,
+        )
+        let credential = store
+          .views_for_subject(preview.tenant_ref, preview.subject_ref)
+          .iter()
+          .find_first(key => key.key_id == preview.key_id)
+        let private_model = private_access &&
+          credential.map_or(false, key => {
+            self.private_model_key_scope(preview.tenant_ref, key.allowed_models)
+          })
+        if credential is Some(key) &&
+          key.maximum_requests == 0L &&
+          !private_model {
+          return KeyDenied
+        }
+        let contract_active = private_access ||
           (match self.contract_document_store {
             Some(contracts) =>
               self.has_effective_rental_authority(
@@ -228,12 +242,34 @@ async fn ApiService::api_key_check(
                 model=selected_model,
                 now,
                 true,
+                unlimited_requests=private_model,
               )
             (Some(tenant), None) =>
-              store.authorize(secret, scope, tenant_ref=tenant, now, true)
+              store.authorize(
+                secret,
+                scope,
+                tenant_ref=tenant,
+                now,
+                true,
+                unlimited_requests=private_model,
+              )
             (None, Some(selected_model)) =>
-              store.authorize(secret, scope, model=selected_model, now, true)
-            (None, None) => store.authorize(secret, scope, now, true)
+              store.authorize(
+                secret,
+                scope,
+                model=selected_model,
+                now,
+                true,
+                unlimited_requests=private_model,
+              )
+            (None, None) =>
+              store.authorize(
+                secret,
+                scope,
+                now,
+                true,
+                unlimited_requests=private_model,
+              )
           }
         } else {
           preview

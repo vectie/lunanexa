@@ -43,6 +43,9 @@ data:
   LUNANEXA_IDENTITY_REGISTRATION_PATH: "/v1/auth/register"
   LUNANEXA_IDENTITY_REGISTRATION_ASSERTION_VERSION: "lunanexa.identity.registration.v1"
   LUNANEXA_OPEN_REGISTRATION_ENABLED: "1"
+  # Set only after the trusted ingress overwrites X-Real-IP with the observed
+  # guest network egress address; empty keeps QR redemption disabled.
+  LUNANEXA_WIFI_TRIAL_SOURCE_CIDRS: ""
   LUNANEXA_BROWSER_OIDC_START_PATH: "/auth/oidc/start"
   LUNANEXA_BROWSER_SESSION_PATH: "/auth/session"
   LUNANEXA_BROWSER_LOGOUT_PATH: "/auth/logout"

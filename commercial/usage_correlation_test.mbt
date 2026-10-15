@@ -196,7 +196,7 @@ test "correlation rejects ambiguous project organization and manifest authority 
       { ..manifest, links: [{ ..manifest.links[0], external_ref: "", }], },
     ] {
     try @commercial.correlate_usage(source, report_query(), invalid) catch {
-      @commercial.InvalidInput(_) => ()
+      InvalidInput(_) => ()
       _ => fail("unexpected commercial error")
     } noraise {
       _ => fail("expected invalid manifest")
@@ -213,7 +213,7 @@ test "correlation rejects ambiguous project organization and manifest authority 
     fields["placement_authority"] = "node-admin"
   }
   try @commercial.import_usage_correlation_manifest(json.stringify()) catch {
-    @commercial.InvalidInput(_) => ()
+    InvalidInput(_) => ()
     _ => fail("unexpected commercial error")
   } noraise {
     _ => fail("unexpected field accepted")
@@ -232,7 +232,7 @@ test "correlation requires matching project and never reads other tenant evidenc
       { ..correlation_manifest(), links: [link], },
     )
   catch {
-    @commercial.InvalidInput(_) => ()
+    InvalidInput(_) => ()
     _ => fail("unexpected error")
   } noraise {
     _ => fail("cross-project association accepted")

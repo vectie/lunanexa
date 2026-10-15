@@ -139,6 +139,7 @@ pub(all) struct SelfServiceTermsView {
 pub(all) struct SelfServiceState {
   selected_product : SelfServiceProduct?
   step : SelfServiceStep
+  return_to_rental : Bool
   organization_mode : OrganizationSetupMode
   subject_kind : String
   legal_name : String
@@ -204,6 +205,7 @@ pub(all) enum SelfServiceMessage {
   AcceptMachineTerms
   ConfirmMachineTermsReviewed
   RefreshMachineOrders
+  ResumeMachineOrder(String)
   CancelMachineOrder(String, Int64)
   TerminateMachineOrder(String, Int64)
   ViewProvisioning
@@ -217,6 +219,7 @@ pub fn default_self_service_state() -> SelfServiceState {
   {
     selected_product: None,
     step: ChooseService,
+    return_to_rental: false,
     organization_mode: CreateCompany,
     subject_kind: "Company",
     legal_name: "",
@@ -385,7 +388,38 @@ fn SelfServiceState::update(
       { ..self, action_loading: true, action_error: None, }
     ConfirmMachineTermsReviewed =>
       { ..self, terms_reviewed: true, action_error: None, }
-    ContinueWithOrganization => { ..self, step: Capacity, action_error: None, }
+    ResumeMachineOrder(order_id) => {
+      guard self.orders.iter().find_first(order => order.order_id == order_id)
+        is Some(order) else {
+        return self
+      }
+      {
+        ..self,
+        order: Some(order),
+        selected_product: Some(order.kind),
+        step: if order.status == AwaitingPayment {
+          ContractPayment
+        } else {
+          Provisioning
+        },
+        checkout: if self.order.map(order => order.order_id) == Some(order_id) {
+          self.checkout
+        } else {
+          None
+        },
+        action_error: None,
+      }
+    }
+    ContinueWithOrganization =>
+      {
+        ..self,
+        step: if self.selected_product is Some(_) {
+          Capacity
+        } else {
+          ChooseService
+        },
+        action_error: None,
+      }
     RefreshOfferings =>
       { ..self, offerings_loading: true, offerings_error: None, }
     SelectOffering(offering_id) => {
@@ -427,7 +461,17 @@ fn SelfServiceState::update(
         },
         action_error: None,
       }
-    RestartSelfService => default_self_service_state()
+    RestartSelfService =>
+      {
+        ..default_self_service_state(),
+        offerings: self.offerings,
+        offerings_loaded: self.offerings_loaded,
+        offerings_error: self.offerings_error,
+        project_id: self.project_id,
+        unix_username: self.unix_username,
+        orders: self.orders,
+        terms: self.terms,
+      }
     DismissSelfServiceError => { ..self, action_error: None, }
   }
 }
@@ -540,9 +584,9 @@ fn self_service_text_command(
 ///|
 fn product_label(locale : @i18n.Locale, product : SelfServiceProduct) -> String {
   match product {
-    SharedMaaS => "MaaS · \{enterprise_copy(locale, SharedMaas)}"
-    DedicatedMaaS => "MaaS · \{enterprise_copy(locale, DedicatedMaas)}"
-    BareGpu => "IaaS · \{enterprise_copy(locale, BareGpu)}"
+    SharedMaaS => enterprise_copy(locale, SharedMaas)
+    DedicatedMaaS => enterprise_copy(locale, DedicatedMaas)
+    BareGpu => enterprise_copy(locale, BareGpu)
   }
 }
 
@@ -552,8 +596,6 @@ fn product_card(
   emit : @rabbita.Emit[EnterpriseMessage]?,
   product : SelfServiceProduct,
   title : String,
-  description : String,
-  outcome : String,
 ) -> @rabbita.Html {
   @html.article(class="service-choice", [
     @html.p(class="eyebrow", product_label(state.locale, product)),
@@ -566,14 +608,26 @@ fn product_card(
       ),
     ),
     @html.h3(title),
-    @html.p(description),
-    @html.p(class="service-outcome", outcome),
     @html.button(
       type_="button",
       class="quiet-button",
       on_click=self_service_command(emit, SelectProduct(product)),
-      enterprise_copy(state.locale, ChooseThisService),
+      if product == BareGpu {
+        copy(state.locale, "Order with online payment", "在线付款下单")
+      } else {
+        enterprise_copy(state.locale, ChooseThisService)
+      },
     ),
+    if product == BareGpu {
+      @html.button(
+        type_="button",
+        class="quiet-button",
+        on_click=command(emit, Navigate(OfflineCommerce)),
+        copy(state.locale, "Rent with offline payment", "线下付款租赁"),
+      )
+    } else {
+      @html.nothing
+    },
   ])
 }
 
@@ -587,14 +641,7 @@ fn product_choices(
     class=if compact { "service-entry compact-entry" } else { "service-entry" },
     [
       @html.div(class="section-heading", [
-        @html.div([
-          @html.p(
-            class="eyebrow",
-            enterprise_copy(state.locale, StartWithAnOutcome),
-          ),
-          @html.h2(enterprise_copy(state.locale, WhatDoYouWantToRun)),
-          @html.p(enterprise_copy(state.locale, ChooseAnApiAManagedDedicated)),
-        ]),
+        @html.div([@html.h2(enterprise_copy(state.locale, WhatDoYouWantToRun))]),
       ]),
       @html.div(class="service-choice-grid", [
         product_card(
@@ -602,31 +649,14 @@ fn product_choices(
           emit,
           BareGpu,
           enterprise_copy(state.locale, RentAGpuWorkspace),
-          enterprise_copy(state.locale, ChooseCapacityAndManageYourOwn),
-          enterprise_copy(state.locale, YouReceiveSshAndWebideAccess),
         ),
         @html.article(class="service-choice", [
-          @html.p(class="eyebrow", "PaaS · WebIDE"),
+          @html.p(class="eyebrow", "WebIDE"),
           @html.h3(
             copy(
               state.locale,
               "Open my personal workspace",
               "打开我的个人工作台",
-            ),
-          ),
-          @html.p(
-            copy(
-              state.locale,
-              "Your own MoonDesk application and saved work. Your company authorizes its resources; teammates keep separate workspaces.",
-              "MoonDesk 应用与保存的工作归你个人；企业授权资源，同事各自拥有独立工作台。",
-            ),
-          ),
-          @html.p(
-            class="service-outcome",
-            copy(
-              state.locale,
-              "I receive my own WebIDE, using company-authorized models.",
-              "获得个人 WebIDE，使用企业授权的模型。",
             ),
           ),
           @html.button(
@@ -641,16 +671,12 @@ fn product_choices(
           emit,
           SharedMaaS,
           enterprise_copy(state.locale, CallAModelApi),
-          enterprise_copy(state.locale, NoMachineSelectionStartWithA),
-          enterprise_copy(state.locale, YouReceiveAnApiKey),
         ),
         product_card(
           state,
           emit,
           DedicatedMaaS,
           enterprise_copy(state.locale, DeployAPrivateModelEndpoint),
-          enterprise_copy(state.locale, ChooseAGpuAndApprovedModel),
-          enterprise_copy(state.locale, YouReceiveAPrivateEndpoint),
         ),
       ]),
     ],
@@ -722,6 +748,17 @@ fn has_customer_membership(state : EnterpriseState) -> Bool {
     Some(trial) if trial.organization_id == membership.organization_id => false
     _ => true
   }
+}
+
+///|
+fn customer_organization_ready(state : EnterpriseState) -> Bool {
+  has_customer_membership(state) &&
+  state.membership.map_or(false, membership => {
+    state.organizations.any(value => {
+      value.organization.organization_id == membership.organization_id &&
+      value.organization.state == Active
+    })
+  })
 }
 
 ///|
@@ -798,8 +835,8 @@ fn organization_step(
                 attrs=@html.Attrs::build().role("status").aria_live("polite"),
                 copy(
                   state.locale,
-                  "Your company registration has been sent to platform administrators for review. No external identity provider is required. Refresh after approval to continue.",
-                  "企业注册已提交平台管理员审核，无需外部认证服务。审核通过后刷新此页继续。",
+                  "Waiting for company approval. Status updates automatically.",
+                  "等待企业审核，状态将自动更新。",
                 ),
               )
             Some(value) if value.blocker_code ==
@@ -859,7 +896,15 @@ fn organization_step(
             disabled=!organization_active,
             on_click=self_service_command(emit, ContinueWithOrganization),
             if organization_active {
-              enterprise_copy(state.locale, Continue)
+              if state.self_service.return_to_rental {
+                copy(
+                  state.locale,
+                  "Continue to rental order",
+                  "继续租赁下单",
+                )
+              } else {
+                enterprise_copy(state.locale, Continue)
+              }
             } else {
               enterprise_copy(state.locale, WaitingForVerification)
             },
@@ -871,9 +916,6 @@ fn organization_step(
       @html.section(class="guided-panel", [
         @html.p(class="eyebrow", enterprise_copy(state.locale, Organization338)),
         @html.h2(enterprise_copy(state.locale, CreateACompanyOrJoinOne)),
-        @html.p(
-          enterprise_copy(state.locale, ACompanyIdentityProviderIsOptional),
-        ),
         @html.div(class="segmented-control", [
           @html.button(
             type_="button",
@@ -1134,9 +1176,8 @@ fn offering_card(
         @html.div([
           @html.h3(offering.display_name),
           @html.p([copy_detail(state, emit, offering.gpu_sku)]),
-          @html.p([
-            @html.span(copy(state.locale, "Configuration: ", "配置编号：")),
-            copy_detail(state, emit, offering.offering_id),
+          @controls.advanced(enterprise_copy(state.locale, AdvancedSettings), [
+            @html.p([copy_detail(state, emit, offering.offering_id)]),
           ]),
         ]),
         @html.span(
@@ -1562,9 +1603,23 @@ fn quote_step(
 ) -> @rabbita.Html {
   let agreements_ready = state.agreements.any(value => value.state == Executed)
   let terms_ready = agreements_ready || state.self_service.terms_accepted
+  let sample_quote = state.self_service.quote
+    .map(quote => quote.quote_id.has_suffix("-demo"))
+    .unwrap_or(false)
   @html.section(class="guided-panel", [
-    @html.p(class="eyebrow", enterprise_copy(state.locale, SignedQuote)),
     @html.h2(enterprise_copy(state.locale, ReviewPriceAndScope)),
+    if sample_quote {
+      @html.p(
+        class="notice is-warning",
+        copy(
+          state.locale,
+          "Demo quote preview only. No signed quote or payment authority was created.",
+          "仅供演示的报价预览。未创建签名报价或支付授权。",
+        ),
+      )
+    } else {
+      @html.nothing
+    },
     if state.self_service.action_loading {
       @html.p(
         class="inline-state",
@@ -1607,10 +1662,18 @@ fn quote_step(
             ]),
             @html.p(
               class="trust-callout",
-              enterprise_copy(
-                state.locale,
-                AmountAvailabilityWindowAndTermsDigest,
-              ),
+              if sample_quote {
+                copy(
+                  state.locale,
+                  "This sample amount illustrates the quote review step. It is not server-derived or signed for this selection.",
+                  "此示例金额仅展示报价审阅步骤，并非针对此配置由服务器生成或签名。",
+                )
+              } else {
+                enterprise_copy(
+                  state.locale,
+                  AmountAvailabilityWindowAndTermsDigest,
+                )
+              },
             ),
             copy_detail(state, emit, quote.terms_digest),
             if !agreements_ready {
@@ -1689,13 +1752,24 @@ fn quote_step(
                 ),
               )
             },
-            @html.button(
-              type_="button",
-              class="primary-button",
-              disabled=!terms_ready || state.self_service.action_loading,
-              on_click=self_service_command(emit, CreateMachineOrder),
-              enterprise_copy(state.locale, CreateOrder),
-            ),
+            if sample_quote {
+              @html.p(
+                class="notice is-warning",
+                copy(
+                  state.locale,
+                  "Ordering is unavailable in this demo preview. Connect an account to request an authoritative quote before ordering.",
+                  "演示预览中无法下单。连接账户后需先申请正式报价，才能下单。",
+                ),
+              )
+            } else {
+              @html.button(
+                type_="button",
+                class="primary-button",
+                disabled=!terms_ready || state.self_service.action_loading,
+                on_click=self_service_command(emit, CreateMachineOrder),
+                enterprise_copy(state.locale, CreateOrder),
+              )
+            },
           ])
         None =>
           @html.div(class="inline-state", [
@@ -1747,7 +1821,6 @@ fn contract_payment_step(
   let agreements_ready = state.agreements.any(value => value.state == Executed) ||
     state.self_service.terms_accepted
   @html.section(class="guided-panel", [
-    @html.p(class="eyebrow", enterprise_copy(state.locale, ContractPayment437)),
     @html.h2(enterprise_copy(state.locale, CompleteCommercialGates)),
     match state.self_service.order {
       Some(order) =>
@@ -1901,7 +1974,6 @@ fn provisioning_step(
   emit : @rabbita.Emit[EnterpriseMessage]?,
 ) -> @rabbita.Html {
   @html.section(class="guided-panel", [
-    @html.p(class="eyebrow", enterprise_copy(state.locale, LiveOrder)),
     @html.h2(enterprise_copy(state.locale, ProvisioningProgress)),
     match state.self_service.order {
       Some(order) =>
@@ -1911,10 +1983,6 @@ fn provisioning_step(
               @html.strong(order_status_label(state.locale, order.status)),
               @html.p([copy_detail(state, emit, order.order_id)]),
             ]),
-            @html.span(
-              class="state-pill",
-              "\{enterprise_copy(state.locale, Generation456)} \{order.generation}",
-            ),
           ]),
           match order.status {
             CompensationPending =>
@@ -1943,7 +2011,6 @@ fn provisioning_step(
           @html.ol(class="provisioning-timeline", [
             @html.li(class="is-complete", [
               @html.strong(enterprise_copy(state.locale, OrderAccepted)),
-              @html.p(enterprise_copy(state.locale, CommercialScopeIsImmutable)),
             ]),
             @html.li(
               class=if order.status == AwaitingPayment {
@@ -1951,12 +2018,7 @@ fn provisioning_step(
               } else {
                 "is-complete"
               },
-              [
-                @html.strong(enterprise_copy(state.locale, PaymentSettled462)),
-                @html.p(
-                  enterprise_copy(state.locale, ProviderEvidenceIsVerified),
-                ),
-              ],
+              [@html.strong(enterprise_copy(state.locale, PaymentSettled462))],
             ),
             @html.li(
               class=if order.status == ProvisioningOrder {
@@ -1966,12 +2028,7 @@ fn provisioning_step(
               } else {
                 ""
               },
-              [
-                @html.strong(enterprise_copy(state.locale, CapacityProvisioned)),
-                @html.p(
-                  enterprise_copy(state.locale, ALeaseIsReservedAndPrepared),
-                ),
-              ],
+              [@html.strong(enterprise_copy(state.locale, CapacityProvisioned))],
             ),
             if order.kind == DedicatedMaaS {
               @html.li(
@@ -1982,15 +2039,7 @@ fn provisioning_step(
                 } else {
                   ""
                 },
-                [
-                  @html.strong(enterprise_copy(state.locale, ModelDeployed)),
-                  @html.p(
-                    enterprise_copy(
-                      state.locale,
-                      ArtifactTransferVerificationAndLunafluxDeployment,
-                    ),
-                  ),
-                ],
+                [@html.strong(enterprise_copy(state.locale, ModelDeployed))],
               )
             } else {
               @html.li(
@@ -1999,12 +2048,7 @@ fn provisioning_step(
                 } else {
                   ""
                 },
-                [
-                  @html.strong(enterprise_copy(state.locale, AccessIssued)),
-                  @html.p(
-                    enterprise_copy(state.locale, ShortLivedSshAndWebideAccess),
-                  ),
-                ],
+                [@html.strong(enterprise_copy(state.locale, AccessIssued))],
               )
             },
             @html.li(
@@ -2110,12 +2154,11 @@ fn provisioning_step(
           } else {
             @html.nothing
           },
-          @html.button(
-            type_="button",
-            class="quiet-button",
-            disabled=state.self_service.action_loading,
-            on_click=self_service_command(emit, RefreshMachineOrders),
+          @controls.icon_button(
+            Refresh,
             enterprise_copy(state.locale, RefreshOrderStatus),
+            self_service_command(emit, RefreshMachineOrders),
+            busy=state.self_service.action_loading,
           ),
         ])
       None =>
@@ -2159,7 +2202,11 @@ fn self_service_view(
   emit : @rabbita.Emit[EnterpriseMessage]?,
 ) -> @rabbita.Html {
   @html.div(class="self-service-page page-stack", [
-    self_service_progress(state),
+    if state.self_service.return_to_rental {
+      @html.h2(copy(state.locale, "Company setup", "企业设置"))
+    } else {
+      self_service_progress(state)
+    },
     if state.self_service.action_error is Some(error) {
       @html.div(
         class="notice is-error",
@@ -2170,13 +2217,50 @@ fn self_service_view(
       @html.nothing
     },
     match state.self_service.step {
-      ChooseService => product_choices(state, emit, false)
+      ChooseService =>
+        @html.div([
+          product_choices(state, emit, false),
+          recent_orders(state, emit),
+        ])
       Organization => organization_step(state, emit)
       Capacity => capacity_step(state, emit)
       Quote => quote_step(state, emit)
       ContractPayment => contract_payment_step(state, emit)
       Provisioning => provisioning_step(state, emit)
     },
+  ])
+}
+
+///|
+fn recent_orders(
+  state : EnterpriseState,
+  emit : @rabbita.Emit[EnterpriseMessage]?,
+) -> @rabbita.Html {
+  if state.self_service.orders.is_empty() {
+    return @html.nothing
+  }
+  @html.section(class="recent-machine-orders", [
+    @html.h3(enterprise_copy(state.locale, RecentMachineOrders)),
+    @html.ul(
+      [
+        for order in state.self_service.orders => {
+          @html.li([
+            @html.span(order.gpu_sku + " · " + order.display_amount),
+            @html.span(order_status_label(state.locale, order.status)),
+            @html.button(
+              type_="button",
+              class="quiet-button",
+              disabled=state.self_service.action_loading,
+              on_click=self_service_command(
+                emit,
+                ResumeMachineOrder(order.order_id),
+              ),
+              copy(state.locale, "Open order", "查看订单"),
+            ),
+          ])
+        }
+      ],
+    ),
   ])
 }
 

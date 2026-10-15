@@ -1,4 +1,4 @@
-import { "moonbitlang/async", "moonbitlang/async/fs", "moonbitlang/async/shell", "moonbitlang/core/env", "moonbitlang/core/json" }
+import { "moonbitlang/async@0.22.4", "moonbitlang/async@0.22.4/fs", "moonbitlang/async@0.22.4/shell", "moonbitlang/core/env", "moonbitlang/core/json" }
 fn object(j : Json) -> Map[String,Json] raise { guard j is Object(v) else { fail("Expected object") }; v }
 fn array(j : Json) -> Array[Json] raise { guard j is Array(v) else { fail("Expected array") }; v }
 async fn main {
