@@ -67,10 +67,28 @@ MoonTown's assembled current frontend is 72.2 MiB; its narrow size gate is now
 - Temporary model publication/inspection Jobs, their NetworkPolicies, failed
   installer staging directories and the temporary host listener were removed.
 
-The `/user/` browser session had expired. A renewed sign-in and fresh card
-handoff are still required for final rendered browser acceptance after the
-gateway restarts. Health, binary identity and asset checks do not substitute
-for observing the robot render or completing an authenticated app journey.
+## Authenticated browser acceptance
+
+The customer renewed the `/user/` session as guojiaan. Fresh launches from the
+PaaS cards reached all three current applications through their live gateways.
+
+- MoonRobo rendered the full E1 body in its robot view. The live renderer
+  reported 50/50 visual and collision mesh loads, covering 25 model meshes and
+  25 collision overlays. The source was the full E1 URDF. The preserved legacy
+  RoboBook still reports two joint-name mapping diagnostics; they were not
+  hidden or relabelled as physical readiness.
+- MoonDesk opened the current Desk and Code destinations, preserved its existing
+  conversations, and returned a new GLM reply of exactly `42` to a bounded
+  verification request that prohibited tools and file changes.
+- MoonTown opened its current map, navigated into Talent and back, preserved
+  its earlier guide conversation, and produced a new guide answer explaining
+  that real work results are available in the Dashboard. Character creation
+  remains an explicit first-use action; none was created for this check.
+
+Screenshots of the live robot, MoonDesk response and MoonTown map/guide were
+retained as local review artifacts outside Git. These observations are scoped
+to the signed-in account and do not assert that every account or physical
+robot was exercised.
 
 Deployment backups, original RoboBook files, credentials and production
 snapshots remain private host references and are not committed here.
