@@ -1012,6 +1012,7 @@ model proxy whose allowed alias comes from that subject's grant. The catalog
 entry is only published after the images are pinned, the gateway and workspace
 service account are configured, and the `/moontown/` browser path passes a
 real handoff/chat test. Never publish the private workspace Pod directly.
+
 `deploy/examples/hosted-moontown.yaml.tpl` is a portable gateway/ingress
 template: provide the required `NAMESPACE`, `CONTROLLER_NAMESPACE`,
 `MOONGATE_NAMESPACE`, `COMFY_IMAGE`, `MODEL_PROXY_IMAGE`, `STORAGE_CLASS`,
@@ -1087,6 +1088,32 @@ consumes it without accepting a controller-provided path and removes it during
 sanitization. The dedicated lease user must have no writable path outside its
 home and rootless runtime storage. Configure and test per-user temporary/mount
 namespaces before enabling SSH.
+
+### Hosted application upgrades
+
+Treat an application release as matched native and browser artifacts from the
+same source snapshot, including its declared paired workspace dependencies.
+Keep the product's public base path in the browser build. Record the immutable
+image digest and the source and browser checksums before publishing.
+
+Update both the gateway's configured launch profile and every existing
+workspace deployment for that application. Updating only the profile leaves
+running workspaces stale; updating only a Pod lets the next handoff restore
+the older configured image. Restart gateways that load their configuration at
+startup, and preserve each workspace's volume, grants and companion services.
+Back up the prior configuration and deployment before guarded replacements.
+
+Check the served index against the built artifact, application readiness,
+public asset/API paths, and a fresh authenticated card launch. Application
+asset packs belong in their owning application's image or user workspace;
+LunaNexa must not install them on managed inference nodes. See each product's
+packaging instructions for optional digital models and first-use data.
+
+For established NFS workspace volumes, `fsGroupChangePolicy: OnRootMismatch`
+avoids rescanning every saved file during each rollout when root permissions
+already match. It retains the configured user/group and still initializes a
+volume whose root permissions differ. Keep actual application readiness and
+model-mapping diagnostics separate from transport or image-version checks.
 
 ### Node transport boundary
 
