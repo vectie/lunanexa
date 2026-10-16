@@ -28,6 +28,7 @@ test "private connection QR contains generic settings and is erased on dismissal
   }
   let initial = render(opened)
   assert_true(initial.contains("Select a key"))
+  assert_true(initial.contains("id=\"api-key-connection-dismiss\""))
   assert_false(initial.contains("Paste your saved"))
   assert_false(initial.contains("model-connection-qr-secret"))
   assert_false(initial.contains("Create a new key"))
@@ -45,6 +46,12 @@ test "private connection QR contains generic settings and is erased on dismissal
   assert_false(html.contains("data:image"))
   assert_true(
     filled.update(DismissModelConnectionQr).model_connection_import is None,
+  )
+  let pending = { ..filled, api_key_secret_request: Some("pending-key"), }
+  let closed = pending.update(DismissModelConnectionQr)
+  assert_true(closed.api_key_secret_request is None)
+  assert_true(
+    closed.api_key_secret_generation > pending.api_key_secret_generation,
   )
   assert_true(filled.update(Navigate(Overview)).model_connection_import is None)
   assert_true(

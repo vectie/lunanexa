@@ -112,10 +112,19 @@ fn model_connection_qr_dialog(
         .aria_modal("true")
         .aria_labelledby("model-connection-qr-title"),
       [
-        @html.h2(
-          id="model-connection-qr-title",
-          copy(state.locale, "Connection QR", "连接二维码"),
-        ),
+        @html.div(class="section-heading", [
+          @html.h2(
+            id="model-connection-qr-title",
+            copy(state.locale, "Connection QR", "连接二维码"),
+          ),
+          @html.button(
+            id="api-key-connection-dismiss",
+            type_="button",
+            class="quiet-button",
+            on_click=command(emit, DismissModelConnectionQr),
+            copy(state.locale, "Close", "关闭"),
+          ),
+        ]),
         @html.label(
           for_="model-connection-key",
           copy(state.locale, "API key", "API 密钥"),
@@ -153,14 +162,6 @@ fn model_connection_qr_dialog(
           @html.nothing
         },
         model_connection_qr(state.locale, value.model, value.secret, emit),
-        @html.div(class="dialog-actions", [
-          @html.button(
-            type_="button",
-            class="quiet-button",
-            on_click=command(emit, DismissModelConnectionQr),
-            copy(state.locale, "Close", "关闭"),
-          ),
-        ]),
       ],
     ),
   ])
