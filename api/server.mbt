@@ -5527,7 +5527,13 @@ pub async fn ApiService::serve_on(
         send_listener_reply(
           connection,
           api_error(
-            400, "InvalidRequest", "invalid OpenAI-compatible chat request", false,
+            400,
+            "InvalidRequest",
+            invalid_openai_chat_message(
+              request_body,
+              self.global_settings.request_budgets,
+            ),
+            false,
           ),
         )
         return

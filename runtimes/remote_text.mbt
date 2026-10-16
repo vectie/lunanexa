@@ -210,7 +210,7 @@ fn responses_input(payload : Json) -> Json raise RemoteRuntimeError {
             Some(value) => value
             None =>
               match fields.get("messages") {
-                Some(value) => value
+                Some(value) => responses_messages_from_chat(value)
                 None =>
                   raise InvalidUpstreamResponse(
                     "text payload must contain input, prompt, or messages",

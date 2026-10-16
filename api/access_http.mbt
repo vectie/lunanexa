@@ -23,7 +23,22 @@ priv struct OpenAiChatRequest {
 
 ///|
 fn decode_openai_chat(body : String) -> OpenAiChatRequest? {
-  try @json.from_json(@json.parse(body)) catch {
+  try {
+    guard @json.parse(body) is Object(fields) else { return None }
+    // OpenAI clients may send null for an unset optional parameter. Derived
+    // optional record fields accept omission but decode present values as the
+    // underlying type, so normalize only these nullable fields before decoding.
+    for
+      field in [
+        "stream", "max_tokens", "tools", "tool_choice", "parallel_tool_calls", "temperature",
+        "top_p",
+      ] {
+      if fields.get(field) is Some(Null) {
+        fields.remove(field)
+      }
+    }
+    @json.from_json(Json::object(fields))
+  } catch {
     _ => None
   } noraise {
     value => Some(value)
@@ -39,6 +54,36 @@ fn valid_openai_request_budget(
     None => true
     Some(units) => units > 0 && units <= budgets.openai_max_output_units
   }
+}
+
+///|
+// Public validation errors describe fields and limits, never request contents.
+fn invalid_openai_chat_message(
+  body : String,
+  budgets : @settings.RequestBudgetSettings,
+) -> String {
+  let fields = try @json.parse(body) catch {
+    _ => return "chat request body must be a JSON object"
+  } noraise {
+    Object(fields) => fields
+    _ => return "chat request body must be a JSON object"
+  }
+  guard fields.get("model") is Some(String(model)) &&
+    @contracts.valid_identifier(model) else {
+    return "model must be a nonempty model ID"
+  }
+  guard fields.get("messages") is Some(Array(messages)) &&
+    messages.length() > 0 &&
+    messages.length() <= 256 else {
+    return "messages must be an array containing 1 to 256 messages"
+  }
+  guard decode_openai_chat(body) is Some(value) else {
+    return "chat parameter has an invalid JSON type: stream and parallel_tool_calls must be booleans, max_tokens an integer, tools an array, temperature and top_p numbers; optional fields may be null"
+  }
+  if !valid_openai_request_budget(value, budgets) {
+    return "max_tokens must be between 1 and \{budgets.openai_max_output_units}; omit it or use null for the default"
+  }
+  "invalid OpenAI-compatible chat request"
 }
 
 ///|
@@ -524,7 +569,13 @@ async fn ApiService::handle_openai_compatibility(
         value.messages.length() <= 256 &&
         valid_openai_request_budget(value, self.global_settings.request_budgets) else {
         return api_error(
-          400, "InvalidRequest", "invalid OpenAI-compatible chat request", false,
+          400,
+          "InvalidRequest",
+          invalid_openai_chat_message(
+            body,
+            self.global_settings.request_budgets,
+          ),
+          false,
         )
       }
       if value.stream.unwrap_or(false) {

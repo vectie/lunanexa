@@ -40,6 +40,101 @@ test "OpenAI compatibility decoder rejects malformed and oversized shapes" {
 }
 
 ///|
+test "OpenAI chat accepts nullable optional parameters from compatible clients" {
+  let body : Json = {
+    "model": "glm-5.3.flash",
+    "messages": [{ "role": "user", "content": "hi" }],
+    "stream": Json::null(),
+    "max_tokens": Json::null(),
+    "tools": Json::null(),
+    "tool_choice": Json::null(),
+    "parallel_tool_calls": Json::null(),
+    "temperature": Json::null(),
+    "top_p": Json::null(),
+  }
+  guard decode_openai_chat(body.stringify()) is Some(value) else {
+    fail("nullable optional fields must be treated as omitted")
+  }
+  assert_eq(value.stream, None)
+  assert_eq(value.max_tokens, None)
+  assert_eq(value.tools, None)
+  assert_eq(value.tool_choice, None)
+  assert_eq(value.parallel_tool_calls, None)
+  assert_eq(value.temperature, None)
+  assert_eq(value.top_p, None)
+  let streaming : Json = {
+    "model": "glm-5.3.flash",
+    "messages": [{ "role": "user", "content": "hi" }],
+    "stream": true,
+    "max_tokens": 1024,
+    "tools": Json::null(),
+    "temperature": 0.5,
+  }
+  guard decode_openai_chat(streaming.stringify()) is Some(streamed) else {
+    fail("null normalization must retain explicit parameters")
+  }
+  assert_eq(streamed.stream, Some(true))
+  assert_eq(streamed.max_tokens, Some(1024))
+  assert_eq(streamed.temperature, Some(0.5))
+  let budgets = @settings.default_global_admin_settings().request_budgets
+  assert_true(valid_openai_request_budget(streamed, budgets))
+  assert_false(
+    valid_openai_request_budget({ ..streamed, max_tokens: Some(0), }, budgets),
+  )
+  assert_false(
+    valid_openai_request_budget(
+      { ..streamed, max_tokens: Some(budgets.openai_max_output_units + 1), },
+      budgets,
+    ),
+  )
+}
+
+///|
+test "OpenAI null normalization does not accept malformed required or optional fields" {
+  for
+    (field, invalid) in [
+      ("model", Json::null()),
+      ("messages", Json::null()),
+      ("stream", Json::string("true")),
+      ("max_tokens", Json::string("1024")),
+      ("tools", Json::object({})),
+      ("parallel_tool_calls", Json::string("false")),
+      ("temperature", Json::string("0.5")),
+      ("top_p", Json::string("1")),
+    ] {
+    let fields : Map[String, Json] = {
+      "model": Json::string("glm-5.3.flash"),
+      "messages": Json::array([{ "role": "user", "content": "hi" }]),
+    }
+    fields[field] = invalid
+    assert_true(decode_openai_chat(Json::object(fields).stringify()) is None)
+  }
+}
+
+///|
+test "OpenAI validation errors identify limits without reflecting payloads" {
+  let budgets = @settings.default_global_admin_settings().request_budgets
+  let body : Json = {
+    "model": "glm-5.3.flash",
+    "messages": [{ "role": "user", "content": "private-prompt-do-not-reflect" }],
+    "max_tokens": -1,
+  }
+  let message = invalid_openai_chat_message(body.stringify(), budgets)
+  assert_true(message.has_prefix("max_tokens must be between 1 and "))
+  assert_false(message.contains("private-prompt"))
+  assert_eq(
+    invalid_openai_chat_message("{}", budgets),
+    "model must be a nonempty model ID",
+  )
+  assert_eq(
+    invalid_openai_chat_message(
+      "{\"model\":\"glm-5.3.flash\",\"messages\":[]}", budgets,
+    ),
+    "messages must be an array containing 1 to 256 messages",
+  )
+}
+
+///|
 async test "personal API keys recheck the current account before quota use" {
   let directory = @fs.tmpdir(prefix="lunanexa-access-account-check-")
   let now = @async.now()

@@ -5,8 +5,8 @@ repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repo_root"
 
 moon build cmd/control cmd/node --target native
-control_binary="$repo_root/_build/native/debug/build/cmd/control/control.exe"
-node_binary="$repo_root/_build/native/debug/build/cmd/node/node.exe"
+control_binary="$repo_root/_build/native/debug/build/vectie/lunanexa/cmd/control/control.exe"
+node_binary="$repo_root/_build/native/debug/build/vectie/lunanexa/cmd/node/node.exe"
 test_directory=$(mktemp -d "${TMPDIR:-/tmp}/lunanexa-process-recovery.XXXXXX")
 port=$((20000 + ($$ % 20000)))
 address="127.0.0.1:$port"
@@ -45,6 +45,7 @@ start_node() {
     LUNANEXA_ALLOW_HTTP_LOOPBACK=1 \
     LUNANEXA_COSIGN_BINARY="/usr/bin/cosign" \
     LUNANEXA_COSIGN_PUBLIC_KEY_PATH="$test_directory/cosign.pub" \
+    LUNANEXA_COSIGN_TRUSTED_ROOT_PATH="$test_directory/trusted-root.json" \
     LUNANEXA_ASSIGNMENT_SIGNING_SECRET="process-test-assignment-authority" \
     LUNANEXA_CONTAINER_ENGINE="/usr/bin/podman" \
     LUNANEXA_RUNTIME_NETWORK="lunanexa-process-test" \
@@ -107,6 +108,7 @@ start_controller() {
     LUNANEXA_LEASE_HELPER_RECEIPT_SECRET="process-test-helper-receipt-authority" \
     LUNANEXA_COSIGN_BINARY="/usr/bin/cosign" \
     LUNANEXA_COSIGN_PUBLIC_KEY_PATH="$test_directory/cosign.pub" \
+    LUNANEXA_COSIGN_TRUSTED_ROOT_PATH="$test_directory/trusted-root.json" \
     "$control_binary" >"$log_path" 2>&1 &
   control_pid=$!
 }
@@ -259,6 +261,7 @@ env \
   LUNANEXA_LEASE_HELPER_RECEIPT_SECRET="process-test-helper-receipt-authority" \
   LUNANEXA_COSIGN_BINARY="/usr/bin/cosign" \
   LUNANEXA_COSIGN_PUBLIC_KEY_PATH="$test_directory/cosign.pub" \
+  LUNANEXA_COSIGN_TRUSTED_ROOT_PATH="$test_directory/trusted-root.json" \
   "$control_binary" >"$stale_log" 2>&1 && {
     printf '%s\n' 'stale controller epoch unexpectedly started' >&2
     exit 1
