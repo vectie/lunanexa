@@ -62,7 +62,14 @@ test "private model call example uses chat completion without secrets or infrast
   }
   let page = render(state)
   assert_true(page.contains("Manage API keys"))
-  assert_true(page.contains("Copy call example"))
+  assert_true(page.contains("Copy Call example"))
+  assert_true(page.contains("TRAE setup"))
+  assert_true(page.contains("Full URL: on"))
+  assert_true(page.contains("16384"))
+  assert_true(page.contains("/chat/completions"))
+  assert_true(page.contains("RequestBudgetExceeded"))
+  assert_false(page.contains("<details class=\"ln-advanced\" open"))
+  assert_true(page.contains("/docs/?page=client-api"))
   let overview = render({
     ..state,
     route: Overview,
@@ -116,4 +123,24 @@ test "private model call example uses chat completion without secrets or infrast
     "https://api.example.invalid/v1", "model'$(never-run)",
   )
   assert_true(hostile.contains("'\"'\"'"))
+}
+
+///|
+test "connection examples retain safe credential handling for normal stream and discovery" {
+  let base = "https://suanli.kechuangfuwu.com:8443/user/v1/"
+  let unary = model_api_example(base, "glm-5.3.flash")
+  let streaming = model_api_example(base, "glm-5.3.flash", stream=true)
+  assert_true(unary.contains("test -n \"$API_KEY\" && curl"))
+  assert_true(unary.contains("\"max_tokens\":1024"))
+  assert_true(unary.contains("\"stream\":false"))
+  assert_true(streaming.contains("--no-buffer"))
+  assert_true(streaming.contains("\"stream\":true"))
+  let discovery = model_discovery_example(base)
+  assert_true(discovery.contains("/user/v1/models'"))
+  for example in [unary, streaming, discovery] {
+    assert_true(example.contains("Authorization: Bearer $API_KEY"))
+    assert_false(example.contains("//chat"))
+    assert_false(example.contains("//models"))
+    assert_false(example.contains("api-key-"))
+  }
 }

@@ -384,8 +384,17 @@ priv enum Outcome {
   ContractPreviewFailed(Int64, @i18n.Locale, String)
   ApiKeyIssued(Int64, @enterprise_ui.IssuedApiKeyView)
   ApiKeyRevoked(Int64, String, Int64?)
+  ApiKeySecretLoaded(Int64, Int64, String, String, KeySecretPurpose)
+  ApiKeySecretLoadFailed(Int64, Int64)
   ApiKeySecretCopied(Int64)
   Failed(@i18n.Locale, String)
+}
+
+///|
+priv enum KeySecretPurpose {
+  Reveal
+  Copy
+  ConnectionQr
 }
 
 ///|
@@ -4741,6 +4750,29 @@ fn update(
           (model, copy_api_key_secret_command(model, value.secret, emit))
         _ => (model, @rabbita.none)
       }
+    Portal(ToggleApiKeySecret(key_id))
+    | Portal(CopySavedApiKey(key_id))
+    | Portal(UseSavedKeyForConnectionQr(key_id)) => {
+      let event = match message {
+        Portal(value) => value
+        _ => abort("unreachable")
+      }
+      let next = model.portal.update(event)
+      let purpose = match message {
+        Portal(CopySavedApiKey(_)) => Copy
+        Portal(UseSavedKeyForConnectionQr(_)) => ConnectionQr
+        _ => Reveal
+      }
+      if next.api_key_secret_request == Some(key_id) {
+        let next_model = { ..model, portal: next, }
+        (
+          next_model,
+          saved_api_key_secret_command(next_model, key_id, purpose, emit),
+        )
+      } else {
+        ({ ..model, portal: next, }, @rabbita.none)
+      }
+    }
     Portal(CopyFirstCallExample) =>
       match model.portal.one_time_api_key_secret {
         Some(value) =>
@@ -5616,6 +5648,78 @@ fn update(
           @rabbita.none,
         )
       }
+    Outcome(ApiKeySecretLoadFailed(generation, nonce)) =>
+      if generation != model.session_generation ||
+        nonce != model.portal.api_key_secret_generation {
+        (model, @rabbita.none)
+      } else {
+        (
+          {
+            ..model,
+            portal: {
+              ..model.portal,
+              api_key_secret_request: None,
+              error_message: Some(
+                portal_copy(
+                  model.portal.locale,
+                  "This key cannot be retrieved. It may be expired, revoked, or require replacement.",
+                  "无法读取此密钥，可能已到期、已撤销或需要重新创建。",
+                ),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
+      }
+    Outcome(ApiKeySecretLoaded(generation, nonce, key_id, secret, purpose)) =>
+      if generation != model.session_generation ||
+        nonce != model.portal.api_key_secret_generation ||
+        model.portal.api_key_secret_request != Some(key_id) ||
+        !model.portal.api_keys.any(key => {
+          key.key_id == key_id &&
+          key.revoked_unix_ms is None &&
+          key.expires_unix_ms > current_unix_ms()
+        }) {
+        (model, @rabbita.none)
+      } else {
+        let portal = {
+          ..model.portal,
+          api_key_secret_request: None,
+          error_message: None,
+        }
+        match purpose {
+          Reveal =>
+            (
+              {
+                ..model,
+                portal: {
+                  ..portal,
+                  revealed_api_key: Some({ key_id, secret, }),
+                },
+              },
+              @rabbita.none,
+            )
+          Copy =>
+            (
+              { ..model, portal, },
+              copy_api_key_secret_command(model, secret, emit),
+            )
+          ConnectionQr =>
+            (
+              {
+                ..model,
+                portal: {
+                  ..portal,
+                  model_connection_import: portal.model_connection_import.map(value => {
+                    ..value,
+                    secret,
+                  }),
+                },
+              },
+              @rabbita.none,
+            )
+        }
+      }
     Outcome(ApiKeyRevoked(generation, key_id, revoked_unix_ms)) =>
       if generation != model.session_generation {
         (model, @rabbita.none)
@@ -5635,6 +5739,8 @@ fn update(
               ..model.portal,
               api_keys,
               api_key_revoke_id: None,
+              revealed_api_key: None,
+              api_key_secret_request: None,
               loading: false,
               success_message: Some(
                 portal_copy(

@@ -691,6 +691,40 @@ async fn ApiService::handle_enterprise_portal(
       })
     }
     (Post, _) if path.has_prefix("/v1/portal/self/api-keys/") &&
+      path.has_suffix(":secret") => {
+      guard self.access_store is Some(access) else {
+        return api_error(
+          503, "AccessStoreUnavailable", "API key state is unavailable", true,
+        )
+      }
+      let key_id = path["/v1/portal/self/api-keys/".length():path.length() -
+      ":secret".length()].to_owned()
+      let view = try
+        portal_view_for_request(portal, subject_ref, headers)
+      catch {
+        error => return portal_error_reply(error)
+      } noraise {
+        value => value
+      }
+      let secret = try
+        access.secret_for_subject(
+          key_id,
+          view.membership.tenant_ref,
+          subject_ref,
+          @async.now(),
+        )
+      catch {
+        _ =>
+          return api_error(
+            404, "KeySecretUnavailable", "this key is expired, revoked, unavailable, or not owned by this account",
+            false,
+          )
+      } noraise {
+        value => value
+      }
+      json_reply(200, { "key_id": key_id, "secret": secret })
+    }
+    (Post, _) if path.has_prefix("/v1/portal/self/api-keys/") &&
       path.has_suffix(":revoke") => {
       guard self.access_store is Some(access) else {
         return api_error(

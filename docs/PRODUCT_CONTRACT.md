@@ -29,6 +29,23 @@ or a delivery request. Stopping an instance retains user data according to its
 published policy and does not automatically evict public weights. Node release
 follows confirmed workload termination and cleanup, not merely lease expiry.
 
+### Private model connection and saved API keys
+
+Signed-in key owners can retrieve their actual API secret repeatedly until
+expiry or revocation. The customer portal masks keys by default, with explicit
+eye and copy controls. `POST /v1/portal/self/api-keys/{key_id}:secret` checks
+the authenticated subject and selected tenant, then verifies the recreated
+secret against its durable digest. A failed match never returns another key.
+Responses are not cached; lists, audit records and snapshots contain no raw
+secret. Closing, navigating or changing organization clears revealed values.
+
+The signed-in MaaS connection QR carries a private `openai.connection.v1`
+descriptor: API base URL, chat-completions format, model, actual API secret and
+recommended output budget. The owner selects an active saved key and its QR
+appears directly. It remains in the signed-in page and is independent of guest
+network admission. Receiving clients review settings before importing; the QR
+does not extend authorization. Public documentation contains no secret QR.
+
 ### Guest Wi-Fi QR trial
 
 An optional venue profile exposes a QR URL into the enterprise browser portal.

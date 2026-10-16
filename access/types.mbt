@@ -168,9 +168,8 @@ pub extend ApiCredentialView with ToJson::{to_json}
 pub extend ApiCredentialView with FromJson::{from_json}
 
 ///|
-/// One-time issuance response safe for an API or browser. The durable secret
-/// digest is deliberately excluded; callers receive only the public metadata
-/// plus the one-time raw secret.
+/// Issuance response for the authenticated owner. The durable secret digest
+/// is excluded; raw secrets are separate from ordinary key metadata lists.
 pub(all) struct IssuedApiKeyView {
   credential : ApiCredentialView
   secret : String

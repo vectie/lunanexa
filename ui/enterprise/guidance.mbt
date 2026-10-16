@@ -6,17 +6,29 @@ fn shell_quote(value : String) -> String {
 }
 
 ///|
-fn model_api_example(base_url : String, model : String) -> String {
+fn model_api_example(
+  base_url : String,
+  model : String,
+  stream? : Bool = false,
+) -> String {
   let payload : Json = {
     "model": model,
     "messages": [{ "role": "user", "content": "Hello" }],
     "max_tokens": 1024,
-    "stream": false,
+    "stream": stream,
   }
-  "# Set API_KEY privately before running.\ncurl --fail-with-body " +
+  "# Load your saved lnx_ secret into API_KEY privately.\ntest -n \"$API_KEY\" && curl --fail-with-body --silent --show-error " +
+  (if stream { "--no-buffer " } else { "" }) +
   shell_quote(base_url.trim_end(chars="/").to_owned() + "/chat/completions") +
   " \\\n  -H \"Authorization: Bearer $API_KEY\" \\\n  -H 'Content-Type: application/json' \\\n  --data-binary " +
   shell_quote(payload.stringify())
+}
+
+///|
+fn model_discovery_example(base_url : String) -> String {
+  "# Load your saved lnx_ secret into API_KEY privately.\ntest -n \"$API_KEY\" && curl --fail-with-body --silent --show-error " +
+  shell_quote(base_url.trim_end(chars="/").to_owned() + "/models") +
+  " \\\n+  -H \"Authorization: Bearer $API_KEY\""
 }
 
 ///|

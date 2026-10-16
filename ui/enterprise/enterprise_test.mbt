@@ -300,8 +300,8 @@ test "API key dialogs expose accessible semantics and one-time erasure" {
   let revealed = @enterprise.render(with_secret)
   assert_true(revealed.contains("role=\"alertdialog\""))
   assert_true(revealed.contains("Copy secret"))
-  assert_true(revealed.contains("<summary>Reveal API key</summary>"))
-  assert_true(revealed.contains("lnx_example_one_time_secret"))
+  assert_false(revealed.contains("<summary>Reveal API key</summary>"))
+  assert_false(revealed.contains("lnx_example_one_time_secret"))
   let erased = with_secret.update(DismissOneTimeApiKeySecret)
   assert_false(
     @enterprise.render(erased).contains("lnx_example_one_time_secret"),

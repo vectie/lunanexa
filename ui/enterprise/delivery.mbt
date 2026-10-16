@@ -40,7 +40,7 @@ pub impl @json.FromJson for ExternalModelServiceView with fn from_json(
       "ready": ready,
       ..
     } else {
-    raise @json.JsonDecodeError((path, "expected external model service"))
+    raise JsonDecodeError((path, "expected external model service"))
   }
   let context_window_tokens : Int? = match value {
     { "context_window_tokens": Array([limit]), .. }
@@ -48,7 +48,7 @@ pub impl @json.FromJson for ExternalModelServiceView with fn from_json(
       Some(@json.from_json(limit, path=path.add_key("context_window_tokens")))
     { "context_window_tokens": Array([]) | Null, .. } => None
     { "context_window_tokens": _, .. } =>
-      raise @json.JsonDecodeError(
+      raise JsonDecodeError(
         (path.add_key("context_window_tokens"), "expected context token limit"),
       )
     _ => None
@@ -1007,28 +1007,19 @@ fn delivery_panel_view(
                   ),
                 ],
               ),
-              @controls.advanced(copy(locale, "Call example", "调用示例"), [
-                @html.pre(
-                  class="mono",
-                  style=["white-space:pre-wrap", "overflow-wrap:anywhere"],
-                  model_api_example(public_maas_base_url(), service.model_alias),
-                ),
-                @controls.icon_button(
-                  Copy,
-                  copy(locale, "Copy call example", "复制调用示例"),
-                  command(
-                    emit,
-                    CopyDetail(
-                      model_api_example(
-                        public_maas_base_url(),
-                        service.model_alias,
-                      ),
-                    ),
-                  ),
-                ),
-              ]),
+              model_connection_guides(locale, service, emit),
             ]),
             @html.div(class="record-actions", [
+              @html.button(
+                type_="button",
+                class="quiet-button",
+                disabled=!service.ready,
+                on_click=command(
+                  emit,
+                  OpenModelConnectionQr(service.model_alias),
+                ),
+                copy(locale, "Connection QR", "连接二维码"),
+              ),
               @html.button(
                 type_="button",
                 class="primary-button",

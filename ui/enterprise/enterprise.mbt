@@ -89,6 +89,15 @@ pub(all) struct OneTimeApiKeySecret {
 } derive(Debug, Eq)
 
 ///|
+pub(all) struct RevealedApiKey {
+  key_id : String
+  secret : String
+} derive(Eq)
+
+///|
+pub extend RevealedApiKey with Eq::{equal, not_equal}
+
+///|
 /// Browser-portable account API scope. This deliberately mirrors the portal
 /// JSON contract without importing the native access store into the JS UI.
 pub(all) enum ApiKeyScope {
@@ -189,6 +198,10 @@ pub(all) struct EnterpriseState {
   api_key_issue_open : Bool
   api_key_revoke_id : String?
   one_time_api_key_secret : OneTimeApiKeySecret?
+  revealed_api_key : RevealedApiKey?
+  api_key_secret_request : String?
+  api_key_secret_generation : Int64
+  model_connection_import : ModelConnectionImport?
   member_invite_email : String
   member_invite_secret : String?
   member_invite_loading : Bool
@@ -242,6 +255,9 @@ pub(all) enum EnterpriseMessage {
   SubmitMemberInvite
   DismissMemberInviteSecret
   CopyOneTimeApiKeySecret
+  ToggleApiKeySecret(String)
+  CopySavedApiKey(String)
+  UseSavedKeyForConnectionQr(String)
   CopyFirstCallExample
   CopyDetail(String)
   ExportCosts
@@ -264,6 +280,8 @@ pub(all) enum EnterpriseMessage {
   OpenApplication(String)
   UseModelInApplication(String)
   CreateModelApiKey(String)
+  OpenModelConnectionQr(String)
+  DismissModelConnectionQr
   SelectWebIdeOrder(String)
   Delivery(DeliveryMessage)
   MarkNotificationRead(String, Int64)
@@ -303,6 +321,10 @@ pub fn default_state(now_unix_ms : Int64) -> EnterpriseState {
     api_key_issue_open: false,
     api_key_revoke_id: None,
     one_time_api_key_secret: None,
+    revealed_api_key: None,
+    api_key_secret_request: None,
+    api_key_secret_generation: 0L,
+    model_connection_import: None,
     member_invite_email: "",
     member_invite_secret: None,
     member_invite_loading: false,
@@ -904,7 +926,114 @@ pub fn EnterpriseState::update(
   self : EnterpriseState,
   message : EnterpriseMessage,
 ) -> EnterpriseState {
+  if (
+      self.revealed_api_key is Some(_) || self.api_key_secret_request is Some(_)
+    ) &&
+    (
+      message is Navigate(_) ||
+      message is SelfService(SelectOrganization(_)) ||
+      message is BeginRevokeApiKey(_) ||
+      message is DismissModelConnectionQr
+    ) {
+    return {
+      ..self,
+      revealed_api_key: None,
+      api_key_secret_request: None,
+      api_key_secret_generation: self.api_key_secret_generation + 1L,
+    }.update(message)
+  }
+  if self.model_connection_import is Some(_) &&
+    (message is Navigate(_) || message is SelfService(SelectOrganization(_))) {
+    return { ..self, model_connection_import: None, }.update(message)
+  }
   match message {
+    ToggleApiKeySecret(key_id) => {
+      let active = self.api_keys.any(key => {
+        key.key_id == key_id &&
+        key.revoked_unix_ms is None &&
+        key.expires_unix_ms > self.machine_access.now_unix_ms
+      })
+      if !active {
+        self
+      } else if self.revealed_api_key is Some(value) && value.key_id == key_id {
+        {
+          ..self,
+          revealed_api_key: None,
+          api_key_secret_request: None,
+          api_key_secret_generation: self.api_key_secret_generation + 1L,
+        }
+      } else {
+        {
+          ..self,
+          revealed_api_key: None,
+          api_key_secret_request: Some(key_id),
+          api_key_secret_generation: self.api_key_secret_generation + 1L,
+        }
+      }
+    }
+    UseSavedKeyForConnectionQr(key_id) => {
+      guard self.model_connection_import is Some(value) else { return self }
+      let selected = self.api_keys.any(key => {
+        key.key_id == key_id &&
+        key.revoked_unix_ms is None &&
+        key.expires_unix_ms > self.machine_access.now_unix_ms &&
+        (
+          key.allowed_models.is_empty() ||
+          key.allowed_models.contains(value.model)
+        )
+      })
+      {
+        ..self,
+        model_connection_import: Some({
+          ..value,
+          key_id: if selected {
+            Some(key_id)
+          } else {
+            None
+          },
+          secret: "",
+        }),
+        api_key_secret_request: if selected {
+          Some(key_id)
+        } else {
+          None
+        },
+        api_key_secret_generation: self.api_key_secret_generation + 1L,
+      }
+    }
+    CopySavedApiKey(key_id) =>
+      if self.api_keys.any(key => {
+          key.key_id == key_id &&
+          key.revoked_unix_ms is None &&
+          key.expires_unix_ms > self.machine_access.now_unix_ms
+        }) {
+        {
+          ..self,
+          api_key_secret_request: Some(key_id),
+          api_key_secret_generation: self.api_key_secret_generation + 1L,
+        }
+      } else {
+        self
+      }
+    OpenModelConnectionQr(model_name) =>
+      if self.deliveries.external_model.map_or(false, service => {
+          service.ready && service.model_alias == model_name
+        }) {
+        {
+          ..self,
+          route: Models,
+          model_connection_import: Some({
+            model: model_name,
+            secret: "",
+            key_id: None,
+          }),
+          one_time_api_key_secret: None,
+          api_key_issue_open: false,
+        }
+      } else {
+        self
+      }
+    DismissModelConnectionQr => { ..self, model_connection_import: None, }
     UseModelInApplication(model_name) => self.open_model_application(model_name)
     CreateModelApiKey(model_name) => {
       if self.loading ||
@@ -917,6 +1046,7 @@ pub fn EnterpriseState::update(
       {
         ..self,
         route: Models,
+        model_connection_import: None,
         api_key_issue_draft: {
           ..self.api_key_issue_draft,
           display_name: model_name,
@@ -1147,6 +1277,7 @@ pub fn EnterpriseState::update(
     OpenApiKeyIssue =>
       {
         ..self,
+        model_connection_import: None,
         api_key_issue_open: true,
         api_key_revoke_id: None,
         one_time_api_key_secret: None,
@@ -1218,7 +1349,14 @@ pub fn EnterpriseState::update(
     | CopyFirstCallExample
     | CopyDetail(_)
     | ExportCosts => self
-    DismissOneTimeApiKeySecret => { ..self, one_time_api_key_secret: None, }
+    DismissOneTimeApiKeySecret =>
+      {
+        ..self,
+        one_time_api_key_secret: None,
+        revealed_api_key: None,
+        api_key_secret_request: None,
+        api_key_secret_generation: self.api_key_secret_generation + 1L,
+      }
     BeginRevokeApiKey(key_id) =>
       {
         ..self,
@@ -2233,12 +2371,30 @@ fn one_time_secret_dialog(
             @html.dd([copy_detail(state, emit, value.key_id)]),
           ]),
         ]),
-        @html.details([
-          @html.summary(
-            copy(state.locale, "Reveal API key", "显示 API 密钥"),
-          ),
-          @html.pre(class="one-time-secret", value.secret),
-        ]),
+        match
+          state.api_keys.iter().find_first(key => key.key_id == value.key_id) {
+          Some(key) => saved_api_key_controls(state, key, emit)
+          None => @html.nothing
+        },
+        if private_model {
+          @controls.advanced(
+            copy(
+              state.locale,
+              "Client connection QR",
+              "客户端连接二维码",
+            ),
+            [
+              model_connection_qr(
+                state.locale,
+                value.allowed_models[0],
+                value.secret,
+                emit,
+              ),
+            ],
+          )
+        } else {
+          @html.nothing
+        },
         @html.details(class="first-call-guide", [
           @html.summary(enterprise_copy(state.locale, MakeYourFirstCall)),
           @html.p(
@@ -2270,11 +2426,10 @@ fn one_time_secret_dialog(
           },
         ]),
         @html.div(class="dialog-actions", [
-          @html.button(
-            type_="button",
-            class="quiet-button",
-            on_click=command(emit, CopyOneTimeApiKeySecret),
+          @controls.icon_button(
+            Copy,
             enterprise_copy(state.locale, CopySecret),
+            command(emit, CopyOneTimeApiKeySecret),
           ),
           @html.button(
             type_="button",
@@ -2356,6 +2511,18 @@ fn account_access_view(
       enterprise_copy(state.locale, AccountIdentityIsUnavailable),
     )
   }
+  let ordered_keys = state.api_keys.copy()
+  ordered_keys.sort_by_key(key => {
+    (
+      if key.revoked_unix_ms is None &&
+        key.expires_unix_ms > state.machine_access.now_unix_ms {
+        0
+      } else {
+        1
+      },
+      0L - key.issued_unix_ms,
+    )
+  })
   let company_active = state.organizations.any(value => {
     value.organization.organization_id == membership.organization_id &&
     value.organization.state == Active
@@ -2619,7 +2786,7 @@ fn account_access_view(
         @html.div(
           class="api-key-list",
           [
-            for key in state.api_keys => {
+            for key in ordered_keys => {
               let (status, status_class) = api_key_state(
                 state.locale,
                 key,
@@ -2639,6 +2806,7 @@ fn account_access_view(
                     status,
                   ),
                 ]),
+                saved_api_key_controls(state, key, emit),
                 @html.dl(class="account-facts api-key-facts", [
                   @html.div([
                     @html.dt(enterprise_copy(state.locale, Scopes)),
@@ -3372,6 +3540,7 @@ fn models_view(
     },
     api_key_issue_dialog(state, emit),
     one_time_secret_dialog(state, emit),
+    model_connection_qr_dialog(state, emit),
   ])
 }
 

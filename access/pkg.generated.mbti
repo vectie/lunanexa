@@ -52,6 +52,7 @@ pub async fn AccessStore::open_postgres(@database.PostgresDatabase, String) -> S
 pub async fn AccessStore::revoke(Self, String, Int64) -> ApiCredential
 pub async fn AccessStore::revoke_for_subject(Self, String, String, String, Int64) -> ApiCredential
 pub async fn AccessStore::revoke_subject(Self, String, Int64) -> Int
+pub async fn AccessStore::secret_for_subject(Self, String, String, String, Int64) -> String
 pub async fn AccessStore::snapshot(Self) -> AccessSnapshot
 pub async fn AccessStore::views(Self) -> Array[ApiCredentialView]
 pub async fn AccessStore::views_for_subject(Self, String, String) -> Array[ApiCredentialView]

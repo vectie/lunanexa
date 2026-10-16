@@ -19,6 +19,8 @@ pub fn styles() -> String
 pub(all) enum Icon {
   Refresh
   Copy
+  Eye
+  EyeOff
 }
 
 // Type aliases

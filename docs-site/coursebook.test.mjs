@@ -337,6 +337,35 @@ test("published screenshots are real local image assets with safe paths", async 
   }
 });
 
+test("GLM quickstart distinguishes client URL modes, safe output and record IDs", () => {
+  const page = pageById.get("client-api");
+  const codes = page.blocks.filter((block) => block.kind === "code");
+  const base = "https://suanli.kechuangfuwu.com:8443/user/v1";
+  assert.ok(codes.some((block) => block.code === base));
+  assert.ok(codes.some((block) => block.code === `${base}/chat/completions`));
+  assert.ok(codes.some((block) => block.code === "glm-5.3.flash"));
+  assert.ok(codes.some((block) => block.code === "16384"));
+  const requests = codes.filter((block) => block.language === "sh");
+  assert.equal(requests.length, 3);
+  for (const block of requests) {
+    assert.ok(block.code.startsWith('test -n "$API_KEY" && curl'));
+    assert.ok(block.code.includes('Authorization: Bearer $API_KEY'));
+    assert.ok(block.code.includes(base));
+    if (block.code.includes("--data-binary")) {
+      const payload = JSON.parse(block.code.match(/--data-binary '([^']+)'/)[1]);
+      assert.equal(payload.model, "glm-5.3.flash");
+      assert.equal(payload.max_tokens, 1024);
+      assert.equal(payload.stream, block.code.includes("--no-buffer"));
+    }
+  }
+  assert.match(JSON.stringify(page), /record ID/);
+  assert.match(JSON.stringify(page), /1 MiB/);
+  assert.match(JSON.stringify(zhBook.pages["client-api"]), /记录编号/);
+  assert.equal(pageById.has("qr-entry"), false);
+  assert.match(JSON.stringify(page), /Connection QR/);
+  assert.match(JSON.stringify(zhBook.pages["client-api"]), /连接二维码/);
+});
+
 test("every page source exists in the evidence ledger", () => {
   assert.equal(evidence.contract_version, "moonbook.repository-coursebook-evidence.v1");
   for (const page of book.pages) {

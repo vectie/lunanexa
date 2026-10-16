@@ -1,5 +1,8 @@
 # Provider-neutral client integration
 
+For the deployed GLM endpoint, copyable requests and TRAE settings, start with
+the [GLM API quickstart](GLM_API_QUICKSTART.md).
+
 The `vectie/lunanexa/client` package is the published consumer surface. It
 supports capability discovery, canonical invocation, streaming preference,
 cancellation, usage, health, and typed provider errors without importing any

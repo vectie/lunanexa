@@ -12,6 +12,8 @@ import {
   "vectie/lunanexa/ui/i18n",
   "moonbit-community/rabbita",
   "moonbit-community/rabbita/html",
+  "moonbit-community/rabbita/svg",
+  "PaiGack/moonbitqrcode/src/lib" @qr,
   "moonbitlang/core/json",
 }
 

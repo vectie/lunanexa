@@ -3,6 +3,8 @@
 pub(all) enum Icon {
   Refresh
   Copy
+  Eye
+  EyeOff
 }
 
 ///|
@@ -24,6 +26,17 @@ fn glyph(icon : Icon) -> @rabbita.Html {
           .stroke_linecap("round")
           .stroke_linejoin("round"),
         match icon {
+          Eye =>
+            [
+              @svg.path(d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"),
+              @svg.circle(cx=12, cy=12, r=3),
+            ]
+          EyeOff =>
+            [
+              @svg.path(
+                d="M3 3l18 18M10.6 5.1A12 12 0 0 1 12 5c6.5 0 10 7 10 7a18 18 0 0 1-3 3.8M6.2 6.2A19 19 0 0 0 2 12s3.5 7 10 7a12 12 0 0 0 5.8-1.5M10 10a3 3 0 0 0 4 4",
+              ),
+            ]
           Refresh =>
             [
               @svg.path(

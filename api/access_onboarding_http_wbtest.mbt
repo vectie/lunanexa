@@ -269,6 +269,27 @@ async test "one access package intent is resumable and enables only after contra
   let payload = @json.parse(key_reply.body)
   assert_true(payload is { "api_base_url": Null, .. })
   let issued : @access.IssuedApiKeyView = @json.from_json(payload)
+  for _ in 0..<2 {
+    let reveal = model_service.handle(
+      Post,
+      "/v1/portal/self/api-keys/" + issued.credential.key_id + ":secret",
+      key_headers,
+      "{}",
+    )
+    assert_eq(reveal.status, 200)
+    assert_eq(
+      @json.parse(reveal.body),
+      ({ "key_id": issued.credential.key_id, "secret": issued.secret } : Json),
+    )
+  }
+  let unauthorized = model_service.handle(
+    Post,
+    "/v1/portal/self/api-keys/" + issued.credential.key_id + ":secret",
+    Map([]),
+    "{}",
+  )
+  assert_eq(unauthorized.status, 401)
+  assert_false(unauthorized.body.contains(issued.secret))
   assert_eq(issued.credential.maximum_requests, 0L)
   assert_true(
     model_service.api_key_check(

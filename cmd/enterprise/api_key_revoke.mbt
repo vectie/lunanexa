@@ -3,7 +3,7 @@
 /// Successful revocation must close the confirmation and update the key card.
 impl @json.FromJson for PortalApiKeyRevokeView with fn from_json(value, path) {
   guard value is { "key_id": key_id, .. } else {
-    raise @json.JsonDecodeError((path, "expected revoked API key"))
+    raise JsonDecodeError((path, "expected revoked API key"))
   }
   let revoked_unix_ms : Int64? = match value {
     { "revoked_unix_ms": Array([timestamp]), .. } =>

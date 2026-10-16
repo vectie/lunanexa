@@ -285,14 +285,28 @@
       ]
     },
     "client-api": {
-      "title":"集成不绑定特定提供商的客户端",
-      "summary":"客户端使用 能源谷“创未来”生态街区 规范工作负载契约，而不是把应用身份或提供商专属假设发送到集群。兼容 API 是适配器，不是权威来源。",
-      "audience":"提供商路由或应用集成开发者",
+      "title":"使用 TRAE 或 API 连接 GLM",
+      "summary":"复制正式 GLM 接口和模型 ID，配置 TRAE，并使用自己的授权密钥验证普通或流式请求。",
+      "audience":"模型 API 用户与开发者",
       "blocks":[
-        {"kind":"heading","text":"客户端职责"},
-        {"kind":"bullets","items":["在 能源谷“创未来”生态街区 之外把应用权限和数据策略转换为通用 WorkloadEnvelope。","使用不泄露产品身份的不透明租户、工作负载、关联和幂等值。","选择已发布的模型别名或能力，不使用仓库路径或内部节点地址。","遵循类型化的可重试性、截止时间、取消和带回执终态结果。","将提供商回退和应用策略留在使用方仓库。"]},
-        {"kind":"code","label":"概念性的规范请求结构"},
-        {"kind":"callout","title":"绝不要把这些内容放进工作负载","text":"应用凭据、仓库路径、产品名、编辑器状态、内部运行时 URL、节点凭据或密钥提供商的值。"}
+        {"kind":"heading","text":"连接信息"},
+        {"kind":"code","label":"基础地址 · 客户端自动拼接请求路径"},
+        {"kind":"code","label":"模型 ID"},
+        {"kind":"paragraph","text":"打开 MaaS → 创建 API 密钥。在“账户与 API 密钥”中，密钥默认显示为 ********，点击眼睛可显示实际 lnx_… 密钥，点击复制图标可重复复制，到期或撤销后不可用。api-key-… 仅是记录编号。不要向客服发送密钥。"},
+        {"kind":"heading","text":"TRAE 设置"},
+        {"kind":"steps","items":["打开 设置 → 模型 → 添加模型 → 自定义模型，选择 OpenAI Chat Completions，开启“完整 URL”。","粘贴下方完整请求地址，模型 ID 填 glm-5.3.flash，API 密钥填已保存的 lnx_… 密钥。","展开 高级配置 → 上下文窗口，将“输出”设为 16384。模型系列选择“默认”，关闭图片输入。保存后新建对话。"]},
+        {"kind":"code","label":"TRAE 完整请求地址 · 开启完整 URL"},
+        {"kind":"code","label":"TRAE 输出 Token 数"},
+        {"kind":"cards","items":[{"title":"TRAE 模型设置参考","text":"官方文档：完整 URL、模型 ID，以及独立的输入与输出窗口设置。"}]},
+        {"kind":"heading","text":"可复制的 API 示例"},
+        {"kind":"paragraph","text":"运行前，通过自己的密钥管理工具将已保存的密钥载入本地 API_KEY 环境变量。示例不包含密钥；API_KEY 为空时不会发送请求。"},
+        {"kind":"code","label":"查询可用模型"},
+        {"kind":"code","label":"普通对话请求"},
+        {"kind":"code","label":"流式对话请求"},
+        {"kind":"paragraph","text":"普通请求应返回助手文本和结束原因；流式请求应返回文本分片、结束原因和 [DONE]。仅 HTTP 200 不足以证明成功，流中也可能出现错误事件。"},
+        {"kind":"heading","text":"限制与排错"},
+        {"kind":"table","columns":["错误或限制","处理方式"],"rows":[["401 / Unauthenticated","使用 lnx_… 密钥，而非 api-key-… 记录编号。检查有效期、撤销状态和允许的模型。"],["InvalidRequest / max_tokens","将 TRAE 输出设为 16384。max_tokens 支持 1–131072，或省略、设为 null。模型上下文窗口与输出上限不同。"],["RequestBudgetExceeded","减少历史、附件或工具定义。当前公网请求体上限是 1 MiB UTF-8 JSON，并非 Token 数；850000 Token 上下文不能覆盖此限制。"],["RuntimeUnavailable","确认 MaaS 服务已就绪后，新建对话重试。持续失败时向管理员提供准确错误和时间，不发送密钥或私人提示词。"],["地址错误","使用带 :8443 和 /user/v1 的 HTTPS 地址。完整 URL 模式只添加一次 /chat/completions；基础地址模式由客户端拼接路径。"]]},
+        {"kind":"cards","items":[{"title":"打开用户门户","text":"在 MaaS 点击“连接二维码”，选择密钥，用 MoonDesk 扫描显示的二维码。私密二维码仅供自己的可信客户端使用。"}]}
       ]
     },
     "tomorrow-deployment": {

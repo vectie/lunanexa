@@ -593,8 +593,7 @@ fn enterprise_copy(
     Cancel => @i18n.copy(locale, "Cancel", "取消")
     Creating => @i18n.copy(locale, "Creating…", "正在创建…")
     CreateKey => @i18n.copy(locale, "Create key", "创建密钥")
-    SaveThisSecretNow =>
-      @i18n.copy(locale, "Save this secret now", "请立即保存此密钥")
+    SaveThisSecretNow => @i18n.copy(locale, "API key", "API 密钥")
     DemoPreviewThisIsNotA =>
       @i18n.copy(
         locale, "DEMO preview — this is not a credential and cannot authorize any request.",
@@ -602,8 +601,8 @@ fn enterprise_copy(
       )
     LunanexaStoresOnlyItsHashThis =>
       @i18n.copy(
-        locale, "Save this key now. You cannot retrieve it after closing this dialog.",
-        "请立即保存密钥，关闭后无法再次获取。",
+        locale, "Reveal or copy this key again from your API keys until it expires or is revoked.",
+        "有效期内可在 API 密钥列表中再次显示和复制，撤销后不可用。",
       )
     Name => @i18n.copy(locale, "Name", "名称")
     KeyId => @i18n.copy(locale, "Key ID", "密钥 ID")
@@ -612,10 +611,7 @@ fn enterprise_copy(
     CopyFirstCallExample =>
       @i18n.copy(locale, "Copy first-call example", "复制首次调用示例")
     CopySecret => @i18n.copy(locale, "Copy secret", "复制密钥")
-    ISavedItClearSecret =>
-      @i18n.copy(
-        locale, "I saved it — clear secret", "我已保存 — 清除密钥",
-      )
+    ISavedItClearSecret => @i18n.copy(locale, "Done", "完成")
     RevokeApiKey =>
       @i18n.copy(locale, "Revoke API key?", "撤销 API 密钥？")
     RequestsUsingThisKeyWillFail =>

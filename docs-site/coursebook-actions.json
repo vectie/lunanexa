@@ -17,7 +17,6 @@
     "enrollment-flow",
     "access-flow",
     "local-quickstart",
-    "client-api",
     "dgx-runtimes",
     "observability-recovery",
     "debug-controller",
@@ -52,6 +51,13 @@
     }
   ],
   "actions": [
+    {
+      "page_ids": ["client-api"],
+      "source": "ui/enterprise/delivery.mbt",
+      "binding": "on_click=command(emit, CreateModelApiKey(service.model_alias))",
+      "en": "Create API key",
+      "zh": "创建 API 密钥"
+    },
     {
       "page_ids": [
         "operator-console"

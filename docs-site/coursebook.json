@@ -12,7 +12,7 @@
   },
   "navigation": [
     {"id":"overview","label":"Overview","page_ids":["welcome","feature-map","choose-your-path","boundaries"]},
-    {"id":"quickstart","label":"Quickstart","page_ids":["trial-quickstart","enterprise-portal-day-one","exclusive-machine-basics","comfyui-quickstart","local-quickstart","operator-console","developer-workbench","client-api"]},
+    {"id":"quickstart","label":"Quickstart","page_ids":["client-api","trial-quickstart","enterprise-portal-day-one","exclusive-machine-basics","comfyui-quickstart","local-quickstart","operator-console","developer-workbench"]},
     {"id":"concepts","label":"How it works","page_ids":["architecture","request-flow","deployment-flow","enrollment-flow","access-flow","state-ownership"]},
     {"id":"deployment","label":"Deployment","page_ids":["tomorrow-deployment","dgx-runtimes"]},
     {"id":"operations","label":"Operations","page_ids":["daily-operations","ui-end-to-end-sop","production-ui-validation","observability-recovery"]},
@@ -453,24 +453,32 @@
     {
       "id":"client-api",
       "group_id":"quickstart",
-      "title":"Integrate a provider-neutral client",
-      "summary":"Clients use 能源谷“创未来”生态街区's canonical workload contract rather than sending application identity or provider-specific assumptions to the cluster. Compatibility APIs are adapters, not the source of truth.",
-      "audience":"Provider-router or application-integration developer",
-      "estimated_minutes":10,
+      "title":"Connect GLM in TRAE or through the API",
+      "summary":"Copy the live GLM endpoint and model ID, configure TRAE, and verify a normal or streamed request using your own scoped API secret.",
+      "audience":"Model API users and developers",
+      "estimated_minutes":5,
       "status":"implemented",
-      "tags":["api","client","streaming","cancellation","idempotency"],
-      "source_ids":["client-integration","product-contract","workspaces"],
+      "tags":["GLM","TRAE","API key","streaming","401","RequestBudgetExceeded"],
+      "source_ids":["glm-api","client-integration","product-contract","workspaces"],
       "blocks":[
-        {"kind":"heading","level":2,"id":"client-responsibilities","text":"Client responsibilities"},
-        {"kind":"bullets","items":[
-          "Translate application authority and data policy into the generic WorkloadEnvelope outside 能源谷“创未来”生态街区.",
-          "Use opaque tenant, workload, correlation, and idempotency values that reveal no product identity.",
-          "Select a published model alias or capability, never a repository path or internal node address.",
-          "Honor typed retryability, deadlines, cancellation, and receipt-bearing terminal results.",
-          "Keep provider fallback and application policy in the consumer repository."
-        ]},
-        {"kind":"code","language":"json","label":"Conceptual canonical request shape","code":"{\n  \"version\": \"lunanexa.v1\",\n  \"workload_id\": \"opaque-unique-id\",\n  \"idempotency_key\": \"opaque-logical-operation\",\n  \"tenant_ref\": \"opaque-tenant\",\n  \"capability\": \"TextGenerate\",\n  \"model_selector\": \"text.default\",\n  \"data_policy\": {\n    \"classification\": \"Internal\",\n    \"retention\": \"Ephemeral\",\n    \"allow_cache\": false,\n    \"allow_training_reuse\": false\n  },\n  \"payload\": {\"input\": \"...\"}\n}"},
-        {"kind":"callout","tone":"danger","title":"Never put these in the workload","text":"Application credentials, repository paths, product names, editor state, internal runtime URLs, node credentials, or secret-provider values."}
+        {"kind":"heading","level":2,"id":"connection","text":"Connection details"},
+        {"kind":"code","language":"text","label":"Base URL — clients append the request path","code":"https://suanli.kechuangfuwu.com:8443/user/v1"},
+        {"kind":"code","language":"text","label":"Model ID","code":"glm-5.3.flash"},
+        {"kind":"paragraph","text":"Open MaaS → Create API key. In Account & API keys, keys stay masked as ********. Click the eye to reveal the actual lnx_… key or the copy icon to copy it again until expiry or revocation. The api-key-… value is only a record ID. Do not send secrets in support messages."},
+        {"kind":"heading","level":2,"id":"trae","text":"TRAE settings"},
+        {"kind":"steps","items":["Open Settings → Models → Add model → Custom model. Choose OpenAI Chat Completions and turn Full URL on.","Paste the full request URL below. Set Model ID to glm-5.3.flash and put your saved lnx_… secret in API key.","Expand Advanced configuration → Context window. Set Output to 16384. Choose the Default model family and turn image input off. Save, then start a new conversation."]},
+        {"kind":"code","language":"text","label":"TRAE full request URL — Full URL on","code":"https://suanli.kechuangfuwu.com:8443/user/v1/chat/completions"},
+        {"kind":"code","language":"text","label":"TRAE output tokens","code":"16384"},
+        {"kind":"cards","items":[{"title":"TRAE model settings reference","text":"Official instructions for full URLs, model IDs and separate input/output windows.","href":"https://docs.trae.cn/ide_models"}]},
+        {"kind":"heading","level":2,"id":"examples","text":"Copyable API examples"},
+        {"kind":"paragraph","text":"Load your saved secret into the local API_KEY environment variable through your secret manager before running these shell commands. The examples do not contain a key and will not send a request when API_KEY is empty."},
+        {"kind":"code","language":"sh","label":"List available models","code":"test -n \"$API_KEY\" && curl --fail-with-body --silent --show-error \\\n  'https://suanli.kechuangfuwu.com:8443/user/v1/models' \\\n  -H \"Authorization: Bearer $API_KEY\""},
+        {"kind":"code","language":"sh","label":"Chat completion","code":"test -n \"$API_KEY\" && curl --fail-with-body --silent --show-error \\\n  'https://suanli.kechuangfuwu.com:8443/user/v1/chat/completions' \\\n  -H \"Authorization: Bearer $API_KEY\" \\\n  -H 'Content-Type: application/json' \\\n  --data-binary '{\"model\":\"glm-5.3.flash\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello\"}],\"max_tokens\":1024,\"stream\":false}'"},
+        {"kind":"code","language":"sh","label":"Streaming chat completion","code":"test -n \"$API_KEY\" && curl --fail-with-body --silent --show-error --no-buffer \\\n  'https://suanli.kechuangfuwu.com:8443/user/v1/chat/completions' \\\n  -H \"Authorization: Bearer $API_KEY\" \\\n  -H 'Content-Type: application/json' \\\n  --data-binary '{\"model\":\"glm-5.3.flash\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello\"}],\"max_tokens\":1024,\"stream\":true}'"},
+        {"kind":"paragraph","text":"A successful normal request contains assistant text and a finish reason. A successful stream contains text chunks, a terminal finish reason and [DONE]. HTTP 200 alone is insufficient: a stream can contain an error event."},
+        {"kind":"heading","level":2,"id":"troubleshooting","text":"Limits and troubleshooting"},
+        {"kind":"table","columns":["Error or limit","Action"],"rows":[["401 / Unauthenticated","Use the lnx_… secret, not its api-key-… record ID. Check expiry, revocation and allowed model scope."],["InvalidRequest / max_tokens","Set TRAE output to 16384. max_tokens accepts 1–131072, omission or null. The model context window is separate from output."],["RequestBudgetExceeded","Reduce history, attachments or tool definitions. The current public request-body limit is 1 MiB of UTF-8 JSON, not a token count; 850000 context tokens do not override it."],["RuntimeUnavailable","Check MaaS service readiness and retry a new conversation. If it persists, send the exact public error and time to the operator, without a key or private prompt."],["Wrong URL","Use HTTPS with :8443 and /user/v1. For a full-URL client use /chat/completions once; for a base-URL client let it append the path."]]},
+        {"kind":"cards","items":[{"title":"Open the customer portal","text":"In MaaS, choose Connection QR, select a key and scan its QR with MoonDesk. Only scan this private QR with your own trusted client.","href":"https://suanli.kechuangfuwu.com:8443/user/"}]}
       ]
     },
     {
