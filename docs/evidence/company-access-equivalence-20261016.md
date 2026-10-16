@@ -65,4 +65,11 @@ guards, with private rollback snapshots):
 
 - Controller: `sha256:f2affe85eca38e317e04a8a5e6ada1b4f3bbc411e8bd54f076339daee63e70c9`.
 - Customer portal: `sha256:f4a7ba7d3ca63b53beb83ea8fd1e9653cab57d6478eb919e784eb5d056b99bf5`.
-- Docs evidence refresh: `sha256:81026f6bae5b2ff84a79a794c49dbc83876c62aa381bb8a49824461d4a2e392c`.
+- Docs evidence refresh: `sha256:70d34ac545086d9319b35e2f78091bc6a7debcb3a966db8308b37355425bc6c1`.
+
+The first documentation package drew from an outdated browser output folder.
+The public asset comparison caught the mismatch. All three coursebook JSON
+files were repackaged directly from the tested `docs-site` source; the
+intermediate image is superseded by the digest above.
+The live English coursebook, Chinese coursebook and evidence JSON now match
+the corresponding tested source files byte for byte.
