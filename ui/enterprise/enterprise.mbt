@@ -1033,12 +1033,13 @@ pub fn EnterpriseState::update(
       } else {
         self
       }
-    DismissModelConnectionQr => {
-      ..self,
-      model_connection_import: None,
-      api_key_secret_request: None,
-      api_key_secret_generation: self.api_key_secret_generation + 1L,
-    }
+    DismissModelConnectionQr =>
+      {
+        ..self,
+        model_connection_import: None,
+        api_key_secret_request: None,
+        api_key_secret_generation: self.api_key_secret_generation + 1L,
+      }
     UseModelInApplication(model_name) => self.open_model_application(model_name)
     CreateModelApiKey(model_name) => {
       if self.loading ||
