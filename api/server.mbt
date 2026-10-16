@@ -2630,6 +2630,12 @@ async fn ApiService::invoke_workload(
       let timed_out = error is @async.TimeoutError
       let cancelled = error is @async.WaitedTaskAlreadyCancelled
       let retryable = !timed_out && !cancelled && retryable_runtime_error(error)
+      self.record_runtime_failure(
+        error,
+        request.workload_id,
+        accepted,
+        completed,
+      )
       let receipt = if cancelled {
         "cancel:\{request.workload_id}:\{digest_hex(request.workload_id)}"
       } else if timed_out {
@@ -3091,6 +3097,12 @@ async fn ApiService::stream_workload(
       let timed_out = error is @async.TimeoutError
       let cancelled = error is @async.WaitedTaskAlreadyCancelled
       let retryable = !timed_out && !cancelled && retryable_runtime_error(error)
+      self.record_runtime_failure(
+        error,
+        request.workload_id,
+        accepted,
+        completed,
+      )
       let receipt = if cancelled {
         "cancel:\{request.workload_id}:\{digest_hex(request.workload_id)}"
       } else if timed_out {

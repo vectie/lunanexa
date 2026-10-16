@@ -80,8 +80,8 @@ fn model_connection_guides(
       ),
       @html.p(
         copy(
-          locale, "Model family: Default. Image input: off. Save, then start a new conversation.",
-          "模型系列：默认。图片输入：关闭。保存后新建对话。",
+          locale, "Model family: Default. Turn off Multimodal beside Model ID. Save, then start a new conversation.",
+          "模型系列：默认。关闭模型 ID 旁的“多模态”。保存后新建对话。",
         ),
       ),
     ]),

@@ -66,6 +66,7 @@ test "private model call example uses chat completion without secrets or infrast
   assert_true(page.contains("TRAE setup"))
   assert_true(page.contains("Full URL: on"))
   assert_true(page.contains("16384"))
+  assert_true(page.contains("Turn off Multimodal beside Model ID"))
   assert_true(page.contains("/chat/completions"))
   assert_true(page.contains("RequestBudgetExceeded"))
   assert_false(page.contains("<details class=\"ln-advanced\" open"))

@@ -27,7 +27,7 @@
     {"id":"future-expansion","path":"docs/FUTURE_EXPANSION_PLAN.md","digest":"sha256:e933e64a713d185a530c3388bd6b85c44d32fd80f8899651b5e9fbc772824484","kind":"product-roadmap","public":true},
     {"id":"simulation","path":"docs/SIMULATION.md","digest":"sha256:c3a0f1f6bdc9be1d3c1ee22efffe6d29ab1b14617b990531c35f991b1a83e045","kind":"simulation","public":true},
     {"id":"workspace-http","path":"api/workspace_http.mbt","digest":"sha256:d3f5f3ec1dec31ddc86bb2a14df68c6ec671eca983f0220bbfaa8c1520c665f6","kind":"implementation","public":true},
-    {"id":"api-server","path":"api/server.mbt","digest":"sha256:e721b4714f13ad9e6a156f5a35cfb5493c414d5dc359d008d2f55d9ef82046ff","kind":"implementation","public":true},
+    {"id":"api-server","path":"api/server.mbt","digest":"sha256:95245a533bccd1d4e6e545af0449e6d4e567a5d5cd91d8fc89a183a8f1649a72","kind":"implementation","public":true},
     {"id":"release-gate","path":"scripts/release-gate.sh","digest":"sha256:bdbaedd29b092fd6bc08a1631752135068902f619d2688872d9518d515da8220","kind":"acceptance-script","public":true},
     {"id":"ascend-temporary-compute","path":"docs/ASCEND_310P3_TEMPORARY_COMPUTE.md","digest":"sha256:e1cba097d1620b79479d59e290f03b6bf0218f253ccadbab6c85535696ab0e38","kind":"hardware-qualification","public":true},
     {"id":"lunaflux-qualification","path":"docs/LUNAFLUX_RUNTIME_QUALIFICATION.md","digest":"sha256:de88fca9c2fd749b3142da0dc1ab7e94dd50a5da88b44a04423a107c184c9a4b","kind":"runtime-qualification","public":true},

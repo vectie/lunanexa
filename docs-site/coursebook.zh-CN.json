@@ -294,7 +294,7 @@
         {"kind":"code","label":"模型 ID"},
         {"kind":"paragraph","text":"打开 MaaS → 创建 API 密钥。在“账户与 API 密钥”中，密钥默认显示为 ********，点击眼睛可显示实际 lnx_… 密钥，点击复制图标可重复复制，到期或撤销后不可用。api-key-… 仅是记录编号。不要向客服发送密钥。"},
         {"kind":"heading","text":"TRAE 设置"},
-        {"kind":"steps","items":["打开 设置 → 模型 → 添加模型 → 自定义模型，选择 OpenAI Chat Completions，开启“完整 URL”。","粘贴下方完整请求地址，模型 ID 填 glm-5.3.flash，API 密钥填已保存的 lnx_… 密钥。","展开 高级配置 → 上下文窗口，将“输出”设为 16384。模型系列选择“默认”，关闭图片输入。保存后新建对话。"]},
+        {"kind":"steps","items":["打开 设置 → 模型 → 添加模型 → 自定义模型，选择 OpenAI Chat Completions，开启“完整 URL”。","粘贴下方完整请求地址，模型 ID 填 glm-5.3.flash，关闭模型 ID 旁的“多模态”，API 密钥填已保存的 lnx_… 密钥。此接口支持文本和工具调用。","展开 高级配置 → 上下文窗口，将“输出”设为 16384，模型系列选择“默认”。保存后新建对话。"]},
         {"kind":"code","label":"TRAE 完整请求地址 · 开启完整 URL"},
         {"kind":"code","label":"TRAE 输出 Token 数"},
         {"kind":"cards","items":[{"title":"TRAE 模型设置参考","text":"官方文档：完整 URL、模型 ID，以及独立的输入与输出窗口设置。"}]},
