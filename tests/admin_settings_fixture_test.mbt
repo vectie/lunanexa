@@ -11,4 +11,30 @@ async test "deployment administrator settings match the control-plane contract" 
   }
   assert_eq(parsed.schema_version, "lunanexa.settings.v1")
   assert_eq(parsed.generation, 1L)
+  // Long reasoning and coding streams must survive the former two-minute cap.
+  assert_eq(parsed.request_budgets.openai_default_deadline_ms, 1800000L)
+  assert_eq(parsed.request_budgets.openai_max_deadline_ms, 1800000L)
+  let manifest = @fs.read_file("deploy/prerequisites.yaml").text()
+  let line = manifest
+    .split("\n")
+    .find_first(line => line.trim().has_prefix("\"request_budgets\":"))
+    .unwrap()
+  let raw = line
+    .trim()
+    .strip_prefix("\"request_budgets\":")
+    .unwrap()
+    .strip_suffix(",")
+    .unwrap()
+    .to_owned()
+  let deployed : @settings.RequestBudgetSettings = @json.from_json(
+    @json.parse(raw),
+  )
+  assert_eq(
+    deployed.openai_default_deadline_ms,
+    parsed.request_budgets.openai_default_deadline_ms,
+  )
+  assert_eq(
+    deployed.openai_max_deadline_ms,
+    parsed.request_budgets.openai_max_deadline_ms,
+  )
 }

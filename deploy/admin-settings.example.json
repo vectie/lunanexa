@@ -18,8 +18,8 @@
   "request_budgets": {
     "maximum_request_body_bytes": 1048576,
     "response_cache_entries": 1024,
-    "openai_default_deadline_ms": "120000",
-    "openai_max_deadline_ms": "120000",
+    "openai_default_deadline_ms": "1800000",
+    "openai_max_deadline_ms": "1800000",
     "openai_default_output_units": 1024,
     "openai_max_output_units": 131072,
     "openai_max_input_units": 1048576,
