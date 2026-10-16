@@ -14,6 +14,10 @@ Verified on the signed-in live `/user/` site as guojiaan.
 - UI and shell regression tests: **142/142 passed**. The handler test covers
   outside click, inside click, Escape, focus restoration and disabled controls.
 - Strict native check and browser source/bundle/HTML verification passed.
+- Complete native workspace suite: **1829/1829 passed**, using the established
+  macOS C backend (`MOONBIT_NEW_NATIVE=0`), a Clang wrapper appending `-O0`,
+  and `ulimit -s unlimited`. The default native backend's long compile was
+  interrupted; no passing result is claimed for that test run.
 
 Published customer portal image:
 `sha256:8a5f6e2597014fefbb69d69aae45565c3f2c6452d3bcf3c5d884058db57f5bd7`.
