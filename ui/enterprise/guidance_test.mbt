@@ -82,6 +82,34 @@ test "friendly failures preserve recovery and never technical secrets" {
 }
 
 ///|
+test "key creation refusals preserve their actionable reason instead of reporting stale state" {
+  for
+    (code, english, chinese) in [
+      ("ApiKeyRejected", "settings are invalid", "密钥设置无效"),
+      ("CommercialProjectRequired", "billing project", "计费项目"),
+      ("EntitlementRequired", "no active model access", "模型访问授权"),
+      ("OrganizationSelectionRequired", "Select your company", "所属企业"),
+      ("ApiKeyLifetimeInvalid", "lifetime", "有效期"),
+    ] {
+    for
+      (locale, expected) in [
+        (@i18n.English, english),
+        (@i18n.ChineseSimplified, chinese),
+      ] {
+      let text = @enterprise.friendly_failure(
+        locale,
+        "Create key",
+        "HTTP 409 " + code + " secret-private-value",
+      )
+      assert_true(text.contains(expected))
+      assert_false(text.contains("secret-private-value"))
+      assert_false(text.contains("resource changed"))
+      assert_false(text.contains("资源状态已变化"))
+    }
+  }
+}
+
+///|
 test "cost CSV escapes quotations delimiters and spreadsheet formulas" {
   let state = @enterprise.demo_state()
   let csv = @enterprise.costs_csv({

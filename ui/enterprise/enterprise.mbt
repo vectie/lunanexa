@@ -1188,6 +1188,18 @@ pub fn EnterpriseState::update(
             }) {
             return {
               ..self,
+              project_id: if self.project_id.trim() == "" ||
+                self.trial.map_or(false, trial => {
+                  trial.project_id == self.project_id &&
+                  (
+                    trial.organization_id != organization_id ||
+                    trial.tenant_ref != value.membership.tenant_ref
+                  )
+                }) {
+                project_id
+              } else {
+                self.project_id
+              },
               membership: Some(value.membership),
               selected_organization_id: Some(organization_id),
               self_service: {

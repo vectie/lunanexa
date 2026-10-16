@@ -325,8 +325,9 @@ async fn ApiService::handle_delivery(
       continue
     }
     let company_allocation = value.request.reservation_id.has_prefix(
-      "undertaking-resource-",
-    )
+        "undertaking-resource-",
+      ) ||
+      self.private_company_reservation_authorized(value, subject, now)
     let authorized = try {
       if company_allocation {
         ignore(
@@ -495,7 +496,8 @@ async fn ApiService::handle_delivery(
     }
     let authorization = if reservation.request.reservation_id.has_prefix(
         "undertaking-resource-",
-      ) {
+      ) ||
+      self.private_company_reservation_authorized(reservation, subject, now) {
       match capability {
         Some(value) =>
           directory.authorize_subject_for_tenant_capability(

@@ -663,6 +663,7 @@ async test "free registration provisions one bounded shared-inference trial" {
   let key_body = (
     {
       "key_id": "trial-api-key",
+      "lifetime_days": 1,
       "project_id": trial.project_id,
       "display_name": "Trial key",
       "scopes": ["ModelList", "Inference"],

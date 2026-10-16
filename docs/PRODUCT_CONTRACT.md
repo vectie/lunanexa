@@ -29,6 +29,13 @@ or a delivery request. Stopping an instance retains user data according to its
 published policy and does not automatically evict public weights. Node release
 follows confirmed workload termination and cleanup, not merely lease expiry.
 
+In the private-cloud profile, active company administrators with Developer
+workspace authority may select the company's current node reservations using
+their own capability leases. The original reservation's sponsoring grant and
+lease must also remain current. Admission, reconciliation and credential
+issuance apply the same company and tenant checks. Personal workspace files,
+connections and non-model delivery management remain bound to their owner.
+
 ### Private model connection and saved API keys
 
 Signed-in key owners can retrieve their actual API secret repeatedly until
@@ -38,6 +45,13 @@ the authenticated subject and selected tenant, then verifies the recreated
 secret against its durable digest. A failed match never returns another key.
 Responses are not cached; lists, audit records and snapshots contain no raw
 secret. Closing, navigating or changing organization clears revealed values.
+
+Self-service key creation accepts an optional `lifetime_days` of 1, 7, 30, 90,
+or 365. The controller computes expiry from its own clock and caps trial or
+paid-order credentials at the current entitlement expiry. Older clients may
+continue sending only `expires_unix_ms`. Company grants, membership, project
+ownership and model scope remain independent authorization checks. Expired or
+foreign trial records must not shorten a company key's requested lifetime.
 
 The signed-in MaaS connection QR carries a private `openai.connection.v1`
 descriptor: API base URL, chat-completions format, model, actual API secret and

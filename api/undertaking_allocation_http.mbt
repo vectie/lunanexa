@@ -215,8 +215,11 @@ async fn ApiService::delivery_reservation_authorized(
   if reservation.request.reservation_id.has_prefix("undertaking-resource-") {
     return self.undertaking_reservation_allowed(reservation, now)
   }
-  reservation.request.lease_id == lease_id &&
-  reservation.request.authority_ref == grant_id
+  (
+    reservation.request.lease_id == lease_id &&
+    reservation.request.authority_ref == grant_id
+  ) ||
+  self.private_company_delivery_authorized(reservation, lease_id, grant_id, now)
 }
 
 ///|

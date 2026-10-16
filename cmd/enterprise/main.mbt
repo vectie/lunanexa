@@ -139,6 +139,7 @@ priv struct PortalApiKeyIssueIntent {
   scopes : Array[@enterprise_ui.ApiKeyScope]
   allowed_models : Array[String]
   expires_unix_ms : Int64
+  lifetime_days : Int
   maximum_requests : Int64
 } derive(ToJson)
 
@@ -2488,6 +2489,8 @@ fn api_key_issue_expiry(
     portal.api_key_issue_draft.lifetime_days.to_int64() * 86400000L
   match (portal.trial, portal.membership) {
     (Some(trial), Some(membership)) if trial.revoked_unix_ms is None &&
+      trial.starts_unix_ms <= now_unix_ms &&
+      trial.expires_unix_ms > now_unix_ms &&
       trial.organization_id == membership.organization_id &&
       trial.tenant_ref == membership.tenant_ref &&
       trial.project_id == portal.project_id &&
@@ -2507,6 +2510,7 @@ async fn issue_api_key(model : AppModel) -> @enterprise_ui.IssuedApiKeyView {
     scopes: @enterprise_ui.api_key_scopes(model.portal),
     allowed_models: @enterprise_ui.api_key_allowed_models(model.portal),
     expires_unix_ms,
+    lifetime_days: draft.lifetime_days,
     maximum_requests: if @enterprise_ui.api_key_uses_reserved_model(
         model.portal,
       ) {
@@ -6098,6 +6102,8 @@ fn update(
       }
       let active_trial = match trial {
         Some(value) if value.revoked_unix_ms is None &&
+          value.organization_id == view.membership.organization_id &&
+          value.tenant_ref == view.membership.tenant_ref &&
           value.expires_unix_ms > current_unix_ms() => Some(value)
         _ => None
       }

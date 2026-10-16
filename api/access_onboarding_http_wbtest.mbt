@@ -269,6 +269,47 @@ async test "one access package intent is resumable and enables only after contra
   let payload = @json.parse(key_reply.body)
   assert_true(payload is { "api_base_url": Null, .. })
   let issued : @access.IssuedApiKeyView = @json.from_json(payload)
+  // A full-year company key must not fail because a client's clock is ahead.
+  // Relative lifetime is resolved by the server; the old absolute field stays
+  // accepted for older clients.
+  let clock_start = @async.now()
+  let clock_intent : Json = {
+    "key_id": "company-key-skewed-clock",
+    "project_id": "private-project",
+    "display_name": "Company annual key",
+    "scopes": ["ModelList", "Inference"],
+    "allowed_models": ["private.model"],
+    "expires_unix_ms": (clock_start + 31622400000L).to_json(),
+    "lifetime_days": 365,
+    "maximum_requests": 0L.to_json(),
+  }
+  let clock_reply = model_service.handle(
+    Post,
+    "/v1/portal/self/api-keys",
+    key_headers,
+    clock_intent.stringify(),
+  )
+  assert_eq(clock_reply.status, 201)
+  let clock_key : @access.IssuedApiKeyView = @json.from_json(
+    @json.parse(clock_reply.body),
+  )
+  assert_eq(
+    clock_key.credential.expires_unix_ms - clock_key.credential.issued_unix_ms,
+    31536000000L,
+  )
+  assert_eq(clock_key.credential.subject_ref, account.subject_ref)
+  assert_eq(clock_key.credential.maximum_requests, 0L)
+  guard clock_intent is Object(clock_fields) else { fail("missing intent") }
+  let invalid_lifetime_fields = clock_fields.copy()
+  invalid_lifetime_fields["lifetime_days"] = Json::number(366.0)
+  let invalid_lifetime = model_service.handle(
+    Post,
+    "/v1/portal/self/api-keys",
+    key_headers,
+    Json::object(invalid_lifetime_fields).stringify(),
+  )
+  assert_eq(invalid_lifetime.status, 400)
+  assert_true(invalid_lifetime.body.contains("ApiKeyLifetimeInvalid"))
   for _ in 0..<2 {
     let reveal = model_service.handle(
       Post,

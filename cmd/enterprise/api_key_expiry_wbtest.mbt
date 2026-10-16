@@ -30,6 +30,15 @@ test "company API key lifetime is independent of an expired personal trial" {
     api_key_issue_expiry({ ..portal, trial: Some(same_scope), }, now),
     same_scope.expires_unix_ms,
   )
+  for expiry in [now - 1000L, now] {
+    assert_eq(
+      api_key_issue_expiry(
+        { ..portal, trial: Some({ ..same_scope, expires_unix_ms: expiry, }), },
+        now,
+      ),
+      requested_expiry,
+    )
+  }
   assert_eq(
     api_key_issue_expiry(
       {

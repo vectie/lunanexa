@@ -9,7 +9,7 @@
   "sources": [
     {"id":"glm-api","path":"docs/GLM_API_QUICKSTART.md","digest":"sha256:a7484309962b8076da72d39869510e2056dccad852afd180f7f8952756d960d2","kind":"client-guide","public":true},
     {"id":"readme","path":"README.mbt.md","digest":"sha256:8acfad00775f8416931b8c49104d6b1ad59d5975a8ab45f0fb1f953657d74933","kind":"overview","public":true},
-    {"id":"product-contract","path":"docs/PRODUCT_CONTRACT.md","digest":"sha256:7f9163ebf1178d26b5fd93d6d00a18430f43dc7cff8971acf618b2ccc8e995f3","kind":"product-contract","public":true},
+    {"id":"product-contract","path":"docs/PRODUCT_CONTRACT.md","digest":"sha256:53b1461ffc6a7b154e6fec084fc8988b49261824e4279c652604c2446b9b4aeb","kind":"product-contract","public":true},
     {"id":"architecture","path":"docs/ARCHITECTURE.md","digest":"sha256:96c9bdbfc0d98e3bf78669c40d90044321005ee9df4065f786272c529ce6b149","kind":"architecture","public":true},
     {"id":"implementation-status","path":"docs/IMPLEMENTATION_STATUS.md","digest":"sha256:021f063d755f11d19c8f2974a9c92e94e9ca5c6b821f6a9a7bd1a66ea1cdc29b","kind":"readiness","public":true},
     {"id":"deployment","path":"docs/DEPLOYMENT.md","digest":"sha256:946a69f8faac2f76d8e57402d7feb65cb86fe9ce74caa15cb7b85d5ca8bff88e","kind":"deployment","public":true},

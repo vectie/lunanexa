@@ -88,6 +88,7 @@ priv struct PortalApiKeyIntent {
   scopes : Array[@access.ApiKeyScope]
   allowed_models : Array[String]
   expires_unix_ms : Int64
+  lifetime_days : Int?
   maximum_requests : Int64
 } derive(FromJson)
 
@@ -501,6 +502,16 @@ async fn ApiService::handle_enterprise_portal(
         )
       }
       let now = @async.now()
+      let duration_expires = match intent.lifetime_days {
+        Some(days) if [1, 7, 30, 90, 365].contains(days) =>
+          now + days.to_int64() * 86400000L
+        Some(_) =>
+          return api_error(
+            400, "ApiKeyLifetimeInvalid", "API key lifetime must be 1, 7, 30, 90, or 365 days",
+            false,
+          )
+        None => intent.expires_unix_ms
+      }
       let private_access = self.private_workspace_authorized(
         view.membership.tenant_ref,
         subject_ref,
@@ -533,13 +544,21 @@ async fn ApiService::handle_enterprise_portal(
         Some(accounts) => accounts.active_trial_for_subject(subject_ref, now)
         None => None
       }
+      let requested_expires = match (intent.lifetime_days, trial) {
+        (Some(_), Some(value)) if !contract_active &&
+          value.tenant_ref == view.membership.tenant_ref &&
+          value.organization_id == view.membership.organization_id &&
+          value.project_id == intent.project_id =>
+          duration_expires.min(value.expires_unix_ms)
+        _ => duration_expires
+      }
       let trial_active = match trial {
         Some(value) =>
           value.tenant_ref == view.membership.tenant_ref &&
           value.organization_id == view.membership.organization_id &&
           value.project_id == intent.project_id &&
           value.api_key_id is None &&
-          intent.expires_unix_ms <= value.expires_unix_ms &&
+          requested_expires <= value.expires_unix_ms &&
           intent.maximum_requests > 0L &&
           intent.maximum_requests <= value.maximum_requests &&
           intent.scopes.all(scope => scope == ModelList || scope == Inference) &&
@@ -616,9 +635,9 @@ async fn ApiService::handle_enterprise_portal(
         Some(order) =>
           order.active_started_unix_ms
           .map(started => started + order.duration_seconds * 1000L)
-          .unwrap_or(intent.expires_unix_ms)
-          .min(intent.expires_unix_ms)
-        None => intent.expires_unix_ms
+          .unwrap_or(requested_expires)
+          .min(requested_expires)
+        None => requested_expires
       }
       let issued = try
         access.issue(

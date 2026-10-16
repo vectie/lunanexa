@@ -110,6 +110,29 @@ pub fn friendly_failure(
 ) -> String {
   let reason = if raw.contains("TrialApiKeyRejected") {
     message(locale, TrialSecret)
+  } else if raw.contains("ApiKeyLifetimeInvalid") {
+    @i18n.copy(
+      locale, "Choose an API key lifetime of 1, 7, 30, 90, or 365 days.", "请选择 1、7、30、90 或 365 天的密钥有效期。",
+    )
+  } else if raw.contains("ApiKeyRejected") {
+    @i18n.copy(
+      locale, "The API key settings are invalid. Check the name, expiry, scopes, and allowed models.",
+      "密钥设置无效，请检查名称、有效期、权限范围和允许的模型。",
+    )
+  } else if raw.contains("CommercialProjectRequired") {
+    @i18n.copy(
+      locale, "Select a billing project belonging to the current company in Advanced.",
+      "请在高级设置中选择当前企业的计费项目。",
+    )
+  } else if raw.contains("OrganizationSelectionRequired") {
+    @i18n.copy(
+      locale, "Select your company before creating an API key.", "请先选择所属企业，再创建 API 密钥。",
+    )
+  } else if raw.contains("EntitlementRequired") {
+    @i18n.copy(
+      locale, "The selected company has no active model access. Check its MaaS service and authorization.",
+      "所选企业暂无有效的模型访问授权，请检查 MaaS 服务与授权状态。",
+    )
   } else if raw.contains("EffectiveMasterLeaseRequired") {
     enterprise_copy(locale, CommercialAuthorizationIsNotActiveCheck)
   } else if raw.contains("AgreementRequired") {
