@@ -14,7 +14,7 @@ async fn main {
   )
   let jobs = @env.get_env_var("LUNANEXA_NATIVE_JOBS").unwrap_or("2")
   let common = [
-    "--target", "native", "--deny-warn", "--warn-list", "+73", "--target-dir", target,
+    "--target", "native", "--strip", "--deny-warn", "--warn-list", "+73", "--target-dir", target,
     "--jobs", jobs,
   ]
   let commands = [
