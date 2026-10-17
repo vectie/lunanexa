@@ -1,0 +1,40 @@
+{
+  "schema_version": "lunanexa.registry.v1",
+  "models": [
+    {
+      "model_id": "synthetic-model", "version": "v1",
+      "artifact": {
+        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "uri": "modelstore://excluded-synthetic-small", "size_bytes": "1",
+        "signature_ref": "excluded-synthetic-signature"
+      },
+      "license_id": "excluded-synthetic-license", "provenance": "Invented fixture, not measured model requirements",
+      "compatible_architectures": ["fixture-arch-a"],
+      "minimum_memory_mib": 7000, "state": "Candidate"
+    },
+    {
+      "model_id": "synthetic-model", "version": "v2",
+      "artifact": {
+        "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "uri": "modelstore://excluded-synthetic-large", "size_bytes": "1",
+        "signature_ref": "excluded-synthetic-signature"
+      },
+      "license_id": "excluded-synthetic-license", "provenance": "Invented fixture, not measured model requirements",
+      "compatible_architectures": ["fixture-arch-a"],
+      "minimum_memory_mib": 12000, "state": "Approved"
+    },
+    {
+      "model_id": "synthetic-other", "version": "v1",
+      "artifact": {
+        "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "uri": "modelstore://excluded-synthetic-other", "size_bytes": "1",
+        "signature_ref": "excluded-synthetic-signature"
+      },
+      "license_id": "excluded-synthetic-license", "provenance": "Invented fixture, not measured model requirements",
+      "compatible_architectures": ["fixture-arch-b"],
+      "minimum_memory_mib": 3000, "state": "Revoked"
+    }
+  ],
+  "licenses": [], "verifications": [], "evaluations": [], "aliases": [],
+  "receipts": [], "alias_history": [], "runtimes": []
+}

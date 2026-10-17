@@ -1,0 +1,17 @@
+import {
+  "vectie/lunanexa/model_fleet",
+  "vectie/lunanexa/fleet",
+  "moonbitlang/core/env",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/x/fs",
+  "moonbitlang/x/sys",
+}
+
+supported_targets = "native"
+
+pkgtype(kind: "executable")
+
+options(
+  "native-stub": [ "diagnostic.c" ],
+  link: { "native": { "cc-link-flags": "-pthread -ldl" } },
+)
