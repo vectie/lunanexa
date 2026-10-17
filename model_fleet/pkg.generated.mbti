@@ -1,0 +1,94 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/model_fleet"
+
+import {
+  "moonbitlang/core/json",
+  "vectie/lunanexa/contracts",
+}
+
+// Values
+pub fn explore(Array[@contracts.ModelRecord], Array[@contracts.NodeHeartbeat], Query) -> Report raise
+
+pub fn import_models(String, String) -> Array[@contracts.ModelRecord] raise
+
+pub fn import_query(String) -> Query raise
+
+// Errors
+pub suberror CompatibilityError {
+  InvalidInput(String)
+}
+
+// Types and methods
+pub(all) struct ModelSummary {
+  model_id : String
+  version : String
+  compared_devices : Int
+  devices_matching_declarations : Int
+  nodes_without_devices : Int
+} derive(Eq, ToJson)
+pub fn ModelSummary::equal(Self, Self) -> Bool
+pub fn ModelSummary::not_equal(Self, Self) -> Bool
+pub fn ModelSummary::to_json(Self) -> Json
+
+pub(all) struct Query {
+  schema_version : String
+  now_unix_ms : Int64
+  maximum_age_ms : Int64
+  memory_reserve_mib : Int
+  model_id : String
+  version : String
+  node_id : String
+} derive(Eq, ToJson, @json.FromJson)
+pub fn Query::equal(Self, Self) -> Bool
+pub fn Query::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Query::not_equal(Self, Self) -> Bool
+pub fn Query::to_json(Self) -> Json
+
+pub(all) struct Report {
+  schema_version : String
+  scope : String
+  query : Query
+  source_model_count : Int
+  source_node_count : Int
+  selected_model_count : Int
+  selected_node_count : Int
+  unassessed : Array[String]
+  models : Array[ModelSummary]
+  rows : Array[Row]
+} derive(Eq, ToJson)
+pub fn Report::equal(Self, Self) -> Bool
+pub fn Report::json_text(Self) -> String raise CompatibilityError
+pub fn Report::matrix_csv(Self) -> String raise CompatibilityError
+pub fn Report::not_equal(Self, Self) -> Bool
+pub fn Report::to_json(Self) -> Json
+
+pub(all) struct Row {
+  model_id : String
+  version : String
+  artifact_digest : String
+  recorded_model_state : @contracts.ModelState
+  declared_architectures : Array[String]
+  declared_minimum_memory_mib : Int
+  required_with_reserve_mib : Int64
+  node_id : String
+  recorded_node_state : String
+  observed_unix_ms : Int64
+  freshness : String
+  device_id : String?
+  device_architecture : String?
+  recorded_device_healthy : Bool?
+  observed_total_mib : Int?
+  observed_free_mib : Int?
+  memory_margin_mib : Int64?
+  architecture_matches : Bool?
+  memory_matches : Bool?
+  declaration_comparison : String
+  cautions : Array[String]
+} derive(Eq, ToJson)
+pub fn Row::equal(Self, Self) -> Bool
+pub fn Row::not_equal(Self, Self) -> Bool
+pub fn Row::to_json(Self) -> Json
+
+// Type aliases
+
+// Traits

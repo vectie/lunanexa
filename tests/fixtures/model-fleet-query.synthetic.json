@@ -1,0 +1,9 @@
+{
+  "schema_version": "lunanexa.model-fleet.query.v1",
+  "now_unix_ms": "1791504000000",
+  "maximum_age_ms": "60000",
+  "memory_reserve_mib": 1000,
+  "model_id": "",
+  "version": "",
+  "node_id": ""
+}

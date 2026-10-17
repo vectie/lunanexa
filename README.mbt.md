@@ -169,6 +169,7 @@ signature, payment or tax-invoice providers.
 - [Combine overlapping usage captures](docs/USAGE_CONSOLIDATION_QUICKSTART.md)
 - [Offline candidate-rate cost exploration](docs/USAGE_PRICE_QUICKSTART.md)
 - [Offline fleet inventory exploration](docs/FLEET_EXPLORER_QUICKSTART.md)
+- [Compare saved model declarations with individual fleet devices](docs/MODEL_FLEET_QUICKSTART.md)
 - [Offline saved deployment placement exploration](docs/DEPLOYMENT_EXPLORER_QUICKSTART.md)
 - [Offline fleet capture-history comparison](docs/FLEET_HISTORY_QUICKSTART.md)
 - [Explore repeated benchmark concurrency sweeps](docs/BENCHMARK_SWEEP_QUICKSTART.md)
