@@ -61,6 +61,10 @@ will admit this route only for the matching offering and only while its
 registered artifact, live model listing, node heartbeat, and trial credential
 agree. This is separate from any dedicated company model route. The controller
 loopback proxy must forward only to the intended in-cluster runtime.
+For MoonDesk, also include the same alias in the `desktop-workspace` client
+model policy. Otherwise the service can be healthy yet remain absent from the
+PaaS selector. Keep dedicated model aliases alongside it, not in the shared
+trial route.
 
 `Video` offerings are launch links only; ComfyUI authentication and resource
 control remain with its existing gateway. If a service is not responding, the
