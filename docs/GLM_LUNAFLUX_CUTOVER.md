@@ -1,7 +1,8 @@
 # GLM LunaFlux route cutover
 
-The existing company route `glm-5.3.flash` is being migrated from the stopped
-EXL3/vLLM pair to the validated LunaFlux NVFP4 pair. This is an explicit
+The existing company route `glm-5.3.flash` is online on the LunaFlux NVFP4 pair
+after authenticated public acceptance on 19 October 2026. The old EXL3/vLLM
+pair remains stopped. This is an explicit
 externally operated text binding, not a fabricated single-node managed
 deployment. LunaNexa owns tenant admission, the public alias, metadata and
 the lifecycle adapter; LunaFlux owns inference and the two-rank protocol.
@@ -42,6 +43,9 @@ traffic. Record actual results here; the plan itself is not evidence of an
 online service.
 
 ## Observed acceptance — 18 October 2026
+
+This section preserves the pre-cutover observations and blockers. The completed
+public cutover is recorded below; its former pending states are not current.
 
 The native pair is installed at persistent user-owned paths on both Sparks,
 using the previously validated LunaFlux revision
@@ -105,7 +109,7 @@ build is owned by `lunanexa-glm-cutover-build-20261018-v4.service`; until its
 completion marker and authenticated public tests are observed, do not mark
 this cutover complete.
 
-## Public validation — 19 October 2026 (in progress)
+## Public validation — 19 October 2026
 
 The corrected controller and NVFP4 alias generation 3 are now selected. An
 existing signed-in company credential passed public HTTPS JSON, multi-turn,
@@ -132,3 +136,78 @@ the regression test triggered a panic in `Sender::send_response`. Interrupted
 stream handling must close the downstream and its owned upstream without
 attempting a second response; acceptance requires repeating disconnect/reuse
 with unchanged gateway restart counts. The first candidate is not final proof.
+
+### Completed cutover
+
+Gateway revision `476c2dae384b3707350d879c647436a825a9a2d4` handles an
+interrupted SSE response by closing the connection, without re-entering the
+generic fresh-response error handler. It was built and deployed to both public
+gateway replicas. All 38 affected gateway tests and the warning-denied native
+check pass locally and on the manager. The Linux release build passed. The
+tests exercise the real outer error handler as well as early delivery,
+downstream disconnect, upstream close and unchanged ordinary JSON framing.
+Neither final gateway replica restarted during public acceptance.
+
+The existing signed-in company key authorized the actual public path:
+
+- `GET /user/v1/models` lists `glm-5.3.flash`.
+- JSON arithmetic returned `323`; multi-turn conversation returned `42`.
+- Chinese SSE returned a complete coherent moon-visibility explanation, a
+  `stop` finish, final token usage and `[DONE]` within its requested budget.
+- Three lifecycle rounds each completed two concurrent answers (`144`, `81`),
+  disconnected after a real streaming token, and completed a subsequent answer
+  (`323`). First content arrived in 1425, 1421 and 1387 ms respectively. These
+  are smoke-test observations, not a comparative throughput benchmark.
+- Across this final gateway campaign, native counters changed from
+  23 admissions / 20 completions / 3 cancellations to 38 / 32 / 6: twelve
+  completed requests and three actual native cancellations. Afterward there
+  were zero active/queued requests, all 512 KV pages free, and zero worker
+  failures, restarts or deadlines. The two historical chunked-request
+  rejections remained unchanged. Both public gateway replicas stayed Ready
+  with restart count zero, including after all three disconnects.
+
+The final resource snapshot is below. GPU process memory is reported by
+`nvidia-smi --query-compute-apps`; generic GPU-total queries on this unified
+memory hardware return `N/A` and are not used as evidence. Host `MemAvailable`
+is measured separately. Both owned units retain `MemoryMax=100 GiB`, zero unit
+swap and zero restarts; pre-existing host swap is not claimed to be zero.
+
+| Spark | GPU process memory | Host available |
+| --- | ---: | ---: |
+| `.178` | 97,654 MiB (95.37 GiB) | 18,242,876 KiB (17.40 GiB) |
+| `.179` | 97,669 MiB (95.38 GiB) | 19,573,920 KiB (18.67 GiB) |
+
+Selected deployment components:
+
+- LunaFlux native/AOT source: `7106127262375b5dab6b98a23c2d1d07412ce45e`.
+- Controller: `626bd29dff082b223fd655cef37bf263aa450ad0`.
+- Public gateway: `476c2dae384b3707350d879c647436a825a9a2d4`.
+- Alias generation 3: approved
+  `libertaidai-glm-5.3-flash-nvfp4@modelscope-master`; the old EXL3 model was
+  not renamed or modified.
+- Public base: `https://suanli.kechuangfuwu.com:8443/user/v1`.
+- Public model: `glm-5.3.flash`. Portal refresh shows running on two Sparks
+  with the actual 2K context allocation. Four resident sequences and 64 prefill
+  rows remain selected. This is not a claim of unrestricted context or full
+  vLLM feature parity; unsupported tool calls are explicitly rejected.
+
+Deployment and route ConfigMap annotations now say `validated-online`. No
+customer key, lease policy or GPU executable changed during these gateway
+fixes. No payload hashes or checkpoint-integrity scans were computed. The
+temporary local copy of the existing customer key is removed after validation;
+the original key remains active and unchanged.
+
+Evidence is preserved without overwrite:
+
+- Desktop `/tmp/lunanexa-glm-public-stream-v6-20261019/`: public response
+  bodies, acceptance markers and `FINAL_PUBLIC_ACCEPTANCE.json` with selected
+  alias/model metadata, counters, per-replica status and memory snapshots.
+- Desktop `/tmp/lunanexa-glm-public-stream-v6-repeat1-20261019/` and
+  `...-repeat2-20261019/`: the two additional disconnect/reuse rounds.
+- Desktop `/tmp/lunanexa-glm-public-stream-v5-20261019/`: the superseded
+  candidate's results; its gateway failure is not discarded or called a pass.
+- Manager `/home/HwHiAiUser/lunaflux-glm-cutover-20261018-v1/`: build logs,
+  `GATEWAY_V6_COMPLETE`, prior deployment snapshots and scoped rollout patches.
+
+The earlier full-repository warning/isolation blockers remain recorded above;
+this acceptance does not claim a clean aggregate LunaNexa release campaign.
