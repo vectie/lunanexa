@@ -618,21 +618,25 @@ async fn proxy_request(
     })
     .unwrap_or(false) {
     headers["X-Accel-Buffering"] = "no"
-    connection.send_response(
-      response.code,
-      response_reason(response.code),
-      extra_headers=headers,
-      cookies~,
-    )
-    // Publish each available chunk before waiting for the next. An abandoned
-    // downstream raises on write/flush and the owned upstream closes by defer.
-    errdefer connection.close()
-    connection.flush()
-    while client.read_some(max_len=16384) is Some(chunk) {
-      connection.write(chunk)
+    // Once headers start, an interrupted stream must close instead of reaching
+    // the outer handler that sends a fresh HTTP error response. The owned
+    // upstream still closes deterministically through the enclosing defer.
+    try {
+      connection.send_response(
+        response.code,
+        response_reason(response.code),
+        extra_headers=headers,
+        cookies~,
+      )
       connection.flush()
+      while client.read_some(max_len=16384) is Some(chunk) {
+        connection.write(chunk)
+        connection.flush()
+      }
+      connection.end_response()
+    } catch {
+      _ => connection.close()
     }
-    connection.end_response()
     return
   }
   let response_body = client.read_all().binary()

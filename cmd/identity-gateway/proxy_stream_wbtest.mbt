@@ -40,7 +40,9 @@ async test "proxy forwards SSE before upstream completion and keeps JSON framing
               connection,
               "http://\{upstream.addr}",
               no_store=true,
-            )
+            ) catch {
+              _ => send_error(connection, 503, "identity-gateway-unavailable")
+            }
           },
           allow_failure=true,
         )
@@ -108,7 +110,9 @@ async test "proxy closes upstream when a streaming consumer disconnects" {
               connection,
               "http://\{upstream.addr}",
               no_store=true,
-            )
+            ) catch {
+              _ => send_error(connection, 503, "identity-gateway-unavailable")
+            }
           },
           allow_failure=true,
         )

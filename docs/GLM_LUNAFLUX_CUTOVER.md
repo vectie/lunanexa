@@ -122,3 +122,13 @@ as live-stream/cancellation acceptance. Fix SSE forwarding at the HTTP boundary,
 preserving ordinary response behavior, credentials and deterministic upstream
 close. Prove early delivery while the upstream is still blocked, then retest
 the real public path and native cancellation/retirement counters.
+
+The incremental-forwarding candidate delivered a public first content token in
+1608 ms and propagated cancellation to the native worker. Its public disconnect
+test also exposed a process-level error path: the outer gateway handler tried
+to send a fresh 503 after streaming headers had already been sent. One gateway
+replica exited; the GPU pair stayed healthy. Reproducing the actual wrapper in
+the regression test triggered a panic in `Sender::send_response`. Interrupted
+stream handling must close the downstream and its owned upstream without
+attempting a second response; acceptance requires repeating disconnect/reuse
+with unchanged gateway restart counts. The first candidate is not final proof.
