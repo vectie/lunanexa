@@ -1,6 +1,6 @@
 {
   "comfyui": ["video.default", "Ref2VA"],
-  "desktop-workspace": ["text.private"],
+  "desktop-workspace": ["text.trial", "text.private"],
   "moonrobo": ["text.private"],
   "moontown": ["text.private"]
 }
