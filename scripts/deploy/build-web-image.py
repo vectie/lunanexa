@@ -168,7 +168,7 @@ def main():
     with tarfile.open(fileobj=buffer, mode="w") as archive:
         for path, source in sorted(wanted.items()):
             info = tarfile.TarInfo(path)
-            info.mode = 0o644
+            info.mode = 0o755 if os.access(source, os.X_OK) else 0o644
             info.mtime = int(time.time())
             info.size = os.path.getsize(source)
             with open(source, "rb") as handle:
