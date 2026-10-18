@@ -9,7 +9,13 @@ async test "text Chat transport preserves conversation budget usage JSON and SSE
           request.headers.get("authorization"),
           Some("Bearer test-backend"),
         )
-        let value = @json.parse(body.read_all().text())
+        let text = body.read_all().text()
+        assert_eq(request.headers.get("transfer-encoding"), None)
+        assert_eq(
+          request.headers.get("content-length"),
+          Some(@utf8.encode(text).length().to_string()),
+        )
+        let value = @json.parse(text)
         guard value is Object(fields) else { fail("request object") }
         assert_eq(fields.get("max_tokens"), Some(Json::number(20)))
         assert_false(fields.contains("metadata"))
@@ -17,7 +23,7 @@ async test "text Chat transport preserves conversation budget usage JSON and SSE
         assert_eq(
           fields.get("messages"),
           Some([
-            { "role": "system", "content": "Be precise" },
+            { "role": "system", "content": "Be precise 精确" },
             { "role": "user", "content": "17 times 19" },
           ]),
         )
@@ -53,7 +59,7 @@ async test "text Chat transport preserves conversation budget usage JSON and SSE
       ..remote_request(),
       payload: {
         "messages": [
-          { "role": "system", "content": "Be precise" },
+          { "role": "system", "content": "Be precise 精确" },
           {
             "role": "user",
             "content": [{ "type": "text", "text": "17 times 19" }],

@@ -13,6 +13,8 @@ supported_targets = "native"
 
 import {
   "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/core/env",
 } for "test"
 
 options(

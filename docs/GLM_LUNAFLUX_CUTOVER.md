@@ -68,3 +68,18 @@ portal session. The operator's attempt to issue a temporary test key returned
 `409 EffectiveMasterLeaseRequired`; it created no credential. No lease policy,
 customer identity, or existing key was changed. Until public validation passes,
 the public alias must not be advertised as online or as an NVFP4 cutover success.
+
+The opt-in live adapter gate then caught a second wire incompatibility: the
+MoonBit HTTP client defaults to chunked request bodies, which this LunaFlux
+HTTP parser rejects. The Chat adapter now serializes the request once and uses
+its exact UTF-8 byte length for both JSON and SSE response modes. A regression
+includes non-ASCII text and asserts no request transfer encoding. Error and
+cancellation cleanup close the owned upstream client deterministically.
+
+The real two-GPU adapter gate passed JSON, SSE, disconnect and request reuse:
+four admissions, three completions, one cancellation, zero worker failures,
+zero active requests and all 512 KV pages free afterward. All 51 runtime tests
+passed with this live gate enabled. The two observed rejected chunked requests
+are retained in the negative evidence; they were not model execution failures.
+The superseded v3 controller build was stopped before deployment after this
+finding. Its unit/route tests passed, but its executable is not a release candidate.

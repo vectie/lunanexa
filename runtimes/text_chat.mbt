@@ -132,12 +132,15 @@ async fn OpenAiTextRuntime::invoke_text_chat(
   request : @contracts.WorkloadEnvelope,
   node_id : String,
 ) -> RuntimeInvocationResult {
-  let (response, body) = @http.post(
-    self.endpoint_for(node_id),
+  let stream = self.open_text_chat_request(
+    request,
+    node_id,
+    false,
     text_chat_request(request, self.served_model_name, false),
-    headers=self.chat_headers(request, node_id, false),
   )
-  let text = body.text()
+  defer stream.close()
+  let response = stream.end_request()
+  let text = stream.read_all().text()
   guard text.length() <= self.maximum_response_bytes else {
     raise InvalidUpstreamResponse("chat response exceeded configured limit")
   }
@@ -161,6 +164,35 @@ async fn OpenAiTextRuntime::invoke_text_chat(
 }
 
 ///|
+/// Request framing is independent of response streaming. Serialize once to
+/// supply the exact UTF-8 byte extent; a chunked request is not required for SSE.
+async fn OpenAiTextRuntime::open_text_chat_request(
+  self : Self,
+  request : @contracts.WorkloadEnvelope,
+  node_id : String,
+  streaming : Bool,
+  upstream : Json,
+) -> @http.Client {
+  let endpoint = self.endpoint_for(node_id)
+  guard endpoint.find("://") is Some(scheme) &&
+    endpoint[scheme + 3:].find("/") is Some(offset) else {
+    raise InvalidUpstreamResponse("chat endpoint lacks request path")
+  }
+  let path_start = scheme + 3 + offset
+  let body = @utf8.encode(upstream.stringify())
+  let client = @http.Client(
+    endpoint[:path_start].to_owned(),
+    headers=self.chat_headers(request, node_id, streaming),
+  )
+  errdefer client.close()
+  client.request(Post, endpoint[path_start:], extra_headers={
+    "Content-Length": body.length().to_string(),
+  })
+  client.write(body)
+  client
+}
+
+///|
 async fn OpenAiTextRuntime::invoke_text_chat_stream(
   self : Self,
   request : @contracts.WorkloadEnvelope,
@@ -168,12 +200,8 @@ async fn OpenAiTextRuntime::invoke_text_chat_stream(
   on_chunk : async (Json) -> Unit,
 ) -> RuntimeInvocationResult {
   let upstream = text_chat_request(request, self.served_model_name, true)
-  let stream = @http.post_stream(
-    self.endpoint_for(node_id),
-    headers=self.chat_headers(request, node_id, true),
-  )
+  let stream = self.open_text_chat_request(request, node_id, true, upstream)
   defer stream.close()
-  stream.write(upstream)
   let response = stream.end_request()
   guard response.code >= 200 && response.code < 300 else {
     raise UpstreamRejected(status=response.code, body="chat stream rejected")
