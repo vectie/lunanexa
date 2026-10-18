@@ -20,7 +20,7 @@ test "navigation retains launch choices and refresh cannot switch a removed rese
         ..@enterprise_ui.default_delivery_panel(),
         reservation_id: "selected-reservation",
         template_choice: @enterprise_ui.delivery_template_choice(gpu),
-        options: { reservations: [], templates: [gpu], },
+        options: { reservations: [], templates: [gpu], shared_trials: [], },
       },
     },
   }
@@ -33,6 +33,7 @@ test "navigation retains launch choices and refresh cannot switch a removed rese
   )
   let options : @enterprise_ui.DeliveryOptions = {
     templates: [gpu],
+    shared_trials: [],
     reservations: [
       {
         reservation_id: "other-reservation",

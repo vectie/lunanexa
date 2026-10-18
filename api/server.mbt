@@ -105,6 +105,7 @@ pub struct ApiService {
   reconciliation_only : Bool
   runtime : @runtimes.OpenAiTextRuntime
   external_text_route : ExternalTextRoute?
+  shared_trial_offerings : Array[SharedTrialOffering]
   external_media_providers : Array[ExternalMediaProvider]
   client_model_policies : Map[String, Array[String]]
   external_text_control : (async (String) -> String)?
@@ -217,6 +218,7 @@ pub fn ApiService::new(
     reconciliation_only: false,
     runtime,
     external_text_route: None,
+    shared_trial_offerings: [],
     external_media_providers: [],
     client_model_policies: Map([]),
     external_text_control: None,
@@ -328,6 +330,7 @@ pub fn ApiService::with_registry(
     reconciliation_only: false,
     runtime,
     external_text_route: None,
+    shared_trial_offerings: [],
     external_media_providers: [],
     client_model_policies: Map([]),
     external_text_control: None,
@@ -440,6 +443,7 @@ pub fn ApiService::with_services(
     reconciliation_only: false,
     runtime,
     external_text_route: None,
+    shared_trial_offerings: [],
     external_media_providers: [],
     client_model_policies: Map([]),
     external_text_control: None,
@@ -554,6 +558,7 @@ pub fn ApiService::with_control_plane(
     reconciliation_only: false,
     runtime,
     external_text_route: None,
+    shared_trial_offerings: [],
     external_media_providers: [],
     client_model_policies: Map([]),
     external_text_control: None,
@@ -1949,6 +1954,11 @@ async fn ApiService::schedule_and_admit(
       }
     None => required_deployment_id
   }
+  let shared_trial = match authority {
+    Some(value) =>
+      self.shared_trial_authorized_key(value, request.model_selector)
+    None => None
+  }
   let budgets = self.global_settings.request_budgets
   if request.deadline_unix_ms > now + budgets.openai_max_deadline_ms ||
     request.resource_ceiling.max_runtime_ms > budgets.openai_max_deadline_ms ||
@@ -2000,6 +2010,17 @@ async fn ApiService::schedule_and_admit(
     request.capability == TextGenerate &&
     required_deployment_id is None &&
     delivery is None {
+    if !shared_trial_node_matches(shared_trial, route.node_id) {
+      return (
+        Some(
+          api_error(
+            503, "SharedTrialPlacementMismatch", "the shared model route is not on its trial machine",
+            false,
+          ),
+        ),
+        [],
+      )
+    }
     if !self.external_text_ready() {
       return (
         Some(
@@ -2073,7 +2094,10 @@ async fn ApiService::schedule_and_admit(
   }
   let assignments = self.store.assignments()
   let nodes = [
-    for heartbeat in self.store.heartbeats() => {
+    for heartbeat in self.store.heartbeats() if shared_trial_node_matches(
+      shared_trial,
+      heartbeat.node_id,
+    ) => {
       let ready_models = if self.runtime.uses_direct_node_routing() {
         if assignments.any(assignment => {
             assignment.node_id == heartbeat.node_id &&
@@ -2540,7 +2564,11 @@ async fn ApiService::invoke_workload(
   request : @contracts.WorkloadEnvelope,
   authority : @access.ApiAuthorization,
 ) -> HttpReply {
-  if self.inference_billing_preflight(authority, @async.now()) is Some(reply) {
+  if self.inference_billing_preflight(
+      authority,
+      request.model_selector,
+      @async.now(),
+    ) is Some(reply) {
     return reply
   }
   let idempotency_key = idempotency_scope(request)
@@ -2955,7 +2983,11 @@ async fn ApiService::stream_workload(
   authority : @access.ApiAuthorization,
   openai? : OpenAiStreamContext? = None,
 ) -> Unit {
-  if self.inference_billing_preflight(authority, @async.now()) is Some(reply) {
+  if self.inference_billing_preflight(
+      authority,
+      request.model_selector,
+      @async.now(),
+    ) is Some(reply) {
     connection.send_response(reply.status, reason(reply.status), extra_headers={
       "Content-Type": reply.content_type,
       "Cache-Control": "no-store",
@@ -3732,10 +3764,7 @@ async fn ApiService::dispatch_with_transport(
         view.active_lease is Some(lease) {
         for
           credential in access.views_for_subject(lease.tenant_ref, subject_ref) {
-          if credential.revoked_unix_ms is None &&
-            credential.expires_unix_ms > @async.now() &&
-            credential.scopes.contains(Inference) &&
-            credential.consumed_requests < credential.maximum_requests {
+          if workspace_model_key_visible(credential, @async.now()) {
             for model in credential.allowed_models {
               if !allowed_models.contains(model) {
                 allowed_models.push(model)

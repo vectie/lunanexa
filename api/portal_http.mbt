@@ -455,11 +455,17 @@ async fn ApiService::handle_enterprise_portal(
         access
         .views_for_subject(view.membership.tenant_ref, subject_ref)
         .map(key => {
-          if private_access &&
+          if (private_access &&
             self.private_model_key_scope(
               view.membership.tenant_ref,
               key.allowed_models,
-            ) {
+            )) ||
+            (key.maximum_requests == 0L &&
+            self.shared_trial_text_key_scope(
+              view.membership.organization_id,
+              view.membership.tenant_ref,
+              key.allowed_models,
+            )) {
             { ..key, maximum_requests: 0L, }
           } else {
             key
@@ -517,18 +523,29 @@ async fn ApiService::handle_enterprise_portal(
         subject_ref,
         now,
       )
-      let unlimited_requests = private_access &&
+      let shared_trial_access = self.shared_trial_text_key_scope(
+        view.membership.organization_id,
+        view.membership.tenant_ref,
+        intent.allowed_models,
+      )
+      let unlimited_requests = (private_access &&
         self.private_model_key_scope(
           view.membership.tenant_ref,
           intent.allowed_models,
-        )
-      if intent.maximum_requests == 0L && !unlimited_requests {
+        )) || shared_trial_access
+      if shared_trial_access && intent.maximum_requests != 0L {
         return api_error(
-          403, "RequestQuotaRequired", "unlimited keys require an authorized company-owned model",
+          400, "SharedTrialQuotaInvalid", "shared trial API keys must use the organization trial policy",
           false,
         )
       }
-      let contract_active = private_access ||
+      if intent.maximum_requests == 0L && !unlimited_requests {
+        return api_error(
+          403, "RequestQuotaRequired", "unlimited keys require an authorized company model or shared trial model",
+          false,
+        )
+      }
+      let contract_active = private_access || shared_trial_access ||
         (match self.contract_document_store {
           Some(contract_store) =>
             self.has_effective_rental_authority(

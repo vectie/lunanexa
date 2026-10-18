@@ -2511,7 +2511,7 @@ async fn issue_api_key(model : AppModel) -> @enterprise_ui.IssuedApiKeyView {
     allowed_models: @enterprise_ui.api_key_allowed_models(model.portal),
     expires_unix_ms,
     lifetime_days: draft.lifetime_days,
-    maximum_requests: if @enterprise_ui.api_key_uses_reserved_model(
+    maximum_requests: if @enterprise_ui.api_key_uses_unmetered_model(
         model.portal,
       ) {
       0L

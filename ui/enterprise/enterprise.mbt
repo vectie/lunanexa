@@ -243,6 +243,7 @@ pub(all) enum EnterpriseMessage {
   SelfService(SelfServiceMessage)
   LocaleChanged(@i18n.Locale)
   OpenApiKeyIssue
+  OpenSharedTrialApiKey(String)
   CancelApiKeyIssue
   ApiKeyDisplayNameChanged(String)
   ToggleApiKeyModelListScope
@@ -1302,6 +1303,22 @@ pub fn EnterpriseState::update(
         success_message: None,
         error_message: None,
       }
+    OpenSharedTrialApiKey(model_alias) =>
+      {
+        ..self,
+        route: Models,
+        model_connection_import: None,
+        api_key_issue_open: true,
+        api_key_revoke_id: None,
+        one_time_api_key_secret: None,
+        api_key_issue_draft: {
+          ..self.api_key_issue_draft,
+          display_name: "Shared trial · \{model_alias}",
+          allowed_models: model_alias,
+        },
+        success_message: None,
+        error_message: None,
+      }
     CancelApiKeyIssue =>
       { ..self, api_key_issue_open: false, error_message: None, }
     ApiKeyDisplayNameChanged(value) =>
@@ -2269,7 +2286,7 @@ fn api_key_issue_dialog(
                   enterprise_copy(state.locale, LeaveEmptyToAllowEveryModel),
                 ),
               ]),
-              if api_key_uses_reserved_model(state) {
+              if api_key_uses_unmetered_model(state) {
                 @html.nothing
               } else {
                 @html.div(class="field", [
@@ -2545,15 +2562,17 @@ fn account_access_view(
     value.organization.organization_id == membership.organization_id &&
     value.organization.state == Active
   })
-  let can_issue = membership.active &&
-    @portal.role_allows(membership.roles, Developer) &&
-    (match state.trial {
+  let personal_trial_available = match state.trial {
       Some(trial) if trial.organization_id == membership.organization_id &&
         trial.revoked_unix_ms is None =>
         trial.expires_unix_ms > state.machine_access.now_unix_ms &&
         trial.api_key_id is None
       _ => true
-    })
+    }
+  let can_issue = membership.active &&
+    @portal.role_allows(membership.roles, Developer) &&
+    (state.deliveries.options.shared_trials.any(slot => slot.kind == "Text") ||
+    personal_trial_available)
   let browser_session_rows = [
     for browser_session in state.browser_sessions if browser_session.revoked_unix_ms
     is None &&
@@ -3507,6 +3526,70 @@ fn costs_view(
 }
 
 ///|
+fn shared_trial_panel(
+  state : EnterpriseState,
+  emit : @rabbita.Emit[EnterpriseMessage]?,
+) -> @rabbita.Html {
+  if state.deliveries.options.shared_trials.is_empty() {
+    return @html.nothing
+  }
+  @html.section(class="welcome-panel", [
+    @html.div([
+      @html.h2(copy(state.locale, "Shared trial machines", "共享试用机器")),
+      @html.p(copy(
+        state.locale,
+        "Shared capacity is not an exclusive lease. The trial has no request-count limit; service availability is shown per machine.",
+        "共享算力不是独占租赁。试用不设请求次数上限；每台机器的服务状态单独显示。",
+      )),
+      ..state.deliveries.options.shared_trials.map(slot => {
+        @html.div(class="record-card", [
+          @html.h3("\{slot.model_name} · \{slot.node_label}"),
+          @html.p(
+            if !slot.node_online {
+              copy(state.locale, "Machine offline", "机器未在线")
+            } else if !slot.service_responding {
+              copy(
+                state.locale,
+                "Machine online · model service not responding",
+                "机器在线 · 模型服务尚未响应",
+              )
+            } else {
+              copy(
+                state.locale,
+                "Service health check passed · inference not yet verified",
+                "服务健康检查通过 · 推理效果仍待实测",
+              )
+            },
+          ),
+          if slot.node_online && slot.service_responding {
+            @html.a(
+              class="primary-action external-action",
+              href=slot.public_url,
+              target=Blank,
+              rel="noopener noreferrer",
+              escape=true,
+              copy(state.locale, "Open trial service", "打开试用服务"),
+            )
+          } else {
+            @html.nothing
+          },
+          if slot.kind == "Text" {
+            @html.button(
+              type_="button",
+              class="quiet-button",
+              on_click=command(emit, OpenSharedTrialApiKey(slot.model_alias)),
+              copy(state.locale, "Create trial API key", "创建试用 API 密钥"),
+            )
+          } else {
+            @html.nothing
+          },
+        ])
+      }),
+    ]),
+  ])
+}
+
+///|
 fn models_view(
   state : EnterpriseState,
   emit : @rabbita.Emit[EnterpriseMessage]?,
@@ -3523,6 +3606,7 @@ fn models_view(
     }
   ]
   @html.div(class="page-stack", [
+    shared_trial_panel(state, emit),
     if state.deliveries.company_workspace.map_or(false, value => {
         value.status != "NoCompanyMachines"
       }) ||
@@ -4413,6 +4497,7 @@ fn content(
         item.expires_at_ms > state.machine_access.now_unix_ms
       })
       @html.div(class="page-stack", [
+        shared_trial_panel(state, emit),
         if !reservations.is_empty() {
           @html.section(class="welcome-panel", [
             @html.div(

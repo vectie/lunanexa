@@ -1,4 +1,12 @@
 ///|
+test "delivery options tolerate an older controller without shared trial slots" {
+  let options : @enterprise.DeliveryOptions = @json.from_json(
+    @json.parse("{\"reservations\":[],\"templates\":[]}"),
+  )
+  assert_eq(options.shared_trials.length(), 0)
+}
+
+///|
 test "delivery launch requires actual reservation and published template and preserves retry identity" {
   let empty = @enterprise.default_delivery_panel()
   assert_false(@enterprise.delivery_start_available(empty))
@@ -23,6 +31,7 @@ test "delivery launch requires actual reservation and published template and pre
         },
       ],
       templates: [option],
+      shared_trials: [],
     },
     reservation_id: "reserved-a",
     template_choice: @enterprise.delivery_template_choice(option),
@@ -200,7 +209,7 @@ test "GPU terminal uses catalog client without requiring a model" {
   let panel = {
     ..state.deliveries,
     loaded: true,
-    options: { reservations: [], templates: [template], },
+    options: { reservations: [], templates: [template], shared_trials: [], },
     operations: [operation],
   }
   assert_true(
@@ -230,6 +239,7 @@ test "GPU terminal uses catalog client without requiring a model" {
     options: {
       reservations: [],
       templates: [{ ..template, client_id: None, }],
+      shared_trials: [],
     },
   }
   assert_true(
@@ -271,7 +281,7 @@ test "model workspace and model API retain distinct launch requirements" {
   let configured = {
     ..panel,
     operations: [operation],
-    options: { reservations: [], templates: [template], },
+    options: { reservations: [], templates: [template], shared_trials: [], },
   }
   assert_true(
     @enterprise.delivery_launch_template(configured, operation.operation_id)
@@ -282,6 +292,7 @@ test "model workspace and model API retain distinct launch requirements" {
     options: {
       reservations: [],
       templates: [{ ..template, model_selector: "", }],
+      shared_trials: [],
     },
   }
   assert_true(
@@ -296,6 +307,7 @@ test "model workspace and model API retain distinct launch requirements" {
       templates: [
         { ..template, kind: "ModelApi", client_id: Some("desktop-workspace"), },
       ],
+      shared_trials: [],
     },
   }
   assert_true(

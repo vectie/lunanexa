@@ -95,6 +95,7 @@ test "private model call example uses chat completion without secrets or infrast
           },
         ],
         templates: [],
+        shared_trials: [],
       },
     },
   }
@@ -115,6 +116,49 @@ test "private model call example uses chat completion without secrets or infrast
     },
   }
   assert_false(render(expired).contains("Company reserved machines"))
+  let trial = {
+    ..reserved,
+    deliveries: {
+      ..reserved.deliveries,
+      options: {
+        ..reserved.deliveries.options,
+        shared_trials: [
+          {
+            node_id: "spark-trial-a",
+            node_label: "Spark trial 1",
+            model_alias: "MiniMax-H3",
+            model_name: "MiniMax-H3",
+            kind: "Video",
+            node_online: true,
+            service_responding: true,
+            public_url: "https://example.test/comfyui/",
+            shared: true,
+            request_limit: "none",
+          },
+          {
+            node_id: "spark-trial-b",
+            node_label: "Spark trial 2",
+            model_alias: "Qwen3.8-27B",
+            model_name: "Qwen3.8-27B",
+            kind: "Text",
+            node_online: true,
+            service_responding: false,
+            public_url: "https://example.test/user/",
+            shared: true,
+            request_limit: "none",
+          },
+        ],
+      },
+    },
+  }
+  let trial_html = render(trial)
+  assert_true(trial_html.contains("Shared trial machines"))
+  assert_true(trial_html.contains("MiniMax-H3"))
+  assert_true(trial_html.contains("Qwen3.8-27B"))
+  assert_true(trial_html.contains("model service not responding"))
+  assert_true(trial_html.contains("https://example.test/comfyui/"))
+  assert_false(trial_html.contains("https://example.test/user/"))
+  assert_true(render({ ..trial, route: Models, }).contains("Shared trial machines"))
   let shared = api_key_first_call_example(state, {
     ..value,
     allowed_models: ["text.qwen"],

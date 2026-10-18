@@ -94,6 +94,7 @@ test "service choices survive IaaS MaaS and PaaS navigation and withdrawn option
     options: {
       reservations: [],
       templates: [gpu, maas, alternative, workspace],
+      shared_trials: [],
     },
   }
   let iaas = panel.for_route(MachineAccess)
@@ -116,9 +117,10 @@ test "service choices survive IaaS MaaS and PaaS navigation and withdrawn option
     paas.for_route(MachineAccess).template_choice,
     @enterprise.delivery_template_choice(gpu),
   )
-  let withdrawn = { ..paas, options: { reservations: [], templates: [maas], }, }.for_route(
-    Models,
-  )
+  let withdrawn = {
+    ..paas,
+    options: { reservations: [], templates: [maas], shared_trials: [], },
+  }.for_route(Models)
   assert_eq(
     withdrawn.template_choice,
     @enterprise.delivery_template_choice(alternative),

@@ -207,12 +207,21 @@ async fn ApiService::api_key_check(
           credential.map_or(false, key => {
             self.private_model_key_scope(preview.tenant_ref, key.allowed_models)
           })
+        let shared_trial_model = credential.map_or(false, key => {
+          key.maximum_requests == 0L &&
+          self.shared_trial_text_key_scope(
+            preview.organization_id,
+            preview.tenant_ref,
+            key.allowed_models,
+          )
+        })
         if credential is Some(key) &&
           key.maximum_requests == 0L &&
-          !private_model {
+          !private_model &&
+          !shared_trial_model {
           return KeyDenied
         }
-        let contract_active = private_access ||
+        let contract_active = private_access || shared_trial_model ||
           (match self.contract_document_store {
             Some(contracts) =>
               self.has_effective_rental_authority(
@@ -287,7 +296,7 @@ async fn ApiService::api_key_check(
                 model=selected_model,
                 now,
                 true,
-                unlimited_requests=private_model,
+                unlimited_requests=private_model || shared_trial_model,
               )
             (Some(tenant), None) =>
               store.authorize(
@@ -296,7 +305,7 @@ async fn ApiService::api_key_check(
                 tenant_ref=tenant,
                 now,
                 true,
-                unlimited_requests=private_model,
+                unlimited_requests=private_model || shared_trial_model,
               )
             (None, Some(selected_model)) =>
               store.authorize(
@@ -305,7 +314,7 @@ async fn ApiService::api_key_check(
                 model=selected_model,
                 now,
                 true,
-                unlimited_requests=private_model,
+                unlimited_requests=private_model || shared_trial_model,
               )
             (None, None) =>
               store.authorize(
@@ -313,7 +322,7 @@ async fn ApiService::api_key_check(
                 scope,
                 now,
                 true,
-                unlimited_requests=private_model,
+                unlimited_requests=private_model || shared_trial_model,
               )
           }
         } else {

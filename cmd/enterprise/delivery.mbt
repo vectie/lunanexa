@@ -140,7 +140,7 @@ fn delivery_command(
         ) catch {
           _ =>
             (
-              { reservations: [], templates: [], },
+              { reservations: [], templates: [], shared_trials: [], },
               Some(
                 portal_copy(
                   model.portal.locale,

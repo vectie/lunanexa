@@ -90,6 +90,20 @@ pub(all) struct DeliveryReservationOption {
 } derive(Eq, FromJson)
 
 ///|
+pub(all) struct SharedTrialSlotOption {
+  node_id : String
+  node_label : String
+  model_alias : String
+  model_name : String
+  kind : String
+  node_online : Bool
+  service_responding : Bool
+  public_url : String
+  shared : Bool
+  request_limit : String
+} derive(Eq, FromJson)
+
+///|
 pub(all) struct DeliveryTemplateOption {
   template_id : String
   template_version : String
@@ -103,7 +117,30 @@ pub(all) struct DeliveryTemplateOption {
 pub(all) struct DeliveryOptions {
   reservations : Array[DeliveryReservationOption]
   templates : Array[DeliveryTemplateOption]
-} derive(Eq, FromJson)
+  shared_trials : Array[SharedTrialSlotOption]
+} derive(Eq)
+
+///|
+/// Keep the customer bundle compatible with a controller that has not yet
+/// published shared trial slots during a rolling deployment.
+pub impl @json.FromJson for DeliveryOptions with fn from_json(value, path) {
+  guard value is { "reservations": reservations, "templates": templates, .. } else {
+    raise JsonDecodeError((path, "expected delivery options"))
+  }
+  let shared_trials : Array[SharedTrialSlotOption] = match value {
+    { "shared_trials": slots, .. } =>
+      @json.from_json(slots, path=path.add_key("shared_trials"))
+    _ => []
+  }
+  {
+    reservations: @json.from_json(
+      reservations,
+      path=path.add_key("reservations"),
+    ),
+    templates: @json.from_json(templates, path=path.add_key("templates")),
+    shared_trials,
+  }
+}
 
 ///|
 pub(all) struct CompanyWorkspaceStatus {
@@ -176,7 +213,7 @@ pub fn default_delivery_panel() -> DeliveryPanel {
   {
     operations: [],
     external_model: None,
-    options: { reservations: [], templates: [], },
+    options: { reservations: [], templates: [], shared_trials: [], },
     company_workspace: None,
     reservation_id: "",
     template_choice: "",

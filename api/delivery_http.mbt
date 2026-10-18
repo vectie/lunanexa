@@ -363,6 +363,16 @@ async fn ApiService::handle_delivery(
     None => []
   }
   if verb == Get && path == "/v1/portal/self/delivery-options" {
+    let shared_trials : Array[Json] = []
+    for offering in self.shared_trial_offerings {
+      if shared_trial_offering_visible(
+          offering,
+          view.membership.organization_id,
+          view.membership.tenant_ref,
+        ) {
+        shared_trials.push(self.shared_trial_offering_view(offering, now))
+      }
+    }
     let undertaking_orders = match self.offline_commerce_store {
       Some(commerce) => commerce.snapshot().orders
       None => []
@@ -422,6 +432,7 @@ async fn ApiService::handle_delivery(
       })
       .to_json(),
       "templates": templates.to_json(),
+      "shared_trials": shared_trials.to_json(),
     })
   }
   if verb == Post && path == "/v1/portal/self/deliveries" {

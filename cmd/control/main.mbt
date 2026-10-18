@@ -1649,6 +1649,18 @@ async fn main {
     }
     None => service
   }
+  let service = match @env.get_env_var("LUNANEXA_SHARED_TRIAL_OFFERINGS_JSON") {
+    Some(raw) if raw != "" => {
+      guard raw.length() <= 65536 else {
+        raise Failure("shared trial offerings are too large")
+      }
+      let offerings : Array[@api.SharedTrialOffering] = @json.from_json(
+        @json.parse(raw),
+      )
+      service.with_shared_trial_offerings(offerings)
+    }
+    _ => service
+  }
   let service = match @env.get_env_var("LUNANEXA_MEDIA_BINDINGS_FILE") {
     Some(path) => {
       guard management_database is Some(database) else {

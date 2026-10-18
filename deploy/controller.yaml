@@ -354,6 +354,12 @@ spec:
                   name: lunanexa-control-config
                   key: external-text-route
                   optional: true
+            - name: LUNANEXA_SHARED_TRIAL_OFFERINGS_JSON
+              valueFrom:
+                configMapKeyRef:
+                  name: lunanexa-control-config
+                  key: shared-trial-offerings
+                  optional: true
             - name: LUNANEXA_GLM_CONTROL_ORIGIN
               valueFrom:
                 configMapKeyRef:

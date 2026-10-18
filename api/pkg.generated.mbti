@@ -117,6 +117,7 @@ pub struct ApiService {
   reconciliation_only : Bool
   runtime : @runtimes.OpenAiTextRuntime
   external_text_route : ExternalTextRoute?
+  shared_trial_offerings : Array[SharedTrialOffering]
   external_media_providers : Array[ExternalMediaProvider]
   client_model_policies : Map[String, Array[String]]
   external_text_control : (async (String) -> String)?
@@ -244,6 +245,7 @@ pub fn ApiService::with_retired_bootstrap_operator_token(Self, Bool) -> Self
 pub fn ApiService::with_role_tokens(Self, String, String) -> Self
 pub fn ApiService::with_runtime_concurrency(Self, Int) -> Self raise
 pub fn ApiService::with_services(@vectie/lunanexa/store.FileStore, @registry.FileRegistry, @node.FileEnrollmentService, @runtimes.OpenAiTextRuntime, String, String, String, String) -> Self
+pub fn ApiService::with_shared_trial_offerings(Self, Array[SharedTrialOffering]) -> Self raise
 pub fn ApiService::with_signature_verifier(Self, @registry.CosignVerifier) -> Self
 pub fn ApiService::with_technical_acceptance_authorization(Self, @offline.TechnicalAcceptanceAuthorization) -> Self raise Failure
 pub fn ApiService::with_technical_store(Self, @vectie/lunanexa/technical/store.TechnicalStore) -> Self
@@ -396,6 +398,19 @@ pub(all) struct PersonalDesktopLaunch {
 } derive(ToJson, @json.FromJson)
 pub fn PersonalDesktopLaunch::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
 pub fn PersonalDesktopLaunch::to_json(Self) -> Json
+
+pub(all) struct SharedTrialOffering {
+  organization_id : String
+  tenant_ref : String
+  node_id : String
+  node_label : String
+  model_alias : String
+  model_name : String
+  kind : String
+  health_url : String
+  public_url : String
+} derive(@json.FromJson)
+pub fn SharedTrialOffering::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
 
 pub(all) enum StreamEvent {
   Opened

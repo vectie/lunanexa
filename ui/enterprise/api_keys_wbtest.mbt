@@ -47,7 +47,7 @@ test "private model key form and unlimited key card omit quota controls" {
     },
     api_key_issue_open: true,
   }
-  assert_true(api_key_uses_reserved_model(state))
+  assert_true(api_key_uses_unmetered_model(state))
   let form = render(state)
   assert_false(form.contains("api-key-maximum-requests"))
   assert_true(form.contains("api-key-lifetime"))
@@ -58,9 +58,34 @@ test "private model key form and unlimited key card omit quota controls" {
       allowed_models: "shared.model",
     },
   }
-  assert_false(api_key_uses_reserved_model(shared))
+  assert_false(api_key_uses_unmetered_model(shared))
   let shared_form = render(shared)
   assert_true(shared_form.contains("api-key-maximum-requests"))
+  let shared_trial = {
+    ..shared,
+    deliveries: {
+      ..shared.deliveries,
+      options: {
+        ..shared.deliveries.options,
+        shared_trials: [{
+          node_id: "trial-node-text",
+          node_label: "Shared Spark 2",
+          model_alias: "text.qwen",
+          model_name: "Qwen 27B",
+          kind: "Text",
+          node_online: true,
+          service_responding: false,
+          public_url: "https://example.test/user/",
+          shared: true,
+          request_limit: "none",
+        }],
+      },
+    },
+  }.update(OpenSharedTrialApiKey("text.qwen"))
+  assert_eq(shared_trial.route, Models)
+  assert_eq(shared_trial.api_key_issue_draft.allowed_models, "text.qwen")
+  assert_true(api_key_uses_unmetered_model(shared_trial))
+  assert_false(render(shared_trial).contains("api-key-maximum-requests"))
   let advanced_start = shared_form
     .find("<details class=\"api-key-advanced\">")
     .unwrap()

@@ -23,16 +23,21 @@ pub impl @json.FromJson for IssuedApiKeyView with fn from_json(value, path) {
 }
 
 ///|
-/// The backend independently verifies the company and private-model authority.
+/// The backend independently verifies private-model or shared-trial authority.
 /// This projection only determines whether the quota picker is relevant.
-pub fn api_key_uses_reserved_model(state : EnterpriseState) -> Bool {
-  match state.deliveries.external_model {
-    Some(service) => {
-      let models = api_key_allowed_models(state)
-      models.length() > 0 && models.all(model => model == service.model_alias)
-    }
-    None => false
+pub fn api_key_uses_unmetered_model(state : EnterpriseState) -> Bool {
+  let models = api_key_allowed_models(state)
+  if models.is_empty() {
+    return false
   }
+  let private_model = state.deliveries.external_model.map_or(false, service => {
+    models.all(model => model == service.model_alias)
+  })
+  private_model || models.all(model => {
+    state.deliveries.options.shared_trials.any(slot => {
+      slot.kind == "Text" && slot.model_alias == model
+    })
+  })
 }
 
 ///|
