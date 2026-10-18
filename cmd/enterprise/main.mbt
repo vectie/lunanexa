@@ -34,7 +34,7 @@ priv struct GatewayBrowserBootstrap {
 /// status is kept apart from the body so a refusal can be reported without
 /// echoing anything the gateway did not deliberately send.
 priv struct GatewayAuthOutcome {
-  status : Int
+  status : Int32
   body : String
 } derive(FromJson)
 
@@ -139,7 +139,7 @@ priv struct PortalApiKeyIssueIntent {
   scopes : Array[@enterprise_ui.ApiKeyScope]
   allowed_models : Array[String]
   expires_unix_ms : Int64
-  lifetime_days : Int
+  lifetime_days : Int32
   maximum_requests : Int64
 } derive(ToJson)
 
@@ -184,7 +184,7 @@ priv struct SelfUploadIntent {
   order_id : String
   artifact_id : String
   kind : @offline.DocumentArtifactKind
-  revision : Int
+  revision : Int32
   allowed_media_types : Array[String]
   maximum_byte_count : Int64
   expires_unix_ms : Int64
@@ -222,7 +222,7 @@ priv struct OfflineArtifactView {
   artifact_id : String
   order_id : String
   kind : @offline.DocumentArtifactKind
-  revision : Int
+  revision : Int32
   locale : String
   media_type : String
   byte_count : Int64
@@ -447,13 +447,13 @@ priv enum AppMessage {
   LogoutCompleted(Int64)
   Portal(@enterprise_ui.EnterpriseMessage)
   ContractPreviewDue(Int64, @contract_documents.ContractDocumentsMessage)
-  ContractPollDue(Int64, String, Int)
-  RentalWaitDue(Int64, String, Int)
-  RentalWaitLoaded(Int64, String, Int, Result[RentalWaitResult, String])
+  ContractPollDue(Int64, String, Int32)
+  RentalWaitDue(Int64, String, Int32)
+  RentalWaitLoaded(Int64, String, Int32, Result[RentalWaitResult, String])
   ContractPollResult(
     Int64,
     String,
-    Int,
+    Int32,
     Result[Array[@contractdoc.ContractPacket], String]
   )
   Outcome(Outcome)
@@ -620,7 +620,7 @@ extern "js" fn machine_clock_promise(expires_unix_ms : Int64) -> @js.Promise =
 
 ///|
 extern "js" fn contract_preview_delay_promise(
-  milliseconds : Int,
+  milliseconds : Int32,
 ) -> @js.Promise =
   #| milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
 
@@ -906,7 +906,7 @@ async fn request(
   path : String,
   token : String,
   subject_ref : String,
-  body? : String = "",
+  body~ : String = "",
 ) -> String {
   let base = if endpoint.has_suffix("/") {
     endpoint[:-1].to_owned()
@@ -2383,7 +2383,7 @@ fn next_artifact_revision(
   state : @offline_commerce.OfflineCommerceState,
   order_id : String,
   kind : @offline.DocumentArtifactKind,
-) -> Int {
+) -> Int32 {
   let mut revision = 1
   for artifact in state.artifacts {
     if artifact.order_id == order_id &&
@@ -3750,7 +3750,7 @@ fn contract_approval_nudge_command(
 fn schedule_contract_preview_only(
   model : AppModel,
   documents : @contract_documents.ContractDocumentsState,
-  delay_ms : Int,
+  delay_ms : Int32,
   emit : @rabbita.Emit[AppMessage],
 ) -> (AppModel, @rabbita.Cmd) {
   guard documents.preview_request() is Some(request) else {
@@ -6317,6 +6317,30 @@ fn update(
           value != model.portal.deliveries.poll_generation
         }) {
         return (model, @rabbita.none)
+      }
+      // Launch failures are delivered through a separate outcome from normal
+      // portal requests. An expired browser session must still return to the
+      // login screen instead of leaving a stale user name and a raw HTTP 401.
+      if model.token.has_prefix("lnxs_") &&
+        result is Err(message) &&
+        message.contains("HTTP 401") {
+        let signed_out = signed_out_model(model)
+        return (
+          {
+            ..signed_out,
+            portal: {
+              ..signed_out.portal,
+              error_message: Some(
+                portal_copy(
+                  signed_out.portal.locale,
+                  "Your session has expired. Sign in again.",
+                  "会话已过期，请重新登录。",
+                ),
+              ),
+            },
+          },
+          @rabbita.none,
+        )
       }
       let (success, error) = match result {
         Ok(name) =>

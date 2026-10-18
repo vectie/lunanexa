@@ -4153,8 +4153,8 @@ fn desktop_ide_view(
               @html.p(
                 copy(
                   state.locale,
-                  "Open the live counters from your personal MoonGate; these are not the company's shared-model total.",
-                  "打开个人 MoonGate 的实时统计；这里不是企业共享模型的总用量。",
+                  "Open live counters from your personal MoonGate. They reset when this workspace restarts and are not the company's shared-model total.",
+                  "查看个人 MoonGate 的实时统计；工作区重启后计数会归零，也不代表企业共享模型的总用量。",
                 ),
               ),
               @html.a(

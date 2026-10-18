@@ -642,6 +642,35 @@ test "HTTP 401 signs out a stale browser session with a clear message" {
 }
 
 ///|
+test "MoonDesk launch HTTP 401 signs out the stale browser session" {
+  let model : AppModel = {
+    ..gateway_auth_test_model(),
+    token: "lnxs_expired",
+    subject_ref: "subject-test",
+    session_generation: 7L,
+  }
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (signed_out, _) = update(
+    model,
+    Outcome(
+      ApplicationLaunchCompleted(
+        7L,
+        model.portal.selected_organization_id,
+        None,
+        Err("Unable to open the desktop WebIDE: HTTP 401"),
+      ),
+    ),
+    emit,
+  )
+  assert_eq(signed_out.token, "")
+  assert_eq(signed_out.subject_ref, "")
+  assert_eq(
+    signed_out.portal.error_message,
+    Some("Your session has expired. Sign in again."),
+  )
+}
+
+///|
 test "enterprise checkout quote is stable and selects the latest finalized period" {
   let entry : @commercial.LedgerEntry = {
     entry_id: "entry-one",
