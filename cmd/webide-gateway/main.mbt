@@ -125,7 +125,7 @@ async fn main {
     @async.with_task_group <| group => {
       group.spawn_bg(() => {
         while true {
-          host.reconcile() catch {
+          host.reconcile(client_id~, subject_ref=expected_subject) catch {
             _ =>
               eprintln(
                 "WebIDE reconciliation incomplete; retrying without releasing authority",

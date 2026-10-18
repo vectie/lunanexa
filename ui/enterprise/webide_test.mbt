@@ -362,6 +362,8 @@ test "MoonDesk model picker separates trial Qwen from dedicated GLM and blocks o
   assert_true(rendered.contains("Trial · Qwen3.8-27B · unavailable"))
   assert_true(rendered.contains("Dedicated · glm-5.3 · unavailable"))
   assert_true(rendered.contains("MoonGate usage for my MoonDesk"))
+  assert_true(rendered.contains("Open live MoonGate statistics"))
+  assert_false(rendered.contains("<iframe"))
   assert_true(
     rendered.contains(
       "https://example.test/moondesk/api/desktop/moongate-stats/view",

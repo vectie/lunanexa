@@ -4153,18 +4153,21 @@ fn desktop_ide_view(
               @html.p(
                 copy(
                   state.locale,
-                  "Open your workspace first. These are live counters from your personal MoonGate, not the company's shared-model total.",
-                  "请先打开工作区。这里显示个人 MoonGate 的实时统计，不是企业共享模型的总用量。",
+                  "Open the live counters from your personal MoonGate; these are not the company's shared-model total.",
+                  "打开个人 MoonGate 的实时统计；这里不是企业共享模型的总用量。",
                 ),
               ),
-              @html.iframe(
-                src=uri,
-                title=copy(state.locale, "MoonGate usage", "MoonGate 用量"),
-                width=720,
-                height=240,
-                loading="lazy",
-                sandbox="",
-                style=["width: 100%", "max-width: 720px", "border: 0"],
+              @html.a(
+                class="quiet-button external-action",
+                href=uri,
+                target=Blank,
+                rel="noopener noreferrer",
+                escape=true,
+                copy(
+                  state.locale,
+                  "Open live MoonGate statistics",
+                  "打开 MoonGate 实时统计",
+                ),
               ),
             ])
           _ => @html.nothing

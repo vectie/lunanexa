@@ -150,14 +150,15 @@ fn delivery_command(
               ),
             )
         }
-        // Overview and IaaS also display the company's model handoff. Load
-        // current model evidence on direct entry, without requiring a MaaS visit.
+        // Every route that shows the company model or selects it for a workspace
+        // must load its status on direct entry, without requiring a MaaS visit.
         let (external_model, external_error) : (
           @enterprise_ui.ExternalModelServiceView?,
           String?,
         ) = if model.portal.route == Models ||
           model.portal.route == Overview ||
-          model.portal.route == MachineAccess {
+          model.portal.route == MachineAccess ||
+          model.portal.route == DesktopIde {
           try
             (
               Some(
@@ -189,8 +190,8 @@ fn delivery_command(
                 Some(
                   portal_copy(
                     model.portal.locale,
-                    "Shared model status unavailable: \{error.to_string()}",
-                    "企业共享模型状态暂不可用：\{error.to_string()}",
+                    "The dedicated model is currently unavailable. You can still use the shared trial Qwen model.",
+                    "企业专属模型暂不可用；共享试用 Qwen 仍可使用。",
                   ),
                 ),
               )

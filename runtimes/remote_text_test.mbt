@@ -107,6 +107,39 @@ async test "approved text adapter invokes a digest-pinned upstream runtime" {
 }
 
 ///|
+async test "non-thinking text route passes chat template setting to upstream" {
+  let server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
+  @async.with_task_group <| group => {
+    group.spawn_bg(no_wait=true, allow_failure=true) <| () => {
+      server.run_forever() <| ((_request, body, connection) => {
+        let received = @json.parse(body.read_all().text())
+        assert_true(
+          received
+          .stringify()
+          .contains("\"chat_template_kwargs\":{\"enable_thinking\":false}"),
+        )
+        connection.send_response(200, "OK", extra_headers={
+          "Content-Type": "application/json",
+        })
+        connection.write_string("{\"output_text\":\"READY\"}")
+        connection.end_response()
+      })
+    }
+    let runtime = @runtimes.OpenAiTextRuntime::new(
+      "http://\{server.addr}/v1/responses",
+      "runtime-credential",
+      "runtime-v1",
+      "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      allow_http_loopback=true,
+    ).with_thinking_disabled()
+    let result = runtime.invoke(remote_request())
+    assert_true(result.output.stringify().contains("READY"))
+    server.close()
+  }
+}
+
+///|
 async test "text adapter rejects payloads that cannot map to Responses input" {
   let runtime = @runtimes.OpenAiTextRuntime::new(
     "http://127.0.0.1:1/v1/responses",

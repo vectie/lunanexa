@@ -41,6 +41,45 @@ fn proxy_config(controller : String, gateway : String) -> ModelProxyConfig {
 }
 
 ///|
+test "reconciliation belongs only to the gateway's product and user" {
+  let grant = proxy_config("http://controller", "http://gateway").grant()
+  assert_true(reconciliation_owns_grant(grant, "comfyui", "alice"))
+  assert_true(reconciliation_owns_grant(grant, "comfyui", ""))
+  assert_false(reconciliation_owns_grant(grant, "desktop-workspace", "alice"))
+  assert_false(reconciliation_owns_grant(grant, "comfyui", "bob"))
+}
+
+///|
+async test "gateway reconciliation never scales another product or user" {
+  let credentials = proxy_config("http://controller", "http://gateway")
+  let grant = credentials.grant()
+  let name = resource_name(@webide.workspace_id(grant))
+  let secret : Json = {
+    "data": {
+      "model-proxy.json": @base64.encode(
+        @utf8.encode(ToJson::to_json(credentials).stringify()),
+      ),
+    },
+  }
+  let page : Json = { "items": [{ "metadata": { "name": name } }] }
+  let host : WorkspaceHost = {
+    config: host_config(),
+    require_exclusive: false,
+    observation_token: "",
+    locks: {},
+    kubernetes_override: Some((verb, path, _) => {
+      if verb == Get && path.contains("/secrets/") {
+        (200, secret)
+      } else {
+        fail("a foreign gateway must not scale another workspace")
+      }
+    }),
+  }
+  host.reconcile_page(page, "desktop-workspace", "alice")
+  host.reconcile_page(page, "comfyui", "bob")
+}
+
+///|
 async test "public catalog API identity is separate from private model transport" {
   let server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
   defer server.close()

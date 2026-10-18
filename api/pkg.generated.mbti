@@ -117,6 +117,7 @@ pub struct ApiService {
   reconciliation_only : Bool
   runtime : @runtimes.OpenAiTextRuntime
   external_text_route : ExternalTextRoute?
+  shared_trial_text_route : ExternalTextRoute?
   shared_trial_offerings : Array[SharedTrialOffering]
   external_media_providers : Array[ExternalMediaProvider]
   client_model_policies : Map[String, Array[String]]
@@ -246,6 +247,7 @@ pub fn ApiService::with_role_tokens(Self, String, String) -> Self
 pub fn ApiService::with_runtime_concurrency(Self, Int) -> Self raise
 pub fn ApiService::with_services(@vectie/lunanexa/store.FileStore, @registry.FileRegistry, @node.FileEnrollmentService, @runtimes.OpenAiTextRuntime, String, String, String, String) -> Self
 pub fn ApiService::with_shared_trial_offerings(Self, Array[SharedTrialOffering]) -> Self raise
+pub fn ApiService::with_shared_trial_text_route(Self, String, String, String, String, String, String, String, String, String) -> Self raise
 pub fn ApiService::with_signature_verifier(Self, @registry.CosignVerifier) -> Self
 pub fn ApiService::with_technical_acceptance_authorization(Self, @offline.TechnicalAcceptanceAuthorization) -> Self raise Failure
 pub fn ApiService::with_technical_store(Self, @vectie/lunanexa/technical/store.TechnicalStore) -> Self

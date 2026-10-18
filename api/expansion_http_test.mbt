@@ -297,6 +297,8 @@ async test "scoped API key preserves WebIDE tools across the streaming chat brid
     assert_true(stream.contains("\"finish_reason\":\"tool_calls\""))
     assert_false(stream.contains("{\\\"text_delta\\\":\\\"hello\\\"}"))
     assert_true(stream.contains("lunanexa_receipt"))
+    assert_true(stream.contains("\"prompt_tokens\":2"))
+    assert_true(stream.contains("\"completion_tokens\":2"))
     assert_true(stream.contains("data: [DONE]"))
     assert_false(stream.contains("WorkloadStreamEvent"))
     api_server.close()

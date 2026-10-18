@@ -92,7 +92,7 @@ pub struct WorkspaceHost {
 pub async fn WorkspaceHost::authorize(Self, @webide.Grant) -> Bool
 pub fn WorkspaceHost::new(HostConfig, require_exclusive? : Bool, observation_token? : String) -> Self raise HostError
 pub async fn WorkspaceHost::provision(Self, String, @webide.Grant, placement? : ExclusivePlacement, container? : ExclusiveContainer) -> @webide.Backend
-pub async fn WorkspaceHost::reconcile(Self) -> Unit
+pub async fn WorkspaceHost::reconcile(Self, client_id? : String, subject_ref? : String) -> Unit
 pub async fn WorkspaceHost::redeem(Self, String, String) -> @webide.Grant
 pub async fn WorkspaceHost::stop(Self, String) -> Unit
 

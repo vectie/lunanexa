@@ -21,7 +21,7 @@ async fn file_digest(path : String) -> String {
 }
 
 ///|
-async fn file_size(path : String) -> Int {
+async fn file_size(path : String) -> Int32 {
   @string.parse_int(command("stat", ["-c", "%s", path]))
 }
 
@@ -92,16 +92,8 @@ async fn main {
     binary,
     layer + "/usr/local/bin/lunanexa-webide-gateway",
   ]).run()
-  for line in command("ldd", [binary]).split("\n") {
-    for part in line.trim().split(" ") {
-      if part.has_prefix("/") {
-        let path = part.to_owned()
-        let parent = path[:path.rev_find("/").unwrap()].to_owned()
-        @shell.Cmd("install", ["-d", layer + parent]).run()
-        @shell.Cmd("cp", ["-L", path, layer + path]).run()
-      }
-    }
-  }
+  // Keep the base image's matched libc and OpenSSL together. Overlaying the
+  // build host's libc can prevent the base image's libssl from loading.
   let archive = root + "/webide-gateway-layer.tar"
   @shell.Cmd("tar", [
     "--owner=0", "--group=0", "--mode=u+rwX,go+rX", "-C", layer, "-cf", archive,

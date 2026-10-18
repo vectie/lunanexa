@@ -4,7 +4,7 @@ pub(all) suberror RemoteRuntimeError {
   InvalidNodeRouting(String)
   RoutingTargetUnavailable(String)
   UnsupportedCapability
-  UpstreamRejected(status~ : Int, body~ : String)
+  UpstreamRejected(status~ : Int32, body~ : String)
   UpstreamFailed(code~ : String, retryable~ : Bool)
   InvalidUpstreamResponse(String)
 } derive(Debug, Eq)
@@ -20,8 +20,8 @@ pub(all) struct RuntimeInvocationResult {
   output : Json
   artifact_digest : String
   runtime_version : String
-  input_units : Int
-  output_units : Int
+  input_units : Int32
+  output_units : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -46,10 +46,11 @@ pub struct OpenAiTextRuntime {
   runtime_version : String
   image_digest : String
   artifact_digest : String
-  maximum_event_bytes : Int
-  maximum_response_bytes : Int
+  maximum_event_bytes : Int32
+  maximum_response_bytes : Int32
   lunaflux_streaming_responses : Bool
   served_model_name : String?
+  disable_thinking : Bool
 }
 
 ///|
@@ -72,8 +73,8 @@ pub extend NodeRuntimeEndpoint with FromJson::{from_json}
 
 ///|
 priv struct UpstreamUsage {
-  input_tokens : Int
-  output_tokens : Int
+  input_tokens : Int32
+  output_tokens : Int32
 } derive(FromJson)
 
 ///|
@@ -103,7 +104,7 @@ pub fn OpenAiTextRuntime::new(
   runtime_version : String,
   image_digest : String,
   artifact_digest : String,
-  allow_http_loopback? : Bool = false,
+  allow_http_loopback~ : Bool = false,
 ) -> OpenAiTextRuntime raise RemoteRuntimeError {
   if !valid_endpoint(endpoint, allow_http_loopback) {
     raise InsecureEndpoint(endpoint)
@@ -125,6 +126,7 @@ pub fn OpenAiTextRuntime::new(
     maximum_response_bytes: 16777216,
     lunaflux_streaming_responses: false,
     served_model_name: None,
+    disable_thinking: false,
   }
 }
 
@@ -139,6 +141,15 @@ pub fn OpenAiTextRuntime::with_served_model_name(
 }
 
 ///|
+/// The shared interactive Qwen route uses the model's non-thinking chat
+/// template so Code receives a final answer instead of raw reasoning text.
+pub fn OpenAiTextRuntime::with_thinking_disabled(
+  self : OpenAiTextRuntime,
+) -> OpenAiTextRuntime {
+  { ..self, disable_thinking: true, }
+}
+
+///|
 /// Selects LunaFlux's bounded Responses profile: streaming transport, string
 /// input, and a fail-closed request field set.
 pub fn OpenAiTextRuntime::with_lunaflux_streaming_responses(
@@ -150,8 +161,8 @@ pub fn OpenAiTextRuntime::with_lunaflux_streaming_responses(
 ///|
 pub fn OpenAiTextRuntime::with_response_budgets(
   self : OpenAiTextRuntime,
-  maximum_event_bytes : Int,
-  maximum_response_bytes : Int,
+  maximum_event_bytes : Int32,
+  maximum_response_bytes : Int32,
 ) -> OpenAiTextRuntime raise RemoteRuntimeError {
   if maximum_event_bytes < 65536 ||
     maximum_event_bytes > 1048576 ||
@@ -283,6 +294,7 @@ fn responses_upstream_request(
   stream : Bool,
   lunaflux_streaming_responses : Bool,
   served_model_name : String?,
+  disable_thinking : Bool,
 ) -> Json raise RemoteRuntimeError {
   let fields : Map[String, Json] = {
     "model": Json::string(served_model_name.unwrap_or(request.model_selector)),
@@ -298,6 +310,9 @@ fn responses_upstream_request(
         stream
       },
     ),
+  }
+  if disable_thinking {
+    fields["chat_template_kwargs"] = { "enable_thinking": false }
   }
   if lunaflux_streaming_responses {
     if request.payload is Object(payload) {
@@ -539,6 +554,7 @@ pub async fn OpenAiTextRuntime::invoke_at(
     false,
     self.lunaflux_streaming_responses,
     self.served_model_name,
+    self.disable_thinking,
   )
   let endpoint = self.endpoint_for(node_id)
   let (response, body) = @http.post(endpoint, upstream_request, headers~)
@@ -603,6 +619,7 @@ pub async fn OpenAiTextRuntime::invoke_stream_at(
     true,
     self.lunaflux_streaming_responses,
     self.served_model_name,
+    self.disable_thinking,
   )
   let endpoint = self.endpoint_for(node_id)
   let stream = @http.post_stream(endpoint, headers~)

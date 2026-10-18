@@ -4,7 +4,7 @@ async fn WorkspaceHost::kubernetes(
   verb : @http.RequestMethod,
   path : String,
   body : Json?,
-) -> (Int, Json) {
+) -> (Int32, Json) {
   match self.kubernetes_override {
     Some(transport) => return transport(verb, path, body)
     None => ()
@@ -235,7 +235,11 @@ pub async fn WorkspaceHost::provision(
 /// Restore lease enforcement after a gateway restart. Stop expired/revoked
 /// workspaces without deleting customer volumes. A fresh launch reapplies the
 /// desired replica and credential; retries never allocate another PVC.
-pub async fn WorkspaceHost::reconcile(self : WorkspaceHost) -> Unit {
+pub async fn WorkspaceHost::reconcile(
+  self : WorkspaceHost,
+  client_id~ : String = "",
+  subject_ref~ : String = "",
+) -> Unit {
   let (_, response) = self.kubernetes(
     Get,
     "/api/v1/namespaces/\{self.config.namespace_name}/secrets?labelSelector=app.kubernetes.io%2Fmanaged-by%3Dlunanexa-webide&limit=500",
@@ -243,7 +247,7 @@ pub async fn WorkspaceHost::reconcile(self : WorkspaceHost) -> Unit {
   )
   // Pagination is explicit: a bounded scan must not pretend it inspected more
   // workspaces than the API actually returned.
-  self.reconcile_page(response)
+  self.reconcile_page(response, client_id, subject_ref)
   let mut page = response
   while page is { "metadata": { "continue": String(cursor), .. }, .. } &&
         cursor != "" {
@@ -253,7 +257,7 @@ pub async fn WorkspaceHost::reconcile(self : WorkspaceHost) -> Unit {
       encode_query(cursor),
       None,
     )
-    self.reconcile_page(next)
+    self.reconcile_page(next, client_id, subject_ref)
     page = next
   }
 }
@@ -285,6 +289,8 @@ fn encode_query(value : String) -> String {
 async fn WorkspaceHost::reconcile_page(
   self : WorkspaceHost,
   page : Json,
+  client_id : String,
+  subject_ref : String,
 ) -> Unit {
   guard page is { "items": Array(items), .. } else {
     raise HostError::WorkspaceUnavailable
@@ -316,6 +322,15 @@ async fn WorkspaceHost::reconcile_page(
       Some(config.grant())
     } catch {
       _ => None
+    }
+    // Multiple product and personal gateways can share this namespace. A
+    // gateway must never revoke another gateway's workspace just because its
+    // own delivery policy cannot authorize that workspace's grant.
+    if client_id != "" {
+      guard grant is Some(value) &&
+        reconciliation_owns_grant(value, client_id, subject_ref) else {
+        continue
+      }
     }
     let active = try {
       match grant {
@@ -358,6 +373,16 @@ async fn WorkspaceHost::reconcile_page(
       }
     }
   }
+}
+
+///|
+fn reconciliation_owns_grant(
+  grant : @webide.Grant,
+  client_id : String,
+  subject_ref : String,
+) -> Bool {
+  grant.client_id == client_id &&
+  (subject_ref == "" || grant.subject_ref == subject_ref)
 }
 
 ///|

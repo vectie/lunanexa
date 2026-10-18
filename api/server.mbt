@@ -2984,6 +2984,16 @@ async fn send_compatible_stream_event(
       let receipt = event.response
         .map(response => response.audit_receipt)
         .unwrap_or("")
+      let usage : Json = match event.response {
+        Some(response) =>
+          {
+            "prompt_tokens": response.usage.input_units,
+            "completion_tokens": response.usage.output_units,
+            "total_tokens": response.usage.input_units +
+            response.usage.output_units,
+          }
+        None => Json::null()
+      }
       let completed_payload : Json = {
         "id": context.id,
         "object": "chat.completion.chunk",
@@ -3002,6 +3012,7 @@ async fn send_compatible_stream_event(
           },
         ],
         "lunanexa_receipt": receipt,
+        "usage": usage,
       }
       connection.write_string("data: \{completed_payload.stringify()}\n\n")
       connection.write_string("data: [DONE]\n\n")

@@ -246,6 +246,8 @@ pub fn ApiService::with_shared_trial_text_route(
     shared_trial_text_route: Some({
       ..route,
       credential,
+      // Qwen's default template streams internal planning as text; Code
+      // needs the final assistant answer from this shared trial route.
       runtime: @runtimes.OpenAiTextRuntime::new(
         "\{origin}/v1/responses",
         credential,
@@ -253,7 +255,9 @@ pub fn ApiService::with_shared_trial_text_route(
         image_digest,
         artifact_digest,
         allow_http_loopback=true,
-      ).with_served_model_name(served_model),
+      )
+      .with_served_model_name(served_model)
+      .with_thinking_disabled(),
     }),
   }
 }
