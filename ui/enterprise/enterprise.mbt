@@ -3561,7 +3561,9 @@ fn shared_trial_panel(
               )
             },
           ),
-          if slot.node_online && slot.service_responding {
+          if slot.kind == "Video" &&
+            slot.node_online &&
+            slot.service_responding {
             @html.a(
               class="primary-action external-action",
               href=slot.public_url,

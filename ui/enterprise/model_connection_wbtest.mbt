@@ -158,6 +158,23 @@ test "private model call example uses chat completion without secrets or infrast
   assert_true(trial_html.contains("model service not responding"))
   assert_true(trial_html.contains("https://example.test/comfyui/"))
   assert_false(trial_html.contains("https://example.test/user/"))
+  let text_responding = {
+    ..trial,
+    deliveries: {
+      ..trial.deliveries,
+      options: {
+        ..trial.deliveries.options,
+        shared_trials: [
+          trial.deliveries.options.shared_trials[0],
+          {
+            ..trial.deliveries.options.shared_trials[1],
+            service_responding: true,
+          },
+        ],
+      },
+    },
+  }
+  assert_false(render(text_responding).contains("https://example.test/user/"))
   assert_true(render({ ..trial, route: Models, }).contains("Shared trial machines"))
   let shared = api_key_first_call_example(state, {
     ..value,
