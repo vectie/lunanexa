@@ -100,7 +100,7 @@ async test "handoff lifecycle write failures roll back both authority maps and a
 ///|
 fn handoff_intent(
   now : Int64,
-  request_id? : String = "request-1",
+  request_id~ : String = "request-1",
 ) -> @handoff.ClientHandoffIssueIntent {
   {
     request_id,
@@ -332,4 +332,32 @@ async test "redeemed desktop credential enforces model, quota, and revocation" {
     @handoff.ClientHandoffError::Unauthorized => ()
     _ => fail("unexpected revocation error")
   }
+}
+
+///|
+async test "unlimited trial desktop credential still records use and survives restart" {
+  let directory = @fs.tmpdir(prefix="lunanexa-handoff-unlimited-")
+  defer @fs.rmdir(directory, recursive=true)
+  let path = directory + "/handoffs.json"
+  let now = @async.now()
+  let store = test_store(path)
+  let issued = store.issue(
+    { ..handoff_intent(now), maximum_requests: 0L, },
+    now,
+  )
+  let redeemed = store.redeem(issued.handoff_code, "desktop-client", now + 1L)
+  for index in 0..<4 {
+    ignore(
+      store.authorize(
+        redeemed.api_secret,
+        Inference,
+        model="model-a",
+        now + 2L + index.to_int64(),
+        true,
+      ),
+    )
+  }
+  let persisted = test_store(path).snapshot()
+  assert_eq(persisted.credentials[0].maximum_requests, 0L)
+  assert_eq(persisted.credentials[0].consumed_requests, 4L)
 }

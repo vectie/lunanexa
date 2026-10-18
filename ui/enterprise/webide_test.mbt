@@ -315,3 +315,80 @@ test "paid WebIDE selection pins project and model and never silently falls back
     is Some((None, _, _)),
   )
 }
+
+///|
+test "MoonDesk model picker separates trial Qwen from dedicated GLM and blocks offline launch" {
+  let demo = @enterprise.demo_state()
+  guard demo.desktop_client is Some(client) else {
+    fail("missing demo desktop")
+  }
+  let desktop = {
+    ..client,
+    client_id: "desktop-workspace",
+    display_name: "MoonDesk",
+    launch_uri: "https://example.test/moondesk/connect",
+    approved_model_aliases: ["text.qwen", "glm-5.3"],
+  }
+  let slot : @enterprise.SharedTrialSlotOption = {
+    node_id: "spark-trial-b",
+    node_label: "Spark trial 2",
+    model_alias: "text.qwen",
+    model_name: "Qwen3.8-27B",
+    kind: "Text",
+    node_online: true,
+    service_responding: false,
+    public_url: "",
+    shared: true,
+    request_limit: "none",
+  }
+  let state = {
+    ..demo,
+    route: DesktopIde,
+    desktop_client: Some(desktop),
+    desktop_clients: [desktop],
+    deliveries: {
+      ..demo.deliveries,
+      options: { ..demo.deliveries.options, shared_trials: [slot], },
+      external_model: Some({
+        model_alias: "glm-5.3",
+        state: "Stopped",
+        can_stop: false,
+        ready: false,
+        context_window_tokens: None,
+      }),
+    },
+  }
+  let rendered = @enterprise.render(state)
+  assert_true(rendered.contains("Trial · Qwen3.8-27B · unavailable"))
+  assert_true(rendered.contains("Dedicated · glm-5.3 · unavailable"))
+  assert_true(rendered.contains("MoonGate usage for my MoonDesk"))
+  assert_true(
+    rendered.contains(
+      "https://example.test/moondesk/api/desktop/moongate-stats/view",
+    ),
+  )
+  let qwen = state.update(SelectWebIdeOrder("model:text.qwen"))
+  assert_eq(qwen.webide_model_alias, Some("text.qwen"))
+  assert_eq(@enterprise.webide_launch_selection(qwen), None)
+  let glm = state.update(SelectWebIdeOrder("model:glm-5.3"))
+  assert_eq(glm.webide_model_alias, Some("glm-5.3"))
+  assert_eq(@enterprise.webide_launch_selection(glm), None)
+  assert_eq(
+    state.update(SelectWebIdeOrder("model:other")).webide_model_alias,
+    None,
+  )
+  let ready = {
+    ..state,
+    deliveries: {
+      ..state.deliveries,
+      options: {
+        ..state.deliveries.options,
+        shared_trials: [{ ..slot, service_responding: true, }],
+      },
+    },
+  }.update(SelectWebIdeOrder("model:text.qwen"))
+  assert_eq(
+    @enterprise.webide_launch_selection(ready),
+    Some((None, demo.project_id, ["text.qwen"])),
+  )
+}

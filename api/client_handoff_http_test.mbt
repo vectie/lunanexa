@@ -337,6 +337,37 @@ async fn check_workspace_handoff(private_cloud : Bool) -> Unit {
   assert_eq(personal_handoff.status, 201)
   assert_true(personal_handoff.body.contains("198.51.100.5:5002/connect"))
   assert_false(personal_handoff.body.contains("198.51.100.5:5003/connect"))
+  let trial_service = personal.with_shared_trial_offerings([
+    {
+      organization_id: "org-client",
+      tenant_ref: "tenant-client",
+      node_id: "spark-trial-text",
+      node_label: "Shared text Spark",
+      model_alias: "text.default",
+      model_name: "Shared Qwen",
+      kind: "Text",
+      health_url: "http://service.internal/health",
+      public_url: "https://example.test/user/",
+    },
+  ])
+  let trial_handoff = trial_service.handle(
+    Post,
+    "/v1/portal/self/client-handoffs",
+    enterprise_headers,
+    (
+      {
+        "request_id": "personal-shared-trial-client",
+        "client_id": "desktop-workspace",
+        "project_id": "project-client",
+        "allowed_models": ["text.default"],
+      } : Json).stringify(),
+  )
+  assert_eq(trial_handoff.status, 201)
+  assert_true(
+    handoffs.snapshot().credentials.any(key => {
+      key.maximum_requests == 0L && key.allowed_models == ["text.default"]
+    }),
+  )
   let catalog = service.handle(
     Get,
     "/v1/portal/self/clients",

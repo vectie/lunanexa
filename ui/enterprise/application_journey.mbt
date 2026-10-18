@@ -133,13 +133,21 @@ fn application_model_context(
             ),
           ),
         ]),
-        if !application_model_available(state, model_name) {
+        if !webide_model_source_known(state, model_name) {
           @html.p(
             attrs=@html.Attrs::build().role("alert"),
             copy(
               state.locale,
               "This model is no longer available. Choose another model.",
               "此模型已不可用，请重新选择。",
+            ),
+          )
+        } else if !webide_model_source_ready(state, model_name) {
+          @html.p(
+            copy(
+              state.locale,
+              "The selected model is registered but its service is not responding yet.",
+              "所选模型已登记，但模型服务尚未响应。",
             ),
           )
         } else {

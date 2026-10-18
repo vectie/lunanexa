@@ -35,16 +35,12 @@ fn ApiService::shared_trial_text_offering(
   model_alias : String,
 ) -> SharedTrialOffering? {
   self.shared_trial_offerings
-    .iter()
-    .find_first(offering => {
-      shared_trial_offering_visible(
-        offering,
-        organization_id,
-        tenant_ref,
-      ) &&
-      offering.kind == "Text" &&
-      offering.model_alias == model_alias
-    })
+  .iter()
+  .find_first(offering => {
+    shared_trial_offering_visible(offering, organization_id, tenant_ref) &&
+    offering.kind == "Text" &&
+    offering.model_alias == model_alias
+  })
 }
 
 ///|
@@ -75,18 +71,39 @@ async fn ApiService::shared_trial_authorized_key(
   authority : @access.ApiAuthorization,
   model_alias : String,
 ) -> SharedTrialOffering? {
-  guard self.access_store is Some(access) &&
-    access
-    .views_for_subject(authority.tenant_ref, authority.subject_ref)
-    .iter()
-    .find_first(key => key.key_id == authority.key_id)
-    is Some(key) &&
-    key.maximum_requests == 0L &&
-    self.shared_trial_text_key_scope(
-      authority.organization_id,
-      authority.tenant_ref,
-      key.allowed_models,
-    ) else {
+  let access_key = match self.access_store {
+    Some(access) =>
+      access
+      .views_for_subject(authority.tenant_ref, authority.subject_ref)
+      .iter()
+      .find_first(key => key.key_id == authority.key_id)
+      .map_or(false, key => {
+        key.maximum_requests == 0L &&
+        self.shared_trial_text_key_scope(
+          authority.organization_id,
+          authority.tenant_ref,
+          key.allowed_models,
+        )
+      })
+    None => false
+  }
+  let handoff_key = match self.client_handoff_store {
+    Some(handoffs) =>
+      handoffs.snapshot().credentials.any(key => {
+        key.key_id == authority.key_id &&
+        key.tenant_ref == authority.tenant_ref &&
+        key.subject_ref == authority.subject_ref &&
+        key.organization_id == Some(authority.organization_id) &&
+        key.maximum_requests == 0L &&
+        self.shared_trial_text_key_scope(
+          authority.organization_id,
+          authority.tenant_ref,
+          key.allowed_models,
+        )
+      })
+    None => false
+  }
+  if !access_key && !handoff_key {
     return None
   }
   self.shared_trial_text_offering(
@@ -102,7 +119,9 @@ async fn ApiService::shared_trial_node_online(
   node_id : String,
   now : Int64,
 ) -> Bool {
-  self.store.heartbeats().any(heartbeat => {
+  self.store
+  .heartbeats()
+  .any(heartbeat => {
     heartbeat.node_id == node_id &&
     heartbeat.state == Active &&
     heartbeat.timestamp_unix_ms <= now &&
@@ -129,8 +148,10 @@ pub fn ApiService::with_shared_trial_offerings(
       offering.model_alias == "" ||
       offering.model_name == "" ||
       !["Video", "Text"].contains(offering.kind) ||
-      (offering.kind == "Text" &&
-      !@contracts.valid_identifier(offering.model_alias)) ||
+      (
+        offering.kind == "Text" &&
+        !@contracts.valid_identifier(offering.model_alias)
+      ) ||
       !offering.health_url.has_prefix("http://") ||
       !offering.public_url.has_prefix("https://") ||
       seen.contains(identity) ||

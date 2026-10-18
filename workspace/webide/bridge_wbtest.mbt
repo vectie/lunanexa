@@ -145,6 +145,18 @@ test "workspace identities include every authority dimension without delimiter c
 
 ///|
 test "personal desktop routes never turn another client into an open proxy" {
+  assert_eq(
+    proxied_response_headers(
+      "desktop-workspace", "/api/desktop/moongate-stats/view", "text/html",
+    ).get("x-frame-options"),
+    Some("SAMEORIGIN"),
+  )
+  assert_eq(
+    proxied_response_headers("desktop-workspace", "/", "text/html").get(
+      "x-frame-options",
+    ),
+    Some("DENY"),
+  )
   assert_true(
     allowed_path(Post, "/api/mooncode/chat", client_id="desktop-workspace"),
   )

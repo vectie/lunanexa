@@ -1,5 +1,5 @@
 ///|
-fn valid_text(value : String, maximum : Int) -> Bool {
+fn valid_text(value : String, maximum : Int32) -> Bool {
   value.length() > 0 &&
   value.length() <= maximum &&
   value.all(character => {
@@ -41,7 +41,7 @@ fn safe_client_url(
   value : String,
   allow_custom_scheme : Bool,
   allow_query : Bool,
-  allowed_http_origins? : Array[String] = [],
+  allowed_http_origins~ : Array[String] = [],
 ) -> Bool {
   if value == "" ||
     value.length() > 2048 ||
@@ -85,8 +85,8 @@ fn safe_client_url(
 ///|
 pub fn valid_client_launch_config(
   config : ClientLaunchConfig,
-  allowed_http_launch_origins? : Array[String] = [],
-  allowed_http_api_origins? : Array[String] = [],
+  allowed_http_launch_origins~ : Array[String] = [],
+  allowed_http_api_origins~ : Array[String] = [],
 ) -> Bool {
   @contracts.valid_identifier(config.client_id) &&
   valid_text(config.display_name, 128) &&
@@ -113,8 +113,8 @@ pub fn valid_client_launch_config(
 /// their own launch or provider URLs when requesting a handoff.
 pub fn valid_client_launch_catalog(
   configs : Array[ClientLaunchConfig],
-  allowed_http_launch_origins? : Array[String] = [],
-  allowed_http_api_origins? : Array[String] = [],
+  allowed_http_launch_origins~ : Array[String] = [],
+  allowed_http_api_origins~ : Array[String] = [],
 ) -> Bool {
   configs.length() > 0 &&
   configs.length() <= 32 &&
@@ -134,7 +134,7 @@ pub fn valid_client_launch_catalog(
 pub fn validate_issue_intent(
   intent : ClientHandoffIssueIntent,
   now_unix_ms : Int64,
-  allow_model_free? : Bool = false,
+  allow_model_free~ : Bool = false,
 ) -> Unit raise ClientHandoffError {
   if !@contracts.valid_identifier(intent.request_id) ||
     !@contracts.valid_identifier(intent.client_id) ||
@@ -151,7 +151,7 @@ pub fn validate_issue_intent(
     intent.handoff_expires_unix_ms - now_unix_ms > 300000L ||
     intent.credential_expires_unix_ms <= intent.handoff_expires_unix_ms ||
     intent.credential_expires_unix_ms - now_unix_ms > 31536000000L ||
-    intent.maximum_requests <= 0L ||
+    intent.maximum_requests < 0L ||
     intent.maximum_requests > 1000000000L {
     raise InvalidInput("invalid client handoff intent")
   }

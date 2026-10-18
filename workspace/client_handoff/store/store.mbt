@@ -153,9 +153,12 @@ fn ClientHandoffStore::restore(
       !@contracts.valid_sha256_digest(credential.secret_sha256) ||
       credential.issued_unix_ms <= 0L ||
       credential.expires_unix_ms <= credential.issued_unix_ms ||
-      credential.maximum_requests <= 0L ||
+      credential.maximum_requests < 0L ||
       credential.consumed_requests < 0L ||
-      credential.consumed_requests > credential.maximum_requests ||
+      (
+        credential.maximum_requests > 0L &&
+        credential.consumed_requests > credential.maximum_requests
+      ) ||
       self.credentials.contains(credential.key_id) ||
       !self.handoffs.contains(credential.handoff_id) {
       raise InvalidSnapshot("invalid client credential")
@@ -327,7 +330,7 @@ pub async fn ClientHandoffStore::issue(
   intent : @handoff.ClientHandoffIssueIntent,
   now_unix_ms : Int64,
   delivery_id? : String,
-  allow_model_free? : Bool = false,
+  allow_model_free~ : Bool = false,
 ) -> @handoff.IssuedClientHandoff {
   if allow_model_free && delivery_id is None {
     raise @handoff.ClientHandoffError::InvalidInput(
@@ -539,7 +542,9 @@ pub async fn ClientHandoffStore::authorize(
     model.map(value => !current.allowed_models.contains(value)).unwrap_or(false) {
     raise @handoff.ClientHandoffError::Unauthorized
   }
-  if consume && current.consumed_requests >= current.maximum_requests {
+  if consume &&
+    current.maximum_requests > 0L &&
+    current.consumed_requests >= current.maximum_requests {
     raise @handoff.ClientHandoffError::QuotaExceeded
   }
   if consume {

@@ -115,7 +115,7 @@ async fn ApiService::configured_model_allowed(
 async fn ApiService::serving_client_model_aliases(
   self : ApiService,
   approved : Array[String],
-  tenant_ref? : String = "",
+  tenant_ref~ : String = "",
 ) -> Array[String] {
   let external_media : Array[String] = []
   for provider in self.external_media_providers {
@@ -716,7 +716,17 @@ async fn ApiService::handle_client_handoff(
             allowed_models: intent.allowed_models,
             handoff_expires_unix_ms: handoff_expiry,
             credential_expires_unix_ms: credential_expiry,
-            maximum_requests: config.maximum_requests,
+            maximum_requests: if paid_order is None &&
+              delivery is None &&
+              self.shared_trial_text_key_scope(
+                portal_view.membership.organization_id,
+                portal_view.membership.tenant_ref,
+                intent.allowed_models,
+              ) {
+              0L
+            } else {
+              config.maximum_requests
+            },
           },
           now,
           delivery_id?=intent.delivery_id,

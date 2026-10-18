@@ -63,32 +63,24 @@ async test "shared trial configuration rejects duplicate or non-HTTPS public rou
     { ..offering, kind: "Text", model_alias: "text.qwen", },
   ])
   assert_true(
-    trial.shared_trial_text_key_scope(
-      "org-energy",
-      "tenant-energy",
-      ["text.qwen"],
-    ),
+    trial.shared_trial_text_key_scope("org-energy", "tenant-energy", [
+      "text.qwen",
+    ]),
   )
   assert_false(
-    trial.shared_trial_text_key_scope(
-      "org-other",
-      "tenant-energy",
-      ["text.qwen"],
-    ),
+    trial.shared_trial_text_key_scope("org-other", "tenant-energy", [
+      "text.qwen",
+    ]),
   )
   assert_false(
-    trial.shared_trial_text_key_scope(
-      "org-energy",
-      "tenant-energy",
-      ["text.other"],
-    ),
+    trial.shared_trial_text_key_scope("org-energy", "tenant-energy", [
+      "text.other",
+    ]),
   )
   assert_false(
-    service.with_shared_trial_offerings([offering]).shared_trial_text_key_scope(
-      "org-energy",
-      "tenant-energy",
-      ["video.h3"],
-    ),
+    service
+    .with_shared_trial_offerings([offering])
+    .shared_trial_text_key_scope("org-energy", "tenant-energy", ["video.h3"]),
   )
   assert_true(
     try {
@@ -100,15 +92,17 @@ async test "shared trial configuration rejects duplicate or non-HTTPS public rou
   )
   assert_true(
     try {
-      ignore(service.with_shared_trial_offerings([
-        { ..offering, kind: "Text", model_alias: "text.qwen", },
-        {
-          ..offering,
-          node_id: "trial-node-b",
-          kind: "Text",
-          model_alias: "text.qwen",
-        },
-      ]))
+      ignore(
+        service.with_shared_trial_offerings([
+          { ..offering, kind: "Text", model_alias: "text.qwen", },
+          {
+            ..offering,
+            node_id: "trial-node-b",
+            kind: "Text",
+            model_alias: "text.qwen",
+          },
+        ]),
+      )
       false
     } catch {
       _ => true
@@ -145,25 +139,27 @@ async test "shared trial billing authority requires an explicit unlimited compan
     "shared-trial-test-issuer-more-than-thirty-two-bytes",
   )
   let service = ApiService::new(
-    @store.FileStore::open(root + "/state.json"),
-    runtime,
-    "operator",
-    "inference",
-    "node",
-    "test",
-  )
+      @store.FileStore::open(root + "/state.json"),
+      runtime,
+      "operator",
+      "inference",
+      "node",
+      "test",
+    )
     .with_access_store(access)
-    .with_shared_trial_offerings([{
-      organization_id: "org-energy",
-      tenant_ref: "tenant-energy",
-      node_id: "trial-node-text",
-      node_label: "Shared Spark Text",
-      model_alias: "text.qwen",
-      model_name: "Qwen 27B",
-      kind: "Text",
-      health_url: "http://service.internal/health",
-      public_url: "https://example.test/user/",
-    }])
+    .with_shared_trial_offerings([
+      {
+        organization_id: "org-energy",
+        tenant_ref: "tenant-energy",
+        node_id: "trial-node-text",
+        node_label: "Shared Spark Text",
+        model_alias: "text.qwen",
+        model_name: "Qwen 27B",
+        kind: "Text",
+        health_url: "http://service.internal/health",
+        public_url: "https://example.test/user/",
+      },
+    ])
   let key = access.issue(
     {
       key_id: "shared-key",
@@ -186,12 +182,59 @@ async test "shared trial billing authority requires an explicit unlimited compan
     organization_id: "org-energy",
     project_id: "project-a",
   }
-  assert_true(service.shared_trial_authorized_key(authority, "text.qwen") is Some(_))
-  assert_true(service.shared_trial_authorized_key(authority, "text.other") is None)
+  assert_true(
+    service.shared_trial_authorized_key(authority, "text.qwen") is Some(_),
+  )
+  assert_true(
+    service.shared_trial_authorized_key(authority, "text.other") is None,
+  )
   assert_true(
     service.shared_trial_authorized_key(
       { ..authority, organization_id: "org-other", },
       "text.qwen",
-    ) is None,
+    )
+    is None,
+  )
+  let handoffs = @client_handoff_store.ClientHandoffStore::open(
+    root + "/handoffs.json",
+    "shared-trial-handoff-secret-more-than-thirty-two-bytes",
+  )
+  let issued = handoffs.issue(
+    {
+      request_id: "trial-handoff-request",
+      client_id: "desktop-client",
+      tenant_ref: "tenant-energy",
+      subject_ref: "subject-a",
+      organization_id: "org-energy",
+      project_id: "project-a",
+      display_name: "MoonDesk trial",
+      allowed_models: ["text.qwen"],
+      handoff_expires_unix_ms: 200000L,
+      credential_expires_unix_ms: 300000L,
+      maximum_requests: 0L,
+    },
+    100000L,
+  )
+  ignore(issued)
+  let handoff_key = handoffs.snapshot().credentials[0]
+  let with_handoff = service.with_client_handoff_store(handoffs, {
+    client_id: "desktop-client",
+    display_name: "MoonDesk trial",
+    launch_uri: "https://example.test/moondesk/connect",
+    public_api_base_url: "https://example.test/user/v1",
+    handoff_lifetime_ms: 120000L,
+    maximum_requests: 100L,
+  })
+  let handoff_authority = { ..authority, key_id: handoff_key.key_id, }
+  assert_true(
+    with_handoff.shared_trial_authorized_key(handoff_authority, "text.qwen")
+    is Some(_),
+  )
+  assert_true(
+    with_handoff.shared_trial_authorized_key(
+      { ..handoff_authority, organization_id: "org-other", },
+      "text.qwen",
+    )
+    is None,
   )
 }

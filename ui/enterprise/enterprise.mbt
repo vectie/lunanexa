@@ -18,7 +18,7 @@ pub(all) enum EnterpriseRoute {
 pub(all) struct EnterpriseCostCenterRow {
   cost_center_id : String
   display_name : String
-  project_count : Int
+  project_count : Int32
   provisional_spend : String
   budget_posture : String
 } derive(Debug, Eq)
@@ -30,11 +30,11 @@ pub(all) struct PaymentCheckoutQuote {
   period_id : String
   expected_amount_minor : Int64
   currency : String
-  money_scale : Int
+  money_scale : Int32
   display_amount : String
   idempotency_key : String
   entitlement_transaction_ref_sha256 : String
-  ledger_entry_count : Int
+  ledger_entry_count : Int32
   ledger_revision_unix_ms : Int64
 } derive(Debug, Eq)
 
@@ -44,7 +44,7 @@ pub(all) struct EnterpriseDesktopClient {
   display_name : String
   launch_uri : String
   handoff_lifetime_ms : Int64
-  connected_handoffs : Int
+  connected_handoffs : Int32
   contract_ready : Bool
   workspace_ready : Bool
   models_ready : Bool
@@ -73,7 +73,7 @@ pub(all) struct ApiKeyIssueDraft {
   model_list_scope : Bool
   inference_scope : Bool
   allowed_models : String
-  lifetime_days : Int
+  lifetime_days : Int32
   maximum_requests : Int64
 } derive(Debug, Eq)
 
@@ -85,7 +85,7 @@ pub(all) struct OneTimeApiKeySecret {
   allowed_models : Array[String]
   api_base_url : String?
   tenant_ref : String
-  memory_ceiling_mib : Int?
+  memory_ceiling_mib : Int32?
 } derive(Debug, Eq)
 
 ///|
@@ -249,7 +249,7 @@ pub(all) enum EnterpriseMessage {
   ToggleApiKeyModelListScope
   ToggleApiKeyInferenceScope
   ApiKeyAllowedModelsChanged(String)
-  ApiKeyLifetimeChanged(Int)
+  ApiKeyLifetimeChanged(Int32)
   ApiKeyMaximumRequestsChanged(Int64)
   SubmitApiKeyIssue
   MemberInviteEmailChanged(String)
@@ -1072,6 +1072,20 @@ pub fn EnterpriseState::update(
     SelectWebIdeOrder(order_id) => {
       if self.loading {
         return self
+      }
+      if order_id.has_prefix("model:") {
+        let model_name = order_id["model:".length():].to_owned()
+        if !webide_model_source_known(self, model_name) {
+          return self
+        }
+        return {
+          ..self,
+          webide_order_id: None,
+          webide_model_alias: Some(model_name),
+          desktop_connect_phase: NotStarted,
+          success_message: None,
+          error_message: None,
+        }
       }
       {
         ..self,
@@ -2563,16 +2577,18 @@ fn account_access_view(
     value.organization.state == Active
   })
   let personal_trial_available = match state.trial {
-      Some(trial) if trial.organization_id == membership.organization_id &&
-        trial.revoked_unix_ms is None =>
-        trial.expires_unix_ms > state.machine_access.now_unix_ms &&
-        trial.api_key_id is None
-      _ => true
-    }
+    Some(trial) if trial.organization_id == membership.organization_id &&
+      trial.revoked_unix_ms is None =>
+      trial.expires_unix_ms > state.machine_access.now_unix_ms &&
+      trial.api_key_id is None
+    _ => true
+  }
   let can_issue = membership.active &&
     @portal.role_allows(membership.roles, Developer) &&
-    (state.deliveries.options.shared_trials.any(slot => slot.kind == "Text") ||
-    personal_trial_available)
+    (
+      state.deliveries.options.shared_trials.any(slot => slot.kind == "Text") ||
+      personal_trial_available
+    )
   let browser_session_rows = [
     for browser_session in state.browser_sessions if browser_session.revoked_unix_ms
     is None &&
@@ -3534,60 +3550,71 @@ fn shared_trial_panel(
     return @html.nothing
   }
   @html.section(class="welcome-panel", [
-    @html.div([
-      @html.h2(copy(state.locale, "Shared trial machines", "共享试用机器")),
-      @html.p(copy(
-        state.locale,
-        "Shared capacity is not an exclusive lease. The trial has no request-count limit; service availability is shown per machine.",
-        "共享算力不是独占租赁。试用不设请求次数上限；每台机器的服务状态单独显示。",
-      )),
-      ..state.deliveries.options.shared_trials.map(slot => {
-        @html.div(class="record-card", [
-          @html.h3("\{slot.model_name} · \{slot.node_label}"),
-          @html.p(
-            if !slot.node_online {
-              copy(state.locale, "Machine offline", "机器未在线")
-            } else if !slot.service_responding {
-              copy(
-                state.locale,
-                "Machine online · model service not responding",
-                "机器在线 · 模型服务尚未响应",
+    @html.div(
+      [
+        @html.h2(
+          copy(state.locale, "Shared trial machines", "共享试用机器"),
+        ),
+        @html.p(
+          copy(
+            state.locale,
+            "Shared capacity is not an exclusive lease. The trial has no request-count limit; service availability is shown per machine.",
+            "共享算力不是独占租赁。试用不设请求次数上限；每台机器的服务状态单独显示。",
+          ),
+        ),
+        ..state.deliveries.options.shared_trials.map(slot => {
+          @html.div(class="record-card", [
+            @html.h3("\{slot.model_name} · \{slot.node_label}"),
+            @html.p(
+              if !slot.node_online {
+                copy(state.locale, "Machine offline", "机器未在线")
+              } else if !slot.service_responding {
+                copy(
+                  state.locale,
+                  "Machine online · model service not responding",
+                  "机器在线 · 模型服务尚未响应",
+                )
+              } else {
+                copy(
+                  state.locale,
+                  "Service health check passed · inference not yet verified",
+                  "服务健康检查通过 · 推理效果仍待实测",
+                )
+              },
+            ),
+            if slot.kind == "Video" &&
+              slot.node_online &&
+              slot.service_responding {
+              @html.a(
+                class="primary-action external-action",
+                href=slot.public_url,
+                target=Blank,
+                rel="noopener noreferrer",
+                escape=true,
+                copy(state.locale, "Open trial service", "打开试用服务"),
               )
             } else {
-              copy(
-                state.locale,
-                "Service health check passed · inference not yet verified",
-                "服务健康检查通过 · 推理效果仍待实测",
-              )
+              @html.nothing
             },
-          ),
-          if slot.kind == "Video" &&
-            slot.node_online &&
-            slot.service_responding {
-            @html.a(
-              class="primary-action external-action",
-              href=slot.public_url,
-              target=Blank,
-              rel="noopener noreferrer",
-              escape=true,
-              copy(state.locale, "Open trial service", "打开试用服务"),
-            )
-          } else {
-            @html.nothing
-          },
-          if slot.kind == "Text" {
-            @html.button(
-              type_="button",
-              class="quiet-button",
-              on_click=command(emit, OpenSharedTrialApiKey(slot.model_alias)),
-              copy(state.locale, "Create trial API key", "创建试用 API 密钥"),
-            )
-          } else {
-            @html.nothing
-          },
-        ])
-      }),
-    ]),
+            if slot.kind == "Text" {
+              @html.button(
+                type_="button",
+                class="quiet-button",
+                disabled=!slot.node_online || !slot.service_responding,
+                on_click=command(emit, OpenSharedTrialApiKey(slot.model_alias)),
+                copy(
+                  state.locale,
+                  "Create trial API key",
+                  "创建试用 API 密钥",
+                ),
+              )
+            } else {
+              @html.nothing
+            },
+          ])
+        }),
+      ],
+    ),
   ])
 }
 
@@ -3649,6 +3676,39 @@ fn models_view(
 }
 
 ///|
+fn webide_model_source_known(
+  state : EnterpriseState,
+  model_name : String,
+) -> Bool {
+  state.deliveries.options.shared_trials.any(slot => {
+    slot.kind == "Text" && slot.model_alias == model_name
+  }) ||
+  state.deliveries.external_model.map_or(false, service => {
+    service.model_alias == model_name
+  }) ||
+  state.model_catalog.any(model => model.alias_name == Some(model_name))
+}
+
+///|
+fn webide_model_source_ready(
+  state : EnterpriseState,
+  model_name : String,
+) -> Bool {
+  match
+    state.deliveries.options.shared_trials
+    .iter()
+    .find_first(slot => slot.kind == "Text" && slot.model_alias == model_name) {
+    Some(slot) => slot.node_online && slot.service_responding
+    None =>
+      match state.deliveries.external_model {
+        Some(service) if service.model_alias == model_name => service.ready
+        _ =>
+          state.model_catalog.any(model => model.alias_name == Some(model_name))
+      }
+  }
+}
+
+///|
 /// Resolves the user's explicit model source without silently falling back
 /// from a missing, terminated or stale dedicated order to shared inference.
 pub fn webide_launch_selection(
@@ -3675,7 +3735,7 @@ pub fn webide_launch_selection(
       if state.project_id.is_empty() {
         None
       } else if state.webide_model_alias is Some(model_name) {
-        if application_model_available(state, model_name) &&
+        if webide_model_source_ready(state, model_name) &&
           client.approved_model_aliases.contains(model_name) {
           Some((None, state.project_id, [model_name]))
         } else {
@@ -3715,6 +3775,18 @@ pub fn personal_webide_control_uri(client : EnterpriseDesktopClient) -> String? 
   Some(
     client.launch_uri[0:client.launch_uri.length() - "/connect".length()].to_owned() +
     "/workspace-control",
+  )
+}
+
+///|
+fn personal_moongate_stats_uri(client : EnterpriseDesktopClient) -> String? {
+  if client.client_id != "desktop-workspace" ||
+    !client.launch_uri.has_suffix("/moondesk/connect") {
+    return None
+  }
+  Some(
+    client.launch_uri[0:client.launch_uri.length() - "/connect".length()].to_owned() +
+    "/api/desktop/moongate-stats/view",
   )
 }
 
@@ -3874,8 +3946,8 @@ fn desktop_ide_view(
     webide_launch_selection(state) is None {
     copy(
       state.locale,
-      "Choose an application that supports the selected model.",
-      "请选择支持所选模型的应用。",
+      "The selected model is not serving or is not authorized for this workspace. It will not start until ready.",
+      "所选模型尚未提供服务，或此工作区未获授权；就绪前不会启动。",
     )
   } else {
     enterprise_copy(state.locale, YourAccessIsReadyOpenThe)
@@ -3890,11 +3962,7 @@ fn desktop_ide_view(
     @html.details(class="application-settings", open=!available, [
       @html.summary(copy(state.locale, "Workspace settings", "工作区设置")),
       @html.div(class="application-settings-content", [
-        if !is_comfyui &&
-          (
-            state.webide_order_id is Some(_) ||
-            webide_orders(state).any(order => order.kind == DedicatedMaaS)
-          ) {
+        if !is_comfyui {
           @html.section(class="workflow-panel", [
             @html.label(
               for_="webide-model-source",
@@ -3909,16 +3977,51 @@ fn desktop_ide_view(
                   value="",
                   selected=state.webide_order_id is None &&
                     state.webide_model_alias is None,
-                  enterprise_copy(state.locale, AuthorizedSharedModels),
+                  copy(
+                    state.locale,
+                    "All authorized models",
+                    "全部已授权模型",
+                  ),
                 ),
-                ..match state.webide_model_alias {
-                  Some(model_name) =>
+                ..[
+                  for slot in state.deliveries.options.shared_trials if slot.kind ==
+                  "Text" => {
+                    @html.option(
+                      value="model:" + slot.model_alias,
+                      selected=state.webide_model_alias ==
+                        Some(slot.model_alias),
+                      copy(state.locale, "Trial · ", "试用 · ") +
+                      slot.model_name +
+                      (if slot.node_online && slot.service_responding {
+                        copy(state.locale, " · ready", " · 可用")
+                      } else {
+                        copy(
+                          state.locale,
+                          " · unavailable",
+                          " · 暂不可用",
+                        )
+                      }),
+                    )
+                  }
+                ],
+                ..match state.deliveries.external_model {
+                  Some(service) =>
                     [
                       @html.option(
-                        value="model:" + model_name,
-                        selected=true,
-                        disabled=true,
-                        model_name,
+                        value="model:" + service.model_alias,
+                        selected=state.webide_model_alias ==
+                          Some(service.model_alias),
+                        copy(state.locale, "Dedicated · ", "企业专属 · ") +
+                        service.model_alias +
+                        (if service.ready {
+                          copy(state.locale, " · ready", " · 可用")
+                        } else {
+                          copy(
+                            state.locale,
+                            " · unavailable",
+                            " · 暂不可用",
+                          )
+                        }),
                       ),
                     ]
                   None => []
@@ -4036,6 +4139,35 @@ fn desktop_ide_view(
           desktop_connect_progress_view(state, emit)
         } else {
           @html.nothing
+        },
+        match state.desktop_client {
+          Some(client) if personal_moongate_stats_uri(client) is Some(uri) =>
+            @html.details(class="workflow-panel", [
+              @html.summary(
+                copy(
+                  state.locale,
+                  "MoonGate usage for my MoonDesk",
+                  "我的 MoonDesk · MoonGate 用量",
+                ),
+              ),
+              @html.p(
+                copy(
+                  state.locale,
+                  "Open your workspace first. These are live counters from your personal MoonGate, not the company's shared-model total.",
+                  "请先打开工作区。这里显示个人 MoonGate 的实时统计，不是企业共享模型的总用量。",
+                ),
+              ),
+              @html.iframe(
+                src=uri,
+                title=copy(state.locale, "MoonGate usage", "MoonGate 用量"),
+                width=720,
+                height=240,
+                loading="lazy",
+                sandbox="",
+                style=["width: 100%", "max-width: 720px", "border: 0"],
+              ),
+            ])
+          _ => @html.nothing
         },
         if is_comfyui ||
           state.deliveries.company_workspace.map_or(false, value => {

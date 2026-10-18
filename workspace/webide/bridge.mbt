@@ -9,10 +9,10 @@ fn random_token() -> String raise BridgeError {
 
 ///|
 #borrow(output)
-extern "c" fn fill_secure_random(output : Bytes) -> Int = "lunanexa_webide_secure_random"
+extern "c" fn fill_secure_random(output : Bytes) -> Int32 = "lunanexa_webide_secure_random"
 
 ///|
-async fn read_bounded(reader : &@io.Reader, limit : Int) -> Bytes {
+async fn read_bounded(reader : &@io.Reader, limit : Int32) -> Bytes {
   let output = Buffer()
   let mut size = 0
   while reader.read_some(max_len=8192) is Some(bytes) {
@@ -38,9 +38,24 @@ fn response_headers(content_type : String) -> @http.Headers {
 }
 
 ///|
+fn proxied_response_headers(
+  client_id : String,
+  path : String,
+  content_type : String,
+) -> @http.Headers {
+  let headers = response_headers(content_type)
+  // Only the aggregate, read-only counter view may appear in the portal.
+  if client_id == "desktop-workspace" &&
+    path == "/api/desktop/moongate-stats/view" {
+    headers["x-frame-options"] = "SAMEORIGIN"
+  }
+  headers
+}
+
+///|
 async fn reply(
   connection : @http.ServerConnection,
-  code : Int,
+  code : Int32,
   message : String,
 ) -> Unit {
   connection.send_response(
@@ -406,7 +421,9 @@ async fn Bridge::proxy_http(
   if response.code >= 300 && response.code < 400 && response.code != 304 {
     raise BridgeError::UpstreamUnavailable
   }
-  let outgoing = response_headers(
+  let outgoing = proxied_response_headers(
+    self.config.client_id,
+    request.path,
     header(response.headers, "content-type").unwrap_or(
       "application/octet-stream",
     ),
@@ -433,7 +450,7 @@ async fn Bridge::proxy_http(
 async fn relay_socket(
   source : @websocket.Conn,
   target : @websocket.Conn,
-  limit : Int,
+  limit : Int32,
 ) -> Unit {
   while true {
     let message = source.recv()
