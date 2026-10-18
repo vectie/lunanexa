@@ -83,3 +83,24 @@ passed with this live gate enabled. The two observed rejected chunked requests
 are retained in the negative evidence; they were not model execution failures.
 The superseded v3 controller build was stopped before deployment after this
 finding. Its unit/route tests passed, but its executable is not a release candidate.
+
+Revision `626bd29` repeats the live adapter gate successfully after deterministic
+error cleanup was finalized. A separate probe inside the existing controller
+pod's network namespace also reached the new `glm53-lunaflux` Kubernetes Service
+and obtained the correct answer and usage from TP2. This verifies the actual
+cluster network policy and Service path, but not customer authorization.
+
+The staged `lunanexa-glm-native-route` ConfigMap names the existing approved
+`libertaidai-glm-5.3-flash-nvfp4@modelscope-master` record and the native source
+revision, with honest TP2/100 GiB/16 GiB/2048-token allocation metadata. It is
+not yet selected by the production controller. The existing public alias still
+targets the old EXL3 record and remains offline. The pending controller patch
+and alias promotion are saved separately; neither has been applied.
+
+Additional gates: the contract fixture test passes. The repository isolation
+heuristic reports the pre-existing `example.test/moondesk/connect` URI in
+`api/shared_trial_offerings_wbtest.mbt`; that unchanged test is not an import.
+No exclusions or warning waivers were added. The corrected Linux controller
+build is owned by `lunanexa-glm-cutover-build-20261018-v4.service`; until its
+completion marker and authenticated public tests are observed, do not mark
+this cutover complete.
