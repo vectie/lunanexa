@@ -62,6 +62,39 @@ async test "shared trial configuration rejects duplicate or non-HTTPS public rou
   let trial = service.with_shared_trial_offerings([
     { ..offering, kind: "Text", model_alias: "text.qwen", },
   ])
+  let routed = trial.with_shared_trial_text_route(
+    "text.qwen",
+    "tenant-energy",
+    "trial-node-a",
+    "http://127.0.0.1:19092",
+    "served-qwen",
+    "vllm-v1",
+    "sha256:" + "b".repeat(64),
+    "sha256:" + "a".repeat(64),
+    "trial-credential",
+  )
+  assert_true(routed.shared_trial_text_route is Some(_))
+  assert_true(routed.external_text_route is None)
+  assert_true(
+    try {
+      ignore(
+        trial.with_shared_trial_text_route(
+          "text.qwen",
+          "tenant-other",
+          "trial-node-a",
+          "http://127.0.0.1:19092",
+          "served-qwen",
+          "vllm-v1",
+          "sha256:" + "b".repeat(64),
+          "sha256:" + "a".repeat(64),
+          "trial-credential",
+        ),
+      )
+      false
+    } catch {
+      _ => true
+    },
+  )
   assert_true(
     trial.shared_trial_text_key_scope("org-energy", "tenant-energy", [
       "text.qwen",

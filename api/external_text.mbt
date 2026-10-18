@@ -7,6 +7,7 @@ struct ExternalTextRoute {
   node_id : String
   origin : String
   served_model : String
+  credential : String
   runtime : @runtimes.OpenAiTextRuntime
 }
 
@@ -199,7 +200,60 @@ pub fn ApiService::with_external_text_route(
       node_id,
       origin,
       served_model,
+      credential: "",
       runtime,
+    }),
+  }
+}
+
+///|
+/// A separately authenticated text backend reserved for one organization's
+/// shared trial node. This does not replace the dedicated company route.
+pub fn ApiService::with_shared_trial_text_route(
+  self : ApiService,
+  model_alias : String,
+  tenant_ref : String,
+  node_id : String,
+  origin : String,
+  served_model : String,
+  runtime_version : String,
+  image_digest : String,
+  artifact_digest : String,
+  credential : String,
+) -> ApiService raise {
+  guard self.shared_trial_offerings.any(offering => {
+      offering.kind == "Text" &&
+      offering.tenant_ref == tenant_ref &&
+      offering.model_alias == model_alias &&
+      offering.node_id == node_id
+    }) &&
+    credential.trim() != "" &&
+    !credential.contains_char('\n') &&
+    !credential.contains_char('\r') else {
+    raise Failure::Failure(
+      "shared trial text route is not bound to an offering",
+    )
+  }
+  let base = self.with_external_text_route(
+    model_alias, tenant_ref, node_id, origin, served_model, runtime_version, image_digest,
+    artifact_digest,
+  )
+  guard base.external_text_route is Some(route) else {
+    raise Failure::Failure("shared trial text route is unavailable")
+  }
+  {
+    ..self,
+    shared_trial_text_route: Some({
+      ..route,
+      credential,
+      runtime: @runtimes.OpenAiTextRuntime::new(
+        "\{origin}/v1/responses",
+        credential,
+        runtime_version,
+        image_digest,
+        artifact_digest,
+        allow_http_loopback=true,
+      ).with_served_model_name(served_model),
     }),
   }
 }
@@ -212,7 +266,7 @@ async fn ApiService::external_text_ready(self : ApiService) -> Bool {
 }
 
 ///|
-fn external_model_context(model : Json) -> Int? {
+fn external_model_context(model : Json) -> Int32? {
   match model {
     { "max_model_len": Number(limit, ..), .. } if limit > 0 &&
       limit <= 10485760 &&
@@ -224,11 +278,17 @@ fn external_model_context(model : Json) -> Int? {
 ///|
 async fn ApiService::external_text_observation(
   self : ApiService,
-) -> (Bool, Int?) {
-  guard self.external_text_route is Some(route) &&
-    self.registry is Some(registry) else {
-    return (false, None)
-  }
+) -> (Bool, Int32?) {
+  guard self.external_text_route is Some(route) else { return (false, None) }
+  self.external_route_observation(route)
+}
+
+///|
+async fn ApiService::external_route_observation(
+  self : ApiService,
+  route : ExternalTextRoute,
+) -> (Bool, Int32?) {
+  guard self.registry is Some(registry) else { return (false, None) }
   let snapshot = registry.snapshot()
   guard snapshot.aliases
     .iter()
@@ -251,7 +311,12 @@ async fn ApiService::external_text_observation(
       if health.code != 200 {
         return (false, None)
       }
-      let (response, body) = @http.get("\{route.origin}/v1/models")
+      let headers : @http.Headers = if route.credential == "" {
+        Map([])
+      } else {
+        { "Authorization": "Bearer \{route.credential}" }
+      }
+      let (response, body) = @http.get("\{route.origin}/v1/models", headers~)
       if response.code != 200 || body.text().length() > 65536 {
         return (false, None)
       }

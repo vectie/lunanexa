@@ -51,7 +51,17 @@ configured trial node. A mismatched node is rejected rather than silently
 charged or treated as free. Keys still have a bounded lifetime and must be
 renewed.
 
-This does not deploy a model, create a runtime route, bypass model admission,
-or assert successful inference. `Video` offerings are launch links only;
-ComfyUI authentication and resource control remain with its existing gateway.
-If a service is not responding, the customer portal does not offer its link.
+An offering alone does not deploy a model or create a runtime route. For text
+inference, configure `LUNANEXA_SHARED_TRIAL_TEXT_ROUTE_JSON` on the controller
+with the exact `model_alias`, `tenant_ref`, `node_id`, controller-loopback
+`origin`, `served_model`, `runtime_version`, `image_digest`, and
+`artifact_digest`. Supply `LUNANEXA_SHARED_TRIAL_TEXT_CREDENTIAL` from the
+runtime's existing Kubernetes Secret, never from a ConfigMap. The controller
+will admit this route only for the matching offering and only while its
+registered artifact, live model listing, node heartbeat, and trial credential
+agree. This is separate from any dedicated company model route. The controller
+loopback proxy must forward only to the intended in-cluster runtime.
+
+`Video` offerings are launch links only; ComfyUI authentication and resource
+control remain with its existing gateway. If a service is not responding, the
+customer portal does not offer its link.

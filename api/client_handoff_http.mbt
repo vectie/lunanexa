@@ -116,8 +116,25 @@ async fn ApiService::serving_client_model_aliases(
   self : ApiService,
   approved : Array[String],
   tenant_ref~ : String = "",
+  organization_id~ : String = "",
 ) -> Array[String] {
   let external_media : Array[String] = []
+  let shared_trial : Array[String] = []
+  if self.shared_trial_text_route is Some(route) &&
+    route.tenant_ref == tenant_ref &&
+    approved.contains(route.model_alias) &&
+    self.shared_trial_text_offering(
+      organization_id,
+      tenant_ref,
+      route.model_alias,
+    )
+    is Some(offering) &&
+    offering.node_id == route.node_id &&
+    self.external_route_observation(route).0 &&
+    self.shared_trial_offering_view(offering, @async.now())
+    is { "service_responding": true, .. } {
+    shared_trial.push(route.model_alias)
+  }
   for provider in self.external_media_providers {
     if provider.active &&
       provider.tenant_ref == tenant_ref &&
@@ -133,13 +150,17 @@ async fn ApiService::serving_client_model_aliases(
         self.external_text_ready() {
         external_media.push(route.model_alias)
       }
-      return approved.filter(model => external_media.contains(model))
+      return approved.filter(model => {
+        external_media.contains(model) || shared_trial.contains(model)
+      })
     }
     return match self.external_text_route {
       Some(route) if tenant_ref == route.tenant_ref &&
         self.external_text_ready() =>
-        approved.filter(model_alias => model_alias == route.model_alias)
-      Some(_) => []
+        approved.filter(model_alias => {
+          model_alias == route.model_alias || shared_trial.contains(model_alias)
+        })
+      Some(_) => shared_trial
       None => approved
     }
   }
@@ -177,6 +198,11 @@ async fn ApiService::serving_client_model_aliases(
     self.external_text_ready() &&
     !serving.contains(route.model_alias) {
     serving.push(route.model_alias)
+  }
+  for model in shared_trial {
+    if !serving.contains(model) {
+      serving.push(model)
+    }
   }
   approved.filter(model_alias => serving.contains(model_alias))
 }
@@ -388,6 +414,7 @@ async fn ApiService::handle_client_handoff(
       let aliases = self.serving_client_model_aliases(
         access_package_approved_aliases(self.registry),
         tenant_ref=portal_view.membership.tenant_ref,
+        organization_id=portal_view.membership.organization_id,
       )
       let blockers : Array[String] = []
       if !contract_ready {
@@ -458,6 +485,7 @@ async fn ApiService::handle_client_handoff(
         self.serving_client_model_aliases(
           access_package_approved_aliases(self.registry),
           tenant_ref=portal_view.membership.tenant_ref,
+          organization_id=portal_view.membership.organization_id,
         ),
       )
       for model in intent.allowed_models {

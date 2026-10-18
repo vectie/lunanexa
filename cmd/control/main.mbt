@@ -538,7 +538,7 @@ fn validate_external_ha_postgres(database_url : String) -> Unit raise {
 async fn await_controller_leadership(
   database : @database.PostgresDatabase,
   holder_id : String,
-  retry_ms : Int,
+  retry_ms : Int32,
 ) -> Int64 {
   if holder_id.trim() == "" || holder_id.length() > 256 {
     raise Failure::Failure(
@@ -1693,6 +1693,24 @@ async fn main {
         route.runtime_version,
         route.image_digest,
         route.artifact_digest,
+      )
+    }
+    _ => service
+  }
+  let service = match
+    @env.get_env_var("LUNANEXA_SHARED_TRIAL_TEXT_ROUTE_JSON") {
+    Some(raw) if raw != "" => {
+      let route : ExternalTextRouteConfig = @json.from_json(@json.parse(raw))
+      service.with_shared_trial_text_route(
+        route.model_alias,
+        route.tenant_ref,
+        route.node_id,
+        route.origin,
+        route.served_model,
+        route.runtime_version,
+        route.image_digest,
+        route.artifact_digest,
+        required_environment("LUNANEXA_SHARED_TRIAL_TEXT_CREDENTIAL"),
       )
     }
     _ => service

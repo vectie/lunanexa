@@ -14,7 +14,7 @@ pub extend ApiMethod with Eq::{not_equal, equal}
 
 ///|
 pub(all) struct HttpReply {
-  status : Int
+  status : Int32
   body : String
   content_type : String
 } derive(Debug, Eq)
@@ -105,6 +105,7 @@ pub struct ApiService {
   reconciliation_only : Bool
   runtime : @runtimes.OpenAiTextRuntime
   external_text_route : ExternalTextRoute?
+  shared_trial_text_route : ExternalTextRoute?
   shared_trial_offerings : Array[SharedTrialOffering]
   external_media_providers : Array[ExternalMediaProvider]
   client_model_policies : Map[String, Array[String]]
@@ -218,6 +219,7 @@ pub fn ApiService::new(
     reconciliation_only: false,
     runtime,
     external_text_route: None,
+    shared_trial_text_route: None,
     shared_trial_offerings: [],
     external_media_providers: [],
     client_model_policies: Map([]),
@@ -330,6 +332,7 @@ pub fn ApiService::with_registry(
     reconciliation_only: false,
     runtime,
     external_text_route: None,
+    shared_trial_text_route: None,
     shared_trial_offerings: [],
     external_media_providers: [],
     client_model_policies: Map([]),
@@ -443,6 +446,7 @@ pub fn ApiService::with_services(
     reconciliation_only: false,
     runtime,
     external_text_route: None,
+    shared_trial_text_route: None,
     shared_trial_offerings: [],
     external_media_providers: [],
     client_model_policies: Map([]),
@@ -558,6 +562,7 @@ pub fn ApiService::with_control_plane(
     reconciliation_only: false,
     runtime,
     external_text_route: None,
+    shared_trial_text_route: None,
     shared_trial_offerings: [],
     external_media_providers: [],
     client_model_policies: Map([]),
@@ -1049,7 +1054,7 @@ pub fn ApiService::with_technical_store(
 pub fn ApiService::with_deployment_store(
   self : ApiService,
   deployment_store : @deployment_store.FileDeploymentStore,
-  available_secret_refs? : Array[String] = [],
+  available_secret_refs~ : Array[String] = [],
 ) -> ApiService {
   { ..self, deployment_store: Some(deployment_store), available_secret_refs, }
 }
@@ -1095,8 +1100,8 @@ pub fn ApiService::with_client_handoff_store(
   self : ApiService,
   client_handoff_store : @client_handoff_store.ClientHandoffStore,
   client_launch_config : @client_handoff.ClientLaunchConfig,
-  allowed_http_launch_origins? : Array[String] = [],
-  allowed_http_api_origins? : Array[String] = [],
+  allowed_http_launch_origins~ : Array[String] = [],
+  allowed_http_api_origins~ : Array[String] = [],
 ) -> ApiService raise Failure {
   if !@client_handoff.valid_client_launch_config(
       client_launch_config,
@@ -1120,8 +1125,8 @@ pub fn ApiService::with_client_handoff_store(
 pub fn ApiService::with_client_launch_catalog(
   self : ApiService,
   configs : Array[@client_handoff.ClientLaunchConfig],
-  allowed_http_launch_origins? : Array[String] = [],
-  allowed_http_api_origins? : Array[String] = [],
+  allowed_http_launch_origins~ : Array[String] = [],
+  allowed_http_api_origins~ : Array[String] = [],
 ) -> ApiService raise Failure {
   guard self.client_handoff_store is Some(_) &&
     @client_handoff.valid_client_launch_catalog(
@@ -1159,7 +1164,7 @@ pub extend PersonalDesktopLaunch with ToJson::{to_json}
 pub fn ApiService::with_personal_desktop_launches(
   self : ApiService,
   launches : Array[PersonalDesktopLaunch],
-  allowed_http_launch_origins? : Array[String] = [],
+  allowed_http_launch_origins~ : Array[String] = [],
 ) -> ApiService raise Failure {
   if launches.is_empty() {
     return { ..self, personal_desktop_launches: [], }
@@ -1377,7 +1382,7 @@ pub fn ApiService::with_provider_callback_secrets(
 ///|
 pub fn ApiService::with_runtime_concurrency(
   self : ApiService,
-  concurrency : Int,
+  concurrency : Int32,
 ) -> ApiService raise {
   if concurrency <= 0 || concurrency > 4096 {
     raise Failure::Failure("runtime concurrency must be positive and bounded")
@@ -1511,7 +1516,7 @@ fn valid_public_key_ref(value : String) -> Bool {
 
 ///|
 priv struct CapacityRequest {
-  instance_memory_mib : Int
+  instance_memory_mib : Int32
 } derive(FromJson)
 
 ///|
@@ -1524,13 +1529,13 @@ priv struct VerificationRequest {
 } derive(FromJson)
 
 ///|
-fn json_reply(status : Int, value : Json) -> HttpReply {
+fn json_reply(status : Int32, value : Json) -> HttpReply {
   { status, body: value.stringify(), content_type: "application/json", }
 }
 
 ///|
 fn api_error(
-  status : Int,
+  status : Int32,
   code : String,
   message : String,
   retryable : Bool,
@@ -1786,8 +1791,8 @@ fn label_values(labels : Map[String, String], name : String) -> Array[String] {
 fn numeric_label(
   labels : Map[String, String],
   name : String,
-  fallback : Int,
-) -> Int {
+  fallback : Int32,
+) -> Int32 {
   guard labels.get(name) is Some(value) else { return fallback }
   @string.parse_int64(value).to_int() catch {
     _ => fallback
@@ -1814,7 +1819,7 @@ fn scheduler_node(
   heartbeat : @contracts.NodeHeartbeat,
   now_unix_ms : Int64,
   heartbeat_timeout_ms : Int64,
-  ready_models? : Array[String]? = None,
+  ready_models~ : Array[String]? = None,
 ) -> @scheduler.NodeSnapshot {
   let accelerators : Array[@contracts.AcceleratorInventory] = []
   for accelerator in heartbeat.inventory.accelerators {
@@ -1881,7 +1886,7 @@ async fn ApiService::managed_scheduler_node(
   self : ApiService,
   heartbeat : @contracts.NodeHeartbeat,
   now_unix_ms : Int64,
-  ready_models? : Array[String]? = None,
+  ready_models~ : Array[String]? = None,
 ) -> @scheduler.NodeSnapshot {
   let snapshot = scheduler_node(
     heartbeat,
@@ -1999,6 +2004,38 @@ async fn ApiService::schedule_and_admit(
       ),
       [],
     )
+  }
+  if self.shared_trial_text_route is Some(route) &&
+    request.model_selector == route.model_alias &&
+    request.tenant_ref == route.tenant_ref &&
+    request.capability == TextGenerate &&
+    required_deployment_id is None &&
+    delivery is None {
+    guard shared_trial is Some(offering) &&
+      offering.node_id == route.node_id &&
+      self.shared_trial_node_online(offering.node_id, @async.now()) else {
+      return (
+        Some(
+          api_error(
+            403, "SharedTrialAccessDenied", "this model requires an active organization trial credential",
+            false,
+          ),
+        ),
+        [],
+      )
+    }
+    if !self.external_route_observation(route).0 {
+      return (
+        Some(
+          api_error(
+            503, "SharedTrialModelUnavailable", "the shared trial model is not serving",
+            true,
+          ),
+        ),
+        [],
+      )
+    }
+    return (None, [route.node_id])
   }
   // An externally operated text instance is not a managed Deployment. It is
   // admitted only for its exact approved alias while its live endpoint proves
@@ -2232,6 +2269,16 @@ async fn ApiService::invoke_with_bounded_retry(
   request : @contracts.WorkloadEnvelope,
   routing_nodes : Array[String],
 ) -> (@runtimes.RuntimeInvocationResult, String) {
+  if self.shared_trial_text_route is Some(route) &&
+    request.model_selector == route.model_alias &&
+    request.tenant_ref == route.tenant_ref &&
+    routing_nodes.length() == 1 &&
+    routing_nodes[0] == route.node_id {
+    if !self.external_route_observation(route).0 {
+      raise Failure::Failure("shared trial model became unavailable")
+    }
+    return (route.runtime.invoke(request), route.node_id)
+  }
   if self.external_text_route is Some(route) &&
     request.model_selector == route.model_alias &&
     request.tenant_ref == route.tenant_ref {
@@ -2269,6 +2316,16 @@ async fn ApiService::invoke_stream_with_bounded_retry(
   routing_nodes : Array[String],
   on_chunk : async (Json) -> Unit,
 ) -> (@runtimes.RuntimeInvocationResult, String) {
+  if self.shared_trial_text_route is Some(route) &&
+    request.model_selector == route.model_alias &&
+    request.tenant_ref == route.tenant_ref &&
+    routing_nodes.length() == 1 &&
+    routing_nodes[0] == route.node_id {
+    if !self.external_route_observation(route).0 {
+      raise Failure::Failure("shared trial model became unavailable")
+    }
+    return (route.runtime.invoke_stream(request, on_chunk), route.node_id)
+  }
   if self.external_text_route is Some(route) &&
     request.model_selector == route.model_alias &&
     request.tenant_ref == route.tenant_ref {
@@ -2568,7 +2625,8 @@ async fn ApiService::invoke_workload(
       authority,
       request.model_selector,
       @async.now(),
-    ) is Some(reply) {
+    )
+    is Some(reply) {
     return reply
   }
   let idempotency_key = idempotency_scope(request)
@@ -2981,13 +3039,14 @@ async fn ApiService::stream_workload(
   request : @contracts.WorkloadEnvelope,
   connection : @http.ServerConnection,
   authority : @access.ApiAuthorization,
-  openai? : OpenAiStreamContext? = None,
+  openai~ : OpenAiStreamContext? = None,
 ) -> Unit {
   if self.inference_billing_preflight(
       authority,
       request.model_selector,
       @async.now(),
-    ) is Some(reply) {
+    )
+    is Some(reply) {
     connection.send_response(reply.status, reason(reply.status), extra_headers={
       "Content-Type": reply.content_type,
       "Cache-Control": "no-store",
@@ -5388,7 +5447,7 @@ priv enum BoundedRequestBody {
 ///|
 async fn read_bounded_request_body(
   reader : &@io.Reader,
-  maximum_bytes : Int,
+  maximum_bytes : Int32,
 ) -> BoundedRequestBody {
   let buffer = @buffer.Buffer(size_hint=maximum_bytes.min(65536))
   for total = 0 {
@@ -5413,7 +5472,7 @@ async fn read_bounded_request_body(
 }
 
 ///|
-fn reason(status : Int) -> String {
+fn reason(status : Int32) -> String {
   match status {
     200 => "OK"
     201 => "Created"
