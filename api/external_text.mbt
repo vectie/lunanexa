@@ -175,8 +175,9 @@ pub fn ApiService::with_external_text_route(
   runtime_version : String,
   image_digest : String,
   artifact_digest : String,
-  credential? : String = "",
+  credential~ : String = "",
   native_revision? : String,
+  text_chat_completions~ : Bool = false,
 ) -> ApiService raise {
   if !@contracts.valid_identifier(model_alias) ||
     !@contracts.valid_identifier(tenant_ref) ||
@@ -184,23 +185,44 @@ pub fn ApiService::with_external_text_route(
     !@contracts.valid_identifier(served_model) ||
     !origin.has_prefix("http://127.0.0.1:") ||
     origin["http://127.0.0.1:".length():].contains_char('/') ||
-    credential.contains_char('\n') || credential.contains_char('\r') {
+    credential.contains_char('\n') ||
+    credential.contains_char('\r') {
     raise Failure::Failure("invalid external text route")
   }
+  let endpoint = origin +
+    (if text_chat_completions {
+      "/v1/chat/completions"
+    } else {
+      "/v1/responses"
+    })
   let runtime = match native_revision {
     Some(revision) => {
       guard image_digest == "" else {
         raise Failure::Failure("native route cannot claim an OCI image")
       }
       @runtimes.OpenAiTextRuntime::native(
-        "\{origin}/v1/responses", credential, runtime_version, revision,
-        artifact_digest, allow_http_loopback=true,
+        endpoint,
+        credential,
+        runtime_version,
+        revision,
+        artifact_digest,
+        allow_http_loopback=true,
       )
     }
-    None => @runtimes.OpenAiTextRuntime::new(
-      "\{origin}/v1/responses", credential, runtime_version, image_digest,
-      artifact_digest, allow_http_loopback=true,
-    )
+    None =>
+      @runtimes.OpenAiTextRuntime::new(
+        endpoint,
+        credential,
+        runtime_version,
+        image_digest,
+        artifact_digest,
+        allow_http_loopback=true,
+      )
+  }
+  let runtime = if text_chat_completions {
+    runtime.with_text_chat_completions()
+  } else {
+    runtime
   }
   let runtime = runtime.with_served_model_name(served_model)
   {

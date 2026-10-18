@@ -7,8 +7,25 @@ async test "external text route requires an approved alias and observed model" {
   let saw_credential = [false]
   @async.with_task_group <| group => {
     group.spawn_bg(no_wait=true, allow_failure=true) <| () => {
-      adapter.run_forever(allow_failure=true) <| ((request, _, connection) => {
+      adapter.run_forever(allow_failure=true) <| ((request, payload, connection) => {
         let body = match request.path {
+          "/v1/chat/completions" => {
+            assert_eq(
+              request.headers.get("authorization"),
+              Some("Bearer native-backend-secret"),
+            )
+            let input = @json.parse(payload.read_all().text())
+            assert_true(
+              input
+              is {
+                "messages": Array(_),
+                "max_tokens": 32,
+                "model": "served-test",
+                ..
+              },
+            )
+            "{\"choices\":[{\"message\":{\"content\":\"323\"}}],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":2}}"
+          }
           "/health" => "ok"
           "/v1/models" =>
             if model_present[0] {
@@ -52,12 +69,32 @@ async test "external text route requires an approved alias and observed model" {
       "sha256:" + "a".repeat(64),
       credential="native-backend-secret",
       native_revision="1".repeat(40),
+      text_chat_completions=true,
     )
     assert_true(service.external_text_ready())
     assert_true(saw_credential[0])
     let route = service.external_text_route.unwrap()
     assert_eq(route.runtime.native_revision(), Some("1".repeat(40)))
     assert_eq(route.runtime.image_digest(), "")
+    let reply = service.handle(
+      Post,
+      "/v1/chat/completions",
+      {
+        "Authorization": "Bearer inference-token",
+        "X-LunaNexa-Tenant": "enterprise-tenant",
+      },
+      (
+        {
+          "model": "qwen.default",
+          "messages": [{ "role": "user", "content": "17 times 19" }],
+          "max_tokens": 32,
+        } : Json).stringify(),
+    )
+    assert_eq(reply.status, 200)
+    assert_true(
+      @json.parse(reply.body)
+      is { "choices": Array([{ "message": { "content": "323", .. }, .. }]), .. },
+    )
     assert_eq(service.external_text_observation(), (true, Some(65536)))
     assert_eq(
       service.serving_client_model_aliases(

@@ -50,6 +50,7 @@ pub struct OpenAiTextRuntime {
   maximum_event_bytes : Int32
   maximum_response_bytes : Int32
   lunaflux_streaming_responses : Bool
+  text_chat_completions : Bool
   served_model_name : String?
   disable_thinking : Bool
 }
@@ -127,6 +128,7 @@ pub fn OpenAiTextRuntime::new(
     maximum_event_bytes: 1048576,
     maximum_response_bytes: 16777216,
     lunaflux_streaming_responses: false,
+    text_chat_completions: false,
     served_model_name: None,
     disable_thinking: false,
   }
@@ -164,6 +166,7 @@ pub fn OpenAiTextRuntime::native(
     maximum_event_bytes: 1048576,
     maximum_response_bytes: 16777216,
     lunaflux_streaming_responses: false,
+    text_chat_completions: false,
     served_model_name: None,
     disable_thinking: false,
   }
@@ -199,7 +202,7 @@ pub fn OpenAiTextRuntime::with_thinking_disabled(
 pub fn OpenAiTextRuntime::with_lunaflux_streaming_responses(
   self : OpenAiTextRuntime,
 ) -> OpenAiTextRuntime {
-  { ..self, lunaflux_streaming_responses: true, }
+  { ..self, lunaflux_streaming_responses: true, text_chat_completions: false, }
 }
 
 ///|
@@ -574,6 +577,9 @@ pub async fn OpenAiTextRuntime::invoke_at(
   request : @contracts.WorkloadEnvelope,
   node_id : String,
 ) -> RuntimeInvocationResult {
+  if self.text_chat_completions {
+    return self.invoke_text_chat(request, node_id)
+  }
   if self.lunaflux_streaming_responses {
     return self.invoke_stream_at(request, node_id, _ => ())
   }
@@ -642,6 +648,9 @@ pub async fn OpenAiTextRuntime::invoke_stream_at(
   node_id : String,
   on_chunk : async (Json) -> Unit,
 ) -> RuntimeInvocationResult {
+  if self.text_chat_completions {
+    return self.invoke_text_chat_stream(request, node_id, on_chunk)
+  }
   if request.capability != TextGenerate {
     raise UnsupportedCapability
   }

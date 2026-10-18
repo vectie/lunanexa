@@ -18,6 +18,7 @@ priv struct ExternalTextRouteConfig {
   image_digest : String
   artifact_digest : String
   native_revision : String?
+  text_chat_completions : Bool?
 } derive(FromJson)
 
 ///| Optional readiness attestations are strict booleans. Typos must not turn
@@ -1698,6 +1699,7 @@ async fn main {
           "",
         ),
         native_revision?=route.native_revision,
+        text_chat_completions=route.text_chat_completions.unwrap_or(false),
       )
     }
     _ => service
