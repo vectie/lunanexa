@@ -596,7 +596,6 @@ async fn proxy_request(
   client.request(request.meth, request.path, extra_headers=forwarded)
   client.write(request_body)
   let response = client.end_request()
-  let response_body = client.read_all().binary()
   let headers : @http.Headers = Map([])
   for name in ["Content-Type", "Cache-Control", "ETag", "Content-Range"] {
     match header(response.headers, name) {
@@ -608,11 +607,36 @@ async fn proxy_request(
     headers["Cache-Control"] = "no-store"
     headers["Pragma"] = "no-cache"
   }
-  headers["Content-Length"] = response_body.length().to_string()
   let cookies = match response_cookie {
     Some(value) => [value]
     None => []
   }
+  if header(response.headers, "Content-Type")
+    .map(value => {
+      value.split(";").nth(0).unwrap_or("").trim().to_owned().to_lower() ==
+      "text/event-stream"
+    })
+    .unwrap_or(false) {
+    headers["X-Accel-Buffering"] = "no"
+    connection.send_response(
+      response.code,
+      response_reason(response.code),
+      extra_headers=headers,
+      cookies~,
+    )
+    // Publish each available chunk before waiting for the next. An abandoned
+    // downstream raises on write/flush and the owned upstream closes by defer.
+    errdefer connection.close()
+    connection.flush()
+    while client.read_some(max_len=16384) is Some(chunk) {
+      connection.write(chunk)
+      connection.flush()
+    }
+    connection.end_response()
+    return
+  }
+  let response_body = client.read_all().binary()
+  headers["Content-Length"] = response_body.length().to_string()
   connection.send_response(
     response.code,
     response_reason(response.code),

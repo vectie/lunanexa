@@ -104,3 +104,21 @@ No exclusions or warning waivers were added. The corrected Linux controller
 build is owned by `lunanexa-glm-cutover-build-20261018-v4.service`; until its
 completion marker and authenticated public tests are observed, do not mark
 this cutover complete.
+
+## Public validation — 19 October 2026 (in progress)
+
+The corrected controller and NVFP4 alias generation 3 are now selected. An
+existing signed-in company credential passed public HTTPS JSON, multi-turn,
+Chinese SSE completion and two concurrent answers. No key or lease was created.
+The controller's initial non-root launch failed because its new release
+directory was mode 0750; setting that executable directory to 0755 restored
+the controller without restarting either GPU rank.
+
+Public disconnect validation found a separate gateway defect: `proxy_request`
+reads the complete upstream body before forwarding it, including SSE. The
+client receives valid event syntax, but only after generation finishes; the
+native cancellation counter therefore does not increase. Do not count this
+as live-stream/cancellation acceptance. Fix SSE forwarding at the HTTP boundary,
+preserving ordinary response behavior, credentials and deterministic upstream
+close. Prove early delivery while the upstream is still blocked, then retest
+the real public path and native cancellation/retirement counters.
