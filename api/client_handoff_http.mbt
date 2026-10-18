@@ -161,7 +161,14 @@ async fn ApiService::serving_client_model_aliases(
           model_alias == route.model_alias || shared_trial.contains(model_alias)
         })
       Some(_) => shared_trial
-      None => approved
+      None =>
+        match self.shared_trial_text_route {
+          Some(route) if route.tenant_ref == tenant_ref =>
+            approved.filter(model => {
+              model != route.model_alias || shared_trial.contains(model)
+            })
+          _ => approved
+        }
     }
   }
   let serving = [

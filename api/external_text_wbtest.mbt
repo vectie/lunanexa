@@ -88,6 +88,119 @@ test "external context metadata rejects malformed and unbounded limits" {
 }
 
 ///|
+async test "shared Qwen handoff is listed only for its live trial organization" {
+  let directory = @fs.tmpdir(prefix="lunanexa-shared-text-route-")
+  let adapter = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
+  let model_present = [true]
+  @async.with_task_group <| group => {
+    group.spawn_bg(no_wait=true, allow_failure=true) <| () => {
+      adapter.run_forever(allow_failure=true) <| ((request, _, connection) => {
+        let body = match request.path {
+          "/health" => "ok"
+          "/v1/models" =>
+            if model_present[0] &&
+              request.headers.get("authorization") ==
+              Some("Bearer trial-secret") {
+              "{\"data\":[{\"id\":\"served-qwen\",\"max_model_len\":65536}]}"
+            } else {
+              "{\"data\":[]}"
+            }
+          _ => "{}"
+        }
+        connection.send_response(200, "OK", extra_headers={
+          "Content-Type": "application/json",
+        })
+        connection.write_string(body)
+        connection.end_response()
+      })
+    }
+    let store = @store.FileStore::open("\{directory}/state.json")
+    store.fence_controller(1L)
+    store.put_heartbeat({
+      node_id: "trial-node",
+      state: Active,
+      observed_generation: 1L,
+      controller_epoch: 1L,
+      inventory: {
+        node_id: "trial-node",
+        agent_version: "test",
+        os_release: "test",
+        runtime_names: ["vllm"],
+        accelerators: [],
+        labels: { "lunanexa.io/usage-pool": "trial" },
+        taints: [],
+      },
+      running_deployments: [],
+      runtime_endpoints: None,
+      timestamp_unix_ms: @async.now(),
+      signature: "",
+    })
+    let registry = @registry.FileRegistry::open("\{directory}/registry.json")
+    seed_access_package_model(registry)
+    let runtime = @runtimes.OpenAiTextRuntime::new(
+      "https://runtime.invalid/v1/responses",
+      "",
+      "runtime-v1",
+      "sha256:" + "b".repeat(64),
+      "sha256:" + "a".repeat(64),
+    )
+    let service = ApiService::with_registry(
+        store, registry, runtime, "operator-token", "inference-token", "node-token",
+        "0.2.0",
+      )
+      .with_shared_trial_offerings([
+        {
+          organization_id: "org-energy",
+          tenant_ref: "tenant-energy",
+          node_id: "trial-node",
+          node_label: "Shared trial node",
+          model_alias: "qwen.default",
+          model_name: "Qwen",
+          kind: "Text",
+          health_url: "http://\{adapter.addr}/health",
+          public_url: "https://example.test/user/",
+        },
+      ])
+      .with_shared_trial_text_route(
+        "qwen.default",
+        "tenant-energy",
+        "trial-node",
+        "http://\{adapter.addr}",
+        "served-qwen",
+        "vllm-v1",
+        "sha256:" + "b".repeat(64),
+        "sha256:" + "a".repeat(64),
+        "trial-secret",
+      )
+    assert_eq(
+      service.serving_client_model_aliases(
+        ["qwen.default"],
+        tenant_ref="tenant-energy",
+        organization_id="org-energy",
+      ),
+      ["qwen.default"],
+    )
+    assert_eq(
+      service.serving_client_model_aliases(
+        ["qwen.default"],
+        tenant_ref="tenant-energy",
+        organization_id="org-other",
+      ),
+      [],
+    )
+    model_present[0] = false
+    assert_eq(
+      service.serving_client_model_aliases(
+        ["qwen.default"],
+        tenant_ref="tenant-energy",
+        organization_id="org-energy",
+      ),
+      [],
+    )
+  }
+}
+
+///|
 /// An operator cannot turn arbitrary public HTTP into a model route.
 async test "external text route rejects non-loopback origins" {
   let directory = @fs.tmpdir(prefix="lunanexa-external-text-invalid-")
