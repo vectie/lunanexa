@@ -481,6 +481,7 @@ pub struct OpenAiTextRuntime {
   credential_value : String
   runtime_version : String
   image_digest : String
+  native_revision : String?
   artifact_digest : String
   maximum_event_bytes : Int
   maximum_response_bytes : Int
@@ -494,6 +495,8 @@ pub async fn OpenAiTextRuntime::invoke(Self, @contracts.WorkloadEnvelope) -> Run
 pub async fn OpenAiTextRuntime::invoke_at(Self, @contracts.WorkloadEnvelope, String) -> RuntimeInvocationResult
 pub async fn OpenAiTextRuntime::invoke_stream(Self, @contracts.WorkloadEnvelope, async (Json) -> Unit) -> RuntimeInvocationResult
 pub async fn OpenAiTextRuntime::invoke_stream_at(Self, @contracts.WorkloadEnvelope, String, async (Json) -> Unit) -> RuntimeInvocationResult
+pub fn OpenAiTextRuntime::native(String, String, String, String, String, allow_http_loopback? : Bool) -> Self raise RemoteRuntimeError
+pub fn OpenAiTextRuntime::native_revision(Self) -> String?
 pub fn OpenAiTextRuntime::new(String, String, String, String, String, allow_http_loopback? : Bool) -> Self raise RemoteRuntimeError
 pub fn OpenAiTextRuntime::runtime_version(Self) -> String
 pub fn OpenAiTextRuntime::uses_direct_node_routing(Self) -> Bool

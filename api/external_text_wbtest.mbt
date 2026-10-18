@@ -4,6 +4,7 @@ async test "external text route requires an approved alias and observed model" {
   let directory = @fs.tmpdir(prefix="lunanexa-external-text-")
   let adapter = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
   let model_present = [true]
+  let saw_credential = [false]
   @async.with_task_group <| group => {
     group.spawn_bg(no_wait=true, allow_failure=true) <| () => {
       adapter.run_forever(allow_failure=true) <| ((request, _, connection) => {
@@ -11,6 +12,8 @@ async test "external text route requires an approved alias and observed model" {
           "/health" => "ok"
           "/v1/models" =>
             if model_present[0] {
+              saw_credential[0] = request.headers.get("authorization") ==
+                Some("Bearer native-backend-secret")
               "{\"data\":[{\"id\":\"other\",\"max_model_len\":8192},{\"id\":\"served-test\",\"max_model_len\":65536}]}"
             } else {
               "{\"data\":[]}"
@@ -45,10 +48,16 @@ async test "external text route requires an approved alias and observed model" {
       "http://\{adapter.addr}",
       "served-test",
       "external-v1",
-      "sha256:" + "b".repeat(64),
+      "",
       "sha256:" + "a".repeat(64),
+      credential="native-backend-secret",
+      native_revision="1".repeat(40),
     )
     assert_true(service.external_text_ready())
+    assert_true(saw_credential[0])
+    let route = service.external_text_route.unwrap()
+    assert_eq(route.runtime.native_revision(), Some("1".repeat(40)))
+    assert_eq(route.runtime.image_digest(), "")
     assert_eq(service.external_text_observation(), (true, Some(65536)))
     assert_eq(
       service.serving_client_model_aliases(

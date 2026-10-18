@@ -68,6 +68,10 @@ async test "approved text adapter invokes a digest-pinned upstream runtime" {
         assert_eq(request.meth, Post)
         assert_eq(request.path, "/v1/responses")
         assert_eq(
+          request.headers.get("authorization"),
+          Some("Bearer runtime-credential"),
+        )
+        assert_eq(
           request.headers.get("idempotency-key"),
           Some("opaque-tenant:inference:remote-idem-1"),
         )
@@ -86,14 +90,19 @@ async test "approved text adapter invokes a digest-pinned upstream runtime" {
         connection.end_response()
       })
     }
-    let runtime = @runtimes.OpenAiTextRuntime::new(
+    let runtime = @runtimes.OpenAiTextRuntime::native(
       "http://\{server.addr}/v1/responses",
       "runtime-credential",
       "runtime-v1",
-      "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "7106127262375b5dab6b98a23c2d1d07412ce45e",
       "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       allow_http_loopback=true,
     ).with_served_model_name("GLM-5.3-Flash-EXL3")
+    assert_eq(runtime.image_digest(), "")
+    assert_eq(
+      runtime.native_revision(),
+      Some("7106127262375b5dab6b98a23c2d1d07412ce45e"),
+    )
     let result = runtime.invoke(remote_request())
     assert_eq(
       result.artifact_digest,

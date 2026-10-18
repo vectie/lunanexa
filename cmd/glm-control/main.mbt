@@ -58,12 +58,12 @@ fn inspected_container(
     ) &&
     name == "/" + target.container &&
     id.length() == 64 &&
-    id.all(c => c is ('0'..='9' | 'a'..='f')) &&
-    (running_state == true.to_json() || running_state == false.to_json()) &&
+    id.all(c => c is ('0'..<='9' | 'a'..<='f')) &&
+    (running_state is True || running_state is False) &&
     image.contains("glm-5.3-flash-2x-dgx-sparks") else {
     raise Failure("GLM control target does not match the approved container")
   }
-  (id, running_state == true.to_json())
+  (id, running_state is True)
 }
 
 ///|
@@ -146,7 +146,7 @@ fn header(headers : @http.Headers, name : String) -> String? {
 ///|
 async fn reply(
   connection : @http.ServerConnection,
-  code : Int,
+  code : Int32,
   value : String,
 ) -> Unit {
   connection.send_response(code, "GLM control", extra_headers={
@@ -172,41 +172,70 @@ async fn main {
   let server = @http.Server(@socket.Addr::parse(bind), reuse_addr=true)
   defer server.close()
   let lock = @async.Mutex()
-  server.run_forever(max_connections=16, allow_failure=true, (
-    request,
-    _body,
-    connection,
-  ) => {
-    if header(request.headers, "authorization") != Some("Bearer " + token) {
-      return reply(connection, 401, "Unauthorized")
+  let native = native_pair_enabled()
+  @async.with_task_group(group => {
+    if native {
+      group.spawn_bg(() => {
+        while true {
+          @async.sleep(2000)
+          lock.acquire()
+          defer lock.release()
+          native_monitor() catch {
+            _ => {
+              // Unknown peer state cannot leave the reachable rank consuming GPU.
+              ignore(native_stop()) catch {
+                _ => ()
+              }
+              println("native GLM supervision unavailable; stop requested")
+            }
+          }
+        }
+      })
     }
-    if request.path != "/v1/glm-control" &&
-      request.path != "/v1/glm-control:start" {
-      return reply(connection, 404, "NotFound")
-    }
-    if (request.path == "/v1/glm-control:start" && request.meth != Post) ||
-      (
-        request.path == "/v1/glm-control" &&
-        request.meth != Get &&
-        request.meth != Post
-      ) {
-      return reply(connection, 405, "MethodNotAllowed")
-    }
-    lock.acquire()
-    defer lock.release()
-    let result = try {
-      if request.path == "/v1/glm-control:start" {
-        start_glm()
-      } else if request.meth == Post {
-        stop_glm()
-      } else {
-        state(observe())
+    server.run_forever(max_connections=16, allow_failure=true, (
+      request,
+      _body,
+      connection,
+    ) => {
+      if header(request.headers, "authorization") != Some("Bearer " + token) {
+        return reply(connection, 401, "Unauthorized")
       }
-    } catch {
-      _ => "Unavailable"
-    } noraise {
-      value => value
-    }
-    reply(connection, if result == "Unavailable" { 503 } else { 200 }, result)
+      if request.path != "/v1/glm-control" &&
+        request.path != "/v1/glm-control:start" {
+        return reply(connection, 404, "NotFound")
+      }
+      if (request.path == "/v1/glm-control:start" && request.meth != Post) ||
+        (
+          request.path == "/v1/glm-control" &&
+          request.meth != Get &&
+          request.meth != Post
+        ) {
+        return reply(connection, 405, "MethodNotAllowed")
+      }
+      lock.acquire()
+      defer lock.release()
+      let result = try {
+        if native {
+          if request.path == "/v1/glm-control:start" {
+            native_start()
+          } else if request.meth == Post {
+            native_stop()
+          } else {
+            native_state(native_observe())
+          }
+        } else if request.path == "/v1/glm-control:start" {
+          start_glm()
+        } else if request.meth == Post {
+          stop_glm()
+        } else {
+          state(observe())
+        }
+      } catch {
+        _ => "Unavailable"
+      } noraise {
+        value => value
+      }
+      reply(connection, if result == "Unavailable" { 503 } else { 200 }, result)
+    })
   })
 }

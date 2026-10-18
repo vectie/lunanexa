@@ -1,0 +1,188 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+fn text(j : Json, key : String) -> String raise {
+  guard j is Object(fields) && fields.get(key) is Some(String(s)) else {
+    fail("missing deployment field " + key)
+  }
+  s
+}
+
+///|
+fn quote(s : String) -> String {
+  "'" + s.replace_all(old="'", new="'\\''") + "'"
+}
+
+///|
+async fn remote(rank : Json, args : Array[String]) -> Unit {
+  let result = @shell.Cmd("ssh", [
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "ConnectTimeout=10",
+    "-S",
+    text(rank, "socket"),
+    text(rank, "target"),
+    args.map(quote).join(" "),
+  ]).output()
+  result.check()
+}
+
+///|
+async fn copy(rank : Json, from : String, to : String) -> Unit {
+  @shell.Cmd("scp", [
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "ControlPath=" + text(rank, "socket"),
+    from,
+    text(rank, "target") + ":" + to,
+  ]).run()
+}
+
+///|
+fn unit(root : String, rank : Json, ordinal : Int32) -> String raise {
+  let mode = if ordinal == 0 { "serve" } else { "rank1" }
+  let value =
+    $|[Unit]
+    $|Description=LunaNexa-owned native GLM TP rank \{ordinal}
+    $|After=network-online.target
+    $|[Service]
+    $|Type=simple
+    $|WorkingDirectory=\{root}
+    $|Environment=LD_LIBRARY_PATH=\{root}/nccl
+    $|Environment=NCCL_DEBUG=WARN
+    $|Environment=NCCL_SOCKET_IFNAME=\{text(rank, "interface")}
+    $|Environment=NCCL_IB_HCA=\{text(rank, "hca")}
+    $|ExecStart=\{root}/glm_service.exe \{mode} \{root} service.json
+    $|ExecStopPost=/usr/bin/echo GLM_UNIT_EXIT result=${SERVICE_RESULT} code=${EXIT_CODE} status=${EXIT_STATUS}
+    $|KillMode=mixed
+    $|TimeoutStopSec=90
+    $|MemoryMax=100G
+    $|MemorySwapMax=0
+    $|Restart=no
+    $|
+  value
+}
+
+///|
+/// Install only; the paired lifecycle owner starts the peer/coordinator later.
+/// Existing checkpoint files receive durable hard links, not byte copies/scans.
+async fn main {
+  guard @env.args() is [_, config, evidence] else {
+    fail("CONFIG NEW_EVIDENCE")
+  }
+  let plan = @json.parse(@fs.read_file(config).text())
+  guard plan is { "ranks": Array([head, peer]), .. } else {
+    fail("two ranks required")
+  }
+  @fs.mkdir(evidence, permission=0o700)
+  let secret = @shell.Cmd("openssl", ["rand", "-hex", "32"]).output()
+  secret.check()
+  @fs.write_file(
+    evidence + "/backend.credential",
+    secret.stdout().trim().to_owned(),
+    create_mode=CreateNew,
+  )
+  @shell.Cmd("chmod", ["600", evidence + "/backend.credential"]).run()
+  for ordinal, rank in [head, peer] {
+    let root = text(rank, "root")
+    let home = text(rank, "home")
+    guard root.has_prefix(home + "/.local/share/lunanexa/") &&
+      !root.contains("..") &&
+      root.all(c => {
+        c is ('a'..<='z' | 'A'..<='Z' | '0'..<='9' | '/' | '-' | '_' | '.')
+      }) else {
+      fail("invalid durable root")
+    }
+    remote(rank, [
+      "mkdir",
+      "-p",
+      home + "/.local/share/lunanexa",
+      home + "/.config/systemd/user",
+    ])
+    remote(rank, ["mkdir", root])
+    remote(rank, [
+      "cp",
+      "-al",
+      "--",
+      text(rank, "model_source"),
+      root + "/model",
+    ])
+    remote(rank, ["cp", "-a", "--", text(rank, "nccl_source"), root + "/nccl"])
+    let prior = text(rank, "accepted_root")
+    for
+      file in [
+        "glm_service.exe",
+        "rank\{ordinal}.cubin",
+        "sampling.cubin",
+        "SHARDS.sha256",
+      ] {
+      remote(rank, ["cp", "-n", "--", prior + "/" + file, root + "/" + file])
+    }
+    let service : Json = {
+      "model_root": root + "/model",
+      "kernel_root": root,
+      "inventory": "SHARDS.sha256",
+      "module0": "rank0.cubin",
+      "module1": "rank1.cubin",
+      "sampling_module": "sampling.cubin",
+      "control_address": text(plan, "control_address"),
+      "rendezvous_address": text(plan, "rendezvous_address"),
+      "listen_address": text(plan, "listen_address"),
+      "production_ready": true,
+      "executable": root + "/glm_service.exe",
+      "rows": 64,
+      "slots": 4,
+      "context": 2048,
+      "budget_mib": 102400,
+      "reserve_mib": 2048,
+      "model_label": text(plan, "model_label"),
+      "runtime_label": text(plan, "runtime_label"),
+      "tokenizer_label": text(plan, "tokenizer_label"),
+      "credential_file": "backend.credential",
+    }
+    @fs.write_file(
+      evidence + "/service-\{ordinal}.json",
+      service.stringify(),
+      create_mode=CreateNew,
+    )
+    copy(rank, evidence + "/service-\{ordinal}.json", root + "/service.json")
+    if ordinal == 0 {
+      copy(rank, evidence + "/backend.credential", root + "/backend.credential")
+      remote(rank, ["chmod", "600", root + "/backend.credential"])
+    }
+    let name = text(rank, "unit")
+    guard name == "lunanexa-glm-lunaflux-rank\{ordinal}.service" else {
+      fail("unexpected owned unit")
+    }
+    @fs.write_file(
+      evidence + "/" + name,
+      unit(root, rank, ordinal),
+      create_mode=CreateNew,
+    )
+    // Exclusive install: a prior release is not overwritten by staging.
+    remote(rank, ["test", "!", "-e", home + "/.config/systemd/user/" + name])
+    copy(rank, evidence + "/" + name, home + "/.config/systemd/user/" + name)
+    remote(rank, ["systemctl", "--user", "daemon-reload"])
+    println("rank \{ordinal} installed, not started")
+  }
+}
+
+///|
+test "native units preserve coordinator-owned shutdown without acceptance timeout" {
+  let value = unit("/srv/native", { "interface": "nic0", "hca": "rdma0" }, 0)
+  assert_true(value.contains("KillMode=mixed"))
+  assert_true(value.contains("MemoryMax=100G"))
+  assert_true(value.contains("MemorySwapMax=0"))
+  assert_true(value.contains("Restart=no"))
+  assert_false(value.contains("RuntimeMaxSec"))
+  assert_eq(quote("a'b"), "'a'\\''b'")
+}

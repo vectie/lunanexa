@@ -212,7 +212,7 @@ pub fn ApiService::with_external_export_proof_token(Self, String) -> Self
 pub fn ApiService::with_external_media_providers(Self, Array[ExternalMediaProvider]) -> Self raise
 pub fn ApiService::with_external_observability_collector_configured(Self, Bool) -> Self
 pub fn ApiService::with_external_text_control(Self, async (String) -> String) -> Self
-pub fn ApiService::with_external_text_route(Self, String, String, String, String, String, String, String, String) -> Self raise
+pub fn ApiService::with_external_text_route(Self, String, String, String, String, String, String, String, String, credential? : String, native_revision? : String) -> Self raise
 pub fn ApiService::with_global_admin_settings(Self, @settings.GlobalAdminSettings) -> Self raise
 pub fn ApiService::with_gpu_container_offering(Self, GpuContainerOffering) -> Self raise
 pub fn ApiService::with_guide_diagnostics_token(Self, String) -> Self raise Failure

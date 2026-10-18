@@ -45,6 +45,7 @@ pub struct OpenAiTextRuntime {
   credential_value : String
   runtime_version : String
   image_digest : String
+  native_revision : String?
   artifact_digest : String
   maximum_event_bytes : Int32
   maximum_response_bytes : Int32
@@ -121,6 +122,7 @@ pub fn OpenAiTextRuntime::new(
     credential_value,
     runtime_version,
     image_digest,
+    native_revision: None,
     artifact_digest,
     maximum_event_bytes: 1048576,
     maximum_response_bytes: 16777216,
@@ -128,6 +130,48 @@ pub fn OpenAiTextRuntime::new(
     served_model_name: None,
     disable_thinking: false,
   }
+}
+
+///|
+/// A separately operated native executable has a source revision, not an OCI
+/// image digest. This binding does not qualify it as a managed OCI assignment.
+pub fn OpenAiTextRuntime::native(
+  endpoint : String,
+  credential_value : String,
+  runtime_version : String,
+  revision : String,
+  artifact_digest : String,
+  allow_http_loopback~ : Bool = false,
+) -> OpenAiTextRuntime raise RemoteRuntimeError {
+  guard valid_endpoint(endpoint, allow_http_loopback) &&
+    revision.length() == 40 &&
+    revision.all(c => c is ('0'..<='9' | 'a'..<='f')) &&
+    @contracts.valid_sha256_digest(artifact_digest) else {
+    raise InvalidUpstreamResponse(
+      "native runtime requires a source revision and declared model artifact",
+    )
+  }
+  {
+    endpoint,
+    node_endpoints: Map([]),
+    direct_node_routing: false,
+    allow_http_loopback,
+    credential_value,
+    runtime_version,
+    image_digest: "",
+    native_revision: Some(revision),
+    artifact_digest,
+    maximum_event_bytes: 1048576,
+    maximum_response_bytes: 16777216,
+    lunaflux_streaming_responses: false,
+    served_model_name: None,
+    disable_thinking: false,
+  }
+}
+
+///|
+pub fn OpenAiTextRuntime::native_revision(self : Self) -> String? {
+  self.native_revision
 }
 
 ///|

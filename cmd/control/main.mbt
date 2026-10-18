@@ -17,6 +17,7 @@ priv struct ExternalTextRouteConfig {
   runtime_version : String
   image_digest : String
   artifact_digest : String
+  native_revision : String?
 } derive(FromJson)
 
 ///| Optional readiness attestations are strict booleans. Typos must not turn
@@ -1693,6 +1694,10 @@ async fn main {
         route.runtime_version,
         route.image_digest,
         route.artifact_digest,
+        credential=@env.get_env_var("LUNANEXA_EXTERNAL_TEXT_CREDENTIAL").unwrap_or(
+          "",
+        ),
+        native_revision?=route.native_revision,
       )
     }
     _ => service
