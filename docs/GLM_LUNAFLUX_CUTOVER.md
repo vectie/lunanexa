@@ -7,33 +7,68 @@ externally operated text binding, not a fabricated single-node managed
 deployment. LunaNexa owns tenant admission, the public alias, metadata and
 the lifecycle adapter; LunaFlux owns inference and the two-rank protocol.
 
-## Current capacity upgrade — 19 October 2026, in progress
+## Current capacity upgrade — validated19 October 2026, 11:37 CST
 
-The public endpoint is currently offline while the paired Sparks are reserved
-for the 8K-context/concurrency upgrade and matched vLLM comparison. At the first
-inspection the prior native peer had already exited with SIGABRT at 02:04 CST;
-the manager stopped its coordinator. This is not an established OOM cause or
-a demonstrated fix in the new capacity implementation.
+The public company alias is online with the accepted native NVFP4 TP2 revision
+`5f864415bc33aa630e9c0df4a99b68a7ec40769a`. Both persistent units were installed
+from the physically tested private artifacts, started by the paired lifecycle
+owner, and validated through the real customer-facing route. The old engine
+remains stopped. No model payload hashes or integrity scans were computed.
 
-The prepared LunaFlux 5f864415 candidate has 8,192 logical context tokens,
+The installed LunaFlux5f864415 allocation has8,192 logical context tokens,
 eight resident sequences, sixteen waiting slots, sixteen preparation lanes,
 eighteen HTTP connection slots, and 513 shared 16-token history pages (one
 reserved). Preparation lanes are not the total owned-request ceiling. Excess
 HTTP clients can backpressure before admission. It does **not** promise eight
 full 8K histories.
-The installer now preserves the accepted opaque runtime's capacity fields
-instead of reinstating the initial 2K/four-slot defaults. The candidate is not
-installed or publicly qualified yet. Existing route allocation metadata must
-change only after its physical campaign passes under 100 GiB/rank and 16 GiB host
-reserve. Historical acceptance below does not establish current availability.
+The installer preserves the accepted opaque runtime's capacity fields instead
+of reinstating2K/four-slot defaults. The route ConfigMap and controller runtime
+revision now describe this allocation.16K/32K are not qualified. The8K history
+pool is shared; this does not promise eight simultaneous full-context requests.
 
 The native 47a1f351 context sweep completed 64 exact-label answers, including
 7,973 actual input tokens and C16 queued bursts, within the resource limits.
 Broader Chinese output exposed a separate token-budget UTF-8 finalization
 failure. The 5f864415 build distinguishes a budget cutoff from complete-text
 EOS, retaining the valid text prefix without weakening malformed-byte checks.
-Its ARM build and 5,297 local native tests pass; real-service retesting and
-public acceptance remain required. No GPU arithmetic or checkpoint changed.
+Its ARM build,33 pinned ARM text tests and5,297 local native tests pass. The exact
+512-token Chinese failure now passes JSON/SSE with valid UTF-8 and a `length`
+finish. Complete-answer requests use a larger allowance; no GPU arithmetic or
+checkpoint changed. Twelve broad answers all finished naturally, but the SQL
+answer's extra tie-handling example is wrong and the JSON-only prompt returns
+Markdown fences. Those answer-quality caveats remain documented; transport
+success is not a universal quality certification or reference-parity claim.
+
+Public acceptance with an existing company key passed JSON arithmetic323,
+multi-turn42, Chinese SSE/final usage, two concurrent requests, cancellation
+after a real content token, recovery, and the literal7,973-token retrieval prompt.
+Post-test runtime metrics: eight admissions, seven completions, one cancellation,
+zero failures/restarts, zero active requests, queue and retained KV pages.
+Readiness is true; model discovery advertises8192. The temporary local company
+key copy was removed; no key was created, revoked or granted new permissions.
+
+Private fixed qualification observed GPU97,951/97,979MiB, host available at
+least16,894,464/19,084,300KiB and zero unit swap. Production observation also stayed
+within100GiB/rank and16GiB host reserve, enforced by the existing lifecycle owner.
+The host margin is tight. Controller rollout had one initial database-connection
+failure/restart, then stayed ready; gateway restart counts remained zero. The
+portal's cached session was stale and reload requires sign-in, so the live
+authenticated API—not an unrefreshed portal card—is the acceptance evidence.
+
+Evidence: `/tmp/lunanexa-glm-context-fixed-install-20261019-v1`,
+`/tmp/lunanexa-glm-context-route-20261019-v1`,
+`/tmp/lunanexa-glm-public-sequence-20261019-v1` and
+`/tmp/lunanexa-glm-public-context8k-20261019-v1`. LunaFlux's full report is
+`docs/GLM_FULL_SERVICE_WIRING_2026-10-18.md` in its repository. The fixed native
+7,973-token complete answer took110.694s versus vLLM18.362s on matched private
+HTTP prompts and10 output tokens each; public-route acceptance is separate from
+that timing comparison. Expanded capacity is not a long-prefill speed fix.
+
+At the initial inspection, the prior71061272 native peer had exited with SIGABRT
+at02:04CST and the manager stopped its coordinator. This is not an established
+OOM cause or a demonstrated fix in the new implementation. Current bounded
+acceptance is not a multi-hour soak. Historical lower-context results below
+remain scoped to their original allocation.
 
 ## Deployment contract
 
