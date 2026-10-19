@@ -1,11 +1,28 @@
 # GLM LunaFlux route cutover
 
-The existing company route `glm-5.3.flash` is online on the LunaFlux NVFP4 pair
-after authenticated public acceptance on 19 October 2026. The old EXL3/vLLM
+The existing company route `glm-5.3.flash` passed authenticated public acceptance
+on the LunaFlux NVFP4 pair on 19 October 2026. The old EXL3/vLLM
 pair remains stopped. This is an explicit
 externally operated text binding, not a fabricated single-node managed
 deployment. LunaNexa owns tenant admission, the public alias, metadata and
 the lifecycle adapter; LunaFlux owns inference and the two-rank protocol.
+
+## Current capacity upgrade — 19 October 2026, in progress
+
+The public endpoint is currently offline while the paired Sparks are reserved
+for the8K-context/concurrency upgrade and matched vLLM comparison. At the first
+inspection the prior native peer had already exited with SIGABRT at02:04CST;
+the manager stopped its coordinator. This is not an established OOM cause or
+a demonstrated fix in the new capacity implementation.
+
+The prepared LunaFlux47a1f351 candidate has8,192 logical context tokens,
+eight resident sequences, sixteen admitted requests, and513 shared16-token
+history pages (one reserved). It does **not** promise eight full8K histories.
+The installer now preserves the accepted opaque runtime's capacity fields
+instead of reinstating the initial2K/four-slot defaults. The candidate is not
+installed or publicly qualified yet. Existing route allocation metadata must
+change only after its physical campaign passes under100GiB/rank and16GiB host
+reserve. Historical acceptance below does not establish current availability.
 
 ## Deployment contract
 
