@@ -10,19 +10,30 @@ the lifecycle adapter; LunaFlux owns inference and the two-rank protocol.
 ## Current capacity upgrade — 19 October 2026, in progress
 
 The public endpoint is currently offline while the paired Sparks are reserved
-for the8K-context/concurrency upgrade and matched vLLM comparison. At the first
-inspection the prior native peer had already exited with SIGABRT at02:04CST;
+for the 8K-context/concurrency upgrade and matched vLLM comparison. At the first
+inspection the prior native peer had already exited with SIGABRT at 02:04 CST;
 the manager stopped its coordinator. This is not an established OOM cause or
 a demonstrated fix in the new capacity implementation.
 
-The prepared LunaFlux47a1f351 candidate has8,192 logical context tokens,
-eight resident sequences, sixteen admitted requests, and513 shared16-token
-history pages (one reserved). It does **not** promise eight full8K histories.
+The prepared LunaFlux 5f864415 candidate has 8,192 logical context tokens,
+eight resident sequences, sixteen waiting slots, sixteen preparation lanes,
+eighteen HTTP connection slots, and 513 shared 16-token history pages (one
+reserved). Preparation lanes are not the total owned-request ceiling. Excess
+HTTP clients can backpressure before admission. It does **not** promise eight
+full 8K histories.
 The installer now preserves the accepted opaque runtime's capacity fields
-instead of reinstating the initial2K/four-slot defaults. The candidate is not
+instead of reinstating the initial 2K/four-slot defaults. The candidate is not
 installed or publicly qualified yet. Existing route allocation metadata must
-change only after its physical campaign passes under100GiB/rank and16GiB host
+change only after its physical campaign passes under 100 GiB/rank and 16 GiB host
 reserve. Historical acceptance below does not establish current availability.
+
+The native 47a1f351 context sweep completed 64 exact-label answers, including
+7,973 actual input tokens and C16 queued bursts, within the resource limits.
+Broader Chinese output exposed a separate token-budget UTF-8 finalization
+failure. The 5f864415 build distinguishes a budget cutoff from complete-text
+EOS, retaining the valid text prefix without weakening malformed-byte checks.
+Its ARM build and 5,297 local native tests pass; real-service retesting and
+public acceptance remain required. No GPU arithmetic or checkpoint changed.
 
 ## Deployment contract
 
