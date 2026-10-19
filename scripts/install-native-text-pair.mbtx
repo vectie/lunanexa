@@ -21,7 +21,7 @@ fn quote(s : String) -> String {
 }
 
 ///|
-async fn remote(rank : Json, args : Array[String]) -> Unit {
+async fn remote_text(rank : Json, args : Array[String]) -> String {
   let result = @shell.Cmd("ssh", [
     "-o",
     "BatchMode=yes",
@@ -33,6 +33,12 @@ async fn remote(rank : Json, args : Array[String]) -> Unit {
     args.map(quote).join(" "),
   ]).output()
   result.check()
+  result.stdout()
+}
+
+///|
+async fn remote(rank : Json, args : Array[String]) -> Unit {
+  ignore(remote_text(rank, args))
 }
 
 ///|
@@ -73,6 +79,24 @@ fn unit(root : String, rank : Json, ordinal : Int32) -> String raise {
 }
 
 ///|
+/// Deployment relocates an accepted opaque runtime manifest. Capacity remains
+/// owned by that runtime; no second context/slot/page policy lives here.
+fn relocate_service(accepted : Json, plan : Json, root : String) -> Json raise {
+  guard accepted is Object(original) else { fail("accepted service manifest") }
+  let fields = original.copy()
+  fields["model_root"] = Json(root + "/model")
+  fields["kernel_root"] = Json(root)
+  fields["executable"] = Json(root + "/glm_service.exe")
+  fields["listen_address"] = Json(text(plan, "listen_address"))
+  fields["production_ready"] = true
+  fields["credential_file"] = "backend.credential"
+  for key in ["model_label", "runtime_label", "tokenizer_label"] {
+    fields[key] = Json(text(plan, key))
+  }
+  Json(fields)
+}
+
+///|
 /// Install only; the paired lifecycle owner starts the peer/coordinator later.
 /// Existing checkpoint files receive durable hard links, not byte copies/scans.
 async fn main {
@@ -84,11 +108,16 @@ async fn main {
     fail("two ranks required")
   }
   @fs.mkdir(evidence, permission=0o700)
-  let secret = @shell.Cmd("openssl", ["rand", "-hex", "32"]).output()
-  secret.check()
+  let secret = if plan is { "credential_source": String(path), .. } {
+    @fs.read_file(path).text().trim().to_owned()
+  } else {
+    let generated = @shell.Cmd("openssl", ["rand", "-hex", "32"]).output()
+    generated.check()
+    generated.stdout().trim().to_owned()
+  }
   @fs.write_file(
     evidence + "/backend.credential",
-    secret.stdout().trim().to_owned(),
+    secret,
     create_mode=CreateNew,
   )
   @shell.Cmd("chmod", ["600", evidence + "/backend.credential"]).run()
@@ -127,28 +156,11 @@ async fn main {
       ] {
       remote(rank, ["cp", "-n", "--", prior + "/" + file, root + "/" + file])
     }
-    let service : Json = {
-      "model_root": root + "/model",
-      "kernel_root": root,
-      "inventory": "SHARDS.sha256",
-      "module0": "rank0.cubin",
-      "module1": "rank1.cubin",
-      "sampling_module": "sampling.cubin",
-      "control_address": text(plan, "control_address"),
-      "rendezvous_address": text(plan, "rendezvous_address"),
-      "listen_address": text(plan, "listen_address"),
-      "production_ready": true,
-      "executable": root + "/glm_service.exe",
-      "rows": 64,
-      "slots": 4,
-      "context": 2048,
-      "budget_mib": 102400,
-      "reserve_mib": 2048,
-      "model_label": text(plan, "model_label"),
-      "runtime_label": text(plan, "runtime_label"),
-      "tokenizer_label": text(plan, "tokenizer_label"),
-      "credential_file": "backend.credential",
-    }
+    let service = relocate_service(
+      @json.parse(remote_text(rank, ["cat", prior + "/service.json"])),
+      plan,
+      root,
+    )
     @fs.write_file(
       evidence + "/service-\{ordinal}.json",
       service.stringify(),
@@ -168,8 +180,27 @@ async fn main {
       unit(root, rank, ordinal),
       create_mode=CreateNew,
     )
-    // Exclusive install: a prior release is not overwritten by staging.
-    remote(rank, ["test", "!", "-e", home + "/.config/systemd/user/" + name])
+    // An upgrade preserves the old release and unit, and only replaces a
+    // stopped exact owner. The paired controller still owns starting it.
+    if rank is { "previous_root": String(previous), .. } {
+      let state = remote_text(rank, [
+        "systemctl", "--user", "show", name, "-p", "ActiveState", "--value",
+      ]).trim()
+      guard state is ("inactive" | "failed") else {
+        fail("native owner still active")
+      }
+      let prior_unit = remote_text(rank, ["systemctl", "--user", "cat", name])
+      guard prior_unit.contains("WorkingDirectory=" + previous + "\n") else {
+        fail("unexpected prior release")
+      }
+      @fs.write_file(
+        evidence + "/previous-" + name,
+        prior_unit,
+        create_mode=CreateNew,
+      )
+    } else {
+      remote(rank, ["test", "!", "-e", home + "/.config/systemd/user/" + name])
+    }
     copy(rank, evidence + "/" + name, home + "/.config/systemd/user/" + name)
     remote(rank, ["systemctl", "--user", "daemon-reload"])
     println("rank \{ordinal} installed, not started")
@@ -185,4 +216,38 @@ test "native units preserve coordinator-owned shutdown without acceptance timeou
   assert_true(value.contains("Restart=no"))
   assert_false(value.contains("RuntimeMaxSec"))
   assert_eq(quote("a'b"), "'a'\\''b'")
+}
+
+///|
+test "deployment carries accepted capacity without a second allocation policy" {
+  let accepted : Json = {
+    "context": 8192,
+    "slots": 16,
+    "history_pages": 513,
+    "admission_lanes": 16,
+    "budget_mib": 102400,
+    "reserve_mib": 2048,
+    "control_address": "peer",
+    "rows": 64,
+  }
+  let plan : Json = {
+    "listen_address": "host",
+    "model_label": "m",
+    "runtime_label": "r",
+    "tokenizer_label": "t",
+  }
+  let relocated = relocate_service(accepted, plan, "/srv/new")
+  guard relocated is Object(fields) && accepted is Object(original) else {
+    fail("object")
+  }
+  for
+    key in [
+      "context", "slots", "history_pages", "admission_lanes", "budget_mib", "reserve_mib",
+      "control_address", "rows",
+    ] {
+    assert_eq(fields[key], original[key])
+  }
+  assert_eq(fields["production_ready"], true)
+  assert_eq(fields["executable"], "/srv/new/glm_service.exe")
+  assert_false(original.contains("production_ready"))
 }
