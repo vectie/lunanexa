@@ -2707,13 +2707,23 @@ fn gateway_auth_refusal(
       )
     "invalid-credentials" =>
       portal_copy(
-        locale, "The address or password was not accepted. Check both and try again.",
-        "邮箱或密码不正确，请检查后重试。",
+        locale, "The address or password was not accepted. Use your registered email, not your display name.",
+        "邮箱或密码不正确。请使用注册邮箱，不要填写显示名称。",
+      )
+    "account-temporarily-locked" =>
+      portal_copy(
+        locale, "Sign-in is temporarily locked after repeated failures. Wait before retrying; your password has not been changed.",
+        "连续登录失败，身份站暂时锁定了登录。请稍后再试，密码未被修改；反复重试可能延长等待。",
       )
     "identity-rejected" =>
       portal_copy(
         locale, "Signed in, but this identity cannot be used yet. Ask a platform administrator to enable the account.",
         "登录成功，但该身份暂时不可用。请联系平台管理员启用账户。",
+      )
+    "login-status-unavailable" =>
+      portal_copy(
+        locale, "Sign-in failed, but the identity provider's lockout status could not be checked. Wait before retrying or ask an administrator to check the identity service.",
+        "登录未成功，暂时无法确认是密码不匹配还是账户锁定。请稍后重试，或联系管理员检查身份站。",
       )
     "identity-provider-unavailable" =>
       portal_copy(
@@ -6985,7 +6995,7 @@ fn app_view(
               @html.div([
                 @html.label(
                   for_="portal-login-email",
-                  portal_copy(locale, "Email address", "邮箱"),
+                  portal_copy(locale, "Registered email", "注册邮箱"),
                 ),
                 @html.input(
                   id="portal-login-email",
@@ -6997,12 +7007,20 @@ fn app_view(
                   ),
                   on_input=emit.map(value => LoginEmailChanged(value)),
                 ),
+                @html.small(
+                  portal_copy(
+                    locale, "Sign in with the email used at registration, not your display name.",
+                    "登录请使用注册时的邮箱，不是显示名称。",
+                  ),
+                ),
               ]),
               if model.registering {
                 @html.div([
                   @html.label(
                     for_="portal-register-name",
-                    portal_copy(locale, "Display name", "显示名称"),
+                    portal_copy(
+                      locale, "Display name (not a login name)", "显示名称（不作为登录名）",
+                    ),
                   ),
                   @html.input(
                     id="portal-register-name",

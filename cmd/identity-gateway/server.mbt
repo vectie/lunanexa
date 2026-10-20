@@ -1,5 +1,5 @@
 ///|
-fn response_reason(status : Int) -> String {
+fn response_reason(status : Int32) -> String {
   match status {
     200 => "OK"
     204 => "No Content"
@@ -22,11 +22,11 @@ fn response_reason(status : Int) -> String {
 ///|
 async fn send_body(
   connection : @http.ServerConnection,
-  status : Int,
+  status : Int32,
   body : String,
   content_type : String,
-  headers? : @http.Headers = Map([]),
-  cookies? : Array[@http.Cookie] = [],
+  headers~ : @http.Headers = Map([]),
+  cookies~ : Array[@http.Cookie] = [],
 ) -> Unit {
   headers["Content-Type"] = content_type
   headers["Content-Length"] = @utf8.encode(body).length().to_string()
@@ -48,7 +48,7 @@ fn error_body(code : String) -> String {
 ///|
 async fn send_error(
   connection : @http.ServerConnection,
-  status : Int,
+  status : Int32,
   code : String,
 ) -> Unit {
   send_body(
@@ -65,7 +65,7 @@ fn browser_cookie(
   name : String,
   value : String,
   max_age : Int64,
-  secure? : Bool = true,
+  secure~ : Bool = true,
 ) -> @http.Cookie {
   Cookie(name, value, path="/", max_age~, secure~, http_only=true, extensions=[
     "SameSite=Lax",
@@ -73,7 +73,7 @@ fn browser_cookie(
 }
 
 ///|
-fn expired_cookie(name : String, secure? : Bool = true) -> @http.Cookie {
+fn expired_cookie(name : String, secure~ : Bool = true) -> @http.Cookie {
   browser_cookie(name, "", 0L, secure~)
 }
 
@@ -99,7 +99,7 @@ fn host_and_audience(
 fn exact_origin(
   request : @http.Request,
   host : String,
-  secure? : Bool = true,
+  secure~ : Bool = true,
 ) -> Bool {
   let scheme = if secure { "https" } else { "http" }
   header(request.headers, "Origin") == Some("\{scheme}://\{host}") &&
@@ -389,6 +389,12 @@ async fn handle_browser_session(
   } else {
     (current_id, current)
   }
+  let allowed = browser_audience_allowed(config, active, audience) catch {
+    _ => return send_error(connection, 503, "identity-session-unavailable")
+  }
+  if !allowed {
+    return send_error(connection, 403, "operator-access-denied")
+  }
   let refreshed = { ..active, last_used_unix_ms: now, }
   store.replace(active_id, refreshed)
   let cookie_reference = encode_cookie_reference(
@@ -577,7 +583,7 @@ async fn proxy_request(
   authorization? : String,
   no_store~ : Bool,
   response_cookie? : @http.Cookie,
-  additional_headers? : @http.Headers = Map([]),
+  additional_headers~ : @http.Headers = Map([]),
 ) -> Unit {
   let request_body = reader.read_all().binary()
   guard request_body.length() <= MaximumRequestBytes else {

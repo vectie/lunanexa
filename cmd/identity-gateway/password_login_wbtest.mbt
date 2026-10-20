@@ -78,9 +78,15 @@ test "password login body is bounded and requires both credentials" {
   assert_eq(parsed.username, "alice@example.test")
   assert_eq(parsed.password, "correct horse")
   assert_eq(parsed.audience, "operator")
+  let spaced = parse_password_login_request(
+    "{\"username\":\" alice@example.test \",\"password\":\" secret \",\"audience\":\"enterprise\"}",
+  )
+  assert_eq(spaced.username, "alice@example.test")
+  assert_eq(spaced.password, " secret ")
   for
     rejected in [
-      "", "{}", "{\"username\":\"alice\",\"audience\":\"operator\"}", "{\"password\":\"secret\",\"audience\":\"operator\"}",
+      "", "{}", "{\"username\":\"   \",\"password\":\"secret\",\"audience\":\"operator\"}",
+      "{\"username\":\"alice\",\"audience\":\"operator\"}", "{\"password\":\"secret\",\"audience\":\"operator\"}",
       "{\"username\":\"\",\"password\":\"secret\",\"audience\":\"operator\"}", "{\"username\":\"alice\",\"password\":\"\",\"audience\":\"operator\"}",
       "{\"username\":\"ali\\nce\",\"password\":\"secret\",\"audience\":\"operator\"}",
     ] {
@@ -116,31 +122,86 @@ test "password grant keeps the secret out of the request body" {
 }
 
 ///|
-test "rejected credentials map to a bare 401 and an outage to a distinct 503" {
+test "password failure distinguishes bad credentials lockout identity rejection and provider misconfiguration" {
   assert_eq(
-    password_login_failure_response(password_token_failure(400)),
+    password_login_failure_response(
+      password_token_failure(
+        400, "{\"error\":\"invalid_grant\",\"error_description\":\"Invalid user credentials\"}",
+      ),
+    ),
     (401, "invalid-credentials"),
   )
   assert_eq(
-    password_login_failure_response(password_token_failure(401)),
-    (401, "invalid-credentials"),
+    password_login_failure_response(
+      password_token_failure(
+        400, "{\"error\":\"invalid_grant\",\"error_description\":\"Account temporarily disabled; contact admin or try again later\"}",
+      ),
+    ),
+    (429, "account-temporarily-locked"),
   )
   assert_eq(
-    password_login_failure_response(password_token_failure(403)),
-    (401, "invalid-credentials"),
+    password_login_failure_response(
+      password_token_failure(
+        400, "{\"error\":\"invalid_grant\",\"error_description\":\"Account disabled\"}",
+      ),
+    ),
+    (401, "identity-rejected"),
   )
+  for status in [400, 401, 403, 500, 503] {
+    assert_eq(
+      password_login_failure_response(
+        password_token_failure(status, "{\"error\":\"invalid_client\"}"),
+      ),
+      (503, "identity-provider-unavailable"),
+    )
+  }
   assert_eq(
-    password_login_failure_response(password_token_failure(500)),
-    (503, "identity-provider-unavailable"),
-  )
-  assert_eq(
-    password_login_failure_response(password_token_failure(503)),
+    password_login_failure_response(password_token_failure(400, "not json")),
     (503, "identity-provider-unavailable"),
   )
   // Nothing but the stable code reaches the browser.
   assert_eq(
     error_body("invalid-credentials"),
     "{\"error\":\"invalid-credentials\"}",
+  )
+}
+
+///|
+test "operator audience uses account role not company membership or display name" {
+  assert_true(
+    account_allows_operator(
+      "{\"roles\":[\"EnterpriseUser\",\"PlatformOperator\"]}",
+    ),
+  )
+  assert_false(
+    account_allows_operator(
+      "{\"display_name\":\"admin\",\"roles\":[\"EnterpriseUser\",\"OrganizationAdministrator\"]}",
+    ),
+  )
+  assert_false(account_allows_operator("{\"roles\":[]}"))
+  try ignore(account_allows_operator("{}")) catch {
+    _ => ()
+  } noraise {
+    _ => fail("missing roles must not be accepted")
+  }
+}
+
+///|
+test "authoritative login status is read without exposing failure metadata" {
+  assert_true(
+    login_status_locked(
+      "{\"disabled\":true,\"numFailures\":5,\"lastIPFailure\":\"private\"}",
+    ),
+  )
+  assert_false(login_status_locked("{\"disabled\":false,\"numFailures\":4}"))
+  try ignore(login_status_locked("{}")) catch {
+    _ => ()
+  } noraise {
+    _ => fail("missing status is not unlocked evidence")
+  }
+  assert_eq(
+    password_login_failure_response(LoginStatusUnavailable),
+    (503, "login-status-unavailable"),
   )
 }
 

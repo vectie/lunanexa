@@ -79,8 +79,12 @@ done
 test "$(rg -c 'pkce.code.challenge.method: S256' "$manifest")" -eq 2
 test "$(rg -c 'directAccessGrantsEnabled: false' "$manifest")" -eq 2
 test "$(rg -c 'serviceAccountsEnabled: false' "$manifest")" -eq 2
-test "$(rg -c 'proxy_ssl_verify on' "$manifest")" -eq 3
-test "$(rg -c 'proxy_ssl_server_name on' "$manifest")" -eq 3
+test "$(rg -c 'proxy_ssl_verify on' "$manifest")" -eq 5
+test "$(rg -c 'proxy_ssl_server_name on' "$manifest")" -eq 5
+rg -F -q 'location = /admin/realms/lunanexa/users {' "$manifest"
+rg -F -q 'limit_except GET POST { deny all; }' "$manifest"
+rg -F -q 'location ~ ^/admin/realms/lunanexa/attack-detection/brute-force/users/[A-Za-z0-9-]+$ {' "$manifest"
+rg -F -q 'limit_except GET { deny all; }' "$manifest"
 test "$(rg -c 'secretName: lunanexa-platform-idp-tls' "$manifest")" -eq 1
 test "$(rg -c 'secretName: lunanexa-identity-internal-tls' "$manifest")" -eq 1
 if rg -U -q 'name: lunanexa-platform-idp-ingress(.|\n)*app.kubernetes.io/name: ingress-nginx' "$manifest"; then

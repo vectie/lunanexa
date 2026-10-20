@@ -9,6 +9,8 @@
 /// resulting `lnxs_` session.
 priv suberror PasswordLoginError {
   InvalidCredentials
+  TemporarilyLocked
+  LoginStatusUnavailable
   IdentityRejected
   UpstreamUnavailable
 }
@@ -24,11 +26,11 @@ priv struct PasswordLoginRequest {
 /// The most a password login body may occupy. The credential fields are bounded
 /// far below this; the cap keeps a hostile body from allocating before it is
 /// parsed.
-const MaximumPasswordRequestBytes : Int = 4096
+const MaximumPasswordRequestBytes : Int32 = 4096
 
 ///|
 /// Failures allowed per source before that source is blocked for a window.
-const PasswordFailureLimit : Int = 8
+const PasswordFailureLimit : Int32 = 8
 
 ///|
 /// Window in which failures accumulate, and the block applied once the limit is
@@ -43,11 +45,11 @@ const PasswordFailureBlockMs : Int64 = 300000L
 /// Upper bound on tracked sources. Expired windows are dropped before new ones
 /// are admitted; a table that is still full simply stops admitting new sources,
 /// so a flood of source addresses cannot grow the table without bound.
-const PasswordFailureSources : Int = 1024
+const PasswordFailureSources : Int32 = 1024
 
 ///|
 priv struct PasswordFailureWindow {
-  failures : Int
+  failures : Int32
   window_started_unix_ms : Int64
   blocked_until_unix_ms : Int64
 }
@@ -170,7 +172,7 @@ fn password_login_audience(value : String) -> BrowserAudience? {
 ///|
 fn parse_password_login_request(body : String) -> PasswordLoginRequest raise {
   let request : PasswordLoginRequest = @json.from_json(@json.parse(body))
-  guard request.username.length() >= 1 &&
+  guard request.username.trim() != "" &&
     request.username.length() <= 256 &&
     request.password.length() >= 1 &&
     request.password.length() <= 1024 &&
@@ -180,7 +182,7 @@ fn parse_password_login_request(body : String) -> PasswordLoginRequest raise {
     !request.username.contains("\r") else {
     raise Failure("password login request is invalid")
   }
-  request
+  { ..request, username: request.username.trim().to_owned(), }
 }
 
 ///|
@@ -196,24 +198,43 @@ fn password_grant_body(
 }
 
 ///|
-/// A rejected grant and an unreachable provider must not look the same to the
-/// browser. Keycloak answers a bad username or password with 400
-/// `invalid_grant`, and a disabled or mis-scoped client with 401 or 403; all
-/// three mean the credentials were not accepted.
-fn password_token_failure(status : Int) -> PasswordLoginError {
-  if status == 400 || status == 401 || status == 403 {
-    InvalidCredentials
-  } else {
-    UpstreamUnavailable
+/// Classify only known provider errors; never echo provider text or mistake a
+/// broken client configuration for a user's incorrect password.
+fn password_token_failure(status : Int32, body : String) -> PasswordLoginError {
+  if status == 400 {
+    let value = @json.parse(body) catch { _ => return UpstreamUnavailable }
+    match value {
+      {
+        "error": String("invalid_grant"),
+        "error_description": String(detail),
+        ..
+      } => {
+        let detail = detail.to_lower()
+        if detail.contains("temporarily disabled") ||
+          detail.contains("temporarily locked") {
+          return TemporarilyLocked
+        }
+        if detail == "invalid user credentials" {
+          return InvalidCredentials
+        }
+        return IdentityRejected
+      }
+      _ => ()
+    }
   }
+  UpstreamUnavailable
 }
 
 ///|
 /// The only thing the browser learns about a failure. Upstream error text, the
 /// username, and the password are never echoed.
-fn password_login_failure_response(error : PasswordLoginError) -> (Int, String) {
+fn password_login_failure_response(
+  error : PasswordLoginError,
+) -> (Int32, String) {
   match error {
     InvalidCredentials => (401, "invalid-credentials")
+    TemporarilyLocked => (429, "account-temporarily-locked")
+    LoginStatusUnavailable => (503, "login-status-unavailable")
     IdentityRejected => (401, "identity-rejected")
     UpstreamUnavailable => (503, "identity-provider-unavailable")
   }
@@ -237,7 +258,17 @@ async fn password_token_exchange(
     _ => raise UpstreamUnavailable
   }
   guard response.code == 200 else {
-    raise password_token_failure(response.code)
+    let failure = password_token_failure(response.code, response_body)
+    if failure is InvalidCredentials &&
+      config.registration_admin_origin is Some(_) {
+      let locked = password_account_locked(config, username) catch {
+        _ => raise LoginStatusUnavailable
+      }
+      if locked {
+        raise TemporarilyLocked
+      }
+    }
+    raise failure
   }
   let token : OidcTokenResponse = @json.from_json(@json.parse(response_body)) catch {
     _ => raise UpstreamUnavailable
@@ -404,7 +435,7 @@ async fn handle_password_login(
       let (status, code) = password_login_failure_response(error)
       // A rejected login counts against the source; a provider outage does not,
       // so an unavailable issuer cannot lock out every operator.
-      if status == 401 {
+      if code == "invalid-credentials" {
         password_login_failures.record_failure(source, now)
       }
       return send_error(connection, status, code)
@@ -412,6 +443,14 @@ async fn handle_password_login(
   }
   let session = issue_controller_session(config, identity, audience, now) catch {
     _ => return send_error(connection, 503, "identity-session-unavailable")
+  }
+  let allowed = browser_audience_allowed(config, session, audience) catch {
+    _ => return send_error(connection, 503, "identity-session-unavailable")
+  }
+  if !allowed {
+    ignore(revoke_controller_session(config, session.bearer) catch { _ => 0 })
+    password_login_failures.record_success(source)
+    return send_error(connection, 403, "operator-access-denied")
   }
   let session_id = store.create(session) catch {
     _ => return send_error(connection, 503, "identity-session-unavailable")

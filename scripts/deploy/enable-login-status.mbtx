@@ -1,0 +1,79 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+/// Read existing private-edge proxy settings; preserve host/CA/topology inputs.
+/// Writes only the two narrow admin locations, never an account or permission.
+async fn main {
+  let args = @env.args()
+  guard args is [_, ns, backup_path] else {
+    fail("usage: enable-login-status.mbtx IDENTITY_NAMESPACE BACKUP_PATH")
+  }
+  let cm = "lunanexa-identity-internal-edge-nginx"
+  let result = @shell.Cmd("kubectl", ["-n", ns, "get", "cm", cm, "-o", "json"]).output()
+  result.check()
+  let original = result.stdout()
+  @fs.write_file(backup_path, original, create_mode=CreateNew, permission=0o600)
+  let value = @json.parse(original)
+  guard value is { "data": { "default.conf": String(config), .. }, .. } else {
+    fail("missing edge configuration")
+  }
+  let start = config.find("location ^~ /realms/lunanexa/ {")
+  guard start is Some(start) else { fail("missing identity proxy template") }
+  let tail = config[start:]
+  guard tail.find("}") is Some(end) else { fail("missing proxy end") }
+  let block = tail[:end + 1].to_owned()
+  let users = block.replace(
+    old="location ^~ /realms/lunanexa/ {",
+    new="location = /admin/realms/lunanexa/users {\n        limit_except GET POST { deny all; }",
+  )
+  let attack = block.replace(
+    old="location ^~ /realms/lunanexa/ {",
+    new="location ~ ^/admin/realms/lunanexa/attack-detection/brute-force/users/[A-Za-z0-9-]+$ {\n        limit_except GET { deny all; }",
+  )
+  let mut next = config
+  if config.contains("location ^~ /admin/realms/lunanexa/users {") {
+    next = next
+      .replace(
+        old="location ^~ /admin/realms/lunanexa/users {",
+        new="location = /admin/realms/lunanexa/users {",
+      )
+      .replace(
+        old="limit_except POST { deny all; }",
+        new="limit_except GET POST { deny all; }",
+      )
+  } else if !config.contains("location = /admin/realms/lunanexa/users {") {
+    next = next.replace(
+      old="location / {",
+      new=users + "\n\n      location / {",
+    )
+  }
+  if !next.contains("location ~ ^/admin/realms/lunanexa/attack-detection/") {
+    next = next.replace(
+      old="location / {",
+      new=attack + "\n\n      location / {",
+    )
+  }
+  let patch : Json = { "data": { "default.conf": next } }
+  @shell.Cmd("kubectl", [
+    "-n",
+    ns,
+    "patch",
+    "cm",
+    cm,
+    "--type=merge",
+    "-p",
+    patch.stringify(),
+  ]).run()
+  println("Private edge updated; backup: " + backup_path)
+  // subPath ConfigMap mounts do not update on nginx reload: roll the two
+  // private edges so their new pods actually receive the changed locations.
+  @shell.Cmd("kubectl", ["-n", ns, "rollout", "restart", "deploy/lunanexa-identity-internal-edge"]).run()
+  @shell.Cmd("kubectl", ["-n", ns, "rollout", "status", "deploy/lunanexa-identity-internal-edge", "--timeout=120s"]).run()
+}

@@ -154,11 +154,45 @@ async fn issue_controller_session(
 }
 
 ///|
-fn exchange_requires_registration(status : Int) -> Bool {
+fn exchange_requires_registration(status : Int32) -> Bool {
   // The account store deliberately maps an unknown external identity to 401;
   // older deployments used 404. Registration remains separately signed and
   // will reject suspended or conflicting existing accounts.
   status == 401 || status == 404
+}
+
+///|
+fn account_allows_operator(body : String) -> Bool raise {
+  match @json.parse(body) {
+    { "roles": Array(roles), .. } =>
+      roles.any(role => role is String("PlatformOperator"))
+    _ => raise Failure("account role response is invalid")
+  }
+}
+
+///|
+/// Organization administrators are not platform operators. Check the live
+/// account authority, not OIDC display names, client IDs or cached cookies.
+async fn browser_audience_allowed(
+  config : GatewayConfig,
+  session : GatewayCookie,
+  audience : BrowserAudience,
+) -> Bool {
+  if audience != Operator {
+    return true
+  }
+  let (origin, _) = endpoint_origin_and_path(config.control_endpoint, false)
+  let client = @http.Client(origin)
+  defer client.close()
+  let response = client.get("/v1/auth/self", extra_headers={
+    "Authorization": "Bearer \{session.bearer}",
+    "Accept": "application/json",
+  })
+  let body = client.read_all().text()
+  guard response.code == 200 else {
+    raise Failure("account authority is unavailable")
+  }
+  account_allows_operator(body)
 }
 
 ///|
@@ -177,7 +211,7 @@ fn exchange_detail(body : String) -> String {
 async fn revoke_controller_session(
   config : GatewayConfig,
   bearer : String,
-) -> Int {
+) -> Int32 {
   let (response, _) = post_internal(
     config.control_endpoint,
     "/v1/auth/logout",

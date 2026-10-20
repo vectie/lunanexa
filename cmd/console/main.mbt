@@ -11,7 +11,7 @@ fn model_local_component(directory : String) -> String {
 
 ///|
 priv struct BrowserStreamEvent {
-  sequence : Int
+  sequence : Int32
   kind : String
   text : String
   receipt : String
@@ -186,7 +186,7 @@ priv struct AccessPackageIntent {
   organization_id : String
   tenant_ref : String
   template_id : String
-  lifetime_days : Int
+  lifetime_days : Int32
   identity_verified : Bool
 } derive(ToJson)
 
@@ -207,7 +207,7 @@ priv struct ModelAdoptionIntent {
   version : String
   license_id : String
   compatible_architectures : Array[String]
-  minimum_memory_mib : Int
+  minimum_memory_mib : Int32
 } derive(ToJson)
 
 ///|
@@ -235,7 +235,7 @@ priv struct GatewayBrowserSession {
 /// apart from the body so a rejected login can be reported without echoing
 /// anything the gateway did not deliberately send.
 priv struct PasswordLoginOutcome {
-  status : Int
+  status : Int32
   body : String
 } derive(FromJson)
 
@@ -445,6 +445,10 @@ extern "js" fn gateway_session_promise() -> @js.Promise =
   #|     redirect: "error"
   #|   });
   #|   if (response.status === 401 || response.status === 404) return "";
+  #|   if (response.status === 403) {
+  #|     const body = await response.json();
+  #|     if (body.error === "operator-access-denied") return "operator-access-denied";
+  #|   }
   #|   if (!response.ok) throw new Error(`gateway session HTTP ${response.status}`);
   #|   const text = await response.text();
   #|   if (text.length > 4096) throw new Error("gateway session response exceeds its bound");
@@ -512,7 +516,7 @@ extern "js" fn demo_contract_preview_promise(
 
 ///|
 extern "js" fn contract_preview_delay_promise(
-  milliseconds : Int,
+  milliseconds : Int32,
 ) -> @js.Promise =
   #| milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
 
@@ -786,8 +790,8 @@ async fn request(
   endpoint : String,
   path : String,
   token : String,
-  subject_ref? : String = "",
-  body? : String = "",
+  subject_ref~ : String = "",
+  body~ : String = "",
 ) -> String {
   let base = if endpoint.has_suffix("/") {
     endpoint[:-1].to_owned()
@@ -844,7 +848,7 @@ fn architecture(heartbeat : @contracts.NodeHeartbeat) -> String {
 }
 
 ///|
-fn total_memory(heartbeat : @contracts.NodeHeartbeat) -> Int {
+fn total_memory(heartbeat : @contracts.NodeHeartbeat) -> Int32 {
   let mut total = 0
   for device in heartbeat.inventory.accelerators {
     total += device.memory_total_mib
@@ -860,7 +864,7 @@ fn latest_node_metric_value(
   samples : Array[@contracts.TelemetrySample],
   node_id : String,
   metric : String,
-) -> Int? {
+) -> Int32? {
   latest_node_sensor_value(samples, node_id, metric).map(value => value.to_int())
 }
 
@@ -892,7 +896,7 @@ fn latest_node_metric(
   samples : Array[@contracts.TelemetrySample],
   node_id : String,
   metric : String,
-) -> Int {
+) -> Int32 {
   latest_node_metric_value(samples, node_id, metric).unwrap_or(-1)
 }
 
@@ -1647,11 +1651,7 @@ fn deferred_read_command(
         ),
       )
     catch {
-      error =>
-        DeferredReadFailed(
-          group,
-          http_status_is(error, 401) || http_status_is(error, 403),
-        )
+      error => DeferredReadFailed(group, http_status_is(error, 401))
     } noraise {
       value => value
     }
@@ -1663,9 +1663,9 @@ fn deferred_read_command(
 priv struct AuditReadPayload {
   rows : Array[@ui.AuditRow]
   request_details : Array[@ui.RequestDetail]
-  request_count : Int
-  request_errors : Int
-  recent_changes : Int
+  request_count : Int32
+  request_errors : Int32
+  recent_changes : Int32
 }
 
 ///|
@@ -2608,7 +2608,7 @@ priv enum LoadOutcome {
     String,
     String,
     Int64,
-    Int,
+    Int32,
     Result[@capacity_planner.ConsoleTelemetrySnapshot, String]
   )
   Loaded(@ui.ConsoleState)
@@ -3454,7 +3454,7 @@ fn demo_operator_contract_preview_command(
 fn schedule_contract_preview(
   model : AppModel,
   documents : @contract_documents.ContractDocumentsState,
-  delay_ms : Int,
+  delay_ms : Int32,
   emit : @rabbita.Emit[AppMessage],
 ) -> (AppModel, @rabbita.Cmd) {
   guard documents.preview_request() is Some(request) else {
@@ -3513,14 +3513,18 @@ fn load_command(
         model.console.locale,
       )
     catch {
-      _ =>
+      error =>
         LoadFailed(
           model.console.locale,
-          console_copy(
-            model.console.locale,
-            "The controller could not be reached or rejected this credential.",
-            "无法连接控制器，或控制器拒绝了此凭据。",
-          ),
+          if http_status_is(error, 403) {
+            operator_access_denied_notice(model.console.locale)
+          } else {
+            console_copy(
+              model.console.locale,
+              "The controller could not be reached or rejected this credential.",
+              "无法连接控制器，或控制器拒绝了此凭据。",
+            )
+          },
         )
     } noraise {
       state => Loaded(state)
@@ -3530,12 +3534,15 @@ fn load_command(
 
 ///|
 fn gateway_session_bootstrap_command(
+  locale : @i18n.Locale,
   emit : @rabbita.Emit[AppMessage],
 ) -> @rabbita.Cmd {
   @rabbita.perform(message => emit(message), async fn() noraise {
     try {
       let text : String = gateway_session_promise().wait().cast()
-      if text == "" {
+      if text == "operator-access-denied" {
+        OperatorLoginRefused(locale, operator_access_denied_notice(locale))
+      } else if text == "" {
         GatewaySessionUnavailable
       } else {
         let session : GatewayBrowserSession = @json.from_json(@json.parse(text))
@@ -3575,8 +3582,19 @@ fn password_login_refusal(
   match password_login_error_code(outcome.body) {
     "invalid-credentials" =>
       console_copy(
-        locale, "The username or password was not accepted. Check both and try again.",
-        "用户名或密码不正确，请检查后重试。",
+        locale, "The username or password was not accepted. Use your registered email or login name, not your display name.",
+        "登录账号或密码不正确。请使用注册邮箱或登录名，不要填写显示名称。",
+      )
+    "account-temporarily-locked" =>
+      console_copy(
+        locale, "Sign-in is temporarily locked after repeated failures. Wait before retrying; your password has not been changed.",
+        "连续登录失败，身份站暂时锁定了登录。请稍后再试，密码未被修改；反复重试可能延长等待。",
+      )
+    "operator-access-denied" => operator_access_denied_notice(locale)
+    "login-status-unavailable" =>
+      console_copy(
+        locale, "Sign-in failed, but the identity provider's lockout status could not be checked. Wait before retrying or ask an administrator to check the identity service.",
+        "登录未成功，暂时无法确认是密码不匹配还是账户锁定。请稍后重试，或联系管理员检查身份站。",
       )
     "identity-rejected" =>
       console_copy(
@@ -3914,7 +3932,7 @@ fn json_string_member(text : String, key : String) -> String? {
 /// Rabbita error is opaque, and the detail helper below strips the envelope that
 /// carries the status line, so a handler that must tell one refusal from
 /// another keys on `Show` alone.
-fn http_status_is(error : Error, status : Int) -> Bool {
+fn http_status_is(error : Error, status : Int32) -> Bool {
   error.to_string().contains("HTTP \{status}")
 }
 
@@ -4262,11 +4280,7 @@ fn cluster_poll_request_command(
       )
       ClusterPolled(generation, nodes, storage_nodes)
     } catch {
-      error =>
-        ClusterPollFailed(
-          generation,
-          http_status_is(error, 401) || http_status_is(error, 403),
-        )
+      error => ClusterPollFailed(generation, http_status_is(error, 401))
     }
   })
 }
@@ -4298,6 +4312,14 @@ fn console_session_lost(model : AppModel) -> AppModel {
       ),
     },
   }
+}
+
+///|
+fn operator_access_denied_notice(locale : @i18n.Locale) -> String {
+  console_copy(
+    locale, "Your identity was verified, but this account has no platform operator permission. Company administrator permission is separate. Open the customer portal, or sign in with a platform operator account.",
+    "身份验证已通过，但此账户没有平台运维权限。企业管理员不等于平台管理员。请前往用户端，或使用有运维权限的账户登录。",
+  )
 }
 
 ///|
@@ -10166,7 +10188,9 @@ fn login_view(
           @html.div(class="login-field", [
             @html.label(
               for_="login-username",
-              console_copy(locale, "Username", "用户名"),
+              console_copy(
+                locale, "Registered email / login name", "注册邮箱／登录名",
+              ),
             ),
             @html.input(
               id="login-username",
@@ -10175,6 +10199,13 @@ fn login_view(
               maxlength=320,
               attrs=@html.Attrs::build().disabled(!transport_allowed),
               on_input=emit.map(value => LoginUsernameChanged(value)),
+            ),
+            @html.small(
+              class="login-help",
+              console_copy(
+                locale, "Use your registered email or login name, not your display name.",
+                "使用注册邮箱或登录名，不是显示名称。",
+              ),
             ),
           ]),
           @html.div(class="login-field", [
@@ -10206,6 +10237,11 @@ fn login_view(
             ),
           ]),
         ]),
+        @html.a(
+          href="/user/",
+          class="login-sso-link",
+          console_copy(locale, "Open customer portal", "前往用户端"),
+        ),
         if configured_endpoint().has_suffix("/mana") {
           @html.nothing
         } else {
@@ -10356,7 +10392,7 @@ fn main {
             // without a browser-held credential.
             load_command(base_model, emit)
           } else {
-            gateway_session_bootstrap_command(emit)
+            gateway_session_bootstrap_command(base_model.console.locale, emit)
           },
         )
       },

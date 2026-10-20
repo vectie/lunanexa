@@ -188,6 +188,78 @@ deployments may separately render `deploy/platform-identity-public-ingress.yaml`
 renderer requires that DNS host to equal `--identity-host`; its public TLS
 Secret is never mounted into Keycloak or the internal edge.
 
+## Password-form deployments
+
+Deployments explicitly enabling the existing password form retain their current
+identity-provider credential policy; upgrading the gateway does not reset user
+passwords, rename accounts, change roles, or clear provider lockouts. Public
+self-registration uses the email as the login name and the submitted name only
+as a display name. Both portals explain this distinction. Legacy operator login
+names remain accepted; only surrounding login-name whitespace is trimmed, never
+the password.
+
+Keycloak 26 returns the same `invalid_grant` for incorrect credentials and
+brute-force lockouts ([provider implementation](https://github.com/keycloak/keycloak/blob/26.7.3/services/src/main/java/org/keycloak/authentication/authenticators/directgrant/ValidateUsername.java)).
+On a rejected password the gateway uses the configured
+server-side registration service account to read the exact user and its
+attack-detection status through the private TLS edge. That account needs user
+view authority (the existing `manage-users` registration authority includes it).
+No new browser authority is granted. The edge allows GET/POST only on the exact
+users collection and GET only on the individual lockout-status route; password
+reset, role-write and failure-clearing routes remain inaccessible. Public admin
+routes remain closed. The browser receives only stable error codes:
+
+- `invalid-credentials` (401): login name or password not accepted;
+- `account-temporarily-locked` (429): provider reports a lock; wait before retrying;
+- `login-status-unavailable` (503): rejected login, but lockout diagnosis unavailable;
+- `operator-access-denied` (403): identity verified, but no `PlatformOperator` role;
+- `identity-provider-unavailable` (503): provider/client configuration or transport failure.
+
+Management login and cookie bootstrap check the live LunaNexa account role.
+Organization administrators do not implicitly become platform operators. A
+denied management entry offers a customer-portal link and preserves the
+independent customer session. Background HTTP 403 responses no longer clear a
+valid operator session as though it expired; HTTP 401 retains expiry recovery.
+
+For an existing private edge, run `moon run
+scripts/deploy/enable-login-status.mbtx IDENTITY_NAMESPACE /ABSOLUTE/NEW_BACKUP.json`.
+The script preserves existing host/CA settings, saves a private backup and rolls
+the edge deployment: nginx reload alone cannot update a ConfigMap `subPath`
+mount. Inspect both new ready pods before deploying the gateway. Also verify
+that the deployed process actually uses the binary inside the pinned image;
+an old hostPath command override can silently defeat an image upgrade.
+
+### Login regression verification — 2026-10-20
+
+The native functional suite passed 1856/1856, identity-gateway focused tests
+40/40, and console/enterprise JavaScript tests 144/144. The identity manifest
+tests also passed. `moon info`, formatting and native checking completed;
+the repository's strict `--deny-warn` gate remains blocked by pre-existing
+deprecated `to_json` calls under the October toolchain. The functional suite
+was run with that deprecation warning suppressed, not with assertions disabled.
+
+The deployed HTTPS customer portal was exercised with an existing, operator-
+provided non-operator account and its unchanged password: password login reached
+the authenticated enterprise page. The same account's management login and
+existing-cookie bootstrap displayed explicit permission denial, not expiry;
+the customer-portal link returned to the authenticated enterprise page. One
+deliberately incorrect password produced the credential error, then the correct
+password again produced permission denial. This also exercised both private
+user lookup and authoritative lock-status reads. No lockout was deliberately
+induced on an existing user; the locked and unavailable-status branches have
+automated regression coverage. The originally reported account was not used
+for password acceptance, at the operator's request. No existing password,
+account role, organization membership or machine entitlement was changed.
+
+The publicly served browser bundles matched the final tested build:
+
+- console SHA-256: `8886fe278904b78bf5b826677a2f7430e046c5f8800c39492e4c411a5876a83e`;
+- enterprise SHA-256: `83c22f2190f1f75db9d7892268ab8da5226623f55041b7494e32412242d07b75`.
+
+Only the gateway, browser bundles and private identity edge were updated;
+model servers, application workspaces and compute-node allocations were outside
+this release. Previous immutable images were retained for rollback.
+
 ## Required smoke acceptance
 
 Before enabling public exposure, prove all of the following with a new email address:
