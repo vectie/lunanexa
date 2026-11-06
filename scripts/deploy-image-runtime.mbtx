@@ -1,0 +1,263 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn kube(args : Array[String]) -> String {
+  let result = @shell.Cmd(
+    "kubectl",
+    ["--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", ..args],
+  ).output()
+  if result.exit_code() != 0 {
+    eprintln(result.stderr())
+  }
+  result.check()
+  result.stdout()
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, root] && root.has_prefix("/home/HwHiAiUser/") else {
+    fail("deploy-image-runtime.mbtx PRIVATE_RELEASE_DIR")
+  }
+  let models = @json.parse(@fs.read_file(root + "/model-files.json").text())
+  guard models is { "revision": String(revision), "files": Array(files), .. } &&
+    revision == "6fc90a3b1b653e935a0d175e260736de25b84df5" else {
+    fail("Invalid model release")
+  }
+  for file in files {
+    guard file
+      is { "target_path": String(path), "sha256": String(expected), .. } &&
+      !path.contains("..") else {
+      fail("Invalid model path")
+    }
+    let checksum = kube([
+      "-n",
+      "lunanexa",
+      "exec",
+      "comfyui-runtime-build",
+      "--",
+      "sha256sum",
+      "/model-artifacts/" + revision + "/" + path,
+    ])
+    guard checksum.has_prefix(expected + " ") else {
+      fail("Unverified model: " + path)
+    }
+  }
+  let qwen = @json.parse(
+    kube(["-n", "lunanexa", "get", "deployment", "qwen3-llm", "-o", "json"]),
+  )
+  guard qwen
+    is {
+      "status": { "readyReplicas": Number(1, ..), .. },
+      "spec": {
+        "template": {
+          "spec": { "containers": [{ "args": Array(args), .. }], .. },
+          ..
+        },
+        ..
+      },
+      ..
+    } &&
+    args.contains(Json::string("0.55")) else {
+    fail("Qwen must be ready at the approved reservation")
+  }
+  let node = @json.parse(
+    kube(["get", "node", "spark-3782-feee26eb", "-o", "json"]),
+  )
+  guard node
+    is {
+      "metadata": {
+        "labels": { "lunanexa.io/device-plugin": "shared-image", .. },
+        ..
+      },
+      "status": { "allocatable": { "nvidia.com/gpu": "2", .. }, .. },
+      ..
+    } else {
+    fail("Expected explicit shared GPU allocation")
+  }
+  let pvc : Json = {
+    "apiVersion": "v1",
+    "kind": "PersistentVolumeClaim",
+    "metadata": { "name": "comfyui-image-workspace", "namespace": "lunanexa" },
+    "spec": {
+      "storageClassName": "local-path",
+      "accessModes": ["ReadWriteOnce"],
+      "resources": { "requests": { "storage": "8Gi" } },
+    },
+  }
+  let network : Json = {
+    "apiVersion": "networking.k8s.io/v1",
+    "kind": "NetworkPolicy",
+    "metadata": { "name": "comfyui-image", "namespace": "lunanexa" },
+    "spec": {
+      "podSelector": { "matchLabels": { "app": "comfyui-image" } },
+      "policyTypes": ["Ingress", "Egress"],
+      "ingress": [
+        {
+          "from": [
+            { "podSelector": { "matchLabels": { "app": "image-adapter" } } },
+          ],
+          "ports": [{ "protocol": "TCP", "port": 8188 }],
+        },
+      ],
+      "egress": [],
+    },
+  }
+  let service : Json = {
+    "apiVersion": "v1",
+    "kind": "Service",
+    "metadata": { "name": "comfyui-image", "namespace": "lunanexa" },
+    "spec": {
+      "selector": { "app": "comfyui-image" },
+      "ports": [{ "name": "http", "port": 8188, "targetPort": 8188 }],
+    },
+  }
+  let deployment : Json = {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": { "name": "comfyui-image", "namespace": "lunanexa" },
+    "spec": {
+      "replicas": 1,
+      "strategy": { "type": "Recreate" },
+      "selector": { "matchLabels": { "app": "comfyui-image" } },
+      "template": {
+        "metadata": {
+          "labels": {
+            "app": "comfyui-image",
+            "lunanexa.io/component": "model-runtime",
+          },
+        },
+        "spec": {
+          "automountServiceAccountToken": false,
+          "nodeSelector": { "kubernetes.io/hostname": "spark-3782-feee26eb" },
+          "runtimeClassName": "nvidia",
+          "securityContext": {
+            "runAsUser": 1000,
+            "runAsGroup": 1000,
+            "fsGroup": 1000,
+            "fsGroupChangePolicy": "OnRootMismatch",
+          },
+          "initContainers": [
+            {
+              "name": "workspace-directories",
+              "image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/h3-runtime@sha256:b0bb860f5d369ff7e89e1e36fb91d416b15cbaad7f5b689f812f099f3a86529c",
+              "command": [
+                "mkdir", "-p", "/workspace/user", "/workspace/output", "/workspace/input",
+                "/workspace/temp",
+              ],
+              "securityContext": {
+                "allowPrivilegeEscalation": false,
+                "capabilities": { "drop": ["ALL"] },
+              },
+              "volumeMounts": [
+                { "name": "workspace", "mountPath": "/workspace" },
+              ],
+            },
+          ],
+          "containers": [
+            {
+              "name": "runtime",
+              "args": [
+                "--listen", "0.0.0.0", "--port", "8188", "--disable-all-custom-nodes",
+                "--disable-api-nodes", "--reserve-vram", "8", "--user-directory",
+                "/workspace/user", "--output-directory", "/workspace/output", "--input-directory",
+                "/workspace/input", "--temp-directory", "/workspace/temp", "--database-url",
+                "sqlite:////workspace/user/comfyui.db",
+              ],
+              "env": [
+                { "name": "USER", "value": "model-runtime" },
+                { "name": "LOGNAME", "value": "model-runtime" },
+                {
+                  "name": "TORCHINDUCTOR_CACHE_DIR",
+                  "value": "/workspace/cache/torch",
+                },
+                { "name": "XDG_CACHE_HOME", "value": "/workspace/cache" },
+                { "name": "CUDA_CACHE_PATH", "value": "/workspace/cache/cuda" },
+              ],
+              "image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/comfyui-runtime@sha256:d215c569d3bcade249a4e28a8dd56bc45c355a0616d45b6ab5e99984e3702e65",
+              "imagePullPolicy": "IfNotPresent",
+              "resources": {
+                "requests": {
+                  "cpu": "2",
+                  "memory": "24Gi",
+                  "nvidia.com/gpu": "1",
+                },
+                "limits": {
+                  "cpu": "8",
+                  "memory": "40Gi",
+                  "nvidia.com/gpu": "1",
+                },
+              },
+              "securityContext": {
+                "allowPrivilegeEscalation": false,
+                "capabilities": { "drop": ["ALL"] },
+              },
+              "ports": [{ "name": "http", "containerPort": 8188 }],
+              "readinessProbe": {
+                "httpGet": { "path": "/system_stats", "port": 8188 },
+                "periodSeconds": 5,
+              },
+              "livenessProbe": {
+                "httpGet": { "path": "/system_stats", "port": 8188 },
+                "initialDelaySeconds": 60,
+                "periodSeconds": 15,
+                "failureThreshold": 6,
+              },
+              "volumeMounts": [
+                {
+                  "name": "models",
+                  "mountPath": "/runtime/ComfyUI/models",
+                  "readOnly": true,
+                },
+                { "name": "workspace", "mountPath": "/workspace" },
+                { "name": "shm", "mountPath": "/dev/shm" },
+              ],
+            },
+          ],
+          "volumes": [
+            {
+              "name": "models",
+              "hostPath": {
+                "path": "/var/lib/lunanexa/node-agent/models/z-image-turbo/" +
+                revision,
+                "type": "Directory",
+              },
+            },
+            {
+              "name": "workspace",
+              "persistentVolumeClaim": {
+                "claimName": "comfyui-image-workspace",
+              },
+            },
+            {
+              "name": "shm",
+              "emptyDir": { "medium": "Memory", "sizeLimit": "2Gi" },
+            },
+          ],
+        },
+      },
+    },
+  }
+  for
+    (name, value) in [
+      ("comfyui-workspace", pvc),
+      ("comfyui-network", network),
+      ("comfyui-service", service),
+      ("comfyui-deployment", deployment),
+    ] {
+    let path = root + "/" + name + ".json"
+    @fs.write_file(
+      path,
+      value.stringify(indent=2),
+      create_mode=CreateNew,
+      permission=0o600,
+    )
+    println(kube(["apply", "-f", path]))
+  }
+}

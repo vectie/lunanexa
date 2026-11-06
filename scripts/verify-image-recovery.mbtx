@@ -1,0 +1,102 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/http",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/core/encoding/base64",
+  "moonbitlang/x@0.5.5/crypto",
+}
+
+///|
+async fn kube(args : Array[String]) -> Json {
+  let result = @shell.Cmd(
+    "kubectl",
+    [
+      "--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", ..args, "-o",
+      "json",
+    ],
+  ).output()
+  result.check()
+  @json.parse(result.stdout())
+}
+
+///|
+/// GET only: verify a persisted completed result through a restarted adapter.
+async fn main {
+  guard @env.args() is [_, root, origin] &&
+    root.has_prefix("/home/HwHiAiUser/") &&
+    origin.has_prefix("http://127.0.0.1:") else {
+    fail(
+      "verify-image-recovery.mbtx PRIVATE_RELEASE_DIR LOOPBACK_ADAPTER_ORIGIN",
+    )
+  }
+  guard kube(["-n", "lunanexa", "get", "pvc", "image-adapter-state"])
+    is { "spec": { "volumeName": String(pv), .. }, .. } else {
+    fail("Missing state volume")
+  }
+  guard kube(["get", "pv", pv])
+    is {
+      "spec": {
+        "csi": {
+          "volumeAttributes": {
+            "server": "192.168.2.175",
+            "share": "/data/lunanexa-workspaces",
+            "subDir": String(subdir),
+            ..
+          },
+          ..
+        },
+        ..
+      },
+      ..
+    } &&
+    subdir.has_prefix("lunanexa/image-adapter-state/") &&
+    !subdir.contains("..") else {
+    fail("Unexpected state volume")
+  }
+  let state = "/data/lunanexa-workspaces/" + subdir + "/z-image-turbo-v1"
+  guard @json.parse(@fs.read_file(state + "/jobs.json").text())
+    is { "jobs": Array(jobs), .. } else {
+    fail("Missing durable jobs")
+  }
+  let mut verified = 0
+  for job in jobs {
+    if job is { "state": "Completed", "id": String(id), .. } &&
+      id.length() == 64 &&
+      id.all(c => c is ('a'..<='f' | '0'..<='9')) {
+      @async.with_timeout(15000, () => {
+        let (response, body) = @http.get(
+          origin + "/v1/images/generations/" + id,
+          headers={
+            "authorization": "Bearer " +
+            @fs.read_file(root + "/image-adapter.key").text().trim().to_owned(),
+          },
+        )
+        guard response.code == 200 &&
+          @json.parse(body.text())
+          is { "data": [{ "b64_json": String(encoded), .. }], .. } else {
+          fail("Completed result was not recovered")
+        }
+        let hash = @crypto.bytes_to_hex_string(
+          @crypto.sha256(@base64.decode(encoded)),
+        )
+        guard hash ==
+          @crypto.bytes_to_hex_string(
+            @crypto.sha256(@fs.read_file(state + "/" + id + ".png").binary()),
+          ) else {
+          fail("Recovered output differs")
+        }
+        println(
+          "Recovered completed output by GET, without a new generation: " + hash,
+        )
+      })
+      verified += 1
+    }
+  }
+  guard verified > 0 else {
+    fail("No completed output available for a recovery test")
+  }
+}

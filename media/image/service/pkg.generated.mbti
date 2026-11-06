@@ -1,0 +1,55 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/media/image/service"
+
+import {
+  "moonbitlang/async/http",
+  "moonbitlang/async/io",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/media/image/provider",
+}
+
+// Values
+
+// Errors
+
+// Types and methods
+pub(all) struct Config {
+  origin : String
+  model : String
+  node_id : String
+  artifact_digest : String
+  profile : @provider.Profile
+  state_dir : String
+  bearer_file : String
+  qualification_file : String
+  qualification_sha256 : String
+  maximum_requests : Int
+} derive(@json.FromJson)
+pub fn Config::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+
+type Job derive(ToJson, @json.FromJson)
+pub fn Job::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Job::to_json(Self) -> Json
+
+type JobState derive(Eq, ToJson, @json.FromJson)
+pub fn JobState::equal(Self, Self) -> Bool
+pub fn JobState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn JobState::not_equal(Self, Self) -> Bool
+pub fn JobState::to_json(Self) -> Json
+
+type Journal derive(ToJson, @json.FromJson)
+pub fn Journal::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Journal::to_json(Self) -> Json
+
+pub struct Service {
+  config : Config
+  provider : @provider.Provider
+  binding : String
+}
+pub async fn Service::handle(Self, @http.Request, &@io.Reader, @http.ServerConnection) -> Unit
+pub async fn Service::new(Config) -> Self
+pub async fn Service::reconcile(Self, String) -> Unit
+
+// Type aliases
+
+// Traits

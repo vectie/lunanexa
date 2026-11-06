@@ -1,0 +1,135 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn command(program : String, args : Array[String]) -> String {
+  let result = @shell.Cmd(program, args).output()
+  result.check()
+  result.stdout()
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, root] && root.has_prefix("/home/HwHiAiUser/") else {
+    fail("qualify-image-runtime.mbtx PRIVATE_RELEASE_DIR")
+  }
+  let image = "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/comfyui-runtime@sha256:d215c569d3bcade249a4e28a8dd56bc45c355a0616d45b6ab5e99984e3702e65"
+  let node = "spark-3782-feee26eb"
+  let pods = @json.parse(
+    command("kubectl", [
+      "--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", "-n", "lunanexa",
+      "get", "pods", "-l", "app=comfyui-image", "-o", "json",
+    ]),
+  )
+  guard pods
+    is {
+      "items": [
+        {
+          "metadata": { "uid": String(uid), .. },
+          "spec": {
+            "nodeName": String(placement),
+            "containers": [{ "image": String(actual), .. }],
+            ..
+          },
+          "status": {
+            "containerStatuses": [
+              { "ready": True, "restartCount": Number(0, ..), .. },
+            ],
+            ..
+          },
+          ..
+        },
+      ],
+      ..
+    } &&
+    placement == node &&
+    actual == image else {
+    fail("Expected the healthy pinned runtime on the qualified node")
+  }
+  let proofs : Array[Json] = []
+  for directory in ["probe-cold-valid", "probe-warm-fresh", "probe-coexistence"] {
+    let proof = @json.parse(
+      @fs.read_file(root + "/" + directory + "/probe-result.json").text(),
+    )
+    guard proof
+      is {
+        "sha256": String(hash),
+        "elapsed_ms": String(_),
+        "prompt_id": String(_),
+        ..
+      } &&
+      command("sha256sum", [root + "/" + directory + "/qualification.png"]).has_prefix(
+        hash + " ",
+      ) else {
+      fail("Image proof does not match actual output")
+    }
+    proofs.push(proof)
+  }
+  let text : Array[Json] = []
+  for label in ["before-image", "during-image", "warm-image"] {
+    guard @json.parse(@fs.read_file(root + "/" + label + "-text.json").text())
+      is Array(results) &&
+      results.length() == 3 else {
+      fail("Missing text coexistence measurements")
+    }
+    let timing : Array[Json] = []
+    for result in results {
+      guard result
+        is {
+          "elapsed_ms": String(elapsed),
+          "result": {
+            "choices": [{ "message": { "content": String(content), .. }, .. }],
+            ..
+          },
+          ..
+        } &&
+        !content.trim().is_empty() else {
+        fail("Invalid text measurement")
+      }
+      timing.push(Json::string(elapsed))
+    }
+    text.push({
+      "phase": label,
+      "request_ms": timing,
+      "memory_sample": @fs.read_file(root + "/" + label + "-memory.log")
+      .text()
+      .split("\n")
+      .filter(line => line.has_prefix("MemAvailable:"))
+      .to_array()
+      .join(""),
+    })
+  }
+  let evidence : Json = {
+    "approved": true,
+    "qualified_ms": @async.now().to_string(),
+    "runtime_origin": "http://comfyui-image.lunanexa.svc.cluster.local:8188",
+    "node_id": node,
+    "runtime_pod_uid": uid,
+    "runtime_image": image,
+    "artifact_digest": "sha256:78cad5efa344027953a476f3e38eb92a152bda9a314813cb7500cf16f471b357",
+    "workflow": "z-image-turbo-v1",
+    "comfyui_revision": "7cee3ceb1a35503172e0dfb8dbdbdedee2aba8aa",
+    "model_revision": "6fc90a3b1b653e935a0d175e260736de25b84df5",
+    "qwen_memory_reservation": 0.55,
+    "image_concurrency": 1,
+    "images": proofs,
+    "text_measurements": text,
+    "limits": "Small synthetic qualification, not a sustained load test. Shared GPU memory is not isolated. Request times include kubectl/HTTP overhead; first text request includes warmup. The earlier identical-seed cache hit is excluded.",
+  }
+  @fs.write_file(
+    root + "/qualification.json",
+    evidence.stringify(indent=2),
+    create_mode=CreateNew,
+    permission=0o600,
+    sync=Full,
+  )
+  println(
+    "Qualified the pinned runtime using three actual output files and nine real text completions",
+  )
+}

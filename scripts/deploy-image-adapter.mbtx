@@ -1,0 +1,278 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn command(program : String, args : Array[String]) -> String {
+  let result = @shell.Cmd(program, args).output()
+  if result.exit_code() != 0 {
+    eprintln(result.stderr())
+  }
+  result.check()
+  result.stdout()
+}
+
+///|
+async fn kube(args : Array[String]) -> String {
+  command(
+    "kubectl",
+    ["--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", ..args],
+  )
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, root, consumer_ns, consumer_app] &&
+    root.has_prefix("/home/HwHiAiUser/") &&
+    !consumer_ns.is_empty() &&
+    !consumer_app.is_empty() else {
+    fail(
+      "deploy-image-adapter.mbtx PRIVATE_RELEASE_DIR CONSUMER_NAMESPACE CONSUMER_APP_LABEL",
+    )
+  }
+  let evidence = root + "/qualification.json"
+  guard @json.parse(@fs.read_file(evidence).text())
+    is {
+      "approved": True,
+      "artifact_digest": String(artifact),
+      "runtime_origin": String(origin),
+      "node_id": String(node),
+      "workflow": "z-image-turbo-v1",
+      ..
+    } else {
+    fail("Actual runtime qualification is required")
+  }
+  let sha = command("sha256sum", [evidence])
+    .split(" ")
+    .next()
+    .unwrap()
+    .to_owned()
+  let key = root + "/image-adapter.key"
+  if !@fs.exists(key) {
+    @fs.write_file(
+      key,
+      command("openssl", ["rand", "-hex", "32"]).trim().to_owned(),
+      create_mode=CreateNew,
+      permission=0o600,
+      sync=Full,
+    )
+  }
+  for ns in ["lunanexa", consumer_ns] {
+    let check = @shell.Cmd("kubectl", [
+      "--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", "-n", ns, "get",
+      "secret", "image-adapter-client", "-o", "jsonpath={.data.token}",
+    ]).output()
+    if check.exit_code() != 0 {
+      println(
+        kube([
+          "-n",
+          ns,
+          "create",
+          "secret",
+          "generic",
+          "image-adapter-client",
+          "--from-file=token=" + key,
+        ]),
+      )
+    } else {
+      guard check.stdout().trim() == command("base64", ["-w", "0", key]).trim() else {
+        fail(
+          "Existing client credential differs; inspect deployment references",
+        )
+      }
+    }
+  }
+  let config : Json = {
+    "origin": origin,
+    "model": "z-image-turbo",
+    "node_id": node,
+    "artifact_digest": artifact,
+    "profile": {
+      "diffusion": "z_image_turbo_bf16.safetensors",
+      "text_encoder": "qwen_3_4b.safetensors",
+      "vae": "ae.safetensors",
+    },
+    "state_dir": "/state/z-image-turbo-v1",
+    "bearer_file": "/run/image-client/token",
+    "qualification_file": "/run/image-config/qualification.json",
+    "qualification_sha256": sha,
+    "maximum_requests": 500,
+  }
+  let cm : Json = {
+    "apiVersion": "v1",
+    "kind": "ConfigMap",
+    "metadata": { "name": "image-adapter-qualified", "namespace": "lunanexa" },
+    "data": {
+      "config.json": config.stringify(),
+      "qualification.json": @fs.read_file(evidence).text(),
+    },
+  }
+  let pvc : Json = {
+    "apiVersion": "v1",
+    "kind": "PersistentVolumeClaim",
+    "metadata": { "name": "image-adapter-state", "namespace": "lunanexa" },
+    "spec": {
+      "storageClassName": "lunanexa-workspaces-rwx",
+      "accessModes": ["ReadWriteMany"],
+      "resources": { "requests": { "storage": "8Gi" } },
+    },
+  }
+  let service : Json = {
+    "apiVersion": "v1",
+    "kind": "Service",
+    "metadata": { "name": "image-adapter", "namespace": "lunanexa" },
+    "spec": {
+      "selector": { "app": "image-adapter" },
+      "ports": [{ "name": "http", "port": 18991, "targetPort": 18991 }],
+    },
+  }
+  let network : Json = {
+    "apiVersion": "networking.k8s.io/v1",
+    "kind": "NetworkPolicy",
+    "metadata": { "name": "image-adapter", "namespace": "lunanexa" },
+    "spec": {
+      "podSelector": { "matchLabels": { "app": "image-adapter" } },
+      "policyTypes": ["Ingress", "Egress"],
+      "ingress": [
+        {
+          "from": [
+            {
+              "namespaceSelector": {
+                "matchLabels": { "kubernetes.io/metadata.name": consumer_ns },
+              },
+              "podSelector": { "matchLabels": { "app": consumer_app } },
+            },
+          ],
+          "ports": [{ "protocol": "TCP", "port": 18991 }],
+        },
+      ],
+      "egress": [
+        {
+          "to": [
+            { "podSelector": { "matchLabels": { "app": "comfyui-image" } } },
+          ],
+          "ports": [{ "protocol": "TCP", "port": 8188 }],
+        },
+        {
+          "to": [
+            {
+              "namespaceSelector": {
+                "matchLabels": { "kubernetes.io/metadata.name": "kube-system" },
+              },
+              "podSelector": { "matchLabels": { "k8s-app": "kube-dns" } },
+            },
+          ],
+          "ports": [
+            { "protocol": "UDP", "port": 53 },
+            { "protocol": "TCP", "port": 53 },
+          ],
+        },
+      ],
+    },
+  }
+  let deployment : Json = {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": { "name": "image-adapter", "namespace": "lunanexa" },
+    "spec": {
+      "replicas": 1,
+      "strategy": { "type": "Recreate" },
+      "selector": { "matchLabels": { "app": "image-adapter" } },
+      "template": {
+        "metadata": {
+          "labels": {
+            "app": "image-adapter",
+            "lunanexa.io/component": "image-provider",
+          },
+        },
+        "spec": {
+          "automountServiceAccountToken": false,
+          "nodeSelector": { "kubernetes.io/hostname": "ubuntu" },
+          "securityContext": {
+            "runAsNonRoot": true,
+            "runAsUser": 1000,
+            "runAsGroup": 1000,
+            "fsGroup": 1000,
+            "seccompProfile": { "type": "RuntimeDefault" },
+          },
+          "containers": [
+            {
+              "name": "adapter",
+              "image": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/image-adapter@sha256:90794ef4666d53b323351a8d6b84ef3b1ee5ac0348d140d8fc29e70029bbc261",
+              "args": ["/run/image-config/config.json", "0.0.0.0:18991"],
+              "securityContext": {
+                "allowPrivilegeEscalation": false,
+                "readOnlyRootFilesystem": true,
+                "capabilities": { "drop": ["ALL"] },
+              },
+              "resources": {
+                "requests": { "cpu": "100m", "memory": "128Mi" },
+                "limits": { "cpu": "1", "memory": "512Mi" },
+              },
+              "ports": [{ "name": "http", "containerPort": 18991 }],
+              "readinessProbe": {
+                "httpGet": { "path": "/health", "port": 18991 },
+                "periodSeconds": 5,
+              },
+              "volumeMounts": [
+                { "name": "state", "mountPath": "/state" },
+                {
+                  "name": "config",
+                  "mountPath": "/run/image-config",
+                  "readOnly": true,
+                },
+                {
+                  "name": "client",
+                  "mountPath": "/run/image-client",
+                  "readOnly": true,
+                },
+              ],
+            },
+          ],
+          "volumes": [
+            {
+              "name": "state",
+              "persistentVolumeClaim": { "claimName": "image-adapter-state" },
+            },
+            {
+              "name": "config",
+              "configMap": {
+                "name": "image-adapter-qualified",
+                "defaultMode": 292,
+              },
+            },
+            {
+              "name": "client",
+              "secret": {
+                "secretName": "image-adapter-client",
+                "defaultMode": 288,
+              },
+            },
+          ],
+        },
+      },
+    },
+  }
+  for
+    (name, value) in [
+      ("adapter-config", cm),
+      ("adapter-state", pvc),
+      ("adapter-network", network),
+      ("adapter-service", service),
+      ("adapter-deployment", deployment),
+    ] {
+    let path = root + "/" + name + ".json"
+    @fs.write_file(
+      path,
+      value.stringify(indent=2),
+      create_mode=CreateNew,
+      permission=0o600,
+    )
+    println(kube(["apply", "-f", path]))
+  }
+}

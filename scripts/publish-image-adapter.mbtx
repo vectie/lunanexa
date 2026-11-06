@@ -1,0 +1,153 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, directory, registry, repository, tag, ca] else {
+    fail(
+      "Usage: publish-image-adapter.mbtx OCI_DIRECTORY HTTPS_REGISTRY REPOSITORY TAG CA_FILE",
+    )
+  }
+  guard registry ==
+    "https://lunanexa-registry.lunanexa-registry.svc.cluster.local:5000" &&
+    ["moon/image-adapter"].contains(repository) &&
+    tag.has_prefix("image-adapter-") &&
+    tag.all(c => c is ('a'..<='z' | '0'..<='9' | '-')) else {
+    fail(
+      "Expected the private gateway repository and a reviewed immutable release tag",
+    )
+  }
+  let index = @json.parse(@fs.read_file(directory + "/index.json").text())
+  guard index
+    is { "manifests": [{ "digest": String(manifest_digest), .. }], .. } else {
+    fail("Expected a single-platform OCI image")
+  }
+  let manifest_path = directory +
+    "/blobs/sha256/" +
+    manifest_digest.strip_prefix("sha256:").unwrap().to_owned()
+  let manifest = @json.parse(@fs.read_file(manifest_path).text())
+  guard manifest
+    is {
+      "config": { "digest": String(config), .. },
+      "layers": Array(layers),
+      ..
+    } else {
+    fail("Invalid OCI manifest")
+  }
+  let digests = [config]
+  for layer in layers {
+    guard layer is { "digest": String(digest), .. } else {
+      fail("Invalid layer")
+    }
+    digests.push(digest)
+  }
+  let base = registry + "/v2/" + repository
+  let existing = @shell.Cmd("curl", [
+    "--noproxy",
+    "*",
+    "--cacert",
+    ca,
+    "--silent",
+    "--fail",
+    "--head",
+    base + "/manifests/" + tag,
+  ]).output()
+  guard existing.exit_code() != 0 else {
+    fail("Release tag already exists; choose a new immutable tag")
+  }
+  for digest in digests {
+    let exists = @shell.Cmd("curl", [
+      "--noproxy",
+      "*",
+      "--cacert",
+      ca,
+      "--silent",
+      "--show-error",
+      "--fail",
+      "--head",
+      base + "/blobs/" + digest,
+    ]).output()
+    if exists.exit_code() == 0 {
+      continue
+    }
+    let start = @shell.Cmd("curl", [
+      "--noproxy",
+      "*",
+      "--cacert",
+      ca,
+      "--silent",
+      "--show-error",
+      "--fail",
+      "--request",
+      "POST",
+      "--dump-header",
+      "-",
+      "--output",
+      "/dev/null",
+      base + "/blobs/uploads/",
+    ]).output()
+    start.check()
+    let locations = start
+      .stdout()
+      .split("\n")
+      .filter(line => {
+        line.has_prefix("location:") || line.has_prefix("Location:")
+      })
+      .to_array()
+    guard locations.length() == 1 else {
+      fail("Registry did not return one upload location")
+    }
+    let location = locations[0][9:].trim().to_owned()
+    let location = if location.has_prefix("/") {
+      registry + location
+    } else {
+      location
+    }
+    guard location.has_prefix(base + "/blobs/uploads/") else {
+      fail("Unexpected upload destination")
+    }
+    let separator = if location.contains("?") { "&" } else { "?" }
+    let blob = directory +
+      "/blobs/sha256/" +
+      digest.strip_prefix("sha256:").unwrap().to_owned()
+    @shell.Cmd("curl", [
+      "--noproxy",
+      "*",
+      "--cacert",
+      ca,
+      "--silent",
+      "--show-error",
+      "--fail",
+      "--request",
+      "PUT",
+      "--header",
+      "Content-Type: application/octet-stream",
+      "--data-binary",
+      "@" + blob,
+      location + separator + "digest=" + digest,
+    ]).run()
+  }
+  @shell.Cmd("curl", [
+    "--noproxy",
+    "*",
+    "--cacert",
+    ca,
+    "--silent",
+    "--show-error",
+    "--fail",
+    "--request",
+    "PUT",
+    "--header",
+    "Content-Type: application/vnd.oci.image.manifest.v1+json",
+    "--data-binary",
+    "@" + manifest_path,
+    base + "/manifests/" + tag,
+  ]).run()
+  println(repository + "@" + manifest_digest)
+}

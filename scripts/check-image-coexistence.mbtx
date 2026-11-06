@@ -1,0 +1,96 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn kube(args : Array[String]) -> String {
+  let result = @shell.Cmd(
+    "kubectl",
+    ["--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", ..args],
+  ).output()
+  if result.exit_code() != 0 {
+    eprintln(result.stderr())
+  }
+  result.check()
+  result.stdout()
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, root, label] &&
+    root.has_prefix("/home/HwHiAiUser/") &&
+    ["before-image", "during-image", "after-image", "warm-image"].contains(
+      label,
+    ) else {
+    fail(
+      "check-image-coexistence.mbtx PRIVATE_RELEASE_DIR before-image|during-image|after-image",
+    )
+  }
+  let pods = @json.parse(
+    kube(["-n", "lunanexa", "get", "pods", "-l", "app=qwen3-llm", "-o", "json"]),
+  )
+  guard pods
+    is { "items": [{ "metadata": { "name": String(pod), .. }, .. }], .. } else {
+    fail("Expected one text pod")
+  }
+  let memory = kube([
+    "-n", "lunanexa", "exec", pod, "--", "cat", "/proc/meminfo",
+  ])
+  @fs.write_file(
+    root + "/" + label + "-memory.log",
+    memory,
+    create_mode=CreateNew,
+    permission=0o600,
+  )
+  let body : Json = {
+    "model": "nv-community-qwen3.6-35b-a3b-nvfp4",
+    "messages": [
+      {
+        "role": "user",
+        "content": "用一句中文描述周五喝咖啡的轻松心情。",
+      },
+    ],
+    "max_tokens": 64,
+    "temperature": 0,
+    "chat_template_kwargs": { "enable_thinking": false },
+  }
+  let results : Array[Json] = []
+  for _ in 0..<3 {
+    let start = @async.now()
+    let value = @json.parse(
+      kube([
+        "-n",
+        "lunanexa",
+        "exec",
+        pod,
+        "--",
+        "sh",
+        "-c",
+        "printf 'header = \"Authorization: Bearer %s\"\\n' \"$VLLM_API_KEY\" | curl --config - --fail --silent --show-error --max-time 90 -H 'Content-Type: application/json' --data-binary \"$1\" http://127.0.0.1:8000/v1/chat/completions",
+        "qwen-smoke",
+        body.stringify(),
+      ]),
+    )
+    guard value
+      is { "choices": [{ "message": { "content": String(text), .. }, .. }], .. } &&
+      !text.trim().is_empty() else {
+      fail("Text response invalid")
+    }
+    results.push({
+      "elapsed_ms": (@async.now() - start).to_string(),
+      "result": value,
+    })
+  }
+  @fs.write_file(
+    root + "/" + label + "-text.json",
+    Json::array(results).stringify(indent=2),
+    create_mode=CreateNew,
+    permission=0o600,
+  )
+  println(label + ": 3 real text completions succeeded")
+}

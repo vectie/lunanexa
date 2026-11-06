@@ -1,0 +1,28 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, target] && target.has_prefix("/") else {
+    fail("stage-image-adapter.mbtx NEW_ABSOLUTE_DIRECTORY; run from LunaNexa")
+  }
+  @fs.mkdir(target, permission=0o700)
+  @fs.write_file(
+    target + "/moon.mod",
+    "name = \"vectie/lunanexa\"\nversion = \"0.2.0\"\npreferred_target = \"native\"\nimport {\"moonbitlang/async@0.22.4\",\"moonbitlang/x@0.5.5\"}\n",
+    create_mode=CreateNew,
+  )
+  for
+    path in [
+      "media/image/provider", "media/image/service", "cmd/image-adapter", "cmd/image-probe",
+    ] {
+    @fs.mkdir(target + "/" + path, recursive=true)
+    @shell.Cmd("cp", ["-R", path + "/.", target + "/" + path]).run()
+  }
+  println("Staged only the native image adapter dependency closure")
+}

@@ -1,0 +1,410 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/core/string",
+}
+
+///|
+let kube = "/home/HwHiAiUser/.kube/lunanexa-management"
+
+///|
+let node = "spark-3782-feee26eb"
+
+///|
+async fn command(program : String, args : Array[String]) -> String {
+  let result = @shell.Cmd(program, args).output()
+  if result.exit_code() != 0 {
+    eprintln(result.stderr())
+  }
+  result.check()
+  result.stdout()
+}
+
+///|
+async fn kubectl(args : Array[String]) -> String {
+  command("kubectl", ["--kubeconfig", kube, ..args])
+}
+
+///|
+async fn save(root : String, name : String, value : Json) -> Unit {
+  @fs.write_file(
+    root + "/" + name + ".json",
+    value.stringify(indent=2),
+    create_mode=CreateNew,
+    permission=0o600,
+    sync=Full,
+  )
+}
+
+///|
+fn zero(metrics : String, name : String) -> Bool {
+  let rows = metrics
+    .split("\n")
+    .filter(line => line.has_prefix(name + "{"))
+    .to_array()
+  !rows.is_empty() &&
+  rows.all(line => {
+    line.trim().has_suffix(" 0.0") || line.trim().has_suffix(" 0")
+  })
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, phase, root] && root.has_prefix("/home/HwHiAiUser/") else {
+    fail(
+      "prepare-image-runtime.mbtx prepare|resize-qwen|share-gpu PRIVATE_RELEASE_DIR",
+    )
+  }
+  if !@fs.exists(root) {
+    @fs.mkdir(root, permission=0o700, recursive=true)
+  }
+  let deployment = @json.parse(
+    kubectl(["-n", "lunanexa", "get", "deployment", "qwen3-llm", "-o", "json"]),
+  )
+  guard deployment
+    is {
+      "metadata": { "resourceVersion": String(version), .. },
+      "spec": {
+        "template": {
+          "spec": {
+            "nodeSelector": { "kubernetes.io/hostname": String(placement), .. },
+            "containers": Array(containers),
+            ..
+          },
+          ..
+        },
+        ..
+      },
+      ..
+    } &&
+    placement == node &&
+    containers.length() == 1 &&
+    containers[0] is { "args": Array(args), .. } else {
+    fail("Unexpected text deployment or placement")
+  }
+  if phase == "prepare" {
+    save(root, "qwen-before", {
+      "resource_version": version,
+      "node": node,
+      "args": args,
+    })
+    let image = "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/h3-runtime@sha256:b0bb860f5d369ff7e89e1e36fb91d416b15cbaad7f5b689f812f099f3a86529c"
+    let build : Json = {
+      "apiVersion": "v1",
+      "kind": "Pod",
+      "metadata": {
+        "name": "comfyui-runtime-build",
+        "namespace": "lunanexa",
+        "labels": {
+          "app": "comfyui-runtime-build",
+          "lunanexa.io/component": "model-runtime-builder",
+        },
+      },
+      "spec": {
+        "automountServiceAccountToken": false,
+        "restartPolicy": "Never",
+        "nodeSelector": { "kubernetes.io/hostname": node },
+        "containers": [
+          {
+            "name": "build",
+            "image": image,
+            "imagePullPolicy": "IfNotPresent",
+            "command": ["sleep", "86400"],
+            "env": [
+              { "name": "NVIDIA_VISIBLE_DEVICES", "value": "void" },
+              { "name": "HOME", "value": "/runtime/cache" },
+              { "name": "PIP_CACHE_DIR", "value": "/runtime/cache/pip" },
+            ],
+            "resources": {
+              "requests": { "cpu": "1", "memory": "2Gi" },
+              "limits": { "cpu": "4", "memory": "4Gi" },
+            },
+            "securityContext": {
+              "allowPrivilegeEscalation": false,
+              "capabilities": { "drop": ["ALL"] },
+            },
+            "volumeMounts": [
+              { "name": "runtime", "mountPath": "/runtime" },
+              { "name": "models", "mountPath": "/model-artifacts" },
+            ],
+          },
+        ],
+        "volumes": [
+          {
+            "name": "runtime",
+            "hostPath": {
+              "path": "/var/lib/lunanexa/node-agent/runtime-builds/comfyui-7cee3ceb",
+              "type": "DirectoryOrCreate",
+            },
+          },
+          {
+            "name": "models",
+            "hostPath": {
+              "path": "/var/lib/lunanexa/node-agent/models/z-image-turbo",
+              "type": "DirectoryOrCreate",
+            },
+          },
+        ],
+      },
+    }
+    save(root, "runtime-build", build)
+    let network : Json = {
+      "apiVersion": "networking.k8s.io/v1",
+      "kind": "NetworkPolicy",
+      "metadata": { "name": "comfyui-runtime-build", "namespace": "lunanexa" },
+      "spec": {
+        "podSelector": { "matchLabels": { "app": "comfyui-runtime-build" } },
+        "policyTypes": ["Ingress", "Egress"],
+        "ingress": [],
+        "egress": [
+          { "ports": [{ "protocol": "TCP", "port": 443 }] },
+          {
+            "to": [
+              {
+                "namespaceSelector": {
+                  "matchLabels": {
+                    "kubernetes.io/metadata.name": "kube-system",
+                  },
+                },
+                "podSelector": { "matchLabels": { "k8s-app": "kube-dns" } },
+              },
+            ],
+            "ports": [
+              { "protocol": "UDP", "port": 53 },
+              { "protocol": "TCP", "port": 53 },
+            ],
+          },
+        ],
+      },
+    }
+    save(root, "runtime-build-network", network)
+    println("Prepared CPU-only runtime builder; no GPU service changed")
+    return
+  }
+  if phase == "resize-qwen" {
+    guard @fs.exists(root + "/qwen-before.json") else {
+      fail("Prepare the rollback record first")
+    }
+    let mut position = -1
+    for index, arg in args {
+      if arg is String("--gpu-memory-utilization") {
+        position = index + 1
+      }
+    }
+    guard position > 0 && args.get(position) == Some(Json::string("0.80")) else {
+      fail("Text reservation changed; inspect before resizing")
+    }
+    let pods = @json.parse(
+      kubectl([
+        "-n", "lunanexa", "get", "pods", "-l", "app=qwen3-llm", "-o", "json",
+      ]),
+    )
+    guard pods
+      is {
+        "items": [
+          {
+            "metadata": { "name": String(pod), .. },
+            "spec": { "nodeName": String(actual), .. },
+            ..
+          },
+        ],
+        ..
+      } &&
+      actual == node else {
+      fail("Expected one text replica on the selected node")
+    }
+    let metrics = kubectl([
+      "-n", "lunanexa", "exec", pod, "--", "curl", "--fail", "--silent", "--max-time",
+      "10", "http://127.0.0.1:8000/metrics",
+    ])
+    guard zero(metrics, "vllm:num_requests_running") &&
+      zero(metrics, "vllm:num_requests_waiting") else {
+      fail("Text inference is busy; defer the restart")
+    }
+    @fs.write_file(
+      root + "/qwen-before-metrics.log",
+      metrics,
+      create_mode=CreateOrTruncate,
+      permission=0o600,
+    )
+    let smoke : Json = {
+      "model": "nv-community-qwen3.6-35b-a3b-nvfp4",
+      "messages": [{ "role": "user", "content": "Reply only READY." }],
+      "max_tokens": 32,
+      "temperature": 0,
+      "chat_template_kwargs": { "enable_thinking": false },
+    }
+    // The existing vLLM key stays in its container and travels only through
+    // curl's stdin configuration; it never enters command arguments or logs.
+    let result = kubectl([
+      "-n",
+      "lunanexa",
+      "exec",
+      pod,
+      "--",
+      "sh",
+      "-c",
+      "printf 'header = \"Authorization: Bearer %s\"\\n' \"$VLLM_API_KEY\" | curl --config - --fail --silent --show-error --max-time 60 -H 'Content-Type: application/json' --data-binary \"$1\" http://127.0.0.1:8000/v1/chat/completions",
+      "qwen-smoke",
+      smoke.stringify(),
+    ])
+    save(root, "qwen-before-smoke", @json.parse(result))
+    let latest = kubectl([
+      "-n", "lunanexa", "exec", pod, "--", "curl", "--fail", "--silent", "--max-time",
+      "10", "http://127.0.0.1:8000/metrics",
+    ])
+    guard zero(latest, "vllm:num_requests_running") &&
+      zero(latest, "vllm:num_requests_waiting") else {
+      fail("New text work arrived; defer the restart")
+    }
+    let changed = args.copy()
+    changed[position] = Json::string("0.55")
+    let patch : Json = [
+      { "op": "test", "path": "/metadata/resourceVersion", "value": version },
+      {
+        "op": "test",
+        "path": "/spec/template/spec/containers/0/args",
+        "value": args,
+      },
+      {
+        "op": "replace",
+        "path": "/spec/template/spec/containers/0/args",
+        "value": changed,
+      },
+    ]
+    println(
+      kubectl([
+        "-n",
+        "lunanexa",
+        "patch",
+        "deployment",
+        "qwen3-llm",
+        "--type=json",
+        "-p",
+        patch.stringify(),
+      ]),
+    )
+    return
+  }
+  if phase == "share-gpu" {
+    guard args.contains(Json::string("0.55")) else {
+      fail("Resize and validate text memory before enabling sharing")
+    }
+    let current = @json.parse(kubectl(["get", "node", node, "-o", "json"]))
+    guard current
+      is {
+        "metadata": {
+          "labels": { "lunanexa.io/device-plugin": String(previous), .. },
+          ..
+        },
+        ..
+      } &&
+      previous == "disabled-r56" else {
+      fail("GPU plugin node profile changed")
+    }
+    let plugin = @json.parse(
+      kubectl([
+        "-n", "kube-system", "get", "daemonset", "lunanexa-nvidia-device-plugin",
+        "-o", "json",
+      ]),
+    )
+    guard plugin
+      is { "spec": { "template": { "spec": Object(pod_spec), .. }, .. }, .. } &&
+      pod_spec.get("containers") is Some(Array(plugin_containers)) &&
+      plugin_containers.length() == 1 &&
+      plugin_containers[0] is Object(container) else {
+      fail("Unexpected GPU plugin profile")
+    }
+    let name = "lunanexa-nvidia-device-plugin-shared-image"
+    let labels : Json = {
+      "app.kubernetes.io/name": "nvidia-device-plugin-shared-image",
+      "app.kubernetes.io/part-of": "lunanexa",
+    }
+    let settings = "version: v1\nflags:\n  migStrategy: none\nsharing:\n  timeSlicing:\n    renameByDefault: false\n    failRequestsGreaterThanOne: true\n    resources:\n      - name: nvidia.com/gpu\n        replicas: 2\n"
+    let cm : Json = {
+      "apiVersion": "v1",
+      "kind": "ConfigMap",
+      "metadata": { "name": name, "namespace": "kube-system" },
+      "data": { "config.yaml": settings },
+    }
+    container.set("args", [
+      "--config-file=/etc/nvidia-device-plugin/config.yaml",
+    ])
+    if container.get("volumeMounts") is Some(Array(mounts)) {
+      mounts.push({
+        "name": "shared-profile",
+        "mountPath": "/etc/nvidia-device-plugin",
+        "readOnly": true,
+      })
+    }
+    if pod_spec.get("volumes") is Some(Array(volumes)) {
+      volumes.push({ "name": "shared-profile", "configMap": { "name": name } })
+    }
+    pod_spec.set("automountServiceAccountToken", false)
+    pod_spec.set("nodeSelector", {
+      "kubernetes.io/hostname": node,
+      "lunanexa.io/device-plugin": "shared-image",
+    })
+    let ds : Json = {
+      "apiVersion": "apps/v1",
+      "kind": "DaemonSet",
+      "metadata": { "name": name, "namespace": "kube-system" },
+      "spec": {
+        "selector": { "matchLabels": labels },
+        "updateStrategy": { "type": "OnDelete" },
+        "template": {
+          "metadata": { "labels": labels },
+          "spec": Json::object(pod_spec),
+        },
+      },
+    }
+    save(root, "shared-plugin-config", cm)
+    save(root, "shared-plugin", ds)
+    let old = @json.parse(
+      kubectl([
+        "-n",
+        "kube-system",
+        "get",
+        "pods",
+        "-l",
+        "app.kubernetes.io/name=nvidia-device-plugin,app.kubernetes.io/part-of=lunanexa",
+        "--field-selector",
+        "spec.nodeName=" + node,
+        "-o",
+        "json",
+      ]),
+    )
+    guard old
+      is { "items": [{ "metadata": { "name": String(old_pod), .. }, .. }], .. } else {
+      fail("Expected one old plugin pod")
+    }
+    save(root, "gpu-plugin-before", {
+      "node": node,
+      "node_profile": previous,
+      "pod": old_pod,
+    })
+    println(kubectl(["apply", "-f", root + "/shared-plugin-config.json"]))
+    println(
+      kubectl([
+        "label", "node", node, "lunanexa.io/device-plugin=shared-image", "--overwrite",
+      ]),
+    )
+    println(
+      kubectl([
+        "-n",
+        "kube-system",
+        "wait",
+        "--for=delete",
+        "pod/" + old_pod,
+        "--timeout=45s",
+      ]),
+    )
+    println(kubectl(["apply", "-f", root + "/shared-plugin.json"]))
+    return
+  }
+  fail("Unknown preparation phase")
+}

@@ -1,0 +1,202 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn run(program : String, args : Array[String]) -> String {
+  let result = @shell.Cmd(program, args).output()
+  if result.exit_code() != 0 {
+    eprintln(result.stderr())
+  }
+  result.check()
+  result.stdout()
+}
+
+///|
+async fn build(args : Array[String]) -> String {
+  run(
+    "kubectl",
+    [
+      "--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", "-n", "lunanexa",
+      "exec", "comfyui-runtime-build", "--", ..args,
+    ],
+  )
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, phase, root] else {
+    fail(
+      "build-image-runtime.mbtx dependencies|models|export-layer PRIVATE_RELEASE_DIR",
+    )
+  }
+  if phase == "dependencies" || phase == "dependencies-cached" {
+    ignore(build(["mkdir", "-p", "/runtime/ComfyUI", "/runtime/cache"]))
+    if phase == "dependencies" {
+      println("Downloading pinned third-party ComfyUI source")
+      ignore(
+        build([
+          "curl", "--fail", "--location", "--silent", "--show-error", "--retry",
+          "3", "--max-time", "600", "https://codeload.github.com/comfyanonymous/ComfyUI/tar.gz/7cee3ceb1a35503172e0dfb8dbdbdedee2aba8aa",
+          "-o", "/runtime/comfyui-source.tar.gz",
+        ]),
+      )
+    } else {
+      guard build(["sha256sum", "/runtime/comfyui-source.tar.gz"]).has_prefix(
+        "4c9bddc8a01bafa3d0638c2217e5a6dece2514b512051dccb72eb60425e7f4cb ",
+      ) else {
+        fail("Pinned source archive checksum mismatch")
+      }
+    }
+    ignore(
+      build([
+        "tar", "-xzf", "/runtime/comfyui-source.tar.gz", "--strip-components=1",
+        "-C", "/runtime/ComfyUI",
+      ]),
+    )
+    ignore(
+      build(["python3", "-m", "venv", "--system-site-packages", "/runtime/venv"]),
+    )
+    println(
+      "Installing the pinned source's runtime dependencies; existing PyTorch is reused",
+    )
+    println(
+      build([
+        "/runtime/venv/bin/python", "-m", "pip", "install", "--disable-pip-version-check",
+        "--index-url", "https://pypi.tuna.tsinghua.edu.cn/simple", "--timeout", "30",
+        "-r", "/runtime/ComfyUI/requirements.txt",
+      ]),
+    )
+    let packages = build([
+      "/runtime/venv/bin/python", "-m", "pip", "list", "--format=json", "--disable-pip-version-check",
+    ])
+    @fs.write_file(
+      root + "/runtime-packages.json",
+      packages,
+      create_mode=CreateOrTruncate,
+      permission=0o600,
+    )
+    let help = build([
+      "/runtime/venv/bin/python", "/runtime/ComfyUI/main.py", "--cpu", "--help",
+    ])
+    @fs.write_file(
+      root + "/runtime-cli-help.log",
+      help,
+      create_mode=CreateNew,
+      permission=0o600,
+    )
+    println("Third-party runtime CLI validated without allocating a GPU")
+    return
+  }
+  if phase == "models" || phase == "models-mirror" {
+    let manifest = @json.parse(@fs.read_file(root + "/model-files.json").text())
+    guard manifest
+      is { "revision": String(revision), "files": Array(files), .. } &&
+      revision == "6fc90a3b1b653e935a0d175e260736de25b84df5" else {
+      fail("Unexpected model manifest")
+    }
+    let base = "/model-artifacts/" + revision
+    @async.with_task_group(group => {
+      for file in files {
+        let _ = group.spawn(() => {
+          guard file
+            is {
+              "target_path": String(relative),
+              "url": String(url),
+              "sha256": String(expected),
+              ..
+            } &&
+            !relative.contains("..") &&
+            url.has_prefix(
+              "https://huggingface.co/Comfy-Org/Z-Image-Turbo/resolve/" +
+              revision +
+              "/",
+            ) else {
+            fail("Unexpected model file")
+          }
+          let target = base + "/" + relative
+          let parent = target.split("/").to_array()
+          ignore(parent.pop())
+          ignore(build(["mkdir", "-p", parent.join("/")]))
+          println("Downloading " + relative)
+          let transport = if phase == "models-mirror" {
+            url.replace(
+              old="https://huggingface.co/",
+              new="https://hf-mirror.com/",
+            )
+          } else {
+            url
+          }
+          ignore(
+            build([
+              "curl",
+              "--fail",
+              "--location",
+              "--silent",
+              "--show-error",
+              "--retry",
+              "3",
+              "--connect-timeout",
+              "20",
+              "--continue-at",
+              "-",
+              transport + "?download=true",
+              "-o",
+              target + ".partial",
+            ]),
+          )
+          let checksum = build(["sha256sum", target + ".partial"])
+            .split(" ")
+            .next()
+            .unwrap_or("")
+            .to_owned()
+          guard checksum == expected else {
+            fail("Model checksum mismatch: " + relative)
+          }
+          ignore(build(["mv", target + ".partial", target]))
+          println("Verified " + relative)
+        })
+      }
+    })
+    println("All model files verified against the pinned source metadata")
+    return
+  }
+  if phase == "export-layer" {
+    ignore(
+      build([
+        "tar", "--owner=0", "--group=0", "-C", "/", "-cf", "/runtime/comfyui-layer.tar",
+        "runtime/ComfyUI", "runtime/venv",
+      ]),
+    )
+    ignore(build(["gzip", "-n", "-k", "/runtime/comfyui-layer.tar"]))
+    println(
+      run("kubectl", [
+        "--kubeconfig",
+        "/home/HwHiAiUser/.kube/lunanexa-management",
+        "-n",
+        "lunanexa",
+        "cp",
+        "comfyui-runtime-build:/runtime/comfyui-layer.tar",
+        root + "/comfyui-layer.tar",
+      ]),
+    )
+    println(
+      run("kubectl", [
+        "--kubeconfig",
+        "/home/HwHiAiUser/.kube/lunanexa-management",
+        "-n",
+        "lunanexa",
+        "cp",
+        "comfyui-runtime-build:/runtime/comfyui-layer.tar.gz",
+        root + "/comfyui-layer.tar.gz",
+      ]),
+    )
+    return
+  }
+  fail("Unknown build phase")
+}

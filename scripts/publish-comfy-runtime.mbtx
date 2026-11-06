@@ -1,0 +1,220 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/core/string",
+}
+
+///|
+let registry = "https://lunanexa-registry.lunanexa-registry.svc.cluster.local:5000"
+
+///|
+async fn command(program : String, args : Array[String]) -> String {
+  let result = @shell.Cmd(program, args).output()
+  if result.exit_code() != 0 {
+    eprintln(result.stderr())
+  }
+  result.check()
+  result.stdout().trim().to_owned()
+}
+
+///|
+async fn curl(args : Array[String]) -> String {
+  command(
+    "curl",
+    ["--noproxy", "*", "--silent", "--show-error", "--fail", ..args],
+  )
+}
+
+///|
+async fn hash(path : String) -> String {
+  command("sha256sum", [path]).split(" ").next().unwrap().to_owned()
+}
+
+///|
+async fn descriptor(path : String, media : String) -> Json {
+  {
+    "mediaType": media,
+    "digest": "sha256:" + hash(path),
+    "size": @string.parse_int(command("stat", ["-c", "%s", path])),
+  }
+}
+
+///|
+async fn upload(base : String, path : String, digest : String) -> Unit {
+  let headers = curl([
+    "-X",
+    "POST",
+    "-D",
+    "-",
+    "-o",
+    "/dev/null",
+    base + "/blobs/uploads/",
+  ])
+  let locations = headers
+    .split("\n")
+    .filter(l => l.has_prefix("Location:") || l.has_prefix("location:"))
+    .to_array()
+  guard locations.length() == 1 else {
+    fail("Expected one registry upload location")
+  }
+  let raw = locations[0][9:].trim().to_owned()
+  let location = if raw.has_prefix("/") { registry + raw } else { raw }
+  guard location.has_prefix(base + "/blobs/uploads/") else {
+    fail("Unexpected upload origin")
+  }
+  ignore(
+    curl([
+      "-X",
+      "PUT",
+      "-H",
+      "Content-Type: application/octet-stream",
+      "--data-binary",
+      "@" + path,
+      location +
+      (if location.contains("?") { "&" } else { "?" }) +
+      "digest=" +
+      digest,
+    ]),
+  )
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, root] && root.has_prefix("/home/HwHiAiUser/") else {
+    fail("publish-comfy-runtime.mbtx PRIVATE_RELEASE_DIR")
+  }
+  let source = registry + "/v2/moon/h3-runtime"
+  let base = registry + "/v2/moon/comfyui-runtime"
+  let manifest = @json.parse(
+    curl([
+      "-H",
+      "Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
+      source +
+      "/manifests/sha256:b0bb860f5d369ff7e89e1e36fb91d416b15cbaad7f5b689f812f099f3a86529c",
+    ]),
+  )
+  guard manifest
+    is {
+      "config": { "digest": String(config_hash), .. },
+      "layers": Array(layers),
+      ..
+    } else {
+    fail("Expected single-platform base manifest")
+  }
+  let config = @json.parse(curl([source + "/blobs/" + config_hash]))
+  guard config is Object(fields) &&
+    config
+    is {
+      "architecture": "arm64",
+      "os": "linux",
+      "config": Object(runtime),
+      "rootfs": { "diff_ids": Array(diffs), .. },
+      ..
+    } else {
+    fail("Expected ARM64 Linux base")
+  }
+  // Reuse only loader/toolchain environment; no serving keys or application
+  // configuration are inherited into this opaque third-party runtime.
+  let keep = [
+    "PATH", "LD_LIBRARY_PATH", "CUDA_HOME", "CUDA_VERSION", "PYTHONPATH", "NVIDIA_REQUIRE_CUDA",
+    "NVIDIA_DRIVER_CAPABILITIES",
+  ]
+  let env : Array[Json] = []
+  if runtime.get("Env") is Some(Array(old)) {
+    for item in old {
+      if item is String(value) &&
+        keep.contains(value.split("=").next().unwrap_or("").to_owned()) {
+        env.push(item)
+      }
+    }
+  }
+  env.push("HOME=/workspace")
+  env.push("HF_HUB_OFFLINE=1")
+  env.push("PYTHONDONTWRITEBYTECODE=1")
+  runtime.set("Env", Json::array(env))
+  runtime.set("User", "1000:1000")
+  runtime.set("WorkingDir", "/runtime/ComfyUI")
+  runtime.set("Entrypoint", [
+    "/runtime/venv/bin/python", "/runtime/ComfyUI/main.py",
+  ])
+  runtime.set("Cmd", [
+    "--listen", "0.0.0.0", "--port", "8188", "--disable-all-custom-nodes", "--disable-api-nodes",
+    "--reserve-vram", "8", "--user-directory", "/workspace/user", "--output-directory",
+    "/workspace/output", "--input-directory", "/workspace/input", "--temp-directory",
+    "/workspace/temp",
+  ])
+  fields.set("history", [])
+  for layer in layers {
+    guard layer is Object(item) && layer is { "digest": String(digest), .. } else {
+      fail("Invalid layer")
+    }
+    item.set("mediaType", "application/vnd.oci.image.layer.v1.tar+gzip")
+    let headers = curl([
+      "-X",
+      "POST",
+      "-D",
+      "-",
+      "-o",
+      "/dev/null",
+      base + "/blobs/uploads/?mount=" + digest + "&from=moon/h3-runtime",
+    ])
+    guard headers.has_prefix("HTTP/2 201") || headers.has_prefix("HTTP/1.1 201") else {
+      fail("Registry could not mount existing base layer")
+    }
+  }
+  let archive = root + "/comfyui-layer.tar"
+  diffs.push(Json::string("sha256:" + hash(archive)))
+  let layer = descriptor(
+    archive + ".gz",
+    "application/vnd.oci.image.layer.v1.tar+gzip",
+  )
+  guard layer is { "digest": String(layer_hash), .. } else {
+    fail("Invalid layer descriptor")
+  }
+  upload(base, archive + ".gz", layer_hash)
+  layers.push(layer)
+  let config_path = root + "/comfyui-config.json"
+  @fs.write_file(
+    config_path,
+    config.stringify(),
+    create_mode=CreateNew,
+    permission=0o600,
+  )
+  let config_descriptor = descriptor(
+    config_path, "application/vnd.oci.image.config.v1+json",
+  )
+  guard config_descriptor is { "digest": String(new_config_hash), .. } else {
+    fail("Invalid config descriptor")
+  }
+  upload(base, config_path, new_config_hash)
+  let new_manifest : Json = {
+    "schemaVersion": 2,
+    "mediaType": "application/vnd.oci.image.manifest.v1+json",
+    "config": config_descriptor,
+    "layers": layers,
+  }
+  let path = root + "/comfyui-manifest.json"
+  @fs.write_file(
+    path,
+    new_manifest.stringify(),
+    create_mode=CreateNew,
+    permission=0o600,
+  )
+  let digest = hash(path)
+  ignore(
+    curl([
+      "-X",
+      "PUT",
+      "-H",
+      "Content-Type: application/vnd.oci.image.manifest.v1+json",
+      "--data-binary",
+      "@" + path,
+      base + "/manifests/z-image-7cee3ceb-20261107",
+    ]),
+  )
+  println("moon/comfyui-runtime@sha256:" + digest)
+}

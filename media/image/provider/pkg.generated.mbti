@@ -1,0 +1,50 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/media/image/provider"
+
+import {
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+}
+
+// Values
+
+// Errors
+pub(all) suberror ImageError {
+  InvalidConfiguration
+  InvalidRequest
+  InvalidResponse
+  Unavailable
+}
+
+// Types and methods
+pub(all) enum Observation {
+  Pending
+  Failed
+  Complete(String)
+} derive(Eq, @debug.Debug)
+pub fn Observation::equal(Self, Self) -> Bool
+pub fn Observation::not_equal(Self, Self) -> Bool
+pub fn Observation::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Profile {
+  diffusion : String
+  text_encoder : String
+  vae : String
+} derive(ToJson, @json.FromJson)
+pub fn Profile::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Profile::to_json(Self) -> Json
+
+pub struct Provider {
+  origin : String
+  profile : Profile
+}
+pub async fn Provider::content(Self, String) -> Bytes
+pub async fn Provider::lookup(Self, String) -> String?
+pub fn Provider::new(String, Profile) -> Self raise
+pub async fn Provider::observe(Self, String, String) -> Observation
+pub async fn Provider::submit(Self, String, UInt, String) -> String
+pub fn Provider::workflow(Self, String, UInt, String) -> Json raise
+
+// Type aliases
+
+// Traits
