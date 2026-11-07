@@ -589,6 +589,19 @@ cover missing/false readiness, stopped state, scope, and refresh overlap/end.
 
 Release staging root: `/home/HwHiAiUser/native-glm-20261107`. The console image
 was assembled with immutable base blobs hardlinked and only a new asset layer;
-no redundant multi-gigabyte export was retained. Final rollout/byte-verification
-evidence is recorded below when publication completes. Production logs and
-deployment snapshots remain private. No new credential or grant was issued.
+no redundant multi-gigabyte export was retained. Production logs and deployment
+snapshots remain private. No new credential or grant was issued.
+
+Final publication succeeded for controller and management UI. Control binary
+SHA-256: `05c8533479c3cd85f5f59b4ce73b8e5f3080735e216de9b15b4da264d867d171`.
+Console image: `sha256:70c5b672a42496c366923ae4f6bf6e851135ebe0a3827f2e0fc9db4e0a4e5348`;
+public JS: `93c93987331dfc25632440f76bfdb065308a429c94b3581dbf5a0e8cbf0abb6d`
+matches the tested local build over external 8443. Authenticated live `/mana/`
+shows Qwen/MiniMax ready and GLM stopped. The API now supplies endpoint readiness;
+live verification asserts GLM stopped/ready=false, six retained bindings and
+unchanged Kubernetes GPU specs/UIDs, deployment/assignment/reservation counts and
+membership rows. The controller restart issued no additional GPU start action.
+Final private screenshot: `/tmp/native-glm-20261107/evidence/mana-final.png`.
+Implementation commit `3035ed4` is pushed to both GitHub and Vectie main. The
+audio-service confirmation remains unanswered; do not call GLM inference ready
+or report a successful startup duration from this run.
