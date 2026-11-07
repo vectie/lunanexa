@@ -476,7 +476,7 @@ async fn ApiService::handle_access_management(
     )
   }
   match (verb, path) {
-    (Get, "/v1/access/api-keys") => json_reply(200, store.views().to_json())
+    (Get, "/v1/access/api-keys") => json_reply(200, Json(store.views()))
     (Post, "/v1/access/api-keys") => {
       guard decode_api_key_intent(body) is Some(intent) else {
         return api_error(400, "InvalidRequest", "invalid API key intent", false)
@@ -537,7 +537,7 @@ async fn ApiService::handle_access_management(
       self.operator_audit("access.api-key.revoke", key_id, "api-key:revoked")
       json_reply(200, {
         "key_id": revoked.key_id,
-        "revoked_unix_ms": revoked.revoked_unix_ms.to_json(),
+        "revoked_unix_ms": Json(revoked.revoked_unix_ms),
       })
     }
     _ => api_error(404, "NotFound", "access route was not found", false)
@@ -566,13 +566,13 @@ async fn ApiService::handle_openai_compatibility(
       }
       json_reply(200, {
         "object": "list",
-        "data": aliases
-        .map(value => {
-          "id": value.name,
-          "object": "model",
-          "owned_by": "lunanexa",
-        })
-        .to_json(),
+        "data": Json(
+          aliases.map(value => {
+            "id": value.name,
+            "object": "model",
+            "owned_by": "lunanexa",
+          }),
+        ),
       })
     }
     (Post, "/v1/chat/completions") => {
@@ -858,9 +858,7 @@ fn openai_workload(
     "openai-\{request_digest[:32]}",
   )
   let workload_id = "openai-\{request_digest[32:64]}"
-  let payload_fields : Map[String, Json] = {
-    "messages": value.messages.to_json(),
-  }
+  let payload_fields : Map[String, Json] = { "messages": Json(value.messages) }
   // Explicit compute-state opt-in, separate from payload/response retention.
   // The default ephemeral/no-cache API contract remains unchanged.
   if value.runtime_prefix_cache == Some(true) ||
@@ -868,19 +866,19 @@ fn openai_workload(
     payload_fields["runtime_prefix_cache"] = true
   }
   if value.tools is Some(tools) {
-    payload_fields["tools"] = tools.to_json()
+    payload_fields["tools"] = Json(tools)
   }
   if value.tool_choice is Some(tool_choice) {
     payload_fields["tool_choice"] = tool_choice
   }
   if value.parallel_tool_calls is Some(parallel_tool_calls) {
-    payload_fields["parallel_tool_calls"] = parallel_tool_calls.to_json()
+    payload_fields["parallel_tool_calls"] = Json(parallel_tool_calls)
   }
   if value.temperature is Some(temperature) {
-    payload_fields["temperature"] = temperature.to_json()
+    payload_fields["temperature"] = Json(temperature)
   }
   if value.top_p is Some(top_p) {
-    payload_fields["top_p"] = top_p.to_json()
+    payload_fields["top_p"] = Json(top_p)
   }
   let payload = Json::object(payload_fields)
   // Declare the actual canonical byte count. Clamping here understates large
@@ -922,13 +920,13 @@ fn openai_workload(
 fn body_identity(value : OpenAiChatRequest) -> String {
   let identity : Json = {
     "model": value.model,
-    "messages": value.messages.to_json(),
-    "max_tokens": value.max_tokens.to_json(),
-    "tools": value.tools.to_json(),
-    "tool_choice": value.tool_choice.to_json(),
-    "parallel_tool_calls": value.parallel_tool_calls.to_json(),
-    "temperature": value.temperature.to_json(),
-    "top_p": value.top_p.to_json(),
+    "messages": Json(value.messages),
+    "max_tokens": Json(value.max_tokens),
+    "tools": Json(value.tools),
+    "tool_choice": Json(value.tool_choice),
+    "parallel_tool_calls": Json(value.parallel_tool_calls),
+    "temperature": Json(value.temperature),
+    "top_p": Json(value.top_p),
     "runtime_prefix_cache": Json(value.runtime_prefix_cache),
   }
   identity.stringify()

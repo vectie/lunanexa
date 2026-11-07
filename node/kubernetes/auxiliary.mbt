@@ -121,7 +121,7 @@ pub async fn PodManager::remove_auxiliary(
   let body : Json = {
     "apiVersion": "v1",
     "kind": "DeleteOptions",
-    "preconditions": { "uid": expected.uid.to_json() },
+    "preconditions": { "uid": Json(expected.uid) },
     "propagationPolicy": "Foreground",
   }
   let (status, _) = (self.transport)(

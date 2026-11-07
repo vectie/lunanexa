@@ -749,8 +749,8 @@ async test "contract document lifecycle endpoints gate creation and record execu
       "display_name": "Portal key",
       "scopes": ["Inference"],
       "allowed_models": [],
-      "expires_unix_ms": (@async.now() + 86400000L).to_json(),
-      "maximum_requests": 10L.to_json(),
+      "expires_unix_ms": Json(@async.now() + 86400000L),
+      "maximum_requests": Json(10L),
     } : Json).stringify()
   assert_true(decode_portal_api_key(portal_body) is Some(_))
   let portal_key = service.handle(

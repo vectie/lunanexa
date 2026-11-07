@@ -37,7 +37,7 @@ async fn ApiService::handle_resource_reservation(
   if verb == Get && path == "/v1/resource-reservations" {
     return json_reply(
       200,
-      scheduler.snapshot().node_reservations.unwrap_or([]).to_json(),
+      Json(scheduler.snapshot().node_reservations.unwrap_or([])),
     )
   }
   if verb == Post &&

@@ -14,7 +14,7 @@ test "editable export preserves every metadata field and displays all recorded s
     compatible_architectures: ["x86_64", "aarch64"],
     state,
   })
-  let before = models.to_json()
+  let before = Json(models)
   let mapping = @model_intake.default_mapping()
   let csv = @model_intake.export_registry_csv(models, mapping)
   for
@@ -37,7 +37,7 @@ test "editable export preserves every metadata field and displays all recorded s
       state: Candidate,
     })
   }
-  assert_eq(models.to_json(), before)
+  assert_eq(Json(models), before)
   let reversed = Array::makei(models.length(), i => {
     models[models.length() - i - 1]
   })

@@ -737,8 +737,7 @@ async fn serve(
         }
         (Get, "/internal/v1/modelscope/local-directories") =>
           (200, local_directory_listing(store, model_root))
-        (Get, "/internal/v1/modelscope/imports") =>
-          (200, store.list().to_json())
+        (Get, "/internal/v1/modelscope/imports") => (200, Json(store.list()))
         (Post, "/internal/v1/modelscope/imports") => {
           let input : @modelsource.ImportRequest = decode(body)
           let detail = client.detail(input.model_id)

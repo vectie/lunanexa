@@ -26,9 +26,9 @@ fn readiness_document_json(
 ) -> Json {
   {
     "schema_version": document.schema_version,
-    "issued_unix_ms": document.issued_unix_ms.to_json(),
-    "expires_unix_ms": document.expires_unix_ms.to_json(),
-    "capabilities": document.capabilities.to_json(),
+    "issued_unix_ms": Json(document.issued_unix_ms),
+    "expires_unix_ms": Json(document.expires_unix_ms),
+    "capabilities": Json(document.capabilities),
     "signature": document.signature,
   }
 }

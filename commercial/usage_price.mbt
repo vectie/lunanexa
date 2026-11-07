@@ -10,7 +10,7 @@ fn validate_usage_price_scenario(
   let identities : Map[String, Bool] = Map([])
   for rate in scenario.rates {
     validate_rate_card(rate)
-    let key = [rate.rate_card_id, rate.version].to_json().stringify()
+    let key = Json([rate.rate_card_id, rate.version]).stringify()
     if identities.contains(key) {
       raise InvalidInput("duplicate candidate rate-card identity/version")
     }
@@ -103,7 +103,7 @@ fn usage_price_row(
 
 ///|
 fn usage_price_group_key(group : UsagePriceGroup) -> String {
-  [
+  Json([
     group.group_id,
     group.meter,
     group.unit,
@@ -112,9 +112,7 @@ fn usage_price_group_key(group : UsagePriceGroup) -> String {
     group.recorded_amount.map(a => a.scale.to_string()).unwrap_or(""),
     group.hypothetical_amount.map(a => a.currency).unwrap_or(""),
     group.hypothetical_amount.map(a => a.scale.to_string()).unwrap_or(""),
-  ]
-  .to_json()
-  .stringify()
+  ]).stringify()
 }
 
 ///|

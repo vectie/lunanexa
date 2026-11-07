@@ -588,7 +588,7 @@ async fn handle(
     write_object(config, header(request, "x-lunanexa-object-ref"), bytes, media)
     return json_reply(connection, 201, {
       "sha256": sha,
-      "byte_count": bytes.length().to_int64().to_json(),
+      "byte_count": Json(bytes.length().to_int64()),
       "provider_receipt": "s3:\{sha}",
     })
   }
@@ -614,7 +614,7 @@ async fn handle(
     return json_reply(connection, 201, {
       "session_id": intent.session_id,
       "transfer_url": "\{config.endpoint}/\{intent.session_id}",
-      "expires_unix_ms": intent.expires_unix_ms.to_json(),
+      "expires_unix_ms": Json(intent.expires_unix_ms),
       "provider_receipt": "s3-grant:\{intent.session_id}",
     })
   }

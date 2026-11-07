@@ -46,7 +46,7 @@ fn FakeApi::transport(self : FakeApi) -> @kubernetes.Transport {
         if self.objects.contains(key) {
           return (409, {})
         }
-        meta["uid"] = ("uid-" + self.calls.length().to_string()).to_json()
+        meta["uid"] = Json("uid-" + self.calls.length().to_string())
         if resource is { "kind": "Pod", "spec": Object(spec), .. } {
           spec["nodeName"] = "compute-1"
           guard resource
@@ -64,9 +64,10 @@ fn FakeApi::transport(self : FakeApi) -> @kubernetes.Transport {
               {
                 "name": "runtime",
                 "ready": true,
-                "imageID": image.to_json(),
-                "containerID": ("containerd://fixture-" +
-                self.calls.length().to_string()).to_json(),
+                "imageID": Json(image),
+                "containerID": Json(
+                  "containerd://fixture-" + self.calls.length().to_string(),
+                ),
                 "state": { "running": {} },
               },
             ],

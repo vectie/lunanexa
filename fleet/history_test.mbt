@@ -105,7 +105,7 @@ test "history ignores record device runtime order without mutating sources" {
     running_deployments: ["different-private-deployment"],
   }
   let before = [expanded, node("b", 900L)]
-  let wire = before.to_json().stringify()
+  let wire = Json(before).stringify()
   let captures = [
     capture("one", 1000L, before),
     capture("two", 2000L, [node("b", 1900L), reversed]),
@@ -121,7 +121,7 @@ test "history ignores record device runtime order without mutating sources" {
     ) ==
     report,
   )
-  assert_eq(before.to_json().stringify(), wire)
+  assert_eq(Json(before).stringify(), wire)
   assert_eq(report.changes_csv().split("\r\n").count(), 2)
 }
 

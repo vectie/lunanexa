@@ -58,7 +58,7 @@ pub fn import_usage_correlation_manifest(
 
 ///|
 fn correlation_key(project_id : String, event_id : String) -> String {
-  [project_id, event_id].to_json().stringify()
+  Json([project_id, event_id]).stringify()
 }
 
 ///|
@@ -182,7 +182,7 @@ pub fn correlate_usage(
   let matches : Map[String, Array[UsageCorrelationMatch]] = Map([])
   let sorted_links = links.values().to_array()
   sorted_links.sort_by_key(link => {
-    [link.external_ref, link.project_id, link.event_id].to_json().stringify()
+    Json([link.external_ref, link.project_id, link.event_id]).stringify()
   })
   for link in sorted_links {
     let source_row_ids = source_rows.get_or_default(

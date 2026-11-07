@@ -119,7 +119,7 @@ fn ReservationHost::infrastructure_pod(
   self.infrastructure.any(rule => {
     rule.namespace_name == namespace_name &&
     rule.service_account == service_account &&
-    labels.get(rule.label_key) == Some(rule.label_value.to_json())
+    labels.get(rule.label_key) == Some(Json(rule.label_value))
   })
 }
 
@@ -260,7 +260,7 @@ async fn ReservationHost::reconcile(
             "path": "/metadata/resourceVersion",
             "value": version,
           },
-          { "op": "add", "path": "/spec/taints", "value": preserved.to_json() },
+          { "op": "add", "path": "/spec/taints", "value": Json(preserved) },
         ]),
       ),
     )

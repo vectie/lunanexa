@@ -58,19 +58,19 @@ pub impl ToJson for DistributionBucket with fn to_json(
 ) -> Json {
   {
     "lower_exclusive_ms": match self.lower_exclusive_ms {
-      Some(n) => n.to_json()
+      Some(n) => Json(n)
       None => Json::null()
     },
     "upper_inclusive_ms": match self.upper_inclusive_ms {
-      Some(n) => n.to_json()
+      Some(n) => Json(n)
       None => Json::null()
     },
-    "sample_count": self.sample_count.to_json(),
-    "succeeded_count": self.succeeded_count.to_json(),
-    "failed_count": self.failed_count.to_json(),
-    "cumulative_sample_count": self.cumulative_sample_count.to_json(),
-    "cumulative_succeeded_count": self.cumulative_succeeded_count.to_json(),
-    "cumulative_failed_count": self.cumulative_failed_count.to_json(),
+    "sample_count": Json(self.sample_count),
+    "succeeded_count": Json(self.succeeded_count),
+    "failed_count": Json(self.failed_count),
+    "cumulative_sample_count": Json(self.cumulative_sample_count),
+    "cumulative_succeeded_count": Json(self.cumulative_succeeded_count),
+    "cumulative_failed_count": Json(self.cumulative_failed_count),
   }
 }
 

@@ -213,7 +213,7 @@ async fn artifact(
     let markers = @worker.exact_docx_markers(template.to_fixedarray())
     api(config, "/v1/offline-commerce/operator/generation-plan", Post, {
       "request": request.to_json(),
-      "markers": markers.to_json(),
+      "markers": Json(markers),
     })
   } else {
     plan

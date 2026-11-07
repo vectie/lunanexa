@@ -282,7 +282,7 @@ async test "operator invitation enables one-time OIDC self-registration" {
         "organization_id": "organization-http-one",
         "tenant_ref": "tenant-http-one",
         "project_id": "project-http-one",
-        "expires_unix_ms": (now + 86400000L).to_json(),
+        "expires_unix_ms": Json(now + 86400000L),
       } : Json).stringify(),
   )
   assert_eq(invitation_reply.status, 201)
@@ -303,8 +303,7 @@ async test "operator invitation enables one-time OIDC self-registration" {
     now + 30000L,
   )
   let registration_body = (
-    { "invitation_secret": issued.secret, "lifetime_ms": 60000L.to_json() } :
-    Json).stringify()
+    { "invitation_secret": issued.secret, "lifetime_ms": Json(60000L) } : Json).stringify()
   assert_eq(
     service.handle_with_transport(
       Post,
@@ -669,8 +668,8 @@ async test "free registration provisions one bounded shared-inference trial" {
       "display_name": "Trial key",
       "scopes": ["ModelList", "Inference"],
       "allowed_models": ["text.qwen"],
-      "expires_unix_ms": trial.expires_unix_ms.to_json(),
-      "maximum_requests": 100L.to_json(),
+      "expires_unix_ms": Json(trial.expires_unix_ms),
+      "maximum_requests": Json(100L),
     } : Json).stringify()
   let key_reply = service.handle(
     Post,
@@ -790,7 +789,7 @@ async test "free registration provisions one bounded shared-inference trial" {
         "organization_id": "enterprise-org",
         "tenant_ref": "enterprise-tenant",
         "project_id": "enterprise-project",
-        "expires_unix_ms": (now + 86400000L).to_json(),
+        "expires_unix_ms": Json(now + 86400000L),
       } : Json).stringify(),
   )
   assert_eq(invitation_reply.status, 201)
@@ -811,10 +810,8 @@ async test "free registration provisions one bounded shared-inference trial" {
       now + 30000L,
     ),
     (
-      {
-        "invitation_secret": invitation.secret,
-        "lifetime_ms": 60000L.to_json(),
-      } : Json).stringify(),
+      { "invitation_secret": invitation.secret, "lifetime_ms": Json(60000L) } :
+      Json).stringify(),
     true,
   )
   assert_eq(upgraded.status, 201)
@@ -1106,6 +1103,7 @@ test "trial budget projection follows policy in both optional wire encodings" {
       "consumed_requests": 15,
       "max_input_bytes": 65536,
       "max_output_tokens": 16384,
+      ..
     },
   )
   let legacy : Json = [{ "trial_id": "legacy" }]
@@ -1116,10 +1114,12 @@ test "trial budget projection follows policy in both optional wire encodings" {
         "trial_id": "legacy",
         "max_input_bytes": 32768,
         "max_output_tokens": 8192,
+        ..
       },
     ],
   )
   let absent : Json = @json.parse("null")
   assert_eq(trial_budget_projection(absent, 65536, 16384), absent)
-  assert_eq(trial_budget_projection(Json([]), 65536, 16384), Json([]))
+  let empty = Json::array([])
+  assert_eq(trial_budget_projection(empty, 65536, 16384), empty)
 }

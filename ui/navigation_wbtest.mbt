@@ -22,12 +22,12 @@ test "operator secondary destinations remain reachable and expand on direct navi
   ]
   for route in routes {
     let html = @rabbita.render_to_string(() => {
-      @rabbita.Val::constant(navigation(@i18n.English, route, None))
+      @rabbita.Val::constant(navigation(English, route, None))
     })
     for destination in routes {
       assert_true(
         html.contains(
-          route_label(@i18n.English, destination).replace(old="&", new="&amp;"),
+          route_label(English, destination).replace(old="&", new="&amp;"),
         ),
       )
     }

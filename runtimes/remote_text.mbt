@@ -376,7 +376,9 @@ fn responses_upstream_request(
       }
     }
   } else {
-    fields["max_output_tokens"] = request.resource_ceiling.max_output_units.to_json()
+    fields["max_output_tokens"] = Json(
+      request.resource_ceiling.max_output_units,
+    )
     fields["metadata"] = Json::object({
       "workload_id": Json::string(request.workload_id),
       "trace_token": Json::string(request.trace_token),

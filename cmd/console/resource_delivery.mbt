@@ -121,7 +121,7 @@ fn resource_delivery_command(
         }
         let body : Json = {
           "order_id": order.order_id,
-          "node_ids": panel.undertaking_selected_nodes.to_json(),
+          "node_ids": Json(panel.undertaking_selected_nodes),
           "readiness_confirmation": "allocate-idle-nodes:\{order.order_id}",
         }
         for _ in 0..<20 {

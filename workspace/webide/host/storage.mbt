@@ -66,7 +66,7 @@ fn storage_profile_matches(claim : Json, config : HostConfig) -> Bool {
     ..
   } &&
   storage_class == config.storage_class &&
-  modes == [config.storage_access_mode.unwrap_or("ReadWriteOnce").to_json()]
+  modes == [Json(config.storage_access_mode.unwrap_or("ReadWriteOnce"))]
 }
 
 ///|
@@ -94,7 +94,7 @@ fn volume_accepts_node(volume : Json, node : String) -> Bool {
             "values": Array(values),
             ..
           } &&
-          values.contains(node.to_json())
+          values.contains(Json(node))
         })
       })
     _ => true
@@ -194,14 +194,10 @@ async fn WorkspaceHost::set_storage_owner(
     { "metadata": { "annotations": Object(values), .. }, .. } => values.copy()
     _ => Map([])
   }
-  annotations["lunanexa.io/storage-writer"] = owner.to_json()
+  annotations["lunanexa.io/storage-writer"] = Json(owner)
   let patch : Json = [
     { "op": "test", "path": "/metadata/resourceVersion", "value": version },
-    {
-      "op": "add",
-      "path": "/metadata/annotations",
-      "value": annotations.to_json(),
-    },
+    { "op": "add", "path": "/metadata/annotations", "value": Json(annotations) },
   ]
   // Kubernetes CAS is the lock across gateway instances, not an in-memory
   // mutex or RWX access mode. A racing writer retries through normal launch.

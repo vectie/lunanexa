@@ -251,8 +251,8 @@ fn stamp(
     is { "metadata": { "annotations": Object(annotations), .. }, .. } else {
     raise InvalidResource
   }
-  annotations["lunanexa.io/owner"] = owner.to_json()
-  annotations["lunanexa.io/intent"] = intent.to_json()
+  annotations["lunanexa.io/owner"] = Json(owner)
+  annotations["lunanexa.io/intent"] = Json(intent)
   resource
 }
 

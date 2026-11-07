@@ -123,7 +123,7 @@ pub fn import_models(
     raise InvalidInput("at most 1000 models are supported")
   }
   let models : Array[@contracts.ModelRecord] = @json.from_json(Json::array(raw))
-  if models.to_json() != Json::array(raw) {
+  if Json(models) != Json::array(raw) {
     raise InvalidInput("model record contains unsupported fields")
   }
   validate_models(models)

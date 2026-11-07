@@ -15,13 +15,8 @@ async test "operator and portal share runtime identity and admission before adap
         "org-a",
         [@portal.EnterpriseRole::OrganizationAdministrator],
       ),
-      ("member", "tenant-a", "org-a", [@portal.EnterpriseRole::Developer]),
-      (
-        "other",
-        "tenant-b",
-        "org-b",
-        [@portal.EnterpriseRole::OrganizationAdministrator],
-      ),
+      ("member", "tenant-a", "org-a", [Developer]),
+      ("other", "tenant-b", "org-b", [OrganizationAdministrator]),
     ] {
     ignore(
       portal.put_membership({
@@ -104,7 +99,7 @@ async test "operator and portal share runtime identity and admission before adap
     ..company,
     service_id: "personal-replica",
     model_alias: "private-project-model",
-    runtime_kind: @deployment.ServiceRuntimeKind::NodeAssignment,
+    runtime_kind: NodeAssignment,
     node_ids: ["private-node"],
     binding_ref: "private-project-reference",
     owner: {
@@ -119,7 +114,7 @@ async test "operator and portal share runtime identity and admission before adap
     "Authorization": "Bearer inference",
     "X-LunaNexa-Subject": "admin",
   }
-  let member = {
+  let member_headers = {
     "Authorization": "Bearer inference",
     "X-LunaNexa-Subject": "member",
   }
@@ -154,7 +149,7 @@ async test "operator and portal share runtime identity and admission before adap
     service.handle(
       Post,
       "/v1/portal/self/model-services/company-service:stop",
-      member,
+      member_headers,
       "{}",
     ).status,
     403,

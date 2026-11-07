@@ -101,5 +101,17 @@ that live GLM inference was tested while the service was stopped.
 API native tests pass (228), browser/UI tests pass (389), contract/controller/
 scheduler fixtures pass (35), and Linux store/model-pool/runtime-controller tests
 pass (23). Isolation and response-leak checks pass. The full strict native gate
-remains blocked by existing deprecated-JSON warnings: 53 errors in deny-warn check,
-and 45 in the native runner's prerequisite CLI compilation.
+was initially blocked by deprecated JSON calls. Follow-up cleanup on the same
+date migrated the downstream calls revealed after those first failures, removed
+the remaining strict annotation/keyword warnings, and fixed the obsolete empty
+deployment assertion. Full native check and all 1,956 native workspace tests now
+pass without disabling diagnostics. The existing unreleased MoonLeaf workspace
+also needed four annotation removals; the exact companion change is retained in
+`development/moonleaf-native-annotations.patch` without committing its unrelated
+pending source work.
+
+Live Start-button verification is recorded in [GLM startup](GLM_STARTUP.md).
+The action really starts the units, but this run failed after about 41 seconds
+because the 1M KV allocation lacked about 0.32 GiB. The operator projection now
+requires actual endpoint readiness, rather than equating active processes with
+ready inference. No successful startup duration is claimed from that failed run.

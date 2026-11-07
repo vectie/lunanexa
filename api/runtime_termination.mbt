@@ -99,5 +99,5 @@ async fn ApiService::accept_runtime_terminations(
         503, "TerminationUnavailable", "termination persistence unavailable", true,
       )
   }
-  json_reply(202, { "accepted": report.records.to_json() })
+  json_reply(202, { "accepted": Json(report.records) })
 }

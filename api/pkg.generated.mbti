@@ -42,8 +42,6 @@ pub fn health(String) -> @contracts.HealthResponse
 pub fn provider_callback_signature(String, String, String, Int64, String, String) -> String
 
 // Errors
-type ModelBenchmarkError
-
 pub(all) suberror StreamError {
   Backpressure
   StreamClosed
@@ -390,8 +388,11 @@ pub fn MediaTemplateBinding::from_json(Json, @json.JsonPath) -> Self raise @json
 type ModelBenchmark
 
 type ModelBenchmarkConfig derive(@json.FromJson)
+pub fn ModelBenchmarkConfig::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
 
 type ModelBenchmarkReport derive(ToJson, @json.FromJson)
+pub fn ModelBenchmarkReport::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ModelBenchmarkReport::to_json(Self) -> Json
 
 pub(all) struct OfflineArtifactView {
   artifact_id : String

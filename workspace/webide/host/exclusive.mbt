@@ -70,7 +70,7 @@ fn WorkspaceHost::place_exclusive(
     raise InvalidConfiguration
   }
   if meta.get("labels") is Some(Object(labels)) {
-    labels["lunanexa.io/reservation"] = placement.reservation_id.to_json()
+    labels["lunanexa.io/reservation"] = Json(placement.reservation_id)
   }
   pod["nodeSelector"] = { "kubernetes.io/hostname": placement.node_name }
   pod["tolerations"] = [
@@ -115,11 +115,11 @@ fn WorkspaceHost::place_container(
     raise InvalidConfiguration
   }
   let limits : Map[String, Json] = {
-    "cpu": "\{container.cpu_millis}m".to_json(),
-    "memory": "\{container.memory_mib}Mi".to_json(),
+    "cpu": Json("\{container.cpu_millis}m"),
+    "memory": Json("\{container.memory_mib}Mi"),
   }
   if container.gpu {
-    limits["nvidia.com/gpu"] = (1).to_json()
+    limits["nvidia.com/gpu"] = Json(1)
   }
   let app_env : Array[Json] = [
     { "name": "HOME", "value": "/workspace" },
@@ -232,7 +232,7 @@ fn WorkspaceHost::place_container(
     "workingDir": "/workspace",
     "env": app_env,
     "securityContext": security_context(),
-    "resources": { "requests": limits.to_json(), "limits": limits.to_json() },
+    "resources": { "requests": Json(limits), "limits": Json(limits) },
     "volumeMounts": [
       { "name": "workspace", "mountPath": "/workspace" },
       { "name": "tmp", "mountPath": "/tmp" },
@@ -505,7 +505,7 @@ fn WorkspaceHost::place_container(
   } else {
     []
   }
-  pod["containers"] = [app, ..platform_containers, ..tenant_runtime].to_json()
+  pod["containers"] = Json([app, ..platform_containers, ..tenant_runtime])
   if container.gpu {
     pod["runtimeClassName"] = "nvidia"
   }

@@ -36,7 +36,7 @@ pub fn Report::nodes_csv(self : Report) -> String {
         cell(row.freshness),
         age,
         cell(row.agent_version),
-        cell(row.runtime_names.to_json().stringify()),
+        cell(Json(row.runtime_names).stringify()),
         row.reported_devices.to_string(),
         row.matching_devices.to_string(),
         row.running_deployment_count.to_string(),

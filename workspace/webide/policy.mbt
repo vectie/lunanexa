@@ -148,7 +148,7 @@ pub fn workspace_id(grant : Grant) -> String {
   }
   "webide-" +
   @crypto.bytes_to_hex_string(
-    @crypto.sha256(@utf8.encode(identity.to_json().stringify())),
+    @crypto.sha256(@utf8.encode(Json(identity).stringify())),
   )
 }
 
@@ -168,7 +168,7 @@ pub fn workspace_storage_id(grant : Grant) -> String {
   ]
   "webide-" +
   @crypto.bytes_to_hex_string(
-    @crypto.sha256(@utf8.encode(identity.to_json().stringify())),
+    @crypto.sha256(@utf8.encode(Json(identity).stringify())),
   )
 }
 

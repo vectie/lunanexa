@@ -121,34 +121,31 @@ fn delivery_view(operation : @delivery.Operation, can_manage : Bool) -> Json {
     "kind": operation.intent.kind.to_json(),
     "template_id": operation.intent.template_id,
     "template_version": operation.intent.template_version,
-    "node_count": operation.intent.node_count.to_json(),
+    "node_count": Json(operation.intent.node_count),
     "model_replica_progress": match operation.model_replicas {
       None => Json::null()
       Some(replicas) =>
         {
           "topology": "independent_replicas",
-          "observed": replicas.length().to_json(),
-          "prepared": replicas
-          .filter(replica => replica.prepared)
-          .length()
-          .to_json(),
-          "ready": replicas
-          .filter(replica => replica.ready && !replica.stopped)
-          .length()
-          .to_json(),
-          "stopped": replicas
-          .filter(replica => replica.stopped)
-          .length()
-          .to_json(),
+          "observed": Json(replicas.length()),
+          "prepared": Json(
+            replicas.filter(replica => replica.prepared).length(),
+          ),
+          "ready": Json(
+            replicas
+            .filter(replica => replica.ready && !replica.stopped)
+            .length(),
+          ),
+          "stopped": Json(replicas.filter(replica => replica.stopped).length()),
         }
     },
     "stage": operation.stage.to_json(),
-    "generation": operation.generation.to_json(),
+    "generation": Json(operation.generation),
     "cache_hit": operation.cache_hit,
-    "transferred_bytes": operation.transferred_bytes.to_json(),
-    "total_bytes": operation.total_bytes.to_json(),
-    "failure_code": operation.failure_code.to_json(),
-    "expires_at_ms": operation.intent.expires_at_ms.to_json(),
+    "transferred_bytes": Json(operation.transferred_bytes),
+    "total_bytes": Json(operation.total_bytes),
+    "failure_code": Json(operation.failure_code),
+    "expires_at_ms": Json(operation.intent.expires_at_ms),
     "can_manage": can_manage,
   }
 }
@@ -225,15 +222,16 @@ async fn ApiService::handle_delivery(
       return if path == "/v1/deliveries" {
         json_reply(
           200,
-          deliveries
-          .operations()
-          .map(operation => delivery_view(operation, true))
-          .to_json(),
+          Json(
+            deliveries
+            .operations()
+            .map(operation => delivery_view(operation, true)),
+          ),
         )
       } else {
         json_reply(
           200,
-          scheduler.snapshot().node_reservations.unwrap_or([]).to_json(),
+          Json(scheduler.snapshot().node_reservations.unwrap_or([])),
         )
       }
     }
@@ -293,21 +291,21 @@ async fn ApiService::handle_delivery(
   if verb == Get && path == "/v1/portal/self/deliveries" {
     return json_reply(
       200,
-      owned
-      .map(operation => {
-        delivery_view(
-          operation,
-          delivery_manageable_by_member(
+      Json(
+        owned.map(operation => {
+          delivery_view(
             operation,
-            company_admin,
-            member_leases.any(lease => {
-              lease.lease_id == operation.intent.lease_id &&
-              lease.subject_ref == subject
-            }),
-          ),
-        )
-      })
-      .to_json(),
+            delivery_manageable_by_member(
+              operation,
+              company_admin,
+              member_leases.any(lease => {
+                lease.lease_id == operation.intent.lease_id &&
+                lease.subject_ref == subject
+              }),
+            ),
+          )
+        }),
+      ),
     )
   }
   let reservation_candidates = scheduler.snapshot().node_reservations
@@ -411,28 +409,28 @@ async fn ApiService::handle_delivery(
       })
     }
     return json_reply(200, {
-      "reservations": reservations
-      .map(value => {
-        let undertaking_order = undertaking_orders
-          .iter()
-          .find_first(order => {
-            value.request.reservation_id ==
-            "undertaking-resource-\{undertaking_allocation_fingerprint(order.order_id)}" &&
-            order.organization_id == view.membership.organization_id
-          })
-        (
-          {
-            "reservation_id": value.request.reservation_id,
-            "label": undertaking_order.map_or(value.request.authority_ref, order => {
-              "承诺函订单 · \{order.order_id}"
-            }),
-            "node_count": value.request.node_ids.length().to_json(),
-            "expires_at_ms": value.request.expires_unix_ms.to_json(),
-          } : Json)
-      })
-      .to_json(),
-      "templates": templates.to_json(),
-      "shared_trials": shared_trials.to_json(),
+      "reservations": Json(
+        reservations.map(value => {
+          let undertaking_order = undertaking_orders
+            .iter()
+            .find_first(order => {
+              value.request.reservation_id ==
+              "undertaking-resource-\{undertaking_allocation_fingerprint(order.order_id)}" &&
+              order.organization_id == view.membership.organization_id
+            })
+          (
+            {
+              "reservation_id": value.request.reservation_id,
+              "label": undertaking_order.map_or(value.request.authority_ref, order => {
+                "承诺函订单 · \{order.order_id}"
+              }),
+              "node_count": Json(value.request.node_ids.length()),
+              "expires_at_ms": Json(value.request.expires_unix_ms),
+            } : Json)
+        }),
+      ),
+      "templates": Json(templates),
+      "shared_trials": Json(shared_trials),
     })
   }
   if verb == Post && path == "/v1/portal/self/deliveries" {

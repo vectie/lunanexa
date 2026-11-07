@@ -46,14 +46,14 @@ fn node(id : String, timestamp : Int64) -> @contracts.NodeHeartbeat {
 ///|
 test "imports existing heartbeat wire; deterministic exploration and private-field omission" {
   let input = [node("b", 900L), node("a", 901L)]
-  let wire = input.to_json().stringify()
+  let wire = Json(input).stringify()
   let report = @fleet.explore(@fleet.import_nodes(wire), query())
   assert_eq(report.nodes[0].node_id, "a")
   assert_eq(report.devices.length(), 2)
   assert_eq(report.groups.length(), 1)
   assert_eq(report.groups[0].summed_device_free_mib, 16000L)
   assert_true(report == @fleet.explore(input.rev(), query()))
-  assert_eq(input.to_json().stringify(), wire)
+  assert_eq(Json(input).stringify(), wire)
   for
     hidden in [
       "must-not-export", "private-deployment", "private-signature", "labels", "runtime_endpoints",

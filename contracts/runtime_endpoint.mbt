@@ -9,15 +9,15 @@ pub impl ToJson for NodeHeartbeat with fn to_json(self) {
   let value : Json = {
     "node_id": self.node_id,
     "state": ToJson::to_json(self.state),
-    "observed_generation": self.observed_generation.to_json(),
-    "controller_epoch": self.controller_epoch.to_json(),
+    "observed_generation": Json(self.observed_generation),
+    "controller_epoch": Json(self.controller_epoch),
     "inventory": ToJson::to_json(self.inventory),
-    "running_deployments": self.running_deployments.to_json(),
-    "timestamp_unix_ms": self.timestamp_unix_ms.to_json(),
+    "running_deployments": Json(self.running_deployments),
+    "timestamp_unix_ms": Json(self.timestamp_unix_ms),
     "signature": self.signature,
   }
   if self.runtime_endpoints is Some(endpoints) && value is Object(fields) {
-    fields["runtime_endpoints"] = endpoints.to_json()
+    fields["runtime_endpoints"] = Json(endpoints)
   }
   value
 }

@@ -196,10 +196,7 @@ async fn ApiService::handle_technical_management(
         value.now_unix_ms,
         value.high_water_bytes,
       )
-      json_reply(200, {
-        "findings": findings.to_json(),
-        "action": action.to_json(),
-      })
+      json_reply(200, { "findings": Json(findings), "action": action.to_json() })
     }
     (Post, "/v1/technical/backpressure:decide") => {
       guard decode_backpressure_evaluation(body) is Some(value) else {

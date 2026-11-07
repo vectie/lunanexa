@@ -113,7 +113,7 @@ fn MediaBinding::identity(self : MediaBinding) -> String {
   // placement or generation changes do. Old jobs cannot migrate implicitly.
   let material : Json = {
     "deployment": self.deployment_id,
-    "generation": self.deployment_generation.to_json(),
+    "generation": Json(self.deployment_generation),
     "node": self.node_id,
     "origin": self.origin,
     "profile": self.profile.to_json(),
@@ -130,7 +130,7 @@ fn MediaBinding::identity(self : MediaBinding) -> String {
     profile.remove("image_reference_required") |> ignore
   }
   if self.instance_id is Some(instance_id) && material is Object(fields) {
-    fields["instance_id"] = instance_id.to_json()
+    fields["instance_id"] = Json(instance_id)
   }
   "media-" + digest_hex(material.stringify())
 }
@@ -1240,11 +1240,11 @@ async fn ApiService::handle_media_operator(
               "id": job.job_id,
               "state": job.state.to_json(),
               "order_id": match job.owner.authority {
-                DedicatedOrder(id) => id.to_json()
+                DedicatedOrder(id) => Json(id)
                 PrivateWorkspace(_) => (null : Json)
               },
               "workspace_lease_id": match job.owner.authority {
-                PrivateWorkspace(id) => id.to_json()
+                PrivateWorkspace(id) => Json(id)
                 DedicatedOrder(_) => (null : Json)
               },
               "request_digest": job.request_digest,
@@ -1253,7 +1253,7 @@ async fn ApiService::handle_media_operator(
         })
         .to_array()
       return json_reply(200, {
-        "data": page.to_json(),
+        "data": Json(page),
         "truncated": pending.length() > 100,
       })
     }

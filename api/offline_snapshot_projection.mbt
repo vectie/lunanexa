@@ -7,8 +7,8 @@ fn offline_operator_snapshot(
   match snapshot.to_json() {
     Object(fields) => {
       let safe = fields.copy()
-      safe["generation_plans"] = ({} : Map[String, String]).to_json()
-      safe.to_json()
+      safe["generation_plans"] = Json(({} : Map[String, String]))
+      Json(safe)
     }
     value => value
   }

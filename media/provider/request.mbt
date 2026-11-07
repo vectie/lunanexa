@@ -277,7 +277,7 @@ pub fn VideoRequest::within_workspace_budget(
   maximum_input : Int32,
   maximum_output : Int32,
 ) -> Bool {
-  @utf8.encode(self.fields.to_json().stringify()).length() <= maximum_input &&
+  @utf8.encode(Json(self.fields).stringify()).length() <= maximum_input &&
   (@string.parse_int(self.fields["num_frames"]) catch {
     _ => maximum_output + 1
   }) <=

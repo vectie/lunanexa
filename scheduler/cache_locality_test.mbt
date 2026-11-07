@@ -13,7 +13,7 @@ test "cache locality only trusts fresh exact digest hints inside the reservation
       runtime_names: [],
       accelerators: [],
       labels: {
-        "lunanexa.io/verified-artifact-digests": [digest].to_json().stringify(),
+        "lunanexa.io/verified-artifact-digests": Json([digest]).stringify(),
       },
       taints: [],
     },

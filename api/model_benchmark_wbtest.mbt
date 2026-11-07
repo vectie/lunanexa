@@ -3,7 +3,7 @@ fn benchmark_test_fixture(path : String) -> ModelBenchmark {
   {
     config: { origin: "https://portal.example.invalid", state_path: path, },
     report: {
-      namespace: "loadtest-fixture",
+      run_namespace: "loadtest-fixture",
       status: "running",
       phase: "准备测速",
       run_id: "benchmark-fixture",
@@ -29,6 +29,17 @@ fn benchmark_test_fixture(path : String) -> ModelBenchmark {
     timings: Map([]),
     baseline: None,
   }
+}
+
+///|
+test "benchmark namespace retains its existing persisted wire name" {
+  let report = benchmark_test_fixture("/unused").report
+  let wire = Json(report)
+  assert_true(wire is { "namespace": "loadtest-fixture", .. })
+  guard wire is Object(fields) else { fail("expected report object") }
+  assert_false(fields.contains("run_namespace"))
+  let restored : ModelBenchmarkReport = @json.from_json(wire)
+  assert_eq(restored.run_namespace, report.run_namespace)
 }
 
 ///|

@@ -43,7 +43,7 @@ async test "export bounded production runtime qualification quote" {
     "result_filename": "result.json",
     "render_manifest_filename": "render.json",
     "docx_replacements": [],
-    "xlsx_replacements": replacements.to_json(),
+    "xlsx_replacements": Json(replacements),
   }
   let directory = digest(@utf8.encode(run_id)).split(":").to_array()[1].to_owned()
   ensure_directory(root + "/" + directory)
@@ -117,7 +117,7 @@ async test "export bounded production runtime qualification undertaking" {
     "output_filename": "output.pdf",
     "result_filename": "result.json",
     "render_manifest_filename": "render.json",
-    "docx_replacements": replacements.to_json(),
+    "docx_replacements": Json(replacements),
     "xlsx_replacements": [],
   }
   let directory = digest(@utf8.encode(run_id)).split(":").to_array()[1].to_owned()

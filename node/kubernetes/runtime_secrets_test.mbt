@@ -151,7 +151,7 @@ test "a node that declares no fabric address still reads its configuration" {
 
   let declared = runtime_settings().to_json()
   guard declared is Object(fields) else { fail("not a settings object") }
-  fields["fabric_address"] = "198.18.0.1".to_json()
+  fields["fabric_address"] = Json("198.18.0.1")
   let from_address : @kubernetes.RuntimeSettings = @json.from_json(declared)
   assert_eq(from_address.fabric_address, Some("198.18.0.1"))
 }

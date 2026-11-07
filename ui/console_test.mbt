@@ -1435,8 +1435,8 @@ test "empty and error states remain explicit" {
     deployments: [],
     confirmation: None,
   })
-  assert_true(deployments.contains("Open one-click deployment"))
-  assert_true(deployments.contains("No managed deployments"))
+  assert_true(deployments.contains("Deploy model"))
+  assert_true(deployments.contains("No model services"))
 }
 
 ///|
@@ -2537,7 +2537,7 @@ test "the template form mirrors the planner's cross-field rules" {
 test "approved legacy licence casing does not offer acceptance as the next step" {
   let model = {
     ..candidate_model_row(),
-    state: @contracts.Approved,
+    state: Approved,
     license_status: "Accepted",
     alias_name: "text.default",
   }

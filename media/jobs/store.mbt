@@ -98,9 +98,9 @@ pub async fn JobStore::restore(
   // record during reconciliation. JSON tuple encoding avoids delimiter aliases.
   let incarnations : Map[String, Bool] = Map([])
   for value in terminations {
-    let identity = ([value.node_id, value.evidence.instance_id] : Array[String])
-      .to_json()
-      .stringify()
+    let identity = Json(
+      ([value.node_id, value.evidence.instance_id] : Array[String]),
+    ).stringify()
     if incarnations.contains(identity) {
       raise InvalidSnapshot
     }

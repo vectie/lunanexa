@@ -17,11 +17,11 @@ async fn ApiService::access_organization_options(self : ApiService) -> Json {
       continue
     }
     let tenants : Array[String] = []
-    for member in memberships {
-      if member.organization_id == organization.organization_id &&
-        member.active &&
-        !tenants.contains(member.tenant_ref) {
-        tenants.push(member.tenant_ref)
+    for membership in memberships {
+      if membership.organization_id == organization.organization_id &&
+        membership.active &&
+        !tenants.contains(membership.tenant_ref) {
+        tenants.push(membership.tenant_ref)
       }
     }
     // Ambiguous mappings require operator repair, never an arbitrary choice.

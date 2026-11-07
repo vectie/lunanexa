@@ -400,7 +400,7 @@ async fn check_workspace_handoff(private_cloud : Bool) -> Unit {
     fail("expected desktop client readiness")
   }
   assert_eq(client_fields["contract_ready"], true)
-  assert_eq(client_fields["contract_required"], (!private_cloud).to_json())
+  assert_eq(client_fields["contract_required"], Json(!private_cloud))
   assert_eq(client_fields["workspace_ready"], true)
   assert_eq(client_fields["models_ready"], true)
   assert_eq(client_fields["ready"], true)

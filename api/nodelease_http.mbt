@@ -520,8 +520,7 @@ async fn ApiService::handle_exclusive_lease_management(
   }
   self.reconcile_expired_exclusive_leases()
   match (verb, path) {
-    (Get, "/v1/exclusive-node-leases") =>
-      json_reply(200, leases.leases().to_json())
+    (Get, "/v1/exclusive-node-leases") => json_reply(200, Json(leases.leases()))
     (Post, "/v1/exclusive-node-leases") => {
       self.resource_mutex.acquire()
       defer self.resource_mutex.release()

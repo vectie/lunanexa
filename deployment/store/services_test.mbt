@@ -28,7 +28,7 @@ fn service_fixture(
 test "stopped delivery service does not retain an expired reservation's node ownership" {
   let delivered = {
     ..service_fixture("delivered", "company-a", Stopped),
-    runtime_kind: @deployment.ServiceRuntimeKind::NodeAssignment,
+    runtime_kind: NodeAssignment,
     owner: {
       tenant_ref: "company-a",
       organization_id: "company-a",

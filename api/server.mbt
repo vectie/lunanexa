@@ -3121,7 +3121,7 @@ async fn send_compatible_stream_event(
           {
             "index": 0,
             "delta": delta,
-            "finish_reason": (None : String?).to_json(),
+            "finish_reason": Json((None : String?)),
           },
         ],
       }
@@ -3143,7 +3143,7 @@ async fn send_compatible_stream_event(
               {
                 "index": 0,
                 "delta": compatible_stream_delta(chunk),
-                "finish_reason": (None : String?).to_json(),
+                "finish_reason": Json((None : String?)),
               },
             ],
           }
@@ -3944,7 +3944,7 @@ async fn ApiService::dispatch_with_transport(
         Some(store) => store.snapshot().events
         None => []
       }
-      json_reply(200, events.to_json())
+      json_reply(200, Json(events))
     }
     (Get, "/v1/capabilities") => {
       if !bearer_authorized(headers, self.inference_token) &&
@@ -4055,7 +4055,7 @@ async fn ApiService::dispatch_with_transport(
           500, "InvalidProjection", "workspace projection is unavailable", false,
         )
       }
-      fields["allowed_models"] = allowed_models.to_json()
+      fields["allowed_models"] = Json(allowed_models)
       json_reply(200, projection)
     }
     (Post, "/v1/workspace/users") => {
@@ -4476,7 +4476,7 @@ async fn ApiService::dispatch_with_transport(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
       }
-      json_reply(200, self.store.heartbeats().to_json())
+      json_reply(200, Json(self.store.heartbeats()))
     }
     (Post, "/v1/enrollment/tokens") => {
       if !self.operator_authorized(headers) {
@@ -4768,7 +4768,7 @@ async fn ApiService::dispatch_with_transport(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
       }
-      json_reply(200, self.store.assignments().to_json())
+      json_reply(200, Json(self.store.assignments()))
     }
     (Get, _) if path.has_prefix("/v1/nodes/") && path.has_suffix("/assignments") => {
       let prefix = "/v1/nodes/".length()
@@ -4781,11 +4781,13 @@ async fn ApiService::dispatch_with_transport(
       }
       json_reply(
         200,
-        [
-          for assignment in self.store.assignments() if assignment.node_id ==
-          node_id &&
-          assignment.lease_expires_unix_ms > @async.now() => assignment
-        ].to_json(),
+        Json(
+          [
+            for assignment in self.store.assignments() if assignment.node_id ==
+            node_id &&
+            assignment.lease_expires_unix_ms > @async.now() => assignment
+          ],
+        ),
       )
     }
     (Put, "/v1/assignments") => {
@@ -5388,7 +5390,7 @@ async fn ApiService::dispatch_with_transport(
           401, "Unauthenticated", "valid audit authority is required", false,
         )
       }
-      json_reply(200, self.store.audit_events().to_json())
+      json_reply(200, Json(self.store.audit_events()))
     }
     _ => api_error(404, "NotFound", "route was not found", false)
   }

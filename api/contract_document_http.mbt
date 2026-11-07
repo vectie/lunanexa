@@ -472,7 +472,7 @@ async fn ApiService::handle_contract_documents(
   if verb == Get &&
     path == "/v1/contract-documents/manifest/catalog" &&
     self.operator_authorized(headers) {
-    return json_reply(200, contract_document_catalog().to_json())
+    return json_reply(200, Json(contract_document_catalog()))
   }
   if verb == Get &&
     path == "/v1/contract-documents/manifest" &&
@@ -491,7 +491,7 @@ async fn ApiService::handle_contract_documents(
       (Get, "/v1/contract-documents/operator/snapshot") =>
         json_reply(200, store.snapshot().to_json())
       (Get, "/v1/contract-documents/operator/packets") =>
-        json_reply(200, store.snapshot().packets.to_json())
+        json_reply(200, Json(store.snapshot().packets))
       (Put, _) if operator_contract_packet_id(path, ":information")
         is Some(packet_id) => {
         let decoded : ContractInformationUpdate? = Some(
@@ -764,7 +764,7 @@ async fn ApiService::handle_contract_documents(
         } else {
           None
         }
-        json_reply(200, store.list_approvals(status).to_json())
+        json_reply(200, Json(store.list_approvals(status)))
       }
       (Post, _) if operator_approval_id(path, ":approve") is Some(approval_id) => {
         guard store.get_approval(approval_id) is Some(approval) else {
@@ -893,7 +893,7 @@ async fn ApiService::handle_contract_documents(
     }
     return match (verb, path) {
       (Get, "/v1/contract-documents/worker/pending") =>
-        json_reply(200, store.pending_generation_packets().to_json())
+        json_reply(200, Json(store.pending_generation_packets()))
       (Post, "/v1/contract-documents/worker/results") => {
         let decoded : ContractGenerationResult? = Some(
           @json.from_json(@json.parse(body)),
@@ -1038,11 +1038,11 @@ async fn ApiService::handle_contract_documents(
     })
   match (verb, path) {
     (Get, "/v1/contract-documents/manifest/catalog") =>
-      json_reply(200, contract_document_catalog().to_json())
+      json_reply(200, Json(contract_document_catalog()))
     (Get, "/v1/contract-documents/manifest") =>
       json_reply(200, manifest.to_json())
     (Get, "/v1/contract-documents/self") =>
-      json_reply(200, scoped_packets.to_json())
+      json_reply(200, Json(scoped_packets))
     (Get, "/v1/contract-documents/self/events") => {
       let packet_ids : Map[String, Unit] = Map([])
       for packet in scoped_packets {
@@ -1050,9 +1050,11 @@ async fn ApiService::handle_contract_documents(
       }
       json_reply(
         200,
-        store.snapshot().events
-        .filter(event => packet_ids.contains(event.packet_id))
-        .to_json(),
+        Json(
+          store.snapshot().events.filter(event => {
+            packet_ids.contains(event.packet_id)
+          }),
+        ),
       )
     }
     (Get, "/v1/contract-documents/self/governance") => {
@@ -1062,21 +1064,29 @@ async fn ApiService::handle_contract_documents(
       }
       let snapshot = store.snapshot()
       json_reply(200, {
-        "approvals": snapshot.approvals
-        .filter(value => packet_ids.contains(value.packet_id))
-        .to_json(),
-        "obligations": snapshot.obligations
-        .filter(value => packet_ids.contains(value.packet_id))
-        .to_json(),
-        "amendments": snapshot.amendments
-        .filter(value => packet_ids.contains(value.packet_id))
-        .to_json(),
-        "closure_proposals": snapshot.closure_proposals
-        .filter(value => packet_ids.contains(value.packet_id))
-        .to_json(),
-        "numbers": snapshot.numbers
-        .filter(value => packet_ids.contains(value.packet_id))
-        .to_json(),
+        "approvals": Json(
+          snapshot.approvals.filter(value => {
+            packet_ids.contains(value.packet_id)
+          }),
+        ),
+        "obligations": Json(
+          snapshot.obligations.filter(value => {
+            packet_ids.contains(value.packet_id)
+          }),
+        ),
+        "amendments": Json(
+          snapshot.amendments.filter(value => {
+            packet_ids.contains(value.packet_id)
+          }),
+        ),
+        "closure_proposals": Json(
+          snapshot.closure_proposals.filter(value => {
+            packet_ids.contains(value.packet_id)
+          }),
+        ),
+        "numbers": Json(
+          snapshot.numbers.filter(value => packet_ids.contains(value.packet_id)),
+        ),
       })
     }
     (Post, _) if self_approval_id(path, ":nudge") is Some(approval_id) => {

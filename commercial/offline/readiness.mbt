@@ -155,7 +155,7 @@ pub extend OfflineReadinessEvidenceDocument with FromJson::{from_json}
 pub fn offline_readiness_material(
   document : OfflineReadinessEvidenceDocument,
 ) -> String {
-  "\{offline_readiness_schema_version}|\{document.issued_unix_ms}|\{document.expires_unix_ms}|\{document.capabilities.to_json().stringify()}"
+  "\{offline_readiness_schema_version}|\{document.issued_unix_ms}|\{document.expires_unix_ms}|\{Json(document.capabilities).stringify()}"
 }
 
 ///|

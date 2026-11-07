@@ -5,8 +5,8 @@ pub fn UsageCorrelationReport::json_text(
 ) -> String {
   let references = self.references.map(value => {
     let json : Json = {
-      "external_ref": value.external_ref.to_json(),
-      "links": value.links.to_json(),
+      "external_ref": Json(value.external_ref),
+      "links": Json(value.links),
       "report": value.report.usage_report_json(),
     }
     json
@@ -16,8 +16,8 @@ pub fn UsageCorrelationReport::json_text(
     "association_policy": "analyst_supplied_event_links_adjustments_follow_original_charge",
     "missing_policy": "no_selected_row_is_unresolved_not_zero",
     "query": self.query.to_json(),
-    "duplicate_link_count": self.duplicate_link_count.to_json(),
-    "references": references.to_json(),
+    "duplicate_link_count": Json(self.duplicate_link_count),
+    "references": Json(references),
     "unassigned": self.unassigned.usage_report_json(),
   }
   json.stringify(indent=2)

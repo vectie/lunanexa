@@ -371,11 +371,11 @@ async fn ApiService::access_package_view_for_membership(
     // and the console decodes them as String?/Int64?, so an array throws and
     // takes the whole access-read block down with it.
     "grant_id": match grant {
-      Some(value) => value.grant_id.to_json()
+      Some(value) => Json(value.grant_id)
       None => Json::null()
     },
     "lease_id": match lease {
-      Some(value) => value.lease_id.to_json()
+      Some(value) => Json(value.lease_id)
       None => Json::null()
     },
     "lease_state": match lease_state {
@@ -383,10 +383,10 @@ async fn ApiService::access_package_view_for_membership(
       None => Json::null()
     },
     "expires_unix_ms": match lease {
-      Some(value) => value.expires_unix_ms.to_json()
+      Some(value) => Json(value.expires_unix_ms)
       None => Json::null()
     },
-    "approved_model_aliases": aliases.to_json(),
+    "approved_model_aliases": Json(aliases),
     "account_ready": account_active,
     "membership_ready": membership_ready,
     "contract_required": !self.private_cloud_workspace_access,
@@ -1126,8 +1126,7 @@ async fn ApiService::handle_access_onboarding(
   match (verb, path) {
     (Get, "/v1/onboarding/access-packages/operations") =>
       match self.access_onboarding_store {
-        Some(journal) =>
-          json_reply(200, journal.snapshot().operations.to_json())
+        Some(journal) => json_reply(200, Json(journal.snapshot().operations))
         None =>
           api_error(
             503, "AccessOnboardingUnavailable", "a durable onboarding journal is required",
@@ -1135,7 +1134,7 @@ async fn ApiService::handle_access_onboarding(
           )
       }
     (Get, "/v1/onboarding/access-packages") =>
-      json_reply(200, self.access_package_views().to_json())
+      json_reply(200, Json(self.access_package_views()))
     (Get, "/v1/onboarding/access-packages/options") =>
       json_reply(200, self.access_organization_options())
     (Post, "/v1/onboarding/access-packages") => {

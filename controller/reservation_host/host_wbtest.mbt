@@ -59,12 +59,12 @@ fn Fixture::host(
         self.patches.push(body.unwrap())
         self.node = {
           "metadata": { "name": "spark-a", "resourceVersion": "10" },
-          "spec": { "taints": taints.to_json() },
+          "spec": { "taints": Json(taints) },
         }
         return (200, self.node)
       }
       if path.has_prefix("/api/v1/pods?") {
-        (200, { "items": self.pods.to_json() })
+        (200, { "items": Json(self.pods) })
       } else {
         (200, self.node)
       }

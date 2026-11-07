@@ -213,8 +213,8 @@ async fn ApiService::handle_delivery_access_key(
     "api_secret": redeemed.api_secret,
     "model": template.model_selector,
     "base_url": config.public_api_base_url,
-    "expires_unix_ms": expiry.to_json(),
-    "maximum_requests": config.maximum_requests.to_json(),
+    "expires_unix_ms": Json(expiry),
+    "maximum_requests": Json(config.maximum_requests),
     "one_time": true,
   })
 }

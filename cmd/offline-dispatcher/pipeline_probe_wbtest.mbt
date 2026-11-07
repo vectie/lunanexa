@@ -93,7 +93,7 @@ async test "isolated actual artifact pipeline retries failed callback" {
     "output_filename": "output.pdf",
     "result_filename": "result.json",
     "render_manifest_filename": "render.json",
-    "docx_replacements": replacements.to_json(),
+    "docx_replacements": Json(replacements),
     "xlsx_replacements": [],
   }
   let plan : Json = {

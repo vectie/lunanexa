@@ -3,8 +3,8 @@ test "canonical quantities preserve strict resource integrity checks" {
   let submitted : Json = {
     "resources": {
       "requests": {
-        "cpu": canonical_cpu_quantity(1000).to_json(),
-        "memory": canonical_memory_quantity(2048).to_json(),
+        "cpu": Json(canonical_cpu_quantity(1000)),
+        "memory": Json(canonical_memory_quantity(2048)),
       },
     },
   }

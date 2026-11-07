@@ -452,30 +452,31 @@ async fn ApiService::handle_enterprise_portal(
       )
       json_reply(
         200,
-        access
-        .views_for_subject(view.membership.tenant_ref, subject_ref)
-        .map(key => {
-          if (
-              private_access &&
-              self.private_model_key_scope(
-                view.membership.tenant_ref,
-                key.allowed_models,
-              )
-            ) ||
-            (
-              key.maximum_requests == 0L &&
-              self.shared_trial_text_key_scope(
-                view.membership.organization_id,
-                view.membership.tenant_ref,
-                key.allowed_models,
-              )
-            ) {
-            { ..key, maximum_requests: 0L, }
-          } else {
-            key
-          }
-        })
-        .to_json(),
+        Json(
+          access
+          .views_for_subject(view.membership.tenant_ref, subject_ref)
+          .map(key => {
+            if (
+                private_access &&
+                self.private_model_key_scope(
+                  view.membership.tenant_ref,
+                  key.allowed_models,
+                )
+              ) ||
+              (
+                key.maximum_requests == 0L &&
+                self.shared_trial_text_key_scope(
+                  view.membership.organization_id,
+                  view.membership.tenant_ref,
+                  key.allowed_models,
+                )
+              ) {
+              { ..key, maximum_requests: 0L, }
+            } else {
+              key
+            }
+          }),
+        ),
       )
     }
     (Post, "/v1/portal/self/api-keys") => {
@@ -740,7 +741,7 @@ async fn ApiService::handle_enterprise_portal(
       json_reply(201, {
         "credential": issued.public_view().credential.to_json(),
         "secret": issued.secret,
-        "allowed_models": issued.credential.allowed_models.to_json(),
+        "allowed_models": Json(issued.credential.allowed_models),
         "api_base_url": match self.client_launch_config {
           Some(config) => Json::string(config.public_api_base_url)
           None => Json::null()
@@ -812,7 +813,7 @@ async fn ApiService::handle_enterprise_portal(
       }
       json_reply(200, {
         "key_id": revoked.key_id,
-        "revoked_unix_ms": revoked.revoked_unix_ms.to_json(),
+        "revoked_unix_ms": Json(revoked.revoked_unix_ms),
       })
     }
     (Get, "/v1/portal/self") => {
@@ -931,7 +932,7 @@ async fn ApiService::handle_enterprise_portal(
       guard self.registry is Some(registry) else {
         return json_reply(
           200,
-          ([] : Array[@portal.EnterpriseModelSummary]).to_json(),
+          Json(([] : Array[@portal.EnterpriseModelSummary])),
         )
       }
       let snapshot = registry.snapshot()
@@ -952,7 +953,7 @@ async fn ApiService::handle_enterprise_portal(
           }
         }
       ]
-      json_reply(200, models.to_json())
+      json_reply(200, Json(models))
     }
     (Post, "/v1/portal/signature-requests") => {
       guard decode_signature_request(body) is Some(request) else {

@@ -69,9 +69,8 @@ pub async fn ArtifactMaterializer::cache_inventory(
 ) -> @contracts.NodeInventory {
   let labels = inventory.labels.copy()
   labels["lunanexa.io/artifact-preparation-v1"] = "true"
-  labels["lunanexa.io/verified-artifact-digests"] = self
-    .verified_cache_digests()
-    .to_json()
-    .stringify()
+  labels["lunanexa.io/verified-artifact-digests"] = Json(
+    self.verified_cache_digests(),
+  ).stringify()
   { ..inventory, labels, }
 }

@@ -194,16 +194,16 @@ pub async fn handle_model_proxy(
     if request.path == "/v1/models" {
       let response : Json = {
         "object": "list",
-        "data": config.allowed_models
-        .map(model => {
-          let entry : Json = {
-            "id": model,
-            "object": "model",
-            "owned_by": "lunanexa",
-          }
-          entry
-        })
-        .to_json(),
+        "data": Json(
+          config.allowed_models.map(model => {
+            let entry : Json = {
+              "id": model,
+              "object": "model",
+              "owned_by": "lunanexa",
+            }
+            entry
+          }),
+        ),
       }
       response_started.val = true
       connection.send_response(200, "OK", extra_headers={
@@ -234,7 +234,7 @@ pub async fn handle_model_proxy(
           connection, 400, "A supported bounded video form is required",
         )
       }
-      payload = @utf8.encode(fields.to_json().stringify())
+      payload = @utf8.encode(Json(fields).stringify())
       content_type = "application/json"
     }
     if request.meth == Post {

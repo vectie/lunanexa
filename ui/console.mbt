@@ -11271,7 +11271,7 @@ fn audit_view(state : ConsoleState) -> @rabbita.Html {
         [
           audit_decision_graph({
             ..state,
-            audit: state.audit[(state.audit.length() - 20).max(0):].to_array(),
+            audit: state.audit[(state.audit.length() - 20).max(0):].to_owned(),
           }),
         ],
       )

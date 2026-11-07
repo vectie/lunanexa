@@ -237,14 +237,12 @@ pub fn explore(
         observed_total_mib: device.memory_total_mib,
         observed_free_mib: device.memory_free_mib,
       })
-      let key = [
-          device.architecture,
-          state,
-          freshness,
-          device.healthy.to_string(),
-        ]
-        .to_json()
-        .stringify()
+      let key = Json([
+        device.architecture,
+        state,
+        freshness,
+        device.healthy.to_string(),
+      ]).stringify()
       let prior = grouped
         .get(key)
         .unwrap_or({

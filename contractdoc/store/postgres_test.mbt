@@ -72,7 +72,7 @@ async test "undertaking PostgreSQL reopen and failed write preserve packet audit
   assert_eq(reopened.snapshot(), before)
   assert_eq(reopened.packet(packet.packet_id), Some(updated))
   assert_false(
-    before.events.to_json().stringify().contains("数据库验收单位"),
+    Json(before.events).stringify().contains("数据库验收单位"),
   )
   database.close()
   for _ in 0..<2 {

@@ -103,9 +103,9 @@ async fn ApiService::handle_undertaking_member_workspace(
       } else {
         "NeedsActivation"
       },
-      "expires_unix_ms": allocation
-      .map(value => value.request.expires_unix_ms)
-      .to_json(),
+      "expires_unix_ms": Json(
+        allocation.map(value => value.request.expires_unix_ms),
+      ),
     })
   }
   guard allocation is Some(reservation) else {
@@ -116,7 +116,7 @@ async fn ApiService::handle_undertaking_member_workspace(
   if ready {
     return json_reply(200, {
       "status": "Ready",
-      "expires_unix_ms": reservation.request.expires_unix_ms.to_json(),
+      "expires_unix_ms": Json(reservation.request.expires_unix_ms),
     })
   }
   guard self.account_store is Some(accounts) &&
@@ -233,6 +233,6 @@ async fn ApiService::handle_undertaking_member_workspace(
   )
   json_reply(200, {
     "status": "Ready",
-    "expires_unix_ms": reservation.request.expires_unix_ms.to_json(),
+    "expires_unix_ms": Json(reservation.request.expires_unix_ms),
   })
 }

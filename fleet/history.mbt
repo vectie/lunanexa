@@ -69,7 +69,7 @@ fn history_value_change(
 fn history_runtime_names(names : Array[String]) -> String {
   let sorted = names.copy()
   sorted.sort()
-  sorted.to_json().stringify()
+  Json(sorted).stringify()
 }
 
 ///|

@@ -33,7 +33,7 @@ fn usage_change_identity(row : UsageReportRow) -> (String, String) {
 ///|
 fn usage_change_key(row : UsageReportRow) -> String {
   let (kind, identity) = usage_change_identity(row)
-  [kind, identity].to_json().stringify()
+  Json([kind, identity]).stringify()
 }
 
 ///|
@@ -135,10 +135,10 @@ pub fn UsageChanges::json_text(self : UsageChanges) -> String {
     "schema_version": "lunanexa.usage-changes.v1",
     "window_policy": "intersecting records in full; no proration",
     "query": self.query.to_json(),
-    "baseline_row_count": self.baseline_row_count.to_json(),
-    "candidate_row_count": self.candidate_row_count.to_json(),
-    "unchanged_count": self.unchanged_count.to_json(),
-    "changes": changes.to_json(),
+    "baseline_row_count": Json(self.baseline_row_count),
+    "candidate_row_count": Json(self.candidate_row_count),
+    "unchanged_count": Json(self.unchanged_count),
+    "changes": Json(changes),
   }
   json.stringify(indent=2)
 }

@@ -108,9 +108,9 @@ fn decode_snapshot(
       raise InvalidInput("invalid v5 snapshot")
     }
     let upgraded = fields.copy()
-    upgraded["schema_version"] = @offline.snapshot_schema_version.to_json()
-    upgraded["generation_plans"] = ({} : Map[String, String]).to_json()
-    @json.from_json(upgraded.to_json()) catch {
+    upgraded["schema_version"] = Json(@offline.snapshot_schema_version)
+    upgraded["generation_plans"] = Json(({} : Map[String, String]))
+    @json.from_json(Json(upgraded)) catch {
       error =>
         raise InvalidInput(
           "invalid v5 offline-commerce snapshot: \{Repr(error)}",
@@ -1078,7 +1078,7 @@ pub async fn OfflineCommerceStore::complete_generation(
     )
   }
   plan_fields["completed_result"] = result.to_json()
-  self.generation_plans[request.request_id] = plan_fields.to_json().stringify()
+  self.generation_plans[request.request_id] = Json(plan_fields).stringify()
   self.orders[order.order_id] = with_artifact_id(
     order,
     artifact.artifact_id,

@@ -205,7 +205,7 @@ async test "probe emits aggregate typed observability without private response d
     assert_eq(events[0].event_code, "GuideDiagnosticsProbeCompleted")
     assert_eq(events[0].target_type, "guide")
     assert_eq(events[0].outcome, "healthy")
-    assert_false(events.to_json().stringify().contains("private-body-secret"))
+    assert_false(Json(events).stringify().contains("private-body-secret"))
     @fs.rmdir(directory, recursive=true)
   }
 }

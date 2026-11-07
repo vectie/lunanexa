@@ -199,12 +199,12 @@ pub fn UsageConsolidation::json_text(self : UsageConsolidation) -> String {
   let result : Json = {
     "schema_version": "lunanexa.usage-consolidation.v1",
     "interpretation": "union of supplied records, not latest state, invoice or completeness evidence",
-    "sources": self.sources.to_json(),
-    "unique_usage_count": self.unique_usage_count.to_json(),
-    "unique_ledger_count": self.unique_ledger_count.to_json(),
-    "duplicate_usage_count": self.duplicate_usage_count.to_json(),
-    "duplicate_ledger_count": self.duplicate_ledger_count.to_json(),
-    "row_sources": self.row_sources.to_json(),
+    "sources": Json(self.sources),
+    "unique_usage_count": Json(self.unique_usage_count),
+    "unique_ledger_count": Json(self.unique_ledger_count),
+    "duplicate_usage_count": Json(self.duplicate_usage_count),
+    "duplicate_ledger_count": Json(self.duplicate_ledger_count),
+    "row_sources": Json(self.row_sources),
     "report": report,
   }
   result.stringify(indent=2)
@@ -230,8 +230,8 @@ pub fn UsageConsolidation::rows_csv(self : UsageConsolidation) -> String {
     cells.push(row.quantity.to_string())
     cells.append(usage_amount_cells(row.amount))
     cells.append([
-      csv_cell(provenance.observation_sources.to_json().stringify()),
-      csv_cell(provenance.ledger_sources.to_json().stringify()),
+      csv_cell(Json(provenance.observation_sources).stringify()),
+      csv_cell(Json(provenance.ledger_sources).stringify()),
       csv_cell(usage_change_row_json(Some(row)).stringify()),
     ])
     output.write_string(cells.join(","))

@@ -120,11 +120,11 @@ test "endpoint heartbeats authenticate routes without changing the legacy MAC" {
   let legacy : Json = {
     "node_id": heartbeat.node_id,
     "state": heartbeat.state.to_json(),
-    "observed_generation": heartbeat.observed_generation.to_json(),
-    "controller_epoch": heartbeat.controller_epoch.to_json(),
+    "observed_generation": Json(heartbeat.observed_generation),
+    "controller_epoch": Json(heartbeat.controller_epoch),
     "inventory": heartbeat.inventory.to_json(),
-    "running_deployments": heartbeat.running_deployments.to_json(),
-    "timestamp_unix_ms": heartbeat.timestamp_unix_ms.to_json(),
+    "running_deployments": Json(heartbeat.running_deployments),
+    "timestamp_unix_ms": Json(heartbeat.timestamp_unix_ms),
     "signature": "",
   }
   let key = @utf8.encode("fixture-node-key")

@@ -5,8 +5,11 @@ struct ModelBenchmarkConfig {
 } derive(FromJson)
 
 ///|
+pub extend ModelBenchmarkConfig with @json.FromJson::{from_json}
+
+///|
 struct ModelBenchmarkReport {
-  namespace : String
+  run_namespace : String
   status : String
   phase : String
   run_id : String
@@ -28,7 +31,16 @@ struct ModelBenchmarkReport {
   node_ids : Array[String]?
   quality_suite_digest : String?
   quality_node_counts : Map[String, Int32]?
-} derive(ToJson, FromJson)
+} derive (
+  ToJson(fields(run_namespace(rename="namespace"))),
+  FromJson(fields(run_namespace(rename="namespace"))),
+)
+
+///|
+pub extend ModelBenchmarkReport with ToJson::{to_json}
+
+///|
+pub extend ModelBenchmarkReport with @json.FromJson::{from_json}
 
 ///|
 struct ModelBenchmark {
@@ -39,7 +51,7 @@ struct ModelBenchmark {
 }
 
 ///|
-suberror ModelBenchmarkError {
+priv suberror ModelBenchmarkError {
   ModelBenchmarkError(String)
 }
 
@@ -125,7 +137,7 @@ pub async fn ApiService::with_model_benchmark_json(
     }
   } else {
     {
-      namespace: "loadtest-\{@async.now()}",
+      run_namespace: "loadtest-\{@async.now()}",
       status: "idle",
       phase: "尚未测试",
       run_id: "",
@@ -226,7 +238,7 @@ fn ModelBenchmark::attach_timings(
 
 ///|
 fn ModelBenchmark::email(self : ModelBenchmark, number : Int32) -> String {
-  self.report.namespace + "-\{number}@trial.example.invalid"
+  self.report.run_namespace + "-\{number}@trial.example.invalid"
 }
 
 ///|
@@ -777,7 +789,7 @@ async fn ApiService::start_model_benchmark(
     )
   }
   benchmark.report = {
-    namespace: benchmark.report.namespace,
+    run_namespace: benchmark.report.run_namespace,
     status: "queued",
     phase: "等待开始",
     run_id: "benchmark-\{@async.now()}",

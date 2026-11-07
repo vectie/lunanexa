@@ -93,7 +93,7 @@ async fn configure_provider_test_period(service : @api.ApiService) -> Unit {
           "event_id": "usage-a",
           "entry_id": "entry-a",
           "rate": rate.to_json(),
-          "recorded_unix_ms": 66002L.to_json(),
+          "recorded_unix_ms": Json(66002L),
         } : Json).stringify(),
     ),
   )
@@ -106,13 +106,13 @@ async fn configure_provider_test_period(service : @api.ApiService) -> Unit {
         {
           "period_id": "period-a",
           "organization_id": "org-a",
-          "started_unix_ms": 1L.to_json(),
-          "ended_unix_ms": 70000L.to_json(),
+          "started_unix_ms": Json(1L),
+          "ended_unix_ms": Json(70000L),
           "billing_timezone": "UTC",
           "currency": "CNY",
           "scale": 2,
           "finalized_by": "operator",
-          "finalized_unix_ms": 70001L.to_json(),
+          "finalized_unix_ms": Json(70001L),
         } : Json).stringify(),
     ),
   )

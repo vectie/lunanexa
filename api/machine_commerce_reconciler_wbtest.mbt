@@ -1213,8 +1213,8 @@ async fn exercise_dedicated_endpoint(
         "display_name": "Dedicated account key",
         "scopes": ["ModelList", "Inference"],
         "allowed_models": ["text.default"],
-        "expires_unix_ms": (@async.now() + 60000L).to_json(),
-        "maximum_requests": 1000L.to_json(),
+        "expires_unix_ms": Json(@async.now() + 60000L),
+        "maximum_requests": Json(1000L),
       } : Json).stringify(),
   )
   assert_eq(portal_key.status, 201)

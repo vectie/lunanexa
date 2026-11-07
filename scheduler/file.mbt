@@ -352,7 +352,7 @@ pub async fn FileScheduler::admit(
   let tenant_inflight = self.active
     .values()
     .filter(admission => admission.tenant_ref == request.tenant_ref)
-    .length()
+    .count()
   let current_usage = self.usage
     .get(request.tenant_ref)
     .unwrap_or({

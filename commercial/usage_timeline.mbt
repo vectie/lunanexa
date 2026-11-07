@@ -73,9 +73,9 @@ pub fn explore_usage_timeline(
 pub fn UsageTimeline::json_text(self : UsageTimeline) -> String {
   let buckets = self.buckets.map(bucket => {
     let value : Json = {
-      "started_unix_ms": bucket.started_unix_ms.to_json(),
-      "ended_unix_ms": bucket.ended_unix_ms.to_json(),
-      "crossing_bucket_count": bucket.crossing_bucket_count.to_json(),
+      "started_unix_ms": Json(bucket.started_unix_ms),
+      "ended_unix_ms": Json(bucket.ended_unix_ms),
+      "crossing_bucket_count": Json(bucket.crossing_bucket_count),
       "report": bucket.report.usage_report_json(),
     }
     value
@@ -85,8 +85,8 @@ pub fn UsageTimeline::json_text(self : UsageTimeline) -> String {
     "assignment_policy": "service start, clamped to window start; each record once in full; no proration",
     "empty_bucket_policy": "no selected records in this saved snapshot; not proof of zero usage or cost",
     "query": self.query.to_json(),
-    "bucket_milliseconds": self.bucket_milliseconds.to_json(),
-    "buckets": buckets.to_json(),
+    "bucket_milliseconds": Json(self.bucket_milliseconds),
+    "buckets": Json(buckets),
   }
   result.stringify(indent=2)
 }

@@ -78,8 +78,8 @@ async test "undertaking renderer archives before Generated and recovers cross-st
     generated_unix_ms: 2000L,
   })
   let request : Json = {
-    "packet_id": packet.packet_id.to_json(),
-    "expected_revision": packet.revision.to_json(),
+    "packet_id": Json(packet.packet_id),
+    "expected_revision": Json(packet.revision),
     "docx": artifacts[0].to_json(),
     "pdf": artifacts[1].to_json(),
     "worker_receipt": "renderer-fixture",
@@ -100,8 +100,8 @@ async test "undertaking renderer archives before Generated and recovers cross-st
     401,
   )
   let missing : Json = {
-    "packet_id": packet.packet_id.to_json(),
-    "expected_revision": packet.revision.to_json(),
+    "packet_id": Json(packet.packet_id),
+    "expected_revision": Json(packet.revision),
     "docx": artifacts[0].to_json(),
     "pdf": artifacts[1].to_json(),
     "worker_receipt": "renderer-fixture",

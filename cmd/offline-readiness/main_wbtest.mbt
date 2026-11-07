@@ -165,7 +165,7 @@ async test "the tool signs a document the control plane can load and verify" {
   let input_path = "\{root}/input.json"
   let output_path = "\{root}/readiness.json"
   let capabilities = valid_readiness_capabilities()
-  let input : Json = { "capabilities": capabilities.to_json() }
+  let input : Json = { "capabilities": Json(capabilities) }
   @fs.write_file(
     input_path,
     input.stringify(indent=2),
@@ -215,7 +215,7 @@ async test "an explicit null evidence_ref still signs a loadable document" {
     let reference = if index == 0 {
       "null"
     } else {
-      entry.evidence_ref.unwrap().to_json().stringify()
+      Json(entry.evidence_ref.unwrap()).stringify()
     }
     "{\"capability\":\{entry.capability.to_json().stringify()},\"configured\":true,\"verified\":true,\"evidence_ref\":\{reference}}"
   })

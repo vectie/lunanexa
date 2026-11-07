@@ -540,3 +540,55 @@ under the global admission mutex or apply old observations to a new generation.
 Preserve the old signed v2 catalog serialization; the service ledger has its own
 versioned snapshot. Restart reconciliation observes/adopts without replaying
 start/stop. Family grouping is presentation only, never a resource authority.
+
+## Strict native gate and real GLM startup — 2026-11-07
+
+The prior 53/45 warning failures are superseded. Replacing deprecated primitive,
+array/map and optional conversions with `Json(value)` exposed downstream warnings
+that had not been checked while prerequisites failed. All diagnosed conversions
+were migrated without changing signed/persisted JSON representations. Iterator
+`length` and array-view `to_array` aliases were replaced, map-pattern rest marks
+and empty JSON array types made explicit, and strict unnecessary annotations
+removed. Benchmark's reserved `namespace` field is now `run_namespace` in source
+with both JSON directions retaining the exact `namespace` wire key; a round-trip
+fixture protects existing saved reports. No warning was disabled in the gates.
+
+Final acceptance: `moon info`, `moon fmt`, native `moon check --deny-warn`, and
+`moon run scripts/test-native.mbtx` pass. The complete native workspace suite
+reports 1,956 passed, zero failed. A stale UI assertion still expected the old
+“Open one-click deployment / No managed deployments” copy; it now checks the
+actual Deploy model action and No model services empty state. Browser release
+build passes with deny-warn; isolation/public-response heuristics pass.
+
+The workspace MoonLeaf dependency also needed four unnecessary enum qualifiers
+removed from `pdf_text/recover_metadata.mbt`. That file was already untracked,
+alongside unrelated pending dependency work; do not stage/push that work blindly.
+Only the four-line companion patch is preserved under
+`docs/development/moonleaf-native-annotations.patch`, and reverse-apply checking
+confirms it matches the fixed local dependency. Full-workspace evidence uses that
+local MoonLeaf tree, not a claim about its older published package version.
+
+The authenticated live `/mana/` GLM Start button was exercised once. It really
+started the existing .179 worker and .178 head at 23:32:38 CST. The head exited at
+23:33:19: a 1M stream needs 12.76 GiB KV pages but its CUDA budget left 12.44 GiB.
+The owned-pair supervisor retired the worker. No healthy model endpoint or valid
+live inference resulted; about 41 seconds is failure time, not startup latency.
+Qwen/MiniMax and existing files, keys, precision, context, concurrency and reserve
+were unchanged. `docs/GLM_STARTUP.md` records the result. A host audio-service
+restart was requested separately for confirmation because WirePlumber holds
+about 580/960 MiB on the two machines. It has not been performed; do not lower
+context/precision or assume approval from elapsed time.
+
+Root UI fix: operator and customer readiness share the same endpoint observation.
+The operator API adds a non-persisted `ready` field; active process state alone
+does not produce Ready in the console. Startup-only refresh reuses the cluster
+tick, has one outstanding read, and ends when the service is ready/stopped.
+The endpoint check is bounded and outside resource admission; no inference hop,
+per-token work or permanent idle polling was added. Native regression fixtures
+cover missing/false readiness, stopped state, scope, and refresh overlap/end.
+
+Release staging root: `/home/HwHiAiUser/native-glm-20261107`. The console image
+was assembled with immutable base blobs hardlinked and only a new asset layer;
+no redundant multi-gigabyte export was retained. Final rollout/byte-verification
+evidence is recorded below when publication completes. Production logs and
+deployment snapshots remain private. No new credential or grant was issued.

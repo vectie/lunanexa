@@ -87,7 +87,7 @@ async fn ApiService::publish_announcement(
 ///|
 async fn ApiService::trial_summary(self : ApiService, now : Int64) -> Json {
   guard self.account_store is Some(accounts) else {
-    return (None : String?).to_json()
+    return Json((None : String?))
   }
   let trials = accounts.snapshot().trials.unwrap_or([])
   let memberships = match self.portal_store {
@@ -152,19 +152,19 @@ async fn ApiService::trial_summary(self : ApiService, now : Int64) -> Json {
     })
   })
   {
-    "registered_trials": trials.length().to_json(),
-    "active_trials": trials
-    .count_if(t => {
-      t.revoked_unix_ms is None &&
-      t.starts_unix_ms <= now &&
-      t.expires_unix_ms > now
-    })
-    .to_json(),
-    "expired_trials": trials
-    .count_if(t => t.revoked_unix_ms is None && t.expires_unix_ms <= now)
-    .to_json(),
-    "converted_trials": converted.to_json(),
-    "generated_unix_ms": now.to_json(),
+    "registered_trials": Json(trials.length()),
+    "active_trials": Json(
+      trials.count_if(t => {
+        t.revoked_unix_ms is None &&
+        t.starts_unix_ms <= now &&
+        t.expires_unix_ms > now
+      }),
+    ),
+    "expired_trials": Json(
+      trials.count_if(t => t.revoked_unix_ms is None && t.expires_unix_ms <= now),
+    ),
+    "converted_trials": Json(converted),
+    "generated_unix_ms": Json(now),
     "participants": Json(participants),
   }
 }

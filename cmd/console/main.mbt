@@ -2008,7 +2008,7 @@ async fn load_console_deployment_reads(
       request("GET", endpoint, "/v1/service-deployments", token),
     ),
   )
-  let instances : Array[@deployment.ModelServiceInstance] = @json.from_json(
+  let instances : Array[Json] = @json.from_json(
     parse_console_json(request("GET", endpoint, "/v1/model-services", token)),
   )
   let now = current_unix_ms()
@@ -2022,29 +2022,15 @@ async fn load_console_deployment_reads(
     },
     deployments: [
       ..instances
-      .filter(s => {
-        s.runtime_kind != NodeAssignment &&
-        (s.holds_resources() || s.reserves_company_node())
+      .map(value => {
+        let instance : @deployment.ModelServiceInstance = @json.from_json(value)
+        (instance, model_service_deployment_row(value))
       })
-      .map(s => @ui.DeploymentRow::{
-        assignment_id: "service:" + s.service_id,
-        deployment_id: s.model_alias,
-        desired: if s.desired_running {
-          Ready
-        } else {
-          Stopped
-        },
-        observed: match s.observed {
-          Running => Ready
-          Stopped => Stopped
-          Partial => Degraded
-          Unknown => Preparing
-        },
-        placement_reason: "#\{s.generation}",
-        model_digest: s.artifact_digest,
-        node_id: s.node_ids.join(" · "),
-        resource_owner: s.owner.tenant_ref,
-      }),
+      .filter(s => {
+        s.0.runtime_kind != NodeAssignment &&
+        (s.0.holds_resources() || s.0.reserves_company_node())
+      })
+      .map(s => s.1),
     ] +
     [
       for assignment in assignments if assignment.runtime.name !=
@@ -5772,11 +5758,13 @@ fn update_live(
         } else {
           (next, @rabbita.none)
         }
+        let (next, services) = refresh_starting_model_services(next, emit)
         (
           next,
           @rabbita.batch([
             cluster_poll_delay_command(generation, emit),
             resources,
+            services,
           ]),
         )
       }
@@ -6688,9 +6676,7 @@ fn update_live(
         @rabbita.none,
       )
     Console(AcknowledgeAlert(notification_id, generation)) => {
-      let body = { "expected_generation": generation.to_json() }
-        .to_json()
-        .stringify()
+      let body = Json({ "expected_generation": Json(generation) }).stringify()
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
         try
           request(
@@ -6725,12 +6711,10 @@ fn update_live(
       ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(AssignAlertToSelf(notification_id, generation)) => {
-      let body = {
-          "expected_generation": generation.to_json(),
-          "assignee_ref": "platform-operator".to_json(),
-        }
-        .to_json()
-        .stringify()
+      let body = Json({
+        "expected_generation": Json(generation),
+        "assignee_ref": Json("platform-operator"),
+      }).stringify()
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
         try
           request(
@@ -6765,12 +6749,10 @@ fn update_live(
       ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(SilenceAlert(notification_id, generation)) => {
-      let body = {
-          "expected_generation": generation.to_json(),
-          "silenced_until_unix_ms": (current_unix_ms() + 3600000L).to_json(),
-        }
-        .to_json()
-        .stringify()
+      let body = Json({
+        "expected_generation": Json(generation),
+        "silenced_until_unix_ms": Json(current_unix_ms() + 3600000L),
+      }).stringify()
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
         try
           request(
@@ -6805,9 +6787,7 @@ fn update_live(
       ({ ..model, console: { ..model.console, loading: true, }, }, cmd)
     }
     Console(ResolveAlert(notification_id, generation)) => {
-      let body = { "expected_generation": generation.to_json() }
-        .to_json()
-        .stringify()
+      let body = Json({ "expected_generation": Json(generation) }).stringify()
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
         try
           request(
@@ -6843,9 +6823,7 @@ fn update_live(
     }
     Console(Refresh) => (model, load_command(model, emit))
     Console(ApproveOrganization(organization_id, legal_name)) => {
-      let body = { "expected_legal_name": legal_name.to_json() }
-        .to_json()
-        .stringify()
+      let body = Json({ "expected_legal_name": Json(legal_name) }).stringify()
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
         try
           request(
@@ -6941,9 +6919,7 @@ fn update_live(
       )
     }
     Console(DownloadModelSource(model_id)) => {
-      let body = { "model_id": model_id, "revision": "master" }
-        .to_json()
-        .stringify()
+      let body = Json({ "model_id": model_id, "revision": "master" }).stringify()
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
         try {
           let created : @ui.ModelImportRow = @json.from_json(
@@ -7078,14 +7054,12 @@ fn update_live(
           @rabbita.none,
         )
       }
-      let body = {
-          "model_id": draft.repository.trim().to_json(),
-          "revision": draft.revision.trim().to_json(),
-          "directory": draft.directory.to_json(),
-          "component": model_local_component(draft.directory).to_json(),
-        }
-        .to_json()
-        .stringify()
+      let body = Json({
+        "model_id": Json(draft.repository.trim()),
+        "revision": Json(draft.revision.trim()),
+        "directory": Json(draft.directory),
+        "component": Json(model_local_component(draft.directory)),
+      }).stringify()
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
         try {
           let created : @ui.ModelImportRow = @json.from_json(
@@ -9093,12 +9067,10 @@ fn update_live(
         )
       )
     ) => {
-      let body = {
-          "expected_attempt_count": expected_attempt_count.to_json(),
-          "expected_updated_unix_ms": expected_updated_unix_ms.to_json(),
-        }
-        .to_json()
-        .stringify()
+      let body = Json({
+        "expected_attempt_count": Json(expected_attempt_count),
+        "expected_updated_unix_ms": Json(expected_updated_unix_ms),
+      }).stringify()
       let cmd = @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {
         try
           request(

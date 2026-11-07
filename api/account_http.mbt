@@ -914,7 +914,7 @@ async fn ApiService::handle_accounts(
       }
       (Get, "/v1/auth/trial") => {
         let trial = accounts.trial_for_account(authorization.account.account_id)
-        let projection = trial.to_json()
+        let projection = Json(trial)
         let projection = if trial is Some(value) {
           let event = accounts.event_for_tenant(value.tenant_ref)
           trial_budget_projection(
@@ -932,9 +932,7 @@ async fn ApiService::handle_accounts(
       (Get, "/v1/auth/sessions") =>
         return json_reply(
           200,
-          accounts
-          .sessions_for_account(authorization.account.account_id)
-          .to_json(),
+          Json(accounts.sessions_for_account(authorization.account.account_id)),
         )
       (Post, "/v1/auth/logout") => {
         let revoked = accounts.revoke_session(
@@ -995,7 +993,7 @@ async fn ApiService::handle_accounts(
     (Get, "/v1/accounts/trial-summary") =>
       json_reply(200, self.trial_summary(@async.now()))
     (Get, "/v1/account-invitations") =>
-      json_reply(200, accounts.invitation_views().to_json())
+      json_reply(200, Json(accounts.invitation_views()))
     (Post, "/v1/account-invitations") => {
       guard decode_account_invitation(body) is Some(intent) else {
         return api_error(
@@ -1038,7 +1036,7 @@ async fn ApiService::handle_accounts(
       )
       json_reply(201, issued.to_json())
     }
-    (Get, "/v1/accounts") => json_reply(200, accounts.views().to_json())
+    (Get, "/v1/accounts") => json_reply(200, Json(accounts.views()))
     (Post, "/v1/accounts") => {
       guard decode_account_create(body) is Some(intent) else {
         return api_error(400, "InvalidRequest", "invalid account intent", false)

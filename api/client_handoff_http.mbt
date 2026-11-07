@@ -350,9 +350,9 @@ async fn ApiService::handle_client_handoff(
       "subject_ref": redeemed.subject_ref,
       "organization_id": redeemed.organization_id,
       "project_id": redeemed.project_id,
-      "allowed_models": redeemed.allowed_models.to_json(),
-      "expires_unix_ms": redeemed.expires_unix_ms.to_json(),
-      "maximum_requests": redeemed.maximum_requests.to_json(),
+      "allowed_models": Json(redeemed.allowed_models),
+      "expires_unix_ms": Json(redeemed.expires_unix_ms),
+      "maximum_requests": Json(redeemed.maximum_requests),
       "one_time": true,
     }
     if handoffs.snapshot().credentials
@@ -361,7 +361,7 @@ async fn ApiService::handle_client_handoff(
       is Some(credential) &&
       credential.delivery_id is Some(delivery_id) &&
       response is Object(fields) {
-      fields["delivery_id"] = delivery_id.to_json()
+      fields["delivery_id"] = Json(delivery_id)
     }
     return json_reply(200, response)
   }
@@ -459,18 +459,20 @@ async fn ApiService::handle_client_handoff(
               "client_id": config.client_id,
               "display_name": config.display_name,
               "launch_uri": launch_uri.unwrap_or(""),
-              "handoff_lifetime_ms": config.handoff_lifetime_ms.to_json(),
+              "handoff_lifetime_ms": Json(config.handoff_lifetime_ms),
               "contract_required": !self.private_cloud_workspace_access,
               "contract_ready": contract_ready,
               "workspace_ready": workspace_ready,
               "models_ready": aliases.length() > 0,
               "model_required": model_required,
               "ready": client_blockers.length() == 0,
-              "blocker_codes": client_blockers.to_json(),
-              "approved_model_aliases": aliases.to_json(),
-              "handoffs": subject_handoffs
-              .filter(handoff => handoff.client_id == config.client_id)
-              .to_json(),
+              "blocker_codes": Json(client_blockers),
+              "approved_model_aliases": Json(aliases),
+              "handoffs": Json(
+                subject_handoffs.filter(handoff => {
+                  handoff.client_id == config.client_id
+                }),
+              ),
             } : Json)
         })
       if path == "/v1/portal/self/client" {
@@ -482,7 +484,7 @@ async fn ApiService::handle_client_handoff(
             )
         }
       } else {
-        json_reply(200, views.to_json())
+        json_reply(200, Json(views))
       }
     }
     (Post, "/v1/portal/self/client-handoffs") => {
@@ -853,8 +855,8 @@ async fn ApiService::handle_client_handoff(
         "public_api_base_url": config.public_api_base_url,
         "handoff_code": issued.handoff_code,
         "redemption_path": issued.redemption_path,
-        "handoff_expires_unix_ms": issued.handoff_expires_unix_ms.to_json(),
-        "credential_expires_unix_ms": issued.credential_expires_unix_ms.to_json(),
+        "handoff_expires_unix_ms": Json(issued.handoff_expires_unix_ms),
+        "credential_expires_unix_ms": Json(issued.credential_expires_unix_ms),
         "one_time": true,
       })
     }

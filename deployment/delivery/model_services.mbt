@@ -23,7 +23,7 @@ pub async fn DeliveryStore::model_services(
 ) -> Array[ModelService] {
   self.mutex.acquire()
   defer self.mutex.release()
-  @json.from_json(self.model_services.to_json())
+  @json.from_json(Json(self.model_services))
 }
 
 ///|

@@ -15,16 +15,14 @@ fn delivery_workspace_id(
   client_id : String,
   delivery_id : String,
 ) -> String {
-  let identity = [
-      authority.tenant_ref,
-      authority.subject_ref,
-      authority.organization_id,
-      authority.project_id,
-      client_id,
-      delivery_id,
-    ]
-    .to_json()
-    .stringify()
+  let identity = Json([
+    authority.tenant_ref,
+    authority.subject_ref,
+    authority.organization_id,
+    authority.project_id,
+    client_id,
+    delivery_id,
+  ]).stringify()
   "webide-" +
   @crypto.bytes_to_hex_string(@crypto.sha256(@utf8.encode(identity)))
 }
@@ -205,17 +203,17 @@ async fn ApiService::handle_workspace_delivery(
       "organization_id": authority.organization_id,
       "project_id": authority.project_id,
       "node_name": node_name,
-      "expires_unix_ms": expiry.to_json(),
+      "expires_unix_ms": Json(expiry),
       "delivery_kind": operation.intent.kind.to_json(),
-      "container_image_digest": container_offering
-      .map(value => value.image_digest)
-      .to_json(),
-      "container_cpu_millis": container_offering
-      .map(value => value.cpu_millis)
-      .to_json(),
-      "container_memory_mib": container_offering
-      .map(value => value.memory_mib)
-      .to_json(),
+      "container_image_digest": Json(
+        container_offering.map(value => value.image_digest),
+      ),
+      "container_cpu_millis": Json(
+        container_offering.map(value => value.cpu_millis),
+      ),
+      "container_memory_mib": Json(
+        container_offering.map(value => value.memory_mib),
+      ),
     })
   }
   if verb == Post && path == "/v1/workspace-delivery/ready" {

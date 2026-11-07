@@ -370,9 +370,12 @@ async fn ApiService::handle_commercial_management_unlocked(
   if verb == Get && path == "/v1/commercial/organizations/pending" {
     return json_reply(
       200,
-      self.commercial_store.durable_snapshot().commercial.organizations
-      .filter(organization => organization.state == PendingVerification)
-      .to_json(),
+      Json(
+        self.commercial_store.durable_snapshot().commercial.organizations.filter(organization => {
+            organization.state == PendingVerification
+          },
+        ),
+      ),
     )
   }
   if verb == Post &&

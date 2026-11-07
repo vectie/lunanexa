@@ -434,7 +434,16 @@ async fn ApiService::handle_model_services(
         ),
       )
     } else {
-      json_reply(200, ToJson::to_json(visible))
+      json_reply(
+        200,
+        Json(
+          [
+            for instance in visible => {
+              self.model_service_operator_view(instance)
+            }
+          ],
+        ),
+      )
     }
   }
   let action = if path.has_suffix(":start") {
@@ -482,7 +491,7 @@ async fn ApiService::handle_model_services(
     if customer {
       self.model_service_portal_view(result, can_manage)
     } else {
-      ToJson::to_json(result)
+      self.model_service_operator_view(result)
     },
   )
 }
@@ -493,12 +502,7 @@ async fn ApiService::model_service_portal_view(
   instance : @deployment.ModelServiceInstance,
   can_manage : Bool,
 ) -> Json {
-  let (ready, context) = if self.external_text_route is Some(route) &&
-    route.model_alias == instance.model_alias {
-    self.external_text_observation()
-  } else {
-    (instance.observed == Running, None)
-  }
+  let (ready, context) = self.model_service_readiness(instance)
   {
     "service_id": instance.service_id,
     "model_alias": instance.model_alias,
@@ -512,4 +516,33 @@ async fn ApiService::model_service_portal_view(
     "ready": ready,
     "context_window_tokens": Json(context),
   }
+}
+
+///|
+async fn ApiService::model_service_readiness(
+  self : ApiService,
+  instance : @deployment.ModelServiceInstance,
+) -> (Bool, Int32?) {
+  if instance.observed != Running {
+    return (false, None)
+  }
+  if self.external_text_route is Some(route) &&
+    route.model_alias == instance.model_alias {
+    self.external_text_observation()
+  } else {
+    (true, None)
+  }
+}
+
+///|
+async fn ApiService::model_service_operator_view(
+  self : ApiService,
+  instance : @deployment.ModelServiceInstance,
+) -> Json {
+  let (ready, _) = self.model_service_readiness(instance)
+  guard Json(instance) is Object(fields) else {
+    fail("expected service object")
+  }
+  fields["ready"] = Json(ready)
+  Json(fields)
 }

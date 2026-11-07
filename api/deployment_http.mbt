@@ -753,7 +753,7 @@ async fn ApiService::handle_deployment_management(
   }
   match (verb, path) {
     (Get, "/v1/catalog/templates") =>
-      json_reply(200, deployments.templates().to_json())
+      json_reply(200, Json(deployments.templates()))
     (Post, "/v1/catalog/templates") => {
       guard decode_template(body) is Some(template) else {
         return api_error(
@@ -795,7 +795,7 @@ async fn ApiService::handle_deployment_management(
     }
     (Get, "/v1/service-deployments") => {
       self.refresh_deployment_operations()
-      json_reply(200, deployments.operations().to_json())
+      json_reply(200, Json(deployments.operations()))
     }
     (Post, "/v1/service-deployments") => {
       guard decode_deployment_intent(body) is Some(intent) else {

@@ -160,7 +160,7 @@ async fn ApiService::handle_commercial_provider_adapter(
       } noraise {
         value => value
       }
-      json_reply(200, intents.to_json())
+      json_reply(200, Json(intents))
     }
     (Post, "/internal/v1/commercial-provider/dispatch-receipts") => {
       let receipt : @commercial_integrations.ExternalDispatchReceipt? = try

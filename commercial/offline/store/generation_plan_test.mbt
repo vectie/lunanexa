@@ -54,12 +54,8 @@ async test "v5 snapshot migrates frozen generation cache without losing orders" 
     fail("expected snapshot object")
   }
   ignore(fields.remove("generation_plans"))
-  fields["schema_version"] = "lunanexa.offline-commerce.snapshot.v5".to_json()
-  @fs.write_file(
-    path,
-    fields.to_json().stringify(),
-    create_mode=CreateOrTruncate,
-  )
+  fields["schema_version"] = Json("lunanexa.offline-commerce.snapshot.v5")
+  @fs.write_file(path, Json(fields).stringify(), create_mode=CreateOrTruncate)
   let reopened = @store.OfflineCommerceStore::open(path)
   assert_eq(reopened.order_for_operator(created.order_id), created)
   assert_eq(reopened.generation_plan("absent"), None)

@@ -169,7 +169,7 @@ pub async fn Pool::open(
     runtime_image,
     profiles,
     journal,
-    mutex: @async.Mutex::Mutex(),
+    mutex: Mutex(),
   }
 }
 

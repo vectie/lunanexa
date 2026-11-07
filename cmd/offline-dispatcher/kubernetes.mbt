@@ -56,7 +56,7 @@ fn artifact_job_manifest(
       "image": image,
       "imagePullPolicy": "IfNotPresent",
       "command": [binary],
-      "env": variables.to_json(),
+      "env": Json(variables),
       "volumeMounts": mounts,
       "securityContext": security,
       "resources": {

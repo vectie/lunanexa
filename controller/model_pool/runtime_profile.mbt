@@ -43,7 +43,7 @@ fn Pool::runtime_profile(
     .iter()
     .find_first(p => p.artifact_digests.contains(digest))
     is Some(profile) else {
-    raise PoolError::InvalidConfiguration
+    raise InvalidConfiguration
   }
   profile
 }

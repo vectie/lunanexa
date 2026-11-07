@@ -8,16 +8,16 @@ pub extend Owner with ToJson::{to_json}
 ///|
 pub impl ToJson for Owner with fn to_json(self) {
   let fields : Map[String, Json] = {
-    "tenant_ref": self.tenant_ref.to_json(),
-    "subject_ref": self.subject_ref.to_json(),
-    "organization_id": self.organization_id.to_json(),
-    "project_id": self.project_id.to_json(),
+    "tenant_ref": Json(self.tenant_ref),
+    "subject_ref": Json(self.subject_ref),
+    "organization_id": Json(self.organization_id),
+    "project_id": Json(self.project_id),
   }
   match self.authority {
-    DedicatedOrder(id) => fields["order_id"] = id.to_json()
-    PrivateWorkspace(id) => fields["workspace_lease_id"] = id.to_json()
+    DedicatedOrder(id) => fields["order_id"] = Json(id)
+    PrivateWorkspace(id) => fields["workspace_lease_id"] = Json(id)
   }
-  fields.to_json()
+  Json(fields)
 }
 
 ///|

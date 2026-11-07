@@ -260,7 +260,7 @@ pub async fn DeliveryStore::operations(
   self.mutex.acquire()
   defer self.mutex.release()
   // JSON copy prevents callers mutating the stored node array outside a commit.
-  @json.from_json(self.operations.to_json())
+  @json.from_json(Json(self.operations))
 }
 
 ///|
