@@ -1,5 +1,5 @@
 ///|
-fn docx_fixture(active? : Bool = false) -> FixedArray[Byte] raise {
+fn docx_fixture(active~ : Bool = false) -> FixedArray[Byte] raise {
   let parts : Array[@opc.Part] = [
     {
       name: "[Content_Types].xml",
@@ -70,7 +70,7 @@ fn docx_fixture(active? : Bool = false) -> FixedArray[Byte] raise {
 }
 
 ///|
-fn xlsx_fixture(cached_value? : String = "42") -> FixedArray[Byte] raise {
+fn xlsx_fixture(cached_value~ : String = "42") -> FixedArray[Byte] raise {
   let archive : @opc.Package = {
     parts: [
       {

@@ -160,7 +160,7 @@ fn safe_process_environment() -> Map[String, String] {
 }
 
 ///|
-async fn collect(program : String, args : Array[String]) -> (Int, String) {
+async fn collect(program : String, args : Array[String]) -> (Int32, String) {
   let (status, stdout) = @process.collect_stdout(
     program,
     args,
@@ -383,8 +383,8 @@ async fn lease_generation_marker(
 ///|
 async fn ensure_directory(
   path : String,
-  permission : Int,
-  recursive? : Bool = true,
+  permission : Int32,
+  recursive~ : Bool = true,
 ) -> Unit {
   if !@fs.exists(path) {
     @fs.mkdir(path, permission~, recursive~)

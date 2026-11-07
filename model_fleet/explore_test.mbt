@@ -12,7 +12,7 @@ fn query() -> @model_fleet.Query {
 }
 
 ///|
-fn model(id : String, memory : Int) -> @contracts.ModelRecord {
+fn model(id : String, memory : Int32) -> @contracts.ModelRecord {
   {
     model_id: id,
     version: "v1",
@@ -62,7 +62,7 @@ fn node(
 fn device(
   id : String,
   architecture : String,
-  free : Int,
+  free : Int32,
   healthy : Bool,
 ) -> @contracts.AcceleratorInventory {
   {

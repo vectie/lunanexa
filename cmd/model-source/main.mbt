@@ -1,11 +1,11 @@
 ///|
-const MaximumRequestBytes : Int = 16384
+const MaximumRequestBytes : Int32 = 16384
 
 ///|
 priv struct SearchRequest {
   query : String
-  page_number : Int
-  page_size : Int
+  page_number : Int32
+  page_size : Int32
 } derive(FromJson)
 
 ///|
@@ -52,7 +52,7 @@ fn bearer_authorized(headers : @http.Headers, token : String) -> Bool {
 }
 
 ///|
-fn response_reason(status : Int) -> String {
+fn response_reason(status : Int32) -> String {
   match status {
     200 => "OK"
     202 => "Accepted"
@@ -70,7 +70,7 @@ fn response_reason(status : Int) -> String {
 ///|
 async fn send_json(
   connection : @http.ServerConnection,
-  status : Int,
+  status : Int32,
   value : Json,
 ) -> Unit {
   connection.send_response(status, response_reason(status), extra_headers={
@@ -174,7 +174,7 @@ async fn write_source_manifest(directory : String, text : String) -> String {
 const SourceManifestFileName : String = "lunanexa-source-manifest.json"
 
 ///|
-async fn ensure_directory(path : String, permission : Int) -> Unit {
+async fn ensure_directory(path : String, permission : Int32) -> Unit {
   if !@fs.exists(path) {
     @fs.mkdir(path, permission~, recursive=true)
   }
@@ -539,7 +539,7 @@ async fn entry_size(path : String) -> Int64 {
 ///|
 /// Bounded tree measurement: enough for an operator to recognise a directory,
 /// cheap enough that listing the store root stays a fast read.
-async fn measure_tree(root : String, depth : Int) -> (Int, Int64) {
+async fn measure_tree(root : String, depth : Int32) -> (Int32, Int64) {
   if depth > 6 {
     return (0, 0L)
   }
@@ -585,10 +585,10 @@ async fn is_model_root(path : String) -> Bool {
 let managed_download_prefix : String = "models/modelscope"
 
 ///|
-let model_root_search_depth : Int = 4
+let model_root_search_depth : Int32 = 4
 
 ///|
-let model_root_search_limit : Int = 256
+let model_root_search_limit : Int32 = 256
 
 ///|
 /// Find every revision root under the store. Hidden directories count: a
@@ -597,7 +597,7 @@ let model_root_search_limit : Int = 256
 async fn collect_model_roots(
   root : String,
   relative : String,
-  depth : Int,
+  depth : Int32,
   found : Array[String],
 ) -> Unit {
   if depth > model_root_search_depth ||
@@ -720,7 +720,7 @@ async fn serve(
       return
     }
     let body = if request.meth == Post { read_body(reader) } else { "" }
-    let result : (Int, Json) = try {
+    let result : (Int32, Json) = try {
       match (request.meth, request.path) {
         (Post, "/internal/v1/modelscope/search") => {
           let input : SearchRequest = decode(body)

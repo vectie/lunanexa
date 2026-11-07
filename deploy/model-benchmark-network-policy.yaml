@@ -1,0 +1,23 @@
+# UI-initiated benchmark traffic follows the same HTTPS portal and MoonGate
+# entry as users. Keep the destination scoped to this deployment's gateways.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lunanexa-control-model-benchmark
+  namespace: lunanexa
+spec:
+  podSelector:
+    matchLabels:
+      app: lunanexa-control
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 106.39.18.146/32
+        - ipBlock:
+            cidr: 192.168.2.175/32
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 8443

@@ -60,8 +60,8 @@ fn inference_transport(
 async fn print_get(
   base : String,
   path : String,
-  token? : String = "",
-  subject_ref? : String = "",
+  token~ : String = "",
+  subject_ref~ : String = "",
 ) -> Unit {
   let headers = if token == "" { Map([]) } else { bearer(token) }
   if subject_ref != "" {

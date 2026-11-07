@@ -15,7 +15,7 @@ struct FontConfiguration {
 ///|
 /// Unknown replacement-plan properties belong to the preparation worker.
 struct RenderJob {
-  schema_version : Int
+  schema_version : Int32
   request : @offline.ArtifactGenerationRequest
   prepared_filename : String
   output_filename : String
@@ -24,19 +24,19 @@ struct RenderJob {
 
 ///|
 struct VisualEvidence {
-  page_or_sheet_index : Int
+  page_or_sheet_index : Int32
   filename : String
   sha256 : String
 } derive(ToJson)
 
 ///|
 struct Manifest {
-  schema_version : Int
+  schema_version : Int32
   request_id : String
   artifact_sha256 : String
   source_sha256 : String
   kind : @offline.DocumentArtifactKind
-  page_or_sheet_count : Int
+  page_or_sheet_count : Int32
   passed : Bool
   renderer_receipt : String
   rendered_unix_ms : Int64
@@ -77,7 +77,7 @@ fn digest(bytes : Bytes) -> String {
 }
 
 ///|
-async fn read(root : String, name : String, maximum : Int) -> Bytes {
+async fn read(root : String, name : String, maximum : Int32) -> Bytes {
   let path = root + "/" + filename(name)
   guard @fs.realpath(path) == path else {
     raise Failure("symlinked staged input refused")

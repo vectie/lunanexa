@@ -23,7 +23,7 @@ fn payment_callback(
   callback_id : String,
   previous : @integrations.ExternalRecordState,
   next : @integrations.ExternalRecordState,
-  amount_minor? : Int64 = 1250L,
+  amount_minor~ : Int64 = 1250L,
 ) -> @integrations.ExternalCallback {
   {
     callback_id,

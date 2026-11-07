@@ -5,17 +5,14 @@ fn model_connection_value(
   value : String,
   emit : @rabbita.Emit[EnterpriseMessage]?,
 ) -> @rabbita.Html {
-  @html.div(
-    style=["display:flex", "align-items:center", "gap:.5rem", "flex-wrap:wrap"],
-    [
-      @html.p([@html.strong(label + ": "), @html.code(value)]),
-      @controls.icon_button(
-        Copy,
-        copy(locale, "Copy ", "复制") + label,
-        command(emit, CopyDetail(value)),
-      ),
-    ],
-  )
+  @html.div(class="connection-value", [
+    @html.p([@html.strong(label + ": "), @html.code(value)]),
+    @controls.icon_button(
+      Copy,
+      copy(locale, "Copy ", "复制") + label,
+      command(emit, CopyDetail(value)),
+    ),
+  ])
 }
 
 ///|
@@ -50,11 +47,6 @@ fn model_connection_guides(
 ) -> @rabbita.Html {
   let base = public_maas_base_url()
   @html.div([
-    @html.p(
-      copy(
-        locale, "API key: use the copy icon in Account & API keys.", "API 密钥：在账户与 API 密钥中点击复制图标。",
-      ),
-    ),
     @controls.advanced(copy(locale, "TRAE setup", "TRAE 接入"), [
       @html.p(
         copy(

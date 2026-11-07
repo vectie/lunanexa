@@ -15,9 +15,9 @@ pub extend UsageChange with ToJson::{to_json}
 ///|
 pub(all) struct UsageChanges {
   query : UsageQuery
-  baseline_row_count : Int
-  candidate_row_count : Int
-  unchanged_count : Int
+  baseline_row_count : Int32
+  candidate_row_count : Int32
+  unchanged_count : Int32
   changes : Array[UsageChange]
 }
 

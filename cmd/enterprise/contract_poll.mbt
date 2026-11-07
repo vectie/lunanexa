@@ -24,7 +24,7 @@ extern "js" fn contract_poll_fetch(
 fn schedule_contract_preview(
   model : AppModel,
   documents : @contract_documents.ContractDocumentsState,
-  delay_ms : Int,
+  delay_ms : Int32,
   emit : @rabbita.Emit[AppMessage],
 ) -> (AppModel, @rabbita.Cmd) {
   let (next, preview) = schedule_contract_preview_only(
@@ -70,7 +70,7 @@ fn contract_poll_active(
 fn contract_poll_timer(
   generation : Int64,
   packet_id : String,
-  remaining : Int,
+  remaining : Int32,
   emit : @rabbita.Emit[AppMessage],
 ) -> @rabbita.Cmd {
   @rabbita.perform(message => emit(message), async fn() noraise {
@@ -112,7 +112,7 @@ fn contract_poll_request(
   model : AppModel,
   generation : Int64,
   packet_id : String,
-  remaining : Int,
+  remaining : Int32,
   emit : @rabbita.Emit[AppMessage],
 ) -> @rabbita.Cmd {
   @rabbita.perform(message => emit(message), async fn() noraise {
@@ -144,7 +144,7 @@ fn apply_contract_poll(
   model : AppModel,
   generation : Int64,
   packet_id : String,
-  remaining : Int,
+  remaining : Int32,
   result : Result[Array[@contractdoc.ContractPacket], String],
   emit : @rabbita.Emit[AppMessage],
 ) -> (AppModel, @rabbita.Cmd) {

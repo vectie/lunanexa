@@ -1,10 +1,11 @@
 ///|
 /// Read-only operator aggregate. Conversion is not a payment assertion.
 pub(all) struct TrialSummary {
-  registered_trials : Int
-  active_trials : Int
-  expired_trials : Int
-  converted_trials : Int
+  registered_trials : Int32
+  active_trials : Int32
+  expired_trials : Int32
+  converted_trials : Int32
+  participants : Array[TrialParticipantUsage]?
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -18,6 +19,31 @@ pub extend TrialSummary with ToJson::{to_json}
 
 ///|
 pub extend TrialSummary with FromJson::{from_json}
+
+///|
+pub(all) struct TrialParticipantUsage {
+  account_id : String
+  display_name : String
+  starts_unix_ms : Int64
+  expires_unix_ms : Int64
+  requests : Int64
+  metered_requests : Int32
+  input_units : Int64
+  output_units : Int64
+  accelerator_ms : Int64
+} derive(Debug, Eq, FromJson, ToJson)
+
+///|
+pub extend TrialParticipantUsage with Debug::{to_repr}
+
+///|
+pub extend TrialParticipantUsage with Eq::{equal, not_equal}
+
+///|
+pub extend TrialParticipantUsage with FromJson::{from_json}
+
+///|
+pub extend TrialParticipantUsage with ToJson::{to_json}
 
 ///|
 pub(all) struct AnnouncementDraft {
@@ -84,6 +110,43 @@ fn trial_summary_view(state : ConsoleState) -> @rabbita.Html {
         ])
     },
     @html.p(class="secondary", beginner_message(state.locale, TrialBoundary)),
+    @html.details(
+      [
+        @html.summary(
+          localized(
+            state.locale,
+            "Seven-day trial usage by person",
+            "七天试用 · 每人用量",
+          ),
+        ),
+        @html.p(
+          localized(
+            state.locale,
+            "Calls include admitted requests. Metered calls use durable runtime receipts; input/output units are provider-reported and are not inferred from characters. No prompt content is shown.",
+            "调用次数包含已受理请求；已计量请求按持久化回执汇总。输入/输出为模型报告的计量单位，不用字符数冒充 token；不展示提示词内容。",
+          ),
+        ),
+        ..state.trial_summary
+        .map(s => s.participants.unwrap_or([]))
+        .unwrap_or([])
+        .map(p => {
+          @html.article(class="record-card", [
+            @html.h4(p.display_name),
+            @html.p(class="secondary", p.account_id),
+            @html.p(
+              "\{@contractdoc.format_unix_ms_beijing(p.starts_unix_ms)} — \{@contractdoc.format_unix_ms_beijing(p.expires_unix_ms)}",
+            ),
+            @html.p(
+              localized(
+                state.locale,
+                "Calls \{p.requests} · Metered \{p.metered_requests} · Input \{p.input_units} · Output \{p.output_units} · Compute \{p.accelerator_ms} ms",
+                "调用 \{p.requests} 次 · 已计量 \{p.metered_requests} 次 · 输入 \{p.input_units} · 输出 \{p.output_units} · 推理耗时 \{p.accelerator_ms} ms",
+              ),
+            ),
+          ])
+        }),
+      ],
+    ),
   ])
 }
 
@@ -92,7 +155,7 @@ fn announcement_field(
   id : String,
   label : String,
   value : String,
-  maximum : Int,
+  maximum : Int32,
   emit : @rabbita.Emit[ConsoleMessage]?,
   message : (String) -> ConsoleMessage,
 ) -> @rabbita.Html {

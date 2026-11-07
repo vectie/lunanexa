@@ -1,6 +1,8 @@
 ///|
 priv enum RentalWaitResult {
   Company(Array[@enterprise_ui.SelfServiceOrganizationView])
+  Access(@portal.EnterpriseSelfView)
+  Applications(Array[DesktopClientResponse])
   Scans(Array[@offline_commerce.OfflineArtifactSummary])
 }
 
@@ -13,11 +15,19 @@ fn rental_wait_active(
   !model.demo_mode &&
   !model.token.is_empty() &&
   model.contract_poll_generation == generation &&
-  model.portal.selected_organization_id == Some(organization) &&
+  model.portal.selected_organization_id.unwrap_or("") == organization &&
   (
     (
       model.portal.route == SelfService &&
       model.portal.self_service.step == Organization
+    ) ||
+    (
+      (
+        model.portal.route == LeaseRequests ||
+        model.portal.route == Overview ||
+        model.portal.route == DesktopIde
+      ) &&
+      (waiting_for_lease_approval(model) || waiting_for_application(model))
     ) ||
     (
       model.portal.route == ContractDocuments &&
@@ -30,13 +40,15 @@ fn rental_wait_active(
 ///|
 fn rental_wait_timer(
   model : AppModel,
-  remaining : Int,
+  remaining : Int32,
   emit : @rabbita.Emit[AppMessage],
 ) -> @rabbita.Cmd {
   let generation = model.contract_poll_generation
   let organization = model.portal.selected_organization_id.unwrap_or("")
   @rabbita.perform(message => emit(message), async fn() noraise {
-    ignore(contract_preview_delay_promise(3000).wait()) catch {
+    ignore(
+      contract_preview_delay_promise(if remaining < 0 { 10000 } else { 3000 }).wait(),
+    ) catch {
       _ => ()
     }
     RentalWaitDue(generation, organization, remaining)
@@ -56,7 +68,11 @@ fn start_rental_wait(
   let scan = model.portal.route == ContractDocuments &&
     model.portal.contract_documents.confirmation
     is Some(SubmitUndertaking(_, _, _, _))
-  if !pending_company && !scan {
+  if !pending_company &&
+    !scan &&
+    !waiting_for_lease_approval(model) &&
+    !waiting_for_membership(model) &&
+    !waiting_for_application(model) {
     return (model, @rabbita.none)
   }
   let next = {
@@ -68,7 +84,7 @@ fn start_rental_wait(
       next.contract_poll_generation,
       next.portal.selected_organization_id.unwrap_or(""),
     ) {
-    (next, rental_wait_timer(next, 100, emit))
+    (next, rental_wait_timer(next, if scan { 100 } else { -1 }, emit))
   } else {
     (next, @rabbita.none)
   }
@@ -79,13 +95,47 @@ fn rental_wait_request(
   model : AppModel,
   generation : Int64,
   organization : String,
-  remaining : Int,
+  remaining : Int32,
   emit : @rabbita.Emit[AppMessage],
 ) -> @rabbita.Cmd {
   @rabbita.perform(message => emit(message), async fn() noraise {
     let result = try {
-      if model.portal.route == SelfService {
+      if !onboarding_page_visible() {
+        Err("page_hidden")
+      } else if waiting_for_application(model) {
+        Ok(
+          Applications(
+            @json.from_json(
+              @json.parse(
+                request(
+                  "GET",
+                  model.endpoint,
+                  "/v1/portal/self/clients",
+                  model.token,
+                  model.subject_ref,
+                ),
+              ),
+            ),
+          ),
+        )
+      } else if model.portal.route == SelfService {
         Ok(Company(load_self_service_organizations(model)))
+      } else if model.portal.route != ContractDocuments {
+        Ok(
+          Access(
+            @json.from_json(
+              @json.parse(
+                request(
+                  "GET",
+                  model.endpoint,
+                  "/v1/portal/self",
+                  model.token,
+                  model.subject_ref,
+                ),
+              ),
+            ),
+          ),
+        )
       } else {
         let orders : Array[@offline.CommercialOrder] = @json.from_json(
           @json.parse(
@@ -150,7 +200,7 @@ fn apply_rental_wait(
   model : AppModel,
   generation : Int64,
   organization : String,
-  remaining : Int,
+  remaining : Int32,
   result : Result[RentalWaitResult, String],
   emit : @rabbita.Emit[AppMessage],
 ) -> (AppModel, @rabbita.Cmd) {
@@ -159,7 +209,51 @@ fn apply_rental_wait(
   }
   let mut pending = false
   let next = match result {
+    Ok(Applications(clients)) => {
+      if clients.any(client => client.ready) {
+        return (model, load_command(model, emit))
+      }
+      return (model, rental_wait_timer(model, remaining, emit))
+    }
+    Ok(Access(view)) => {
+      // Refresh the application catalog only when authority or approvals change.
+      // Ordinary checks read one small projection and retain every input draft.
+      if view.lease_requests == model.portal.lease_requests &&
+        view.membership == model.portal.membership.unwrap() &&
+        view.agreements == model.portal.agreements {
+        return (model, rental_wait_timer(model, remaining, emit))
+      }
+      return (model, load_command(model, emit))
+    }
     Ok(Company(organizations)) if model.portal.route == SelfService => {
+      if waiting_for_membership(model) {
+        let customers = organizations.filter(value => {
+          value.membership.active &&
+          !model.portal.trial.map_or(false, trial => {
+            value.membership.organization_id == trial.organization_id &&
+            value.membership.tenant_ref == trial.tenant_ref
+          })
+        })
+        if !customers.is_empty() {
+          return update(
+            model,
+            Outcome(
+              OrganizationsLoaded(
+                model.session_generation,
+                organizations,
+                if customers.length() == 1 {
+                  Some(customers[0].organization.organization_id)
+                } else {
+                  None
+                },
+                model.portal.account,
+              ),
+            ),
+            emit,
+          )
+        }
+        return (model, rental_wait_timer(model, remaining, emit))
+      }
       pending = organizations.any(value => {
         value.organization.organization_id == organization &&
         value.organization.state == PendingVerification
@@ -233,6 +327,9 @@ fn apply_rental_wait(
       { ..model, portal: { ..model.portal, contract_documents: documents, }, }
     }
     _ => model
+  }
+  if remaining < 0 && (pending || result is Err(_)) {
+    return (next, rental_wait_timer(next, remaining, emit))
   }
   if pending && remaining > 1 {
     return (next, rental_wait_timer(next, remaining - 1, emit))

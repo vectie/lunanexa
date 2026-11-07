@@ -136,7 +136,7 @@ async fn contract_bridge_fixture(
 ///|
 fn bridge_result(
   request : @offline.ArtifactGenerationRequest,
-  count : Int?,
+  count : Int32?,
 ) -> @offline.ArtifactGenerationResult {
   {
     request_id: request.request_id,

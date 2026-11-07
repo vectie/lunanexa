@@ -31,7 +31,7 @@ pub(all) struct RuntimeEndpoint {
   controller_epoch : Int64
   instance_id : String
   address : String
-  port : Int
+  port : Int32
   artifact_digest : String
   image_digest : String
   observed_unix_ms : Int64
@@ -53,8 +53,8 @@ pub extend RuntimeEndpoint with FromJson::{from_json}
 /// Administrator-owned per-node private IPv4 route boundary.
 pub(all) struct RuntimeRoutePolicy {
   network : String
-  prefix_length : Int
-  port : Int
+  prefix_length : Int32
+  port : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -75,7 +75,7 @@ fn private_ipv4_number(value : String) -> Int64? {
   if parts.length() != 4 {
     return None
   }
-  let octets : Array[Int] = []
+  let octets : Array[Int32] = []
   for part in parts {
     if part.length() == 0 || part.length() > 3 {
       return None

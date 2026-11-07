@@ -37,7 +37,7 @@ fn storage_cas_version(path : String, body : Json?) -> String? {
 
 ///|
 fn storage_cas_conflict(
-  status : Int,
+  status : Int32,
   path : String,
   body : Json?,
   observed : Json?,

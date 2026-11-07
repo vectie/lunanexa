@@ -39,8 +39,8 @@ enum TelemetryPersistence {
 ///|
 pub struct FileTelemetry {
   persistence : TelemetryPersistence
-  sample_history_limit : Int
-  benchmark_history_limit : Int
+  sample_history_limit : Int32
+  benchmark_history_limit : Int32
   safety_limits : @settings.TelemetrySafetySettings
   samples : Array[@contracts.TelemetrySample]
   benchmark_runs : Array[BenchmarkRun]
@@ -96,9 +96,9 @@ async fn write_telemetry(path : String, snapshot : TelemetrySnapshot) -> Unit {
 ///|
 pub async fn FileTelemetry::open(
   path : String,
-  sample_history_limit? : Int = 10000,
-  benchmark_history_limit? : Int = 256,
-  safety_limits? : @settings.TelemetrySafetySettings = @settings.default_global_admin_settings().telemetry_safety,
+  sample_history_limit~ : Int32 = 10000,
+  benchmark_history_limit~ : Int32 = 256,
+  safety_limits~ : @settings.TelemetrySafetySettings = @settings.default_global_admin_settings().telemetry_safety,
 ) -> FileTelemetry {
   if sample_history_limit <= 0 ||
     sample_history_limit > 1000000 ||
@@ -152,9 +152,9 @@ pub async fn FileTelemetry::open(
 ///|
 pub async fn FileTelemetry::open_postgres(
   database : @database.PostgresDatabase,
-  sample_history_limit? : Int = 10000,
-  benchmark_history_limit? : Int = 256,
-  safety_limits? : @settings.TelemetrySafetySettings = @settings.default_global_admin_settings().telemetry_safety,
+  sample_history_limit~ : Int32 = 10000,
+  benchmark_history_limit~ : Int32 = 256,
+  safety_limits~ : @settings.TelemetrySafetySettings = @settings.default_global_admin_settings().telemetry_safety,
 ) -> FileTelemetry {
   if sample_history_limit <= 0 ||
     sample_history_limit > 1000000 ||

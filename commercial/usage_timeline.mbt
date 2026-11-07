@@ -3,7 +3,7 @@
 pub(all) struct UsageTimeBucket {
   started_unix_ms : Int64
   ended_unix_ms : Int64
-  crossing_bucket_count : Int
+  crossing_bucket_count : Int32
   report : UsageReport
 }
 

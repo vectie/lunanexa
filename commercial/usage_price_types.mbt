@@ -1,7 +1,7 @@
 ///|
 /// Analyst-authored candidate rates. This is not a quote or a ledger mutation.
 pub(all) struct UsagePriceScenario {
-  schema_version : Int
+  schema_version : Int32
   rates : Array[RateCard]
 } derive(Eq, ToJson, FromJson)
 
@@ -20,7 +20,7 @@ pub(all) enum UsagePriceStatus {
 pub(all) struct UsagePriceRow {
   recorded : UsageReportRow
   status : UsagePriceStatus
-  matched_rate_count : Int
+  matched_rate_count : Int32
   candidate_rate_card_id : String
   candidate_rate_card_version : String
   hypothetical_amount : FixedMoney?
@@ -35,9 +35,9 @@ pub(all) struct UsagePriceGroup {
   meter : String
   unit : String
   status : UsagePriceStatus
-  row_count : Int
+  row_count : Int32
   quantity : Int64
-  crossing_window_count : Int
+  crossing_window_count : Int32
   recorded_amount : FixedMoney?
   hypothetical_amount : FixedMoney?
   delta : FixedMoney?

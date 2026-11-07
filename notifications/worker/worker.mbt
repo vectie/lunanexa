@@ -15,7 +15,7 @@ enum DeliveryAdapterConfig {
   AdapterConfigured(
     endpoint~ : String,
     bearer_token~ : String,
-    request_timeout_ms~ : Int
+    request_timeout_ms~ : Int32
   )
 }
 
@@ -30,8 +30,8 @@ pub struct NotificationDeliveryWorker {
   observability_store : @observability.ObservabilityStore?
   adapter : DeliveryAdapterConfig
   claim_lease_ms : Int64
-  batch_limit : Int
-  interval_ms : Int
+  batch_limit : Int32
+  interval_ms : Int32
 }
 
 ///|
@@ -148,10 +148,10 @@ pub fn NotificationDeliveryWorker::configured(
   store : @store.NotificationStore,
   endpoint : String,
   bearer_token : String,
-  request_timeout_ms? : Int = 5000,
-  claim_lease_ms? : Int64 = 30000L,
-  batch_limit? : Int = 100,
-  interval_ms? : Int = 30000,
+  request_timeout_ms~ : Int32 = 5000,
+  claim_lease_ms~ : Int64 = 30000L,
+  batch_limit~ : Int32 = 100,
+  interval_ms~ : Int32 = 30000,
 ) -> NotificationDeliveryWorker raise DeliveryWorkerError {
   if !safe_adapter_endpoint(endpoint) ||
     bearer_token.length() < 32 ||
@@ -265,7 +265,7 @@ pub async fn NotificationDeliveryWorker::run_forever(
 ///|
 pub async fn NotificationDeliveryWorker::readiness(
   self : NotificationDeliveryWorker,
-  now_unix_ms? : Int64 = 0L,
+  now_unix_ms~ : Int64 = 0L,
 ) -> @notifications.NotificationDeliveryReadiness {
   self.store.delivery_readiness(
     self.adapter is AdapterConfigured(..),
@@ -295,7 +295,7 @@ fn delivery_envelope(
 }
 
 ///|
-fn retry_delay_ms(attempt_count : Int) -> Int64 {
+fn retry_delay_ms(attempt_count : Int32) -> Int64 {
   let exponent = (attempt_count - 1).max(0).min(10)
   let mut delay = 1000L
   for _ in 0..<exponent {
@@ -378,7 +378,7 @@ async fn NotificationDeliveryWorker::deliver_one(
   self : NotificationDeliveryWorker,
   endpoint : String,
   bearer_token : String,
-  request_timeout_ms : Int,
+  request_timeout_ms : Int32,
   delivery : @notifications.NotificationDelivery,
   now_unix_ms : Int64,
 ) -> @notifications.NotificationDelivery {

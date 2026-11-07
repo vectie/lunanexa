@@ -152,7 +152,7 @@ fn decode_catalog_page(value : Json) -> CatalogPage raise ModelSourceError {
 
 ///|
 pub fn ModelScopeClient::new(
-  origin? : String = "https://modelscope.cn",
+  origin~ : String = "https://modelscope.cn",
 ) -> ModelScopeClient raise ModelSourceError {
   if origin != "https://modelscope.cn" && origin != "https://www.modelscope.cn" {
     raise UntrustedOrigin
@@ -204,8 +204,8 @@ async fn get_json(url : String) -> Json {
 pub async fn ModelScopeClient::search(
   self : ModelScopeClient,
   query : String,
-  page_number? : Int = 1,
-  page_size? : Int = 12,
+  page_number~ : Int32 = 1,
+  page_size~ : Int32 = 12,
 ) -> CatalogPage {
   if query.length() > 120 || page_number < 1 || page_size < 1 || page_size > 50 {
     raise InvalidUpstreamResponse

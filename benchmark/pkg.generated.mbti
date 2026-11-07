@@ -1,0 +1,45 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/benchmark"
+
+import {
+  "moonbitlang/core/json",
+}
+
+// Values
+pub fn decode_rate(Int, Int64, Int64) -> Double
+
+pub fn quality_case(String, Int, Int) -> (Array[Json], Json)
+
+pub fn request_fixture(String, Int, Int, String, Int, String, Bool) -> (Json, Json?)
+
+pub async fn sample(String, String, String, user~ : Int, concurrency~ : Int, round~ : Int, nonce~ : String, max_tokens? : Int, profile? : String, quality? : Bool) -> Sample
+
+pub fn workload_messages(String, String, Int, Int) -> Array[Json]
+
+// Errors
+
+// Types and methods
+pub(all) struct Sample {
+  user : Int
+  concurrency : Int
+  round : Int
+  status : Int
+  output_tokens : Int
+  ttft_ms : Int64
+  elapsed_ms : Int64
+  decode_tokens_per_second : Double
+  end_to_end_tokens_per_second : Double
+  valid : Bool
+  response_id : String
+  receipt : String
+  error : String
+  timings : Map[String, Int64]
+  cached_input_tokens : Int?
+  input_tokens : Int?
+} derive(ToJson, @json.FromJson)
+pub fn Sample::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Sample::to_json(Self) -> Json
+
+// Type aliases
+
+// Traits

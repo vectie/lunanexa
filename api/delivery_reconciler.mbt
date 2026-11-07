@@ -4,7 +4,10 @@ fn delivery_assignment_id(operation : @delivery.Operation) -> String {
 }
 
 ///|
-fn delivery_replica_id(operation : @delivery.Operation, index : Int) -> String {
+fn delivery_replica_id(
+  operation : @delivery.Operation,
+  index : Int32,
+) -> String {
   if index == 0 {
     delivery_assignment_id(operation)
   } else {
@@ -410,7 +413,7 @@ async fn ApiService::prepare_delivery_assignment(
   self : ApiService,
   operation : @delivery.Operation,
   template : @deployment.ModelServiceTemplate,
-  index : Int,
+  index : Int32,
 ) -> @contracts.DesiredAssignment {
   guard operation.reservation_id is Some(reserved_id) else {
     raise Failure("delivery reservation unavailable")

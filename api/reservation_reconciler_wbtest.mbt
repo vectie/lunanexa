@@ -75,6 +75,31 @@ async test "reservation host enforces full node set and releases only after clai
   )
   service.ensure_reservation_nodes(request.reservation_id)
   assert_true(visited.contains("spark-a") && visited.contains("spark-b"))
+  let drain_path = "/v1/resource-reservations/\{request.reservation_id}:drain"
+  let drain_body : Json = {
+    "generation": Json(
+      scheduler.node_reservation(request.reservation_id).unwrap().generation,
+    ),
+    "readiness_confirmation": "release-idle-nodes:\{request.reservation_id}",
+  }
+  assert_eq(
+    service.handle_resource_reservation(
+      Post,
+      drain_path,
+      Map([]),
+      drain_body.stringify(),
+    ).status,
+    401,
+  )
+  assert_eq(
+    service.handle_resource_reservation(
+      Post,
+      drain_path,
+      { "Authorization": "Bearer op" },
+      drain_body.stringify(),
+    ).status,
+    409,
+  )
   let drained = scheduler.begin_node_release(request.reservation_id, now)
   service.reconcile_resource_reservations()
   assert_true(scheduler.node_is_reserved("node-a"))
@@ -91,6 +116,31 @@ async test "reservation host enforces full node set and releases only after clai
       inventory: { ..heartbeat.inventory, node_id, },
     })
   }
+  assert_eq(
+    service.handle_resource_reservation(
+      Post,
+      drain_path,
+      { "Authorization": "Bearer op" },
+      drain_body.stringify(),
+    ).status,
+    409,
+  )
+  let current_body : Json = {
+    "generation": Json(
+      scheduler.node_reservation(request.reservation_id).unwrap().generation,
+    ),
+    "readiness_confirmation": "release-idle-nodes:\{request.reservation_id}",
+  }
+  assert_eq(
+    service.handle_resource_reservation(
+      Post,
+      drain_path,
+      { "Authorization": "Bearer op" },
+      current_body.stringify(),
+    ).status,
+    202,
+  )
+  assert_true(scheduler.node_is_reserved("node-a"))
   service.reconcile_resource_reservations()
   assert_false(scheduler.node_is_reserved("node-a"))
   assert_false(scheduler.node_is_reserved("node-b"))

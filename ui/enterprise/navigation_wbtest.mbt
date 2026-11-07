@@ -1,37 +1,45 @@
 ///|
-test "enterprise prioritizes services before purchasing and administration" {
-  for locale in [@i18n.English, ChineseSimplified] {
-    let html = render({ ..demo_state(), locale, })
-    let mut previous = -1
-    for
-      route in [
-        EnterpriseRoute::Overview,
-        MachineAccess,
-        Models,
-        DesktopIde,
-        SelfService,
+#warnings("-alert_unstable")
+test "simplified navigation keeps every destination and reveals the active secondary group" {
+  let routes : Array[EnterpriseRoute] = [
+    Overview,
+    MachineAccess,
+    Models,
+    DesktopIde,
+    SelfService,
+    Agreements,
+    OfflineCommerce,
+    ContractDocuments,
+    LeaseRequests,
+    AccountAccess,
+    Costs,
+    Notifications,
+  ]
+  for route in routes {
+    let state = { ..demo_state(), route, }
+    let html = @rabbita.render_to_string(() => {
+      @rabbita.Val::constant(navigation(state, None))
+    })
+    for destination in routes {
+      assert_true(
+        html.contains(
+          route_label(state.locale, destination).replace(old="&", new="&amp;"),
+        ),
+      )
+    }
+    assert_eq(html.split("aria-current=\"page\"").to_array().length(), 2)
+    assert_eq(
+      html.contains(" open"),
+      [
+        EnterpriseRoute::SelfService,
         Agreements,
         OfflineCommerce,
         ContractDocuments,
         LeaseRequests,
-        AccountAccess,
         Costs,
         Notifications,
-      ] {
-      let position = html
-        .find(
-          ">" +
-          route_label(locale, route).replace(old="&", new="&amp;") +
-          "</button>",
-        )
-        .unwrap()
-      assert_true(position > previous)
-      previous = position
-    }
-    assert_true(html.contains("IaaS · "))
-    assert_true(html.contains("MaaS · "))
-    assert_true(html.contains("PaaS · "))
-    assert_true(html.contains("href=\"/docs/\""))
+      ].contains(route),
+    )
   }
 }
 

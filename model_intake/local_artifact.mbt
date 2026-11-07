@@ -10,7 +10,7 @@ pub(all) struct ArtifactMetadata {
   license_id : String
   provenance : String
   compatible_architectures : Array[String]
-  minimum_memory_mib : Int
+  minimum_memory_mib : Int32
   maximum_artifact_bytes : Int64
 } derive(ToJson, FromJson)
 

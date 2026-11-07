@@ -248,6 +248,7 @@ async fn check_workspace_handoff(private_cloud : Bool) -> Unit {
       public_api_base_url: "https://models.example.invalid",
       handoff_lifetime_ms: 120000L,
       maximum_requests: 100L,
+      allowed_organization_ids: None,
     })
   let enterprise_headers = {
     "Authorization": "Bearer inference-token",
@@ -260,6 +261,7 @@ async fn check_workspace_handoff(private_cloud : Bool) -> Unit {
     public_api_base_url: "https://models.example.invalid",
     handoff_lifetime_ms: 120000L,
     maximum_requests: 100L,
+    allowed_organization_ids: None,
   }
   let comfy_config = {
     ..desktop_config,
@@ -410,6 +412,69 @@ async fn check_workspace_handoff(private_cloud : Bool) -> Unit {
       "project_id": "project-client",
       "allowed_models": ["text.default"],
     } : Json).stringify()
+  let scoped = service.with_client_launch_catalog([
+    { ..desktop_config, allowed_organization_ids: Some(["org-other"]), },
+    { ..comfy_config, allowed_organization_ids: Some(["org-client"]), },
+  ])
+  let scoped_catalog = scoped.handle(
+    Get,
+    "/v1/portal/self/clients",
+    enterprise_headers,
+    "",
+  )
+  assert_eq(scoped_catalog.status, 200)
+  assert_false(scoped_catalog.body.contains("desktop-client"))
+  assert_true(scoped_catalog.body.contains("comfyui"))
+  assert_eq(
+    scoped.handle(
+      Post,
+      "/v1/portal/self/client-handoffs",
+      enterprise_headers,
+      issue_body,
+    ).status,
+    404,
+  )
+  let unpublished = service.with_client_launch_catalog([
+    { ..desktop_config, allowed_organization_ids: Some([]), },
+  ])
+  assert_eq(
+    unpublished.handle(Get, "/v1/portal/self/client", enterprise_headers, "").status,
+    404,
+  )
+  let before_scope_change = service.handle(
+    Post,
+    "/v1/portal/self/client-handoffs",
+    enterprise_headers,
+    (
+      {
+        "request_id": "before-scope-change",
+        "client_id": "desktop-client",
+        "project_id": "project-client",
+        "allowed_models": ["text.default"],
+      } : Json).stringify(),
+  )
+  assert_eq(before_scope_change.status, 201)
+  guard @json.parse(before_scope_change.body)
+    is { "handoff_code": String(stale_code), .. } else {
+    fail("expected scoped handoff")
+  }
+  let stale_redeem = scoped.handle(
+    Post,
+    "/v1/client-handoffs:redeem",
+    Map([]),
+    ({ "client_id": "desktop-client", "handoff_code": stale_code } : Json).stringify(),
+  )
+  assert_eq(stale_redeem.status, 409)
+  assert_false(stale_redeem.body.contains("api_secret"))
+  assert_eq(
+    service.handle(
+      Post,
+      "/v1/client-handoffs:redeem",
+      Map([]),
+      ({ "client_id": "desktop-client", "handoff_code": stale_code } : Json).stringify(),
+    ).status,
+    409,
+  )
   let deployment_gated = service.with_deployment_store(
     @deployment_store.FileDeploymentStore::open(
       "\{temp}/client-deployments.json",

@@ -237,6 +237,7 @@ pub extend OpenRegisteredAccount with FromJson::{from_json}
 /// A free-trial entitlement authorizes only the bounded shared-workspace path.
 /// It is not a node lease and cannot be used as machine or operator authority.
 pub(all) struct TrialEntitlement {
+  event_id : String?
   trial_id : String
   account_id : String
   organization_id : String
@@ -296,6 +297,8 @@ pub(all) struct AccountSnapshot {
   invitations : Array[AccountInvitation]?
   // Optional for backward-compatible restoration of pre-trial state.
   trials : Array[TrialEntitlement]?
+  events : Array[@event_trial.Policy]?
+  event_mode_selected : Bool?
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|

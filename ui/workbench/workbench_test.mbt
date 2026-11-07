@@ -23,6 +23,17 @@ test "ready lease renders the dense Web IDE and client-side handoffs" {
 }
 
 ///|
+test "uncapped trial renders unlimited instead of a zero denominator" {
+  let state = @workbench.demo_state()
+  let html = @workbench.render({
+    ..state,
+    usage: { ..state.usage, requests_used: 3, requests_limit: 0, },
+  })
+  assert_true(html.contains("3 / Unlimited"))
+  assert_false(html.contains("<progress"))
+}
+
+///|
 test "expired and absent leases fail closed with explicit boundaries" {
   let state = @workbench.demo_state()
   guard state.lease is Some(lease) else { fail("missing demo lease") }
@@ -37,7 +48,8 @@ test "expired and absent leases fail closed with explicit boundaries" {
   assert_true(expired.contains("status-pill is-danger"))
   assert_true(expired.contains("never grants a DGX login"))
   assert_false(expired.contains("id=\"code-editor\""))
-  assert_true(absent.contains("scoped inference token"))
+  assert_true(absent.contains("Open an enabled workspace from your account"))
+  assert_true(absent.contains("href=\"/user/\""))
   assert_true(absent.contains("status-pill is-blocked"))
 }
 
@@ -180,7 +192,7 @@ test "Simplified Chinese localizes chrome without changing drafts or identifiers
   )
   let blocked_html = @workbench.render(blocked)
   assert_true(blocked_html.contains("工作区尚未就绪"))
-  assert_true(blocked_html.contains("限定范围的推理令牌"))
+  assert_true(blocked_html.contains("前往我的工作台"))
   assert_true(blocked_html.contains("id=\"workbench-locale\""))
   let missing = state.update(SelectFile("missing.mbt"))
   assert_true(

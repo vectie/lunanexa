@@ -77,9 +77,9 @@ async fn exchange(
   path : String,
   verb : @http.RequestMethod,
   body : Bytes,
-  extra? : @http.Headers = Map([]),
-  maximum? : Int = 8388608,
-) -> (Int, Bytes) {
+  extra~ : @http.Headers = Map([]),
+  maximum~ : Int32 = 8388608,
+) -> (Int32, Bytes) {
   @async.with_timeout(30000, () => {
     let headers = extra.copy()
     headers["Authorization"] = "Bearer \{token}"

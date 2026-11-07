@@ -1,7 +1,7 @@
 ///|
 async fn load_runtime_supervisor(
   node_id : String,
-  pid_limit : Int,
+  pid_limit : Int32,
 ) -> @node_agent.ManagedRuntimeSupervisor {
   match @env.get_env_var("LUNANEXA_RUNTIME_BACKEND").unwrap_or("oci") {
     "oci" =>

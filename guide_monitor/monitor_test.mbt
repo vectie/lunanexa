@@ -13,11 +13,11 @@ fn policy() -> @guide_monitor.GuideMonitorPolicy {
 fn observation(
   id : String,
   observed_unix_ms : Int64,
-  coursebook_ok? : Bool = true,
-  admin_diagnostics_enabled? : Bool = true,
-  admin_diagnostics_ok? : Bool = true,
-  knowledge_stale? : Bool = false,
-  knowledge_age_ms? : Int64 = 1000L,
+  coursebook_ok~ : Bool = true,
+  admin_diagnostics_enabled~ : Bool = true,
+  admin_diagnostics_ok~ : Bool = true,
+  knowledge_stale~ : Bool = false,
+  knowledge_age_ms~ : Int64 = 1000L,
 ) -> @guide_monitor.GuideHealthObservation {
   @guide_monitor.sign_observation(
     {

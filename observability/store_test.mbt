@@ -39,8 +39,8 @@ fn test_database_url() -> String? {
 fn event(
   id : String,
   timestamp : Int64,
-  code? : String = "ApiRequestCompleted",
-  status? : Int = 200,
+  code~ : String = "ApiRequestCompleted",
+  status~ : Int32 = 200,
 ) -> @observability.OperationalEvent {
   {
     version: @observability.contract_version,

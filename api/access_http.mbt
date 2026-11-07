@@ -13,12 +13,13 @@ priv struct OpenAiChatRequest {
   model : String
   messages : Array[Json]
   stream : Bool?
-  max_tokens : Int?
+  max_tokens : Int32?
   tools : Array[Json]?
   tool_choice : Json?
   parallel_tool_calls : Bool?
   temperature : Double?
   top_p : Double?
+  runtime_prefix_cache : Bool?
 } derive(FromJson)
 
 ///|
@@ -31,7 +32,7 @@ fn decode_openai_chat(body : String) -> OpenAiChatRequest? {
     for
       field in [
         "stream", "max_tokens", "tools", "tool_choice", "parallel_tool_calls", "temperature",
-        "top_p",
+        "top_p", "runtime_prefix_cache",
       ] {
       if fields.get(field) is Some(Null) {
         fields.remove(field)
@@ -215,13 +216,8 @@ async fn ApiService::api_key_check(
             key.allowed_models,
           )
         })
-        if credential is Some(key) &&
-          key.maximum_requests == 0L &&
-          !private_model &&
-          !shared_trial_model {
-          return KeyDenied
-        }
-        let contract_active = private_access || shared_trial_model ||
+        let contract_active = private_access ||
+          shared_trial_model ||
           (match self.contract_document_store {
             Some(contracts) =>
               self.has_effective_rental_authority(
@@ -247,6 +243,13 @@ async fn ApiService::api_key_check(
               None => false
             }
           None => false
+        }
+        if credential is Some(key) &&
+          key.maximum_requests == 0L &&
+          !private_model &&
+          !shared_trial_model &&
+          !trial_active {
+          return KeyDenied
         }
         if !account_active ||
           !membership_active ||
@@ -277,6 +280,7 @@ async fn ApiService::api_key_check(
                 model?,
                 now,
                 true,
+                unlimited_requests=trial.maximum_requests == 0L,
                 reserve_quota=legacy_consumed => {
                   accounts.consume_trial_request(
                     trial.trial_id,
@@ -650,7 +654,7 @@ async fn ApiService::invoke_openai_chat(
     headers,
     false,
     now,
-    self.global_settings.request_budgets,
+    self.trial_request_budgets(authority.tenant_ref),
   )
   @contracts.validate_workload(request) catch {
     _ =>
@@ -724,11 +728,10 @@ async fn ApiService::invoke_openai_chat(
       {
         "index": 0,
         "message": Json::object(message),
-        "finish_reason": if tool_calls.is_empty() {
-          "stop"
-        } else {
-          "tool_calls"
-        },
+        "finish_reason": compatible_finish_reason(
+          response.output,
+          !tool_calls.is_empty(),
+        ),
       },
     ],
     "usage": {
@@ -738,6 +741,24 @@ async fn ApiService::invoke_openai_chat(
     },
     "lunanexa_receipt": response.audit_receipt,
   })
+}
+
+///|
+fn compatible_finish_reason(output : Json?, tools : Bool) -> String {
+  match output {
+    Some(
+      {
+        "finish_reason": String(
+          "length"
+          | "content_filter"
+          | "stop"
+          | "tool_calls" as reason
+        ),
+        ..
+      }
+    ) => reason
+    _ => if tools { "tool_calls" } else { "stop" }
+  }
 }
 
 ///|
@@ -840,6 +861,12 @@ fn openai_workload(
   let payload_fields : Map[String, Json] = {
     "messages": value.messages.to_json(),
   }
+  // Explicit compute-state opt-in, separate from payload/response retention.
+  // The default ephemeral/no-cache API contract remains unchanged.
+  if value.runtime_prefix_cache == Some(true) ||
+    header(headers, "x-lunanexa-prefix-cache") == Some("tenant") {
+    payload_fields["runtime_prefix_cache"] = true
+  }
   if value.tools is Some(tools) {
     payload_fields["tools"] = tools.to_json()
   }
@@ -902,6 +929,7 @@ fn body_identity(value : OpenAiChatRequest) -> String {
     "parallel_tool_calls": value.parallel_tool_calls.to_json(),
     "temperature": value.temperature.to_json(),
     "top_p": value.top_p.to_json(),
+    "runtime_prefix_cache": Json(value.runtime_prefix_cache),
   }
   identity.stringify()
 }

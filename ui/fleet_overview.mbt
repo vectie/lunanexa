@@ -199,7 +199,6 @@ fn fleet_node_card(
       ]),
       @html.span(class="fleet-posture fleet-posture-\{tone}", posture),
     ]),
-    @html.p(class="fleet-node-explanation", explanation),
     @html.dl(class="fleet-node-facts", [
       @html.div([
         @html.dt(localized(state.locale, "Measured memory", "实测内存")),
@@ -218,64 +217,70 @@ fn fleet_node_card(
         @html.dd(open_alerts.to_string()),
       ]),
     ]),
-    if node.accelerators.is_empty() {
-      @html.p(
-        class="fleet-device-note",
-        localized(
-          state.locale,
-          "No device inventory reported.",
-          "未上报设备清单。",
-        ),
-      )
-    } else {
-      @html.div(
-        class="fleet-devices",
-        [
-          for index, device in node.accelerators => {
-            @html.div(class="fleet-device", [
-              @html.strong(title=device.device_id, "GPU \{index + 1}"),
-              @html.span(
-                if node.state == Unreachable {
-                  if device.healthy {
-                    localized(
-                      state.locale,
-                      "Last inventory: healthy",
-                      "最近清单：健康",
-                    )
-                  } else {
-                    localized(
-                      state.locale,
-                      "Last inventory: unhealthy",
-                      "最近清单：异常",
-                    )
-                  }
-                } else if device.healthy {
-                  localized(state.locale, "Healthy", "健康")
-                } else {
-                  localized(state.locale, "Unhealthy", "异常")
-                },
-              ),
-              @html.span(
-                if node.architecture.contains("gb10") ||
-                  node.architecture.contains("sm121") {
-                  localized(
-                    state.locale,
-                    "Unified memory device · see measured node pool above",
-                    "统一内存设备 · 以上方实测节点内存为准",
-                  )
-                } else {
-                  localized(
-                    state.locale,
-                    "\{memory_gib(device.memory_free_mib)} / \{memory_gib(device.memory_total_mib)} free (last inventory)",
-                    "最近清单可用 \{memory_gib(device.memory_free_mib)} / \{memory_gib(device.memory_total_mib)}",
-                  )
-                },
-              ),
-            ])
-          }
-        ],
-      )
-    },
+    @controls.advanced(
+      localized(state.locale, "Node details", "节点详情"),
+      [
+        @html.p(class="fleet-node-explanation", explanation),
+        if node.accelerators.is_empty() {
+          @html.p(
+            class="fleet-device-note",
+            localized(
+              state.locale,
+              "No device inventory reported.",
+              "未上报设备清单。",
+            ),
+          )
+        } else {
+          @html.div(
+            class="fleet-devices",
+            [
+              for index, device in node.accelerators => {
+                @html.div(class="fleet-device", [
+                  @html.strong(title=device.device_id, "GPU \{index + 1}"),
+                  @html.span(
+                    if node.state == Unreachable {
+                      if device.healthy {
+                        localized(
+                          state.locale,
+                          "Last inventory: healthy",
+                          "最近清单：健康",
+                        )
+                      } else {
+                        localized(
+                          state.locale,
+                          "Last inventory: unhealthy",
+                          "最近清单：异常",
+                        )
+                      }
+                    } else if device.healthy {
+                      localized(state.locale, "Healthy", "健康")
+                    } else {
+                      localized(state.locale, "Unhealthy", "异常")
+                    },
+                  ),
+                  @html.span(
+                    if node.architecture.contains("gb10") ||
+                      node.architecture.contains("sm121") {
+                      localized(
+                        state.locale,
+                        "Unified memory device · see measured node pool above",
+                        "统一内存设备 · 以上方实测节点内存为准",
+                      )
+                    } else {
+                      localized(
+                        state.locale,
+                        "\{memory_gib(device.memory_free_mib)} / \{memory_gib(device.memory_total_mib)} free (last inventory)",
+                        "最近清单可用 \{memory_gib(device.memory_free_mib)} / \{memory_gib(device.memory_total_mib)}",
+                      )
+                    },
+                  ),
+                ])
+              }
+            ],
+          )
+        },
+      ],
+    ),
     @html.div(class="fleet-node-actions", [
       @html.button(
         type_="button",

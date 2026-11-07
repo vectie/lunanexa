@@ -41,11 +41,11 @@ fn field(
   label_en : String,
   kind : ContractFieldKind,
   required : Bool,
-  maximum_characters : Int,
+  maximum_characters : Int32,
   locator : String,
-  allowed_values? : Array[String] = [],
-  collection_policy? : ContractCollectionPolicy = PersistedContractData,
-  owner? : ContractFieldOwner? = None,
+  allowed_values~ : Array[String] = [],
+  collection_policy~ : ContractCollectionPolicy = PersistedContractData,
+  owner~ : ContractFieldOwner? = None,
 ) -> ContractFieldDefinition {
   {
     field_id,

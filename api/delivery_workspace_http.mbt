@@ -1,7 +1,7 @@
 ///|
 priv struct WorkspaceStartingRequest {
-  memory_mib : Int
-  gpu_memory_mib : Int
+  memory_mib : Int32
+  gpu_memory_mib : Int32
 } derive(FromJson)
 
 ///|

@@ -197,7 +197,7 @@ pub extend Project with FromJson::{from_json}
 pub(all) struct FixedMoney {
   minor_units : Int64
   currency : String
-  scale : Int
+  scale : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -370,7 +370,7 @@ pub(all) struct Budget {
   organization_id : String
   project_id : String?
   limit : FixedMoney
-  warning_percent : Int
+  warning_percent : Int32
   warning_action : BudgetAction
   hard_stop : Bool
   grace_minor_units : Int64
@@ -780,16 +780,16 @@ pub extend RoleGrant with FromJson::{from_json}
 ///|
 pub(all) struct CommercialSummary {
   organization_id : String
-  organization_count : Int
-  cost_center_count : Int
-  project_count : Int
-  usage_event_count : Int
-  ledger_entry_count : Int
-  finalized_period_count : Int
-  active_budget_count : Int
-  active_commitment_count : Int
-  pending_agreement_count : Int
-  executed_agreement_count : Int
+  organization_count : Int32
+  cost_center_count : Int32
+  project_count : Int32
+  usage_event_count : Int32
+  ledger_entry_count : Int32
+  finalized_period_count : Int32
+  active_budget_count : Int32
+  active_commitment_count : Int32
+  pending_agreement_count : Int32
+  executed_agreement_count : Int32
   provisional_total : FixedMoney
 } derive(Debug, Eq, ToJson, FromJson)
 
@@ -865,7 +865,7 @@ pub(all) struct CommercialExport {
   filter_project_id : String?
   csv_content : String
   content_sha256 : String
-  row_count : Int
+  row_count : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|

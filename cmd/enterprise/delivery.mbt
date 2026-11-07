@@ -85,7 +85,9 @@ fn delivery_command(
               request(
                 "POST",
                 model.endpoint,
-                "/v1/portal/self/external-model-service:stop",
+                "/v1/portal/self/model-services/" +
+                panel.external_model.unwrap().service_id +
+                ":stop",
                 model.token,
                 model.subject_ref,
                 body="{}",
@@ -96,7 +98,9 @@ fn delivery_command(
               request(
                 "POST",
                 model.endpoint,
-                "/v1/portal/self/external-model-service:start",
+                "/v1/portal/self/model-services/" +
+                panel.external_model.unwrap().service_id +
+                ":start",
                 model.token,
                 model.subject_ref,
                 body="{}",
@@ -152,36 +156,54 @@ fn delivery_command(
         }
         // Every route that shows the company model or selects it for a workspace
         // must load its status on direct entry, without requiring a MaaS visit.
-        let (external_model, external_error) : (
+        let (external_model, shared_models, external_error) : (
           @enterprise_ui.ExternalModelServiceView?,
+          Array[@enterprise_ui.ExternalModelServiceView],
           String?,
         ) = if model.portal.route == Models ||
           model.portal.route == Overview ||
           model.portal.route == MachineAccess ||
           model.portal.route == DesktopIde {
-          try
-            (
-              Some(
-                @json.from_json(
-                  @json.parse(
-                    request(
-                      "GET",
-                      model.endpoint,
-                      "/v1/portal/self/external-model-service",
-                      model.token,
-                      model.subject_ref,
-                    ),
-                  ),
+          try {
+            let services : Array[@enterprise_ui.ExternalModelServiceView] = @json.from_json(
+              @json.parse(
+                request(
+                  "GET",
+                  model.endpoint,
+                  "/v1/portal/self/model-services",
+                  model.token,
+                  model.subject_ref,
                 ),
               ),
-              None,
             )
-          catch {
+            let previous = match panel.external_model {
+              Some(previous) =>
+                services
+                .iter()
+                .find_first(s => s.service_id == previous.service_id)
+              None => None
+            }
+            let selected = match previous {
+              Some(_) => previous
+              None =>
+                match services.iter().find_first(s => s.ready) {
+                  Some(service) => Some(service)
+                  None => services.get(0)
+                }
+            }
+            (selected, services, None)
+          } catch {
             error if error.to_string().contains("HTTP 404 NotFound") =>
-              (None, None)
-            error =>
+              (None, [], None)
+            _ =>
               (
                 panel.external_model.map(service => {
+                  ..service,
+                  state: "Unavailable",
+                  ready: false,
+                  can_stop: false,
+                }),
+                panel.shared_models.map(service => {
                   ..service,
                   state: "Unavailable",
                   ready: false,
@@ -190,8 +212,8 @@ fn delivery_command(
                 Some(
                   portal_copy(
                     model.portal.locale,
-                    "The dedicated model is currently unavailable. You can still use the shared trial Qwen model.",
-                    "企业专属模型暂不可用；共享试用 Qwen 仍可使用。",
+                    "Model service status is currently unavailable. Refresh to retry.",
+                    "模型服务状态暂不可用，请刷新重试。",
                   ),
                 ),
               )
@@ -199,7 +221,7 @@ fn delivery_command(
             value => value
           }
         } else {
-          (panel.external_model, None)
+          (panel.external_model, panel.shared_models, None)
         }
         let status_error = match external_error {
           Some(_) => external_error
@@ -225,7 +247,10 @@ fn delivery_command(
           value => value
         }
         Ok(
-          (options, operations, external_model, company_workspace, status_error),
+          (
+            options, operations, external_model, shared_models, company_workspace,
+            status_error,
+          ),
         )
       } catch {
         _ =>

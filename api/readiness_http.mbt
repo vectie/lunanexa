@@ -18,8 +18,8 @@ pub(all) struct ManagementReadiness {
   machine_helper_receipt_verifier_configured : Bool
   machine_helper_adapter_verified : Bool
   machine_helper_adapter_node_scope : String?
-  machine_helper_covered_node_count : Int
-  eligible_enrolled_node_count : Int
+  machine_helper_covered_node_count : Int32
+  eligible_enrolled_node_count : Int32
   exclusive_machine_authority_configured : Bool
   artifact_signature_verifier_configured : Bool
   guide_diagnostics_configured : Bool

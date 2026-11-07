@@ -15,7 +15,7 @@ fn identity() -> @kubernetes.PodIdentity {
 }
 
 ///|
-fn pod(phase? : String = "Running", ready? : Bool = true) -> Json {
+fn pod(phase~ : String = "Running", ready~ : Bool = true) -> Json {
   let expected = identity()
   {
     "metadata": {

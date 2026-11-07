@@ -25,9 +25,9 @@ pub(all) struct NodeRow {
   age_ms : Int64?
   agent_version : String
   runtime_names : Array[String]
-  reported_devices : Int
-  matching_devices : Int
-  running_deployment_count : Int
+  reported_devices : Int32
+  matching_devices : Int32
+  running_deployment_count : Int32
 } derive(Eq, ToJson)
 
 ///|
@@ -38,8 +38,8 @@ pub(all) struct DeviceRow {
   state : String
   freshness : String
   healthy : Bool
-  observed_total_mib : Int
-  observed_free_mib : Int
+  observed_total_mib : Int32
+  observed_free_mib : Int32
 } derive(Eq, ToJson)
 
 ///|
@@ -48,7 +48,7 @@ pub(all) struct Group {
   state : String
   freshness : String
   healthy : Bool
-  device_count : Int
+  device_count : Int32
   summed_device_total_mib : Int64
   summed_device_free_mib : Int64
 } derive(Eq, ToJson)
@@ -57,7 +57,7 @@ pub(all) struct Group {
 pub(all) struct Report {
   schema_version : String
   query : Query
-  source_node_count : Int
+  source_node_count : Int32
   nodes : Array[NodeRow]
   devices : Array[DeviceRow]
   groups : Array[Group]

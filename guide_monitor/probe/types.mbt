@@ -27,8 +27,8 @@ pub(all) struct GuideProbeConfig {
   allow_https : Bool
   actor_ref : String
   role : String
-  maximum_response_bytes : Int
-  request_timeout_ms : Int
+  maximum_response_bytes : Int32
+  request_timeout_ms : Int32
 } derive(Debug, Eq)
 
 ///|

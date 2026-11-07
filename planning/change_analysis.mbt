@@ -5,16 +5,16 @@ pub(all) struct ChangeInput {
   baseline : Evidence
   candidate : Evidence
   objective : @benchmark.ServiceObjective
-  minimum_tested_concurrency : Int
+  minimum_tested_concurrency : Int32
 } derive(Eq, ToJson, FromJson)
 
 ///|
 pub(all) struct MetricChange {
   metric : String
   unit : String
-  baseline : Int
-  candidate : Int
-  delta : Int
+  baseline : Int32
+  candidate : Int32
+  delta : Int32
   relative_per_mille : Int64?
 } derive(Eq, ToJson, FromJson)
 
@@ -27,13 +27,13 @@ pub(all) struct ConfigurationChange {
 
 ///|
 pub(all) struct ChangeReport {
-  schema_version : Int
+  schema_version : Int32
   analysis_id : String
   input : ChangeInput
   baseline_summary : @benchmark.BenchmarkSummary
   candidate_summary : @benchmark.BenchmarkSummary
-  baseline_failures : Int
-  candidate_failures : Int
+  baseline_failures : Int32
+  candidate_failures : Int32
   failure_rate_direction : String
   baseline_meets_objective : Bool
   candidate_meets_objective : Bool
@@ -47,8 +47,8 @@ pub(all) struct ChangeReport {
 fn change_metric(
   metric : String,
   unit : String,
-  baseline : Int,
-  candidate : Int,
+  baseline : Int32,
+  candidate : Int32,
 ) -> MetricChange {
   {
     metric,

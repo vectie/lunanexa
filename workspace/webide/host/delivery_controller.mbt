@@ -8,8 +8,8 @@ priv struct DeliveryPlacementResponse {
   expires_unix_ms : Int64
   delivery_kind : String
   container_image_digest : String?
-  container_cpu_millis : Int?
-  container_memory_mib : Int?
+  container_cpu_millis : Int32?
+  container_memory_mib : Int32?
 } derive(FromJson)
 
 ///|
@@ -17,7 +17,7 @@ async fn WorkspaceHost::delivery_placement(
   self : WorkspaceHost,
   grant : @webide.Grant,
   container? : ExclusiveContainer,
-  validate_container? : Bool = false,
+  validate_container~ : Bool = false,
 ) -> (ExclusivePlacement, Int64)? {
   if grant.expires_unix_ms <= @async.now() {
     return None

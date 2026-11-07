@@ -21,13 +21,13 @@ pub extend BenchmarkKind with FromJson::{from_json}
 
 ///|
 pub(all) struct BenchmarkSample {
-  latency_ms : Int
-  queue_ms : Int
-  load_ms : Int
-  first_output_ms : Int
-  output_units : Int
-  duration_ms : Int
-  utilization_per_mille : Int
+  latency_ms : Int32
+  queue_ms : Int32
+  load_ms : Int32
+  first_output_ms : Int32
+  output_units : Int32
+  duration_ms : Int32
+  utilization_per_mille : Int32
   failed : Bool
 } derive(Debug, Eq, ToJson, FromJson)
 
@@ -51,7 +51,7 @@ pub(all) struct BenchmarkRun {
   runtime_digest : String
   hardware_profile : String
   kind : BenchmarkKind
-  concurrency : Int
+  concurrency : Int32
   samples : Array[BenchmarkSample]
 } derive(Debug, Eq, ToJson, FromJson)
 
@@ -71,15 +71,15 @@ pub extend BenchmarkRun with FromJson::{from_json}
 pub(all) struct BenchmarkSummary {
   run_id : String
   profile : String
-  sample_count : Int
-  latency_p50_ms : Int
-  latency_p95_ms : Int
-  latency_p99_ms : Int
-  queue_p95_ms : Int
-  first_output_p95_ms : Int
-  throughput_units_per_second : Int
-  failure_per_mille : Int
-  peak_utilization_per_mille : Int
+  sample_count : Int32
+  latency_p50_ms : Int32
+  latency_p95_ms : Int32
+  latency_p99_ms : Int32
+  queue_p95_ms : Int32
+  first_output_p95_ms : Int32
+  throughput_units_per_second : Int32
+  failure_per_mille : Int32
+  peak_utilization_per_mille : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -108,7 +108,7 @@ pub extend BenchmarkError with Debug::{to_repr}
 pub extend BenchmarkError with Eq::{not_equal, equal}
 
 ///|
-fn percentile(values : Array[Int], percentage : Int) -> Int {
+fn percentile(values : Array[Int32], percentage : Int32) -> Int32 {
   let sorted = values.copy()
   sorted.sort()
   let index = ((sorted.length() - 1) * percentage + 99) / 100
@@ -156,9 +156,9 @@ pub fn summarize(run : BenchmarkRun) -> BenchmarkSummary raise BenchmarkError {
 ///|
 pub(all) struct ServiceObjective {
   profile : String
-  maximum_p95_ms : Int
-  minimum_throughput_units_per_second : Int
-  maximum_failure_per_mille : Int
+  maximum_p95_ms : Int32
+  minimum_throughput_units_per_second : Int32
+  maximum_failure_per_mille : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -188,8 +188,8 @@ pub fn meets_objective(
 ///|
 pub(all) struct CapacityRecommendation {
   profile : String
-  recommended_concurrency : Int
-  memory_headroom_mib : Int
+  recommended_concurrency : Int32
+  memory_headroom_mib : Int32
   evidence_run_id : String
   statement : String
 } derive(Debug, Eq, ToJson, FromJson)
@@ -209,9 +209,9 @@ pub extend CapacityRecommendation with FromJson::{from_json}
 ///|
 pub fn recommend_capacity(
   summary : BenchmarkSummary,
-  tested_concurrency : Int,
-  memory_total_mib : Int,
-  memory_peak_mib : Int,
+  tested_concurrency : Int32,
+  memory_total_mib : Int32,
+  memory_peak_mib : Int32,
 ) -> CapacityRecommendation {
   {
     profile: summary.profile,
@@ -327,9 +327,9 @@ pub fn build_evidence_bundle(
 pub(all) struct RecommendationInput {
   run_id : String
   objective : ServiceObjective
-  tested_concurrency : Int
-  memory_total_mib : Int
-  memory_peak_mib : Int
+  tested_concurrency : Int32
+  memory_total_mib : Int32
+  memory_peak_mib : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|

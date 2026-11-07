@@ -43,13 +43,13 @@ pub extend TenantUsage with FromJson::{from_json}
 ///|
 pub(all) struct SchedulerSnapshot {
   schema_version : String
-  capacity : Int
+  capacity : Int32
   quotas : Array[TenantQuota]
   active : Array[ActiveAdmission]
   usage : Array[TenantUsage]
   decisions : Array[PlacementDecision]
-  queued_count : Int?
-  running_count : Int?
+  queued_count : Int32?
+  running_count : Int32?
   node_reservations : Array[NodeReservation]?
 } derive(Debug, Eq, ToJson, FromJson)
 
@@ -85,10 +85,10 @@ enum SchedulerPersistence {
 ///|
 pub struct FileScheduler {
   persistence : SchedulerPersistence
-  mut capacity : Int
-  decision_history_limit : Int
-  background_capacity_percent : Int
-  normal_capacity_percent : Int
+  mut capacity : Int32
+  decision_history_limit : Int32
+  background_capacity_percent : Int32
+  normal_capacity_percent : Int32
   quotas : Map[String, TenantQuota]
   active : Map[String, ActiveAdmission]
   usage : Map[String, TenantUsage]
@@ -160,10 +160,10 @@ async fn write_scheduler(path : String, snapshot : SchedulerSnapshot) -> Unit {
 ///|
 pub async fn FileScheduler::open(
   path : String,
-  capacity : Int,
-  decision_history_limit? : Int = 1024,
-  background_capacity_percent? : Int = 75,
-  normal_capacity_percent? : Int = 90,
+  capacity : Int32,
+  decision_history_limit~ : Int32 = 1024,
+  background_capacity_percent~ : Int32 = 75,
+  normal_capacity_percent~ : Int32 = 90,
 ) -> FileScheduler {
   if decision_history_limit <= 0 || decision_history_limit > 65536 {
     raise InvalidSchedulerState(
@@ -233,10 +233,10 @@ pub async fn FileScheduler::open(
 ///|
 pub async fn FileScheduler::open_postgres(
   database : @database.PostgresDatabase,
-  capacity : Int,
-  decision_history_limit? : Int = 1024,
-  background_capacity_percent? : Int = 75,
-  normal_capacity_percent? : Int = 90,
+  capacity : Int32,
+  decision_history_limit~ : Int32 = 1024,
+  background_capacity_percent~ : Int32 = 75,
+  normal_capacity_percent~ : Int32 = 90,
 ) -> FileScheduler {
   if decision_history_limit <= 0 || decision_history_limit > 65536 {
     raise InvalidSchedulerState(

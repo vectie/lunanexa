@@ -2,9 +2,9 @@
 pub(all) struct HistorySnapshot {
   capture_id : String
   captured_unix_ms : Int64
-  node_count : Int
-  device_count : Int
-  future_heartbeat_count : Int
+  node_count : Int32
+  device_count : Int32
+  future_heartbeat_count : Int32
 } derive(Eq, ToJson)
 
 ///|
@@ -27,13 +27,13 @@ pub(all) struct HistoryChange {
 pub(all) struct HistoryTransition {
   from_capture : String
   to_capture : String
-  newly_observed_nodes : Int
-  absent_nodes : Int
-  matched_nodes : Int
-  repeated_heartbeat_nodes : Int
-  regressed_heartbeat_nodes : Int
-  total_change_count : Int
-  selected_change_count : Int
+  newly_observed_nodes : Int32
+  absent_nodes : Int32
+  matched_nodes : Int32
+  repeated_heartbeat_nodes : Int32
+  regressed_heartbeat_nodes : Int32
+  total_change_count : Int32
+  selected_change_count : Int32
 } derive(Eq, ToJson)
 
 ///|

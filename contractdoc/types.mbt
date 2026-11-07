@@ -151,7 +151,7 @@ pub(all) struct ContractFieldDefinition {
   label_en : String
   kind : ContractFieldKind
   required : Bool
-  maximum_characters : Int
+  maximum_characters : Int32
   allowed_values : Array[String]
   collection_policy : ContractCollectionPolicy
   owner : ContractFieldOwner
@@ -203,8 +203,8 @@ pub(all) struct ContractTemplateManifest {
   fillable_filename : String
   fillable_sha256 : String
   byte_count : Int64
-  page_count : Int
-  section_count : Int
+  page_count : Int32
+  section_count : Int32
   forms : Array[ContractFormDefinition]
   fields : Array[ContractFieldDefinition]
 } derive(Debug, Eq, ToJson, FromJson)
@@ -246,7 +246,7 @@ pub(all) struct ContractPreviewRun {
   bold : Bool
   italic : Bool
   underline : Bool
-  font_size_half_points : Int?
+  font_size_half_points : Int32?
   color : String?
   font_ascii : String?
   font_east_asia : String?
@@ -269,14 +269,14 @@ pub extend ContractPreviewRun with FromJson::{from_json}
 pub(all) struct ContractPreviewParagraph {
   runs : Array[ContractPreviewRun]
   alignment : String?
-  spacing_before_twips : Int?
-  spacing_after_twips : Int?
-  line_twips : Int?
+  spacing_before_twips : Int32?
+  spacing_after_twips : Int32?
+  line_twips : Int32?
   line_rule : String?
-  left_indent_twips : Int?
-  right_indent_twips : Int?
-  first_line_twips : Int?
-  hanging_twips : Int?
+  left_indent_twips : Int32?
+  right_indent_twips : Int32?
+  first_line_twips : Int32?
+  hanging_twips : Int32?
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -295,13 +295,13 @@ pub extend ContractPreviewParagraph with FromJson::{from_json}
 pub(all) struct ContractPreviewCell {
   text : String
   paragraphs : Array[ContractPreviewParagraph]
-  grid_span : Int
+  grid_span : Int32
   vertical_merge : String?
-  width_twips : Int?
-  margin_top_twips : Int?
-  margin_right_twips : Int?
-  margin_bottom_twips : Int?
-  margin_left_twips : Int?
+  width_twips : Int32?
+  margin_top_twips : Int32?
+  margin_right_twips : Int32?
+  margin_bottom_twips : Int32?
+  margin_left_twips : Int32?
   vertical_alignment : String?
 } derive(Debug, Eq, ToJson, FromJson)
 
@@ -320,7 +320,7 @@ pub extend ContractPreviewCell with FromJson::{from_json}
 ///|
 pub(all) struct ContractPreviewRow {
   cells : Array[ContractPreviewCell]
-  height_twips : Int?
+  height_twips : Int32?
   height_rule : String?
 } derive(Debug, Eq, ToJson, FromJson)
 
@@ -342,20 +342,20 @@ pub extend ContractPreviewRow with FromJson::{from_json}
 /// list-item, or table. Table cells preserve source text and line breaks.
 pub(all) struct ContractPreviewBlock {
   kind : String
-  level : Int
+  level : Int32
   ordered : Bool
   runs : Array[ContractPreviewRun]
   rows : Array[ContractPreviewRow]
   alignment : String?
-  spacing_before_twips : Int?
-  spacing_after_twips : Int?
-  line_twips : Int?
+  spacing_before_twips : Int32?
+  spacing_after_twips : Int32?
+  line_twips : Int32?
   line_rule : String?
-  left_indent_twips : Int?
-  right_indent_twips : Int?
-  first_line_twips : Int?
-  hanging_twips : Int?
-  grid_widths_twips : Array[Int]
+  left_indent_twips : Int32?
+  right_indent_twips : Int32?
+  first_line_twips : Int32?
+  hanging_twips : Int32?
+  grid_widths_twips : Array[Int32]
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -382,12 +382,12 @@ pub(all) struct ContractPreviewDocument {
   blocks : Array[ContractPreviewBlock]
   pages : Array[Array[ContractPreviewBlock]]
   diagnostic_codes : Array[String]
-  page_width_twips : Int?
-  page_height_twips : Int?
-  margin_top_twips : Int?
-  margin_right_twips : Int?
-  margin_bottom_twips : Int?
-  margin_left_twips : Int?
+  page_width_twips : Int32?
+  page_height_twips : Int32?
+  margin_top_twips : Int32?
+  margin_right_twips : Int32?
+  margin_bottom_twips : Int32?
+  margin_left_twips : Int32?
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -474,13 +474,13 @@ pub extend ContractFieldAssignment with FromJson::{from_json}
 
 ///|
 pub(all) struct ContractCompletionSummary {
-  customer_required : Int
-  customer_completed : Int
-  operator_required : Int
-  operator_completed : Int
-  system_required : Int
-  system_completed : Int
-  offline_fields : Int
+  customer_required : Int32
+  customer_completed : Int32
+  operator_required : Int32
+  operator_completed : Int32
+  system_required : Int32
+  system_completed : Int32
+  offline_fields : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -526,7 +526,7 @@ pub(all) struct ContractGeneratedArtifact {
   media_type : String
   sha256 : String
   byte_count : Int64
-  page_count : Int
+  page_count : Int32
   render_evidence_sha256 : String
   generated_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
@@ -963,10 +963,10 @@ pub extend ContractNumber with FromJson::{from_json}
 /// A deterministic read model for the operator business dashboard.
 pub(all) struct ContractGovernanceDashboard {
   tenant_ref : String
-  effective_packets : Int
-  pending_approvals : Int
-  overdue_obligations : Int
-  open_closure_proposals : Int
+  effective_packets : Int32
+  pending_approvals : Int32
+  overdue_obligations : Int32
+  open_closure_proposals : Int32
   total_amount_minor_units : Int64
   next_expiry_unix_ms : Int64?
   generated_unix_ms : Int64

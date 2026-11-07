@@ -1,19 +1,19 @@
 ///|
 priv struct GuideCount {
   code : String
-  count : Int
+  count : Int32
 } derive(ToJson)
 
 ///|
 priv struct GuideAlertAggregate {
-  total : Int
-  critical : Int
+  total : Int32
+  critical : Int32
   by_code : Array[GuideCount]
 } derive(ToJson)
 
 ///|
 priv struct GuideResourceAggregate {
-  total : Int
+  total : Int32
   truncated : Bool
   by_state : Array[GuideCount]
 } derive(ToJson)
@@ -26,7 +26,7 @@ priv struct GuideControllerAggregate {
   alerts : GuideAlertAggregate
   nodes : GuideResourceAggregate
   exclusive_leases : GuideResourceAggregate
-  reconciliation_pending_actions : Int
+  reconciliation_pending_actions : Int32
 } derive(ToJson)
 
 ///|
@@ -34,7 +34,7 @@ extend GuideControllerAggregate with ToJson::{to_json}
 
 ///|
 fn bounded_counts(values : Array[String]) -> Array[GuideCount] {
-  let counts : Map[String, Int] = Map([])
+  let counts : Map[String, Int32] = Map([])
   for value in values[:values.length().min(10000)] {
     let safe = if @contracts.valid_identifier(value, maximum_length=80) {
       value

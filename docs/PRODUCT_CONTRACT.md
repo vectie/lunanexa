@@ -1,5 +1,54 @@
 # LunaNexa product contract
 
+## Unified model services
+
+GLM, Qwen and other model families use the same deployment resource authority.
+Model family affects catalog grouping and approved runtime profile data; it does
+not select an authorization, ownership or conflict-checking path.
+
+`GET /v1/model-services` lists operator service instances. The tenant-scoped
+`GET /v1/portal/self/model-services` lists company-shared runtime instances with only customer
+metadata: service ID, model alias, runtime state, readiness, context limit and
+available actions. Both expose `POST /{service_id}:start` and `:stop` for adopted
+runtime bindings. Company mutations require an active organization administrator;
+operator permission does not override another company's resource allocation.
+Signed assignment deployments retain their operation/retry/stop API and pass
+through the same resource admission before publication.
+Personal delivery replicas retain their existing project and lease visibility;
+they are not exposed through the company-shared runtime list.
+
+Runtime execution adapters describe Kubernetes deployments, host-configured
+process groups or signed node assignments. A service has one durable owner and
+binding. Adoption only records existing identity; it never recreates a container,
+scales a deployment or starts a process. Pending and unknown outcomes retain
+claims. Confirmed stop releases runtime occupancy while preserving company
+ownership, model files, personal files, API aliases and credentials. Older
+control URLs delegate to this authority while cached clients transition.
+
+See [the deployment migration and acceptance plan](UNIFIED_MODEL_SERVICES.md).
+
+## Operator access onboarding
+
+An operator can select an active, registered enterprise account and an approved
+organization, review the Developer access scope and duration, and submit one
+approval. `GET /v1/onboarding/access-packages/options` is operator-only and lists
+approved organizations with an unambiguous tenant mapping. The existing package
+POST also accepts `account_id`, `organization_id`, `lifetime_days` and an optional
+`lifetime_minutes` (60 with zero days). Identity, email and tenant come from
+authoritative records; client overrides are ignored. Raw provider subjects and
+identity digests are never returned. The existing manual verified-identity form
+remains available for new personnel.
+
+The approval reuses the durable onboarding journal and existing contract, model,
+workspace and role checks. When all enablement gates pass it enables access in the
+same operation; otherwise it returns the prepared state and remaining action.
+Retries reuse the prior authorization and expiry. Rebinding an existing operation
+to another organization or extending its duration requires explicit recovery,
+not another identical approval. Inactive accounts and unapproved organizations
+cannot use this registered-account path. Machine lease approval still requires
+an explicit operator decision and current request generation; the UI selects an
+enrolled machine instead of requiring a typed node ID.
+
 ## Exclusive delivery revision — 2026-09-23
 
 [`EXCLUSIVE_NODE_DELIVERY.md`](EXCLUSIVE_NODE_DELIVERY.md) supersedes the legacy
@@ -75,6 +124,49 @@ automatic trial creation at registration. QR possession, query parameters,
 browser headers and a claimed SSID are never admission evidence.
 
 ## 1. Purpose
+
+### Event trial mode
+
+Operators can save and open a separately bounded event registration policy in
+Users & access. An event fixes its end time, participant/request caps, approved
+text model and one to four selected nodes; it never grants machine or operator authority.
+Opening requires observed ready replicas, strict routing and workspace
+enforcement. Existing company and Wi-Fi entitlements are not converted. See
+`docs/EVENT_TRIAL.md` for the registration, expiry and routing contract.
+
+The event UI names input budgets in canonical UTF-8 JSON **bytes**, not model
+tokens. `max_input_bytes` defaults to 8192 for existing events; operators can
+set it up to 65536. Input and output ceiling updates also reconcile existing
+active trials without changing their expiry, usage or concurrency. Budget
+refusals use HTTP 400, not an authentication/permission status. The closed model benchmark selects 32768
+for its long-prefix fixtures. This does not alter the model context window or
+introduce a concurrency cap.
+
+On the adopted four-model pool, `runtime_prefix_cache: true` (or
+`x-lunanexa-prefix-cache: tenant`) explicitly permits transient, tenant-isolated
+GPU compute-prefix reuse. Unmarked requests receive request-specific cache
+salts. This is separate from response caching, raw prompt retention and
+training reuse, which remain disabled. The UI's optional cache-affinity router
+stores bounded tenant/model/prefix digests and falls back to least-load routing;
+predicted affinity is not proof of an actual runtime cache hit.
+
+The managed pool's configured authority remains the original four adopted
+services. `/mana/` can persist a participating subset and display names. Scope
+application removes excluded nodes from request routing before stopping only
+their adopted model Deployments; active streams must finish before a stop.
+Weights, node agents and unrelated workloads are not deleted or stopped.
+Preparation, tuning, model switching, rollback and UI benchmarks operate only
+on participating nodes. Benchmark exports record the exact node IDs, and a
+different or unknown node set is not a same-capacity performance comparison.
+
+The fixed-quality UI profile uses 64 synthetic cases repeated three times at
+32-user concurrency. Prompt bytes, output budget, temperature zero and top-p
+one stay identical across ordinary/MTP arms; fixed input is not a promise of
+deterministic output. A SHA-256 covers the requests and expected answers, and
+exports record quality-request node coverage. This profile requires explicit
+prefix-cache off, retains basic KV caching, and compares each case's failure
+frequency rather than treating an unchanged total score as equivalence. It
+does not automatically promote a decoding mode or claim full business quality.
 
 Human-facing operator and customer timestamps and alert calendar grouping use
 Asia/Shanghai (UTC+8). Unix timestamps in storage and API contracts remain
@@ -461,3 +553,19 @@ The first usable release must demonstrate through the operator UI and APIs:
 7. restart the controller and reconcile durable desired state;
 8. prove that public responses and node assignments contain no forbidden
    MoonSuite identifiers or internal secrets.
+
+### Organization-scoped hosted applications
+
+A deployment-owned client catalog entry may declare `allowed_organization_ids`.
+An omitted field preserves existing availability; an empty list publishes to
+no organization. The controller filters catalog responses and rejects handoff
+issue/redemption outside that exact organization list. This does not grant a
+membership, project, lease or model permission. Hosted applications must also
+enforce current identity and organization membership on every data operation.
+Application code and documents remain on business hosts, outside managed GPU nodes.
+Hosted `/user/business/` application launches on the portal's hostname retain
+the current HTTPS ingress origin (443 or 8443), so a signed-in portal session
+continues into the application. Both HTTPS ingress ports share the same
+audience session cookie; existing 8443 cookies are migrated on bootstrap, and
+logout clears both forms. External client origins remain unchanged, and
+operator/enterprise audiences and organization membership remain separate.

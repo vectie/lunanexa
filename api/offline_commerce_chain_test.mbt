@@ -679,7 +679,7 @@ async test "offline commerce chain walks order evidence entitlement transfer and
         "order_id": order_id,
         "artifact_id": entry.0,
         "kind": entry.1.to_json(),
-        "revision": (1 : Int).to_json(),
+        "revision": (1 : Int32).to_json(),
         "allowed_media_types": (["application/pdf"] : Array[String]).to_json(),
         "maximum_byte_count": 1000000L.to_json(),
         "expires_unix_ms": (now + 900000L).to_json(),

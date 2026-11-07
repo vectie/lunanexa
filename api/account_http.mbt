@@ -4,6 +4,7 @@ fn account_path(path : String) -> Bool {
   path == "/v1/auth/register" ||
   path == "/v1/auth/self" ||
   path == "/v1/auth/trial" ||
+  path == "/v1/auth/event-trial:redeem" ||
   path == "/v1/auth/wifi-trial:redeem" ||
   path == "/v1/auth/sessions" ||
   path == "/v1/auth/sessions:revoke-all" ||
@@ -106,7 +107,7 @@ fn valid_account_roles(roles : Array[@account.AccountRole]) -> Bool {
 }
 
 ///|
-fn safe_identity_value(value : String, maximum : Int) -> Bool {
+fn safe_identity_value(value : String, maximum : Int32) -> Bool {
   value.trim() != "" &&
   value.length() <= maximum &&
   value.all(character => {
@@ -321,6 +322,8 @@ async fn ApiService::ensure_open_trial(
   lifetime_ms : Int64,
   maximum_requests : Int64,
   allowed_models : Array[String],
+  event? : @event_trial.Policy,
+  operator_enrollment~ : Bool = false,
 ) -> @account.TrialEntitlement? {
   if lifetime_ms == 0L {
     return None
@@ -330,7 +333,31 @@ async fn ApiService::ensure_open_trial(
     self.workspace_directory is Some(directory) else {
     raise Failure::Failure("trial authorities are unavailable")
   }
-  let fingerprint = account.account_id["account-".length():].to_owned()
+  let account_fingerprint = account.account_id["account-".length():].to_owned()
+  let fingerprint = match event {
+    Some(policy) => {
+      let existing = accounts.snapshot().trials
+        .unwrap_or([])
+        .iter()
+        .find_first(t => {
+          t.account_id == account.account_id &&
+          t.event_id == Some(policy.event_id)
+        })
+      match existing {
+        Some(t) => t.trial_id["trial-".length():].to_owned()
+        None =>
+          if accounts.trial_for_account(account.account_id) is None {
+            account_fingerprint
+          } else {
+            @account.identity_subject_digest(
+              account.account_id,
+              policy.event_id,
+            )[7:39].to_owned()
+          }
+      }
+    }
+    None => account_fingerprint
+  }
   let trial = accounts.ensure_trial(
     {
       trial_id: "trial-\{fingerprint}",
@@ -343,8 +370,22 @@ async fn ApiService::ensure_open_trial(
       expires_unix_ms: now + lifetime_ms,
     },
     now,
+    event_id?=event.map(e => e.event_id),
+    operator_enrollment~,
   )
   let membership_id = "trial-membership-\{fingerprint}"
+  // A later operator invitation gets its own tenant and grant. Retire only
+  // this account's older trial membership, leaving company access untouched.
+  if operator_enrollment {
+    for previous in portal.snapshot().memberships {
+      if previous.subject_ref == account.subject_ref &&
+        previous.active &&
+        previous.membership_id.has_prefix("trial-membership-") &&
+        previous.membership_id != membership_id {
+        ignore(portal.revoke_membership(previous.membership_id))
+      }
+    }
+  }
   match
     portal.snapshot().memberships
     .iter()
@@ -370,7 +411,7 @@ async fn ApiService::ensure_open_trial(
         }),
       )
   }
-  let user_id = "trial-user-\{fingerprint}"
+  let user_id = "trial-user-\{account_fingerprint}"
   let grant_id = "trial-grant-\{fingerprint}"
   let lease_id = "trial-lease-\{fingerprint}"
   let workspace = directory.snapshot(now)
@@ -460,9 +501,21 @@ async fn ApiService::ensure_open_trial(
                 {
                   capability: TextGenerate,
                   max_concurrent_requests: 1,
-                  max_requests_per_hour: 20,
-                  max_input_units_per_request: 16384,
-                  max_output_units_per_request: 2048,
+                  max_requests_per_hour: if event is Some(e) {
+                    e.maximum_requests.to_int()
+                  } else {
+                    20
+                  },
+                  max_input_units_per_request: if event is Some(e) {
+                    e.input_budget()
+                  } else {
+                    16384
+                  },
+                  max_output_units_per_request: if event is Some(e) {
+                    e.output_budget()
+                  } else {
+                    2048
+                  },
                 },
               ],
             },
@@ -517,6 +570,14 @@ async fn ApiService::ensure_open_trial(
       })
     }
     self.persist_commercial_state()
+  }
+  if event is Some(_) && self.scheduler is Some(scheduler) {
+    scheduler.set_quota({
+      tenant_ref: trial.tenant_ref,
+      max_inflight: 1,
+      max_accelerator_ms: trial.expires_unix_ms - trial.starts_unix_ms,
+      window_ms: trial.expires_unix_ms - trial.starts_unix_ms,
+    })
   }
   Some(trial)
 }
@@ -594,7 +655,7 @@ async fn ApiService::handle_accounts(
           value => value
         }
         let trial = try
-          self.ensure_open_trial(
+          self.ensure_registration_trial(
             registered.account,
             now,
             self.open_trial_lifetime_ms,
@@ -764,6 +825,37 @@ async fn ApiService::handle_accounts(
       )
     }
     match (verb, path) {
+      (Post, "/v1/auth/event-trial:redeem") => {
+        let now = @async.now()
+        let trial = self.ensure_registration_trial(
+          authorization.account,
+          now,
+          0L,
+          0L,
+          [],
+        ) catch {
+          _ =>
+            return api_error(
+              409, "EventTrialUnavailable", "event registration is closed, full, not ready, or this account already has different access",
+              true,
+            )
+        }
+        return match trial {
+          Some(value) if value.event_id is Some(_) &&
+            value.revoked_unix_ms is None &&
+            now < value.expires_unix_ms => json_reply(200, value.to_json())
+          Some(_) =>
+            api_error(
+              409, "EventTrialUnavailable", "existing access cannot be replaced or extended by event redemption",
+              false,
+            )
+          None =>
+            api_error(
+              409, "EventTrialUnavailable", "no event is accepting registrations",
+              false,
+            )
+        }
+      }
       (Post, "/v1/auth/wifi-trial:redeem") => {
         if self.wifi_trial_maximum_requests == 0L {
           return api_error(
@@ -779,7 +871,8 @@ async fn ApiService::handle_accounts(
         }
         match accounts.trial_for_account(authorization.account.account_id) {
           Some(existing) => {
-            if existing.expires_unix_ms - existing.starts_unix_ms != 3600000L {
+            if existing.event_id is Some(_) ||
+              existing.expires_unix_ms - existing.starts_unix_ms != 3600000L {
               return api_error(
                 409, "TrialAlreadyUsed", "this account already has a different trial",
                 false,
@@ -821,7 +914,18 @@ async fn ApiService::handle_accounts(
       }
       (Get, "/v1/auth/trial") => {
         let trial = accounts.trial_for_account(authorization.account.account_id)
-        return json_reply(200, trial.to_json())
+        let projection = trial.to_json()
+        let projection = if trial is Some(value) {
+          let event = accounts.event_for_tenant(value.tenant_ref)
+          trial_budget_projection(
+            projection,
+            event.map_or(8192, e => e.input_budget()),
+            event.map_or(2048, e => e.output_budget()),
+          )
+        } else {
+          projection
+        }
+        return json_reply(200, projection)
       }
       (Get, "/v1/auth/self") =>
         return json_reply(200, authorization.account.to_json())
@@ -874,6 +978,20 @@ async fn ApiService::handle_accounts(
     )
   }
   match (verb, path) {
+    (Get, "/v1/accounts/event-trials") =>
+      json_reply(200, Json(self.event_trial_views(@async.now())))
+    (Post, "/v1/accounts/event-trials") =>
+      self.save_event_trial(operator_id, body, @async.now())
+    (Post, _) if path.has_prefix("/v1/accounts/event-trials/") &&
+      path.has_suffix("/participants") => {
+      guard path_identifier(path, "/v1/accounts/event-trials/", "/participants")
+        is Some(event_id) else {
+        return api_error(
+          400, "InvalidRequest", "invalid event identifier", false,
+        )
+      }
+      self.enroll_event_participant(operator_id, event_id, body, @async.now())
+    }
     (Get, "/v1/accounts/trial-summary") =>
       json_reply(200, self.trial_summary(@async.now()))
     (Get, "/v1/account-invitations") =>
@@ -1061,4 +1179,22 @@ async fn ApiService::handle_accounts(
     }
     _ => api_error(404, "NotFound", "route was not found", false)
   }
+}
+
+///|
+// Keep the deployed optional-value wire shape while adding current policy
+// budgets. Supported toolchains encode Some as either an object or [object].
+fn trial_budget_projection(
+  projection : Json,
+  input_bytes : Int32,
+  output_tokens : Int32,
+) -> Json {
+  match projection {
+    Object(fields) | Array([Object(fields)]) => {
+      fields["max_input_bytes"] = Json(input_bytes)
+      fields["max_output_tokens"] = Json(output_tokens)
+    }
+    _ => ()
+  }
+  projection
 }

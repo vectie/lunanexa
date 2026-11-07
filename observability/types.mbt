@@ -10,7 +10,7 @@ pub let snapshot_schema_version : String = "lunanexa.observability.snapshot.v1"
 
 ///|
 /// must not turn the controller into an unbounded metrics cardinality sink.
-pub let maximum_operational_counter_series : Int = 4096
+pub let maximum_operational_counter_series : Int32 = 4096
 
 ///|
 pub(all) suberror ObservabilityError {
@@ -88,7 +88,7 @@ pub(all) struct OperationalEvent {
   tenant_hash : String?
   target_type : String
   outcome : String
-  status_code : Int
+  status_code : Int32
   duration_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
 
@@ -211,8 +211,8 @@ pub(all) struct ObservabilityReadiness {
   external_collector_configured : Bool
   external_export_verified : Bool
   last_external_export_unix_ms : Int64?
-  event_history_count : Int
-  event_history_limit : Int
+  event_history_count : Int32
+  event_history_limit : Int32
   oldest_event_unix_ms : Int64?
   newest_event_unix_ms : Int64?
 } derive(Debug, Eq, ToJson, FromJson)

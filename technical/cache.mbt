@@ -27,7 +27,7 @@ pub(all) struct CacheEntryTelemetry {
   lifecycle : CacheLifecycleState
   logical_bytes : Int64
   transferred_bytes : Int64
-  assignment_references : Int
+  assignment_references : Int32
   signature_verified : Bool
   last_access_unix_ms : Int64
   observed_unix_ms : Int64

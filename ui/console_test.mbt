@@ -3,6 +3,7 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
   {
     locale: English,
     route,
+    navigation_open: false,
     overview: {
       active_nodes: 3,
       total_nodes: 4,
@@ -55,6 +56,9 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
         desired: Ready,
         observed: Ready,
         placement_reason: "warm model and headroom",
+        model_digest: "",
+        node_id: "",
+        resource_owner: "",
       },
     ],
     catalog_templates: [],
@@ -127,6 +131,8 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
       },
     ],
     trial_summary: None,
+    event_trial: @ui.empty_event_trial_panel(),
+    model_pool: @ui.empty_model_pool_panel(),
     announcement_draft: @ui.empty_announcement_draft(),
     accounts: [
       {
@@ -184,6 +190,8 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
       lifetime_days: 30,
       identity_verified: false,
     },
+    registered_access_account: "",
+    access_organizations: [],
     access_packages: [],
     pending_organizations: [],
     users: [
@@ -350,6 +358,123 @@ test "all operator routes render from the shared typed state" {
     assert_true(html.contains("Confirm destructive operation"))
     assert_true(html.contains("aria-label=\"Primary\""))
   }
+}
+
+///|
+test "four-machine UI separates cached weights from live runtime readiness" {
+  let view : @ui.ModelPoolView = {
+    tuning: @ui.default_model_tuning(),
+    benchmark: None,
+    baseline_benchmark: None,
+    speculative_tokens: 0,
+    adopted: true,
+    active: false,
+    generation: 1L,
+    model: "qwen-a3b",
+    models: ["qwen-a3b"],
+    replicas: [
+      for i in 0..<4 => {
+        {
+          node_id: "node-\{i}",
+          deployment: "model-\{i}",
+          can_prepare: true,
+          cache_ready: true,
+          switched: true,
+          ready: i < 3,
+          progress: "",
+          speculative_tokens: 0,
+          configuration_ready: i < 3,
+          selected: None,
+          display_name: None,
+          paused: None,
+        }
+      }
+    ],
+  }
+  let html = @ui.render({
+    ..console_state(Deployments),
+    model_pool: {
+      view: Some(view),
+      model: "qwen-a3b",
+      speculative_tokens: "",
+      tuning_draft: {},
+    },
+  })
+  assert_true(html.contains("共享模型池"))
+  assert_true(html.contains("权重已校验"))
+  assert_true(html.contains("模型启动中"))
+  assert_true(html.contains("恢复原模型"))
+}
+
+///|
+test "four-machine UI decodes progress and benchmark wire payload" {
+  let view : @ui.ModelPoolView = @ui.decode_model_pool_view({
+    "adopted": true,
+    "active": false,
+    "generation": Json(1L),
+    "model": "qwen-a3b",
+    "models": ["qwen-a3b"],
+    "replicas": [
+      {
+        "node_id": "node-1",
+        "deployment": "model-1",
+        "can_prepare": true,
+        "cache_ready": true,
+        "switched": true,
+        "ready": false,
+        "progress": "校验完成 · 100%",
+      },
+    ],
+    "benchmark": [
+      {
+        "namespace": "loadtest-test",
+        "run_id": "",
+        "model": "",
+        "status": "idle",
+        "phase": "尚未测试",
+        "prepared_users": 0,
+        "cleaned_users": 0,
+        "samples": [
+          {
+            "user": 1,
+            "concurrency": 1,
+            "round": 1,
+            "status": 200,
+            "output_tokens": 512,
+            "ttft_ms": Json(300L),
+            "elapsed_ms": Json(10300L),
+            "decode_tokens_per_second": 51.1,
+            "end_to_end_tokens_per_second": 49.7,
+            "valid": true,
+            "response_id": "synthetic",
+            "receipt": "workload:test:receipt",
+            "error": "",
+          },
+        ],
+        "node_counts": {},
+        "wall_ms": Json(0L),
+        "error": "",
+      },
+    ],
+  })
+  assert_eq(view.replicas[0].progress, "校验完成 · 100%")
+  assert_true(view.benchmark is Some({ status: "idle", .. }))
+  assert_eq(view.benchmark.unwrap().samples[0].decode_tokens_per_second, 51.1)
+  assert_true(view.benchmark.unwrap().warmup_samples.is_empty())
+  let state = {
+    ..@ui.demo_state(),
+    route: Deployments,
+    model_pool: {
+      view: Some(view),
+      model: "",
+      speculative_tokens: "",
+      tuning_draft: {},
+    },
+  }
+  let rendered = @ui.render(state)
+  assert_true(rendered.contains("端到端 ≥30：1/1"))
+  assert_true(rendered.contains("仅解码 ≥30：1/1"))
+  assert_true(rendered.contains("旧报告未单独记录"))
 }
 
 ///|
@@ -1010,6 +1135,9 @@ test "generated labels relocalize while raw placement rationale stays untouched"
       {
         ..english.deployments[0],
         placement_reason: "placement/server-note-原样",
+        model_digest: "",
+        node_id: "",
+        resource_owner: "",
       },
     ],
     users: [{ ..english.users[1], last_active: "Never", }],
@@ -1308,7 +1436,7 @@ test "empty and error states remain explicit" {
     confirmation: None,
   })
   assert_true(deployments.contains("Open one-click deployment"))
-  assert_true(deployments.contains("exactly one eligible machine"))
+  assert_true(deployments.contains("No managed deployments"))
 }
 
 ///|
@@ -1353,9 +1481,7 @@ test "platform blockers remain visible without disabling catalog navigation" {
   assert_true(blocked.contains("Lease expiry controller"))
   assert_true(blocked.contains("CommercialProviderAdapterUnavailable"))
   assert_true(blocked.contains("separate from catalog access"))
-  assert_true(
-    blocked.contains("Choose a template, then review the deployment plan."),
-  )
+  assert_true(blocked.contains("<summary>Deployment checks</summary>"))
   assert_false(blocked.contains("Ready for one-click deployment"))
   let mut action = ""
   for index, segment in blocked.split("<button").to_array() {
@@ -1629,7 +1755,7 @@ test "cordoned node offers restore scheduling instead of duplicate cordon" {
 ///|
 test "models route exposes ModelScope browse and import workflow" {
   let html = @ui.render(console_state(Models))
-  assert_true(html.contains("Find and import a model"))
+  assert_true(html.contains("<summary>Import model</summary>"))
   assert_true(html.contains("model-source-query"))
   assert_true(html.contains("Search ModelScope"))
   assert_false(html.contains("Candidate registration manifest (JSON)"))
@@ -1646,15 +1772,10 @@ test "model source search stays disabled until operator authentication succeeds"
     operator_authenticated: true,
   })
   assert_true(
-    disconnected.contains(
-      "Sign in with operator authority to browse and import models.",
-    ),
+    button_tag_for(disconnected, ">Search</button>").contains("disabled"),
   )
-  assert_true(disconnected.contains("disabled"))
-  assert_true(
-    connected.contains(
-      "Downloads are durable; checksum verification is not signature approval.",
-    ),
+  assert_false(
+    button_tag_for(connected, ">Search</button>").contains("disabled"),
   )
 }
 
@@ -1703,6 +1824,15 @@ test "model import recovery and adoption preserve every safety gate" {
   })
   assert_true(html.contains("upstream-rejected"))
   assert_true(html.contains(">Retry</button>"))
+  assert_true(html.contains("64 MiB / 2.0 GiB"))
+  let verifying_html = @ui.render({
+    ..console_state(Models),
+    operator_authenticated: true,
+    model_source_results: [candidate],
+    model_imports: [{ ..failed, state: Verifying, error_code: "", }],
+  })
+  assert_true(verifying_html.contains("Verifying file integrity"))
+  assert_false(verifying_html.contains(">Retry</button>"))
   let verified_managed = {
     ..failed,
     state: Verified,
@@ -1808,7 +1938,7 @@ test "model import recovery and adoption preserve every safety gate" {
 test "empty model registry points to governed ModelScope onboarding" {
   let html = @ui.render({ ..console_state(Models), models: [], })
   assert_true(html.contains("No models registered yet"))
-  assert_true(html.contains("Search ModelScope above and start a download"))
+  assert_true(html.contains("Open Import model to search ModelScope"))
 }
 
 ///|
@@ -2302,6 +2432,19 @@ test "the template form is offered only to an authenticated operator" {
 test "the template form mirrors the planner's cross-field rules" {
   let draft = registered_template_draft()
   assert_true(@ui.template_draft_valid(draft))
+  let valid_form = @ui.render({
+    ..@ui.demo_state(),
+    route: Catalog,
+    template_draft: draft,
+  })
+  assert_true(valid_form.contains("class=\"template-settings\""))
+  assert_false(valid_form.contains("class=\"template-settings\" open"))
+  let invalid_form = @ui.render({
+    ..@ui.demo_state(),
+    route: Catalog,
+    template_draft: { ..draft, architecture: "nvidia-h100", },
+  })
+  assert_true(invalid_form.contains("class=\"template-settings\" open"))
   // The template's architecture must be one its runtime declares.
   assert_false(
     @ui.template_draft_valid({ ..draft, architecture: "nvidia-h100", }),
@@ -2388,4 +2531,23 @@ test "the template form mirrors the planner's cross-field rules" {
   )
   assert_false(@ui.template_draft_valid({ ..draft, display_name: "", }))
   assert_false(@ui.template_draft_valid({ ..draft, template_id: "", }))
+}
+
+///|
+test "approved legacy licence casing does not offer acceptance as the next step" {
+  let model = {
+    ..candidate_model_row(),
+    state: @contracts.Approved,
+    license_status: "Accepted",
+    alias_name: "text.default",
+  }
+  let html = @ui.render({ ..console_state(Models), models: [model], })
+  assert_true(
+    button_tag_for(html, "Accept licence…").contains(
+      "class=\"secondary-button\"",
+    ),
+  )
+  assert_false(
+    button_tag_for(html, "Accept licence…").contains("primary-button"),
+  )
 }

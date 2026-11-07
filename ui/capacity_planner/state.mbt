@@ -36,8 +36,8 @@ pub extend Draft with Eq::{not_equal, equal}
 
 ///|
 pub(all) struct State {
-  revision : Int
-  refresh_sequence : Int
+  revision : Int32
+  refresh_sequence : Int32
   refreshing : Bool
   reading_file : Bool
   recorded_runs : Array[@benchmark.BenchmarkRun]
@@ -64,9 +64,9 @@ pub extend State with Eq::{not_equal, equal}
 ///|
 pub(all) enum Message {
   RefreshRecorded
-  RecordedLoaded(Int, Result[ConsoleTelemetrySnapshot, String])
+  RecordedLoaded(Int32, Result[ConsoleTelemetrySnapshot, String])
   ReadFile(Bool)
-  FileRead(Int, Bool, Result[String, String])
+  FileRead(Int32, Bool, Result[String, String])
   SelectRecorded(String)
   EditMetadata(MetadataField, String)
   AddRecorded
@@ -83,17 +83,17 @@ pub(all) enum Message {
   ExploreRun(String)
   ExploreFailures(Bool)
   ExploreOrder(@planning.SampleOrder)
-  ExplorePage(Int)
+  ExplorePage(Int32)
   ExportSamples
   ChangeSelectRun(String)
   ChangeCaptureBaseline
   ChangeCompare
   ChangeClear
   ReadCsvFile
-  CsvFileRead(Int, Result[String, String])
+  CsvFileRead(Int32, Result[String, String])
   CsvTextChanged(String)
   CsvPreview
-  CsvMap(Int, String)
+  CsvMap(Int32, String)
   EditCsv(CsvField, String)
   EditCsvMetadata(MetadataField, String)
   AddCsv
@@ -143,7 +143,7 @@ pub fn initial() -> State {
 }
 
 ///|
-fn parse_number(value : String, label : String) -> Int raise {
+fn parse_number(value : String, label : String) -> Int32 raise {
   @string.parse_int(value) catch {
     _ => fail("\{label}: enter a whole number")
   }

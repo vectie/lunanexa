@@ -677,7 +677,7 @@ pub(all) struct DocumentArtifact {
   order_id : String
   organization_id : String
   kind : DocumentArtifactKind
-  revision : Int
+  revision : Int32
   template_id : String?
   template_version : String?
   locale : String
@@ -759,7 +759,7 @@ pub(all) struct OfflineWorkClaim {
   work_id : String
   worker_kind : OfflineWorkerKind
   expected_order_generation : Int64
-  attempt : Int
+  attempt : Int32
   claimed_unix_ms : Int64
   retry_after_unix_ms : Int64
   completed_unix_ms : Int64?
@@ -840,7 +840,7 @@ pub extend OfflineAuthorityWorkBatch with FromJson::{from_json}
 pub(all) struct ArtifactGenerationResult {
   /// Actual independently rasterized page count; absent legacy results cannot
   /// complete the contract-document bridge.
-  page_count : Int?
+  page_count : Int32?
   request_id : String
   artifact_id : String
   expected_object_ref : String
@@ -852,7 +852,7 @@ pub(all) struct ArtifactGenerationResult {
   active_content_detected : Bool
   moonleaf_verified : Bool
   render_verified : Bool
-  formula_error_count : Int
+  formula_error_count : Int32
   visual_evidence_sha256 : String
   completed_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
@@ -898,7 +898,7 @@ pub(all) struct EvidenceUploadGrant {
   subject_ref : String
   artifact_id : String
   kind : DocumentArtifactKind
-  revision : Int
+  revision : Int32
   expected_object_ref : String
   allowed_media_types : Array[String]
   maximum_byte_count : Int64
@@ -928,7 +928,7 @@ pub(all) struct OfflineUploadGrantView {
   order_id : String
   artifact_id : String
   kind : DocumentArtifactKind
-  revision : Int
+  revision : Int32
   allowed_media_types : Array[String]
   maximum_byte_count : Int64
   expires_unix_ms : Int64

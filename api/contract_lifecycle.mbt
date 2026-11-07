@@ -343,7 +343,7 @@ pub async fn ApiService::reconcile_expiring_contracts(
 /// reminder loop.
 pub async fn ApiService::run_contract_expiry_reconciler_forever(
   self : ApiService,
-  interval_ms : Int,
+  interval_ms : Int32,
   grace_days : Int64,
 ) -> Unit {
   if interval_ms < 1000 || interval_ms > 86400000 {

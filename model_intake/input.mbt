@@ -234,7 +234,7 @@ pub fn import_registry(text : String) -> Array[@contracts.ModelRecord] raise {
 ///|
 fn positive_integer(
   value : String,
-  record : Int,
+  record : Int32,
   header : String,
 ) -> Int64 raise {
   let value = value.trim()
@@ -275,7 +275,7 @@ pub fn import_csv(text : String, mapping : Mapping) -> Draft raise {
     seen[header] = true
   }
   let columns = names(mapping.columns)
-  let indices : Array[Int] = []
+  let indices : Array[Int32] = []
   for column in columns {
     let mut found = -1
     for index, header in headers {

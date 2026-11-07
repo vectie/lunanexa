@@ -4,6 +4,8 @@ test "company API key lifetime is independent of an expired personal trial" {
   let membership = portal.membership.unwrap()
   let now = portal.machine_access.now_unix_ms
   let trial : @enterprise_ui.TrialEntitlementView = {
+    consumed_requests: None,
+    max_output_tokens: None,
     trial_id: "expired-personal-trial",
     organization_id: "personal-trial-organization",
     tenant_ref: "personal-trial-tenant",

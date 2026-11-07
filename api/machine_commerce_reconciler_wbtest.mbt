@@ -1334,7 +1334,7 @@ async fn machine_webide_fixture(
   service : ApiService,
   root : String,
   now : Int64,
-  video? : Bool = false,
+  video~ : Bool = false,
 ) -> ApiService {
   let contracts = @contractdoc_store.ContractDocumentStore::open(
     root + "/webide-contracts.json",
@@ -1440,6 +1440,7 @@ async fn machine_webide_fixture(
     public_api_base_url: "https://moongate.example.invalid/v1",
     handoff_lifetime_ms: 120000L,
     maximum_requests: 1000L,
+    allowed_organization_ids: None,
   })
 }
 

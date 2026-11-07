@@ -1,5 +1,49 @@
 # LunaNexa phased implementation plan
 
+## Unified model-service migration — 2026-11-07
+
+[Unified model services](UNIFIED_MODEL_SERVICES.md) is implemented and published:
+non-disruptive adoption, one durable service/resource authority, generic runtime
+adapters and both portal projections. Existing GPU specifications/identities,
+keys, aliases, files and records are preserved. Native conflict/restart/privacy
+fixtures and authenticated management-page acceptance pass. Company-member
+browser acceptance remains pending a member session; live GLM inference was not
+tested because its pre-existing stopped state was preserved. The full strict
+native gate remains blocked by existing deprecated-JSON warnings. See HANDOFF.md
+for evidence and limitations; UI labels alone are not acceptance.
+
+## Global product simplification — 2026-11-04
+
+Use the current UI/UX Pro Max guidance and the AGENTS.md principle of fewer
+visible decisions. Preserve existing identity and capability; simplify the
+whole product rather than only the latest application screens.
+
+| Journey | Default experience | Occasional detail |
+| --- | --- | --- |
+| Public visitor | Enter the platform, get API configuration, or contact FDE | Service and pricing conditions |
+| Returning user | Open an authorized application or existing service | New service orders, contracts, usage and messages |
+| Operator | Overview, alerts, nodes, models, deployments and users | Catalog/policies, commerce, diagnostics and audit |
+| Business document | Upload, review, run, download | Model usage; scoped connection renews automatically |
+| Developer | Edit and run an authorized request | Usage and external-client connections |
+| Documentation reader | Search or open the current chapter | Other chapters and technical evidence |
+
+Navigation must retain every destination and expand the active group. Existing
+organization checks, draft/report storage and 443/8443 session sharing remain in
+effect. Do not change inference quality, GPU allocation or concurrency settings.
+Idle business pages must not rebuild the task list or start model connections.
+Track release evidence and browser verification gaps in `../HANDOFF.md`.
+
+## Fixed-quality two-node comparison — 2026-10-23
+
+Implement a UI-started 64-case × 3 quality profile, exact request fingerprint,
+per-case failure-frequency comparison and selected-node coverage. Validate
+ordinary/MTP1 on 176/177 with prefix caching off and basic KV caching retained;
+do not alter concurrency or precision. Only retain MTP1 after no regression is
+observed in this bounded repeated suite. Continue separate TTFT/tail profiling
+and measured fixes, preserving durable accounting before stream completion.
+Local implementation is not production acceptance; deployment and UI-run
+evidence belong in `EVENT_TRIAL_REHEARSAL_20261022.md`.
+
 ## Active exclusive-delivery program — 2026-09-23
 
 The eight stages in [EXCLUSIVE_NODE_DELIVERY.md](EXCLUSIVE_NODE_DELIVERY.md)
@@ -489,6 +533,13 @@ Production gate still required:
 - prepaid usage is recorded as evidence without creating a second payable
   ledger charge.
 
+Event-mode release gate: `docs/EVENT_TRIAL.md` defines the operator draft/open
+journey, fixed-window grants and four-replica dispatch tests. Local protocol
+tests are separate from production acceptance: the supported `/mana/` and
+`/user/` sites must be exercised after deploying both bundles and the controller,
+with authorized four-machine capacity and a real MoonGate/model call. Saving a
+draft is not evidence that the weekend event is live.
+
 The repository includes a LunaNexa-operated Keycloak 26.7.3 public identity
 profile with open registration, verified email, recovery, TOTP, exact PKCE
 clients, external PostgreSQL and restricted ingress. The remaining production
@@ -496,3 +547,10 @@ work is operational rather than hidden product logic: deploy and smoke-test that
 profile or an approved enterprise federation, configure
 identity/payment/signature adapters, publish legally approved immutable terms,
 seed approved SKUs, and complete the physical-cluster release evidence gate.
+
+Organization-scoped client publication acceptance: preserve unscoped legacy
+catalog decoding; test allowed, denied and empty organization lists; verify
+catalog omission, direct handoff denial and stale-code redemption denial.
+For the two imported business applications, publish only to the existing
+能源谷青创街区 organization, verify own-document access and cross-organization
+denial, and complete upload → local GLM inference → document export in `/user/`.

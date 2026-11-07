@@ -1,7 +1,7 @@
 ///|
 /// Render the API server's canonical quantity spelling before journaling the
 /// immutable intent. Otherwise 1000m -> 1 is mistaken for resource tampering.
-fn canonical_cpu_quantity(millis : Int) -> String {
+fn canonical_cpu_quantity(millis : Int32) -> String {
   if millis % 1000 == 0 {
     (millis / 1000).to_string()
   } else {
@@ -12,7 +12,7 @@ fn canonical_cpu_quantity(millis : Int) -> String {
 ///|
 /// Input is positive whole MiB, already bounded by the assignment validator.
 /// Divide before formatting; never multiply into an overflowing Int byte count.
-fn canonical_memory_quantity(mib : Int) -> String {
+fn canonical_memory_quantity(mib : Int32) -> String {
   for unit in [(1073741824, "Pi"), (1048576, "Ti"), (1024, "Gi")] {
     let (scale, suffix) = unit
     if mib % scale == 0 {

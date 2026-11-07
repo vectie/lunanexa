@@ -27,12 +27,12 @@ pub struct PgResult {
 /// How many rows the statement returned. A statement that returns no rows
 /// (an INSERT without RETURNING, for instance) reports zero, so use
 /// `affected_rows` for it.
-pub fn PgResult::row_count(self : PgResult) -> Int {
+pub fn PgResult::row_count(self : PgResult) -> Int32 {
   self.handle.row_count()
 }
 
 ///|
-pub fn PgResult::column_count(self : PgResult) -> Int {
+pub fn PgResult::column_count(self : PgResult) -> Int32 {
   self.handle.column_count()
 }
 
@@ -41,7 +41,7 @@ pub fn PgResult::column_count(self : PgResult) -> Int {
 /// positions. Values are decoded as UTF-8 on the text protocol; binary values
 /// arrive already decoded as bytes by libpq, and lossy decoding is used only
 /// for the byte sequence that is not valid UTF-8.
-pub fn PgResult::value(self : PgResult, row : Int, column : Int) -> String? {
+pub fn PgResult::value(self : PgResult, row : Int32, column : Int32) -> String? {
   self.handle.value(row, column)
 }
 
@@ -54,7 +54,7 @@ pub fn PgResult::affected_rows(self : PgResult) -> Int64 {
 ///|
 /// Collects a single-column result into a string array, which is the shape
 /// most control-plane reads want.
-pub fn PgResult::column(self : PgResult, index? : Int = 0) -> Array[String] {
+pub fn PgResult::column(self : PgResult, index~ : Int32 = 0) -> Array[String] {
   let values : Array[String] = []
   for row in 0..<self.row_count() {
     match self.value(row, index) {

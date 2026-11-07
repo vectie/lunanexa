@@ -7,8 +7,8 @@ pub(all) struct GpuContainerOffering {
   display_name : String
   client_id : String
   image_digest : String
-  cpu_millis : Int
-  memory_mib : Int
+  cpu_millis : Int32
+  memory_mib : Int32
 } derive(FromJson, ToJson)
 
 ///|
@@ -80,7 +80,7 @@ fn latest_delivery_template(
 pub fn ApiService::with_delivery_store(
   self : ApiService,
   delivery_store : @delivery.DeliveryStore,
-  gateway_observation_token? : String = "",
+  gateway_observation_token~ : String = "",
 ) -> ApiService {
   {
     ..self,

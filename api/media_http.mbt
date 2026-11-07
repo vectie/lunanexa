@@ -1188,7 +1188,9 @@ async fn ApiService::serve_media_content(
 }
 
 ///|
-pub async fn ApiService::reconcile_media_jobs(self : ApiService) -> (Int, Int) {
+pub async fn ApiService::reconcile_media_jobs(
+  self : ApiService,
+) -> (Int32, Int32) {
   guard self.media is Some(media) else { return (0, 0) }
   if self.reconciliation_only || !self.store.current_epoch_is_durable() {
     return (0, 1)

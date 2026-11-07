@@ -5,12 +5,13 @@ async test "proxy forwards SSE before upstream completion and keeps JSON framing
   defer upstream.close()
   defer proxy.close()
   let continue_stream = @async.Semaphore(1, initial_value=0)
+  let long_input = "证据".repeat(200000)
   @async.with_timeout(5000, () => {
     @async.with_task_group(group => {
       group.spawn_bg(no_wait=true, allow_failure=true, () => {
         upstream.run_forever(
           (request, reader, connection) => {
-            ignore(reader.read_all())
+            let input = reader.read_all().text()
             if request.path == "/stream" {
               connection.send_response(200, "OK", extra_headers={
                 "Content-Type": "text/event-stream; charset=utf-8",
@@ -21,6 +22,7 @@ async test "proxy forwards SSE before upstream completion and keeps JSON framing
               connection.write_string("data: [DONE]\n\n")
               connection.end_response()
             } else {
+              assert_eq(input, long_input)
               connection.send_response(200, "OK", extra_headers={
                 "Content-Type": "application/json",
               })
@@ -58,7 +60,7 @@ async test "proxy forwards SSE before upstream completion and keeps JSON framing
       // The upstream cannot finish until the public first event is received.
       continue_stream.release()
       assert_eq(client.read_all().text(), "data: [DONE]\n\n")
-      let response = client.get("/json")
+      let response = client.post("/json", long_input)
       assert_eq(response.code, 200)
       assert_eq(header(response.headers, "Content-Length"), Some("13"))
       assert_eq(client.read_all().text(), "{\"answer\":42}")

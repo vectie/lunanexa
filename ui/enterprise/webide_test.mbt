@@ -354,6 +354,7 @@ test "MoonDesk model picker separates trial Qwen from dedicated GLM and blocks o
         state: "Stopped",
         can_stop: false,
         ready: false,
+        service_id: "fixture-model-service",
         context_window_tokens: None,
       }),
     },

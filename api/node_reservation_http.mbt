@@ -5,6 +5,12 @@ priv struct ResourceReservationSubmission {
 } derive(FromJson)
 
 ///|
+priv struct IdleReservationRelease {
+  generation : Int64
+  readiness_confirmation : String
+} derive(FromJson)
+
+///|
 fn resource_reservation_path(path : String) -> Bool {
   path == "/v1/resource-reservations" ||
   path.has_prefix("/v1/resource-reservations/")
@@ -33,6 +39,69 @@ async fn ApiService::handle_resource_reservation(
       200,
       scheduler.snapshot().node_reservations.unwrap_or([]).to_json(),
     )
+  }
+  if verb == Post &&
+    path.has_prefix("/v1/resource-reservations/") &&
+    path.has_suffix(":drain") {
+    let id = path["/v1/resource-reservations/".length():path.length() -
+    ":drain".length()].to_owned()
+    let confirmation : IdleReservationRelease = @json.from_json(
+      @json.parse(body),
+    ) catch {
+      _ =>
+        return api_error(
+          400, "InvalidRequest", "generation and idle-node release confirmation are required",
+          false,
+        )
+    }
+    guard self.reservation_host is Some(_) else {
+      return api_error(
+        503, "ResourceAuthorityUnavailable", "observed host release is unavailable",
+        true,
+      )
+    }
+    self.resource_mutex.acquire()
+    defer self.resource_mutex.release()
+    guard scheduler.node_reservation(id) is Some(reservation) else {
+      return api_error(404, "NotFound", "reservation was not found", false)
+    }
+    if confirmation.generation != reservation.generation ||
+      confirmation.readiness_confirmation != "release-idle-nodes:\{id}" {
+      return api_error(
+        409, "ReservationChanged", "confirm the current reservation generation and idle nodes",
+        false,
+      )
+    }
+    let now = @async.now()
+    let assignments = self.store.assignments()
+    let heartbeats = self.store.heartbeats()
+    if !reservation.services.is_empty() ||
+      reservation.request.node_ids.any(node => {
+        assignments.any(a => a.node_id == node) ||
+        !heartbeats.any(h => {
+          h.node_id == node &&
+          h.state == Active &&
+          h.timestamp_unix_ms <= now &&
+          now - h.timestamp_unix_ms <=
+          self.global_settings.control_timing.heartbeat_timeout_ms &&
+          h.running_deployments.is_empty()
+        })
+      }) {
+      return api_error(
+        409, "ReservationNotIdle", "stop reserved services and wait for fresh empty node observations",
+        true,
+      )
+    }
+    let draining = scheduler.begin_node_release(id, now)
+    self.operator_audit_as(
+      self.operator_identity(headers).unwrap(),
+      "resource-reservation.drain",
+      id,
+      "idle-release-requested",
+    )
+    // Only the reconciler can mark Released, after independent Kubernetes
+    // workload shutdown checks. No account, lease or user volume is revoked.
+    return json_reply(202, Json(draining))
   }
   if verb != Post || path != "/v1/resource-reservations" {
     return api_error(
@@ -149,6 +218,7 @@ async fn ApiService::handle_resource_reservation(
         })
       }) ||
       request.gpu_memory_mib_per_node > request.memory_mib_per_node ||
+      self.node_has_service_allocation(heartbeat.node_id) ||
       assignments.any(assignment => assignment.node_id == heartbeat.node_id) ||
       legacy.any(value => {
         value.intent.node_id == heartbeat.node_id &&

@@ -7,7 +7,7 @@ priv struct RequestResult {
 
 ///|
 priv struct ClientPublicError {
-  status : Int
+  status : Int32
   code : String
   message : String
   retryable : Bool
@@ -55,7 +55,7 @@ priv struct AppModel {
   connecting : Bool
   clock_generation : Int64
   global_policy_generation : Int64
-  global_max_output_units : Int
+  global_max_output_units : Int32
   workbench : @workbench_ui.WorkbenchState
 } derive(Eq)
 
@@ -256,8 +256,17 @@ extern "js" fn request_promise(
   #|   });
   #|   const text = await response.text();
   #|   if (text.length > 1048576) throw new Error("response limit");
-  #|   if (!response.ok) throw new Error("request rejected");
-  #|   return text;
+  #|   if (response.ok) return text;
+  #|   let parsed = {};
+  #|   try { parsed = JSON.parse(text); } catch (_) {}
+  #|   const source = parsed && typeof parsed.error === "object" ? parsed.error : {};
+  #|   const candidate = typeof parsed?.error === "string" ? parsed.error : source?.code;
+  #|   const code = typeof candidate === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(candidate)
+  #|     ? candidate : "RequestRejected";
+  #|   return JSON.stringify({public_error: {
+  #|     status: response.status, code,
+  #|     message: "", retryable: response.status >= 500
+  #|   }});
   #| }
 
 ///|
@@ -312,7 +321,7 @@ async fn request(
   path : String,
   token : String,
   subject_ref : String,
-  body? : String = "",
+  body~ : String = "",
 ) -> String {
   let base = if endpoint.has_suffix("/") {
     endpoint[:-1].to_owned()
@@ -332,7 +341,27 @@ async fn request(
     body,
     session.map(s => s.csrf_token).unwrap_or(""),
   ).wait()
-  value.cast()
+  let text : String = value.cast()
+  validate_bootstrap_reply(text, path)
+  text
+}
+
+///|
+fn validate_bootstrap_reply(text : String, path : String) -> Unit raise {
+  let value = @json.parse(text)
+  if value is { "public_error": _, .. } {
+    let rejected : ClientErrorEnvelope = @json.from_json(value)
+    raise WorkbenchClientError::PublicRejected(
+      rejected.public_error.code,
+      "GET \{path} · HTTP \{rejected.public_error.status}",
+      "",
+      http_error_invalidates_authorization(
+        rejected.public_error.status,
+        rejected.public_error.code,
+      ),
+      rejected.public_error.retryable,
+    )
+  }
 }
 
 ///|
@@ -517,7 +546,7 @@ fn error_invalidates_authorization(code : @contracts.ErrorCode) -> Bool {
 }
 
 ///|
-fn http_error_invalidates_authorization(status : Int, code : String) -> Bool {
+fn http_error_invalidates_authorization(status : Int32, code : String) -> Bool {
   status == 401 ||
   status == 403 ||
   code == "Unauthenticated" ||
@@ -598,6 +627,9 @@ fn public_failure_message(
 fn make_workload(
   state : @workbench_ui.WorkbenchState,
   now_unix_ms : Int64,
+  memory_ceiling_mib~ : Int32 = 8192,
+  runtime_ms~ : Int64 = 30000L,
+  classification~ : @contracts.DataClass = Internal,
 ) -> @contracts.WorkloadEnvelope raise {
   guard state.lease is Some(lease) else { fail("workspace lease missing") }
   guard @workspace.capability_limit(lease, TextGenerate) is Some(limit) else {
@@ -606,7 +638,7 @@ fn make_workload(
   guard @workbench_ui.active_file(state) is Some(file) else {
     fail("browser draft missing")
   }
-  let payload : Json = {
+  let draft_prompt : Json = {
     "instruction": state.instruction,
     "file": {
       "path": file.path,
@@ -614,6 +646,8 @@ fn make_workload(
       "content": file.content,
     },
   }
+  // Runtime adapters accept canonical input/messages, not editor-specific keys.
+  let payload : Json = { "input": draft_prompt.stringify() }
   let input_units = @utf8.encode(payload.stringify()).length()
   if input_units > limit.max_input_units_per_request {
     fail("request exceeds lease limit")
@@ -628,19 +662,19 @@ fn make_workload(
     model_selector: state.model_selector,
     payload,
     data_policy: {
-      classification: Internal,
+      classification,
       retention: Ephemeral,
       allow_cache: false,
       allow_training_reuse: false,
     },
-    deadline_unix_ms: now_unix_ms + 30000L,
+    deadline_unix_ms: now_unix_ms + runtime_ms,
     priority: Interactive,
     latency_class: Realtime,
     resource_ceiling: {
       max_input_units: input_units,
       max_output_units: limit.max_output_units_per_request,
-      max_runtime_ms: 30000L,
-      max_accelerator_memory_mib: 8192,
+      max_runtime_ms: runtime_ms,
+      max_accelerator_memory_mib: memory_ceiling_mib,
     },
     stream: false,
     output_format: "text",
@@ -655,7 +689,22 @@ async fn send_workload(
   subject_ref : String,
   state : @workbench_ui.WorkbenchState,
 ) -> RequestResult {
-  let envelope = make_workload(state, current_unix_ms())
+  let trial = trial_session_mode(endpoint)
+  let memory_ceiling_mib = if trial {
+    let catalog = request(
+      "GET", endpoint, "/v1/portal/self/models", token, subject_ref,
+    )
+    trial_model_memory(catalog, state.model_selector)
+  } else {
+    8192
+  }
+  let envelope = make_workload(
+    state,
+    current_unix_ms(),
+    memory_ceiling_mib~,
+    runtime_ms=if trial { 120000L } else { 30000L },
+    classification=if trial { Confidential } else { Internal },
+  )
   let response_text = workload_request(
     endpoint,
     token,
@@ -690,9 +739,41 @@ async fn send_workload(
         error.retryable,
       )
     None => {
-      let output_text = response.output.map(output => output.stringify())
+      let output_text = response.output.map(normalized_output_text)
       { output_text, receipt: response.audit_receipt, usage: response.usage, }
     }
+  }
+}
+
+///|
+fn normalized_output_text(output : Json) -> String {
+  match output {
+    String(text) => text
+    { "output_text": String(text), .. } => text
+    { "output": Array(items), .. } => {
+      let texts : Array[String] = []
+      for item in items {
+        if item
+          is {
+            "type": "message",
+            "role": "assistant",
+            "content": Array(parts),
+            ..
+          } {
+          for part in parts {
+            if part is { "type": "output_text", "text": String(text), .. } {
+              texts.push(text)
+            }
+          }
+        }
+      }
+      if texts.is_empty() {
+        output.stringify()
+      } else {
+        texts.join("\n")
+      }
+    }
+    _ => output.stringify()
   }
 }
 

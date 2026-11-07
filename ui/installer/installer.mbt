@@ -80,7 +80,7 @@ pub(all) enum InstallerMessage {
   PreviewRequested
   ApplyRequested
   TerminalLine(String)
-  RunFinished(Bool, Int)
+  RunFinished(Bool, Int32)
   RunRejected(String)
   RunOutcomeUnknown
   RecoveryReviewed
@@ -475,8 +475,8 @@ fn field(
   placeholder : String,
   disabled : Bool,
   on_input : @rabbita.Emit[String],
-  secret? : Bool = false,
-  hidden? : Bool = false,
+  secret~ : Bool = false,
+  hidden~ : Bool = false,
 ) -> @rabbita.Html {
   @html.div(
     class=if hidden {
@@ -533,7 +533,7 @@ fn run_tone(state : RunState) -> String {
 ///|
 fn stage_label(
   locale : @i18n.Locale,
-  index : Int,
+  index : Int32,
   fallback : String,
   target : @install_contract.DeploymentTarget,
 ) -> String {

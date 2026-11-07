@@ -207,7 +207,7 @@ fn copy(locale : @i18n.Locale, en : String, zh : String) -> String {
 ///|
 pub fn default_state(
   locale : @i18n.Locale,
-  actor_owner? : @contractdoc.ContractFieldOwner = CustomerMessenger,
+  actor_owner~ : @contractdoc.ContractFieldOwner = CustomerMessenger,
 ) -> ContractDocumentsState {
   {
     locale,
@@ -600,7 +600,7 @@ priv enum ContractStep {
 } derive(Eq)
 
 ///|
-fn step_index(state : @contractdoc.ContractPacketState) -> Int {
+fn step_index(state : @contractdoc.ContractPacketState) -> Int32 {
   match state {
     InformationDraft | ReadyForConfirmation => 0
     InformationConfirmed => 1
@@ -887,7 +887,7 @@ fn preview_font_stack(font : String) -> String {
 /// Scale a source DOCX half-point measurement against MoonLeaf's effective
 /// content box. Container query units resolve against the paper's content box,
 /// not the outer physical page.
-fn half_points_cqw(value : Int, content_width_twips : Int) -> String {
+fn half_points_cqw(value : Int32, content_width_twips : Int32) -> String {
   "\{value.to_double() * 1000.0 / content_width_twips.to_double()}cqw"
 }
 
@@ -897,14 +897,14 @@ fn half_points_cqw(value : Int, content_width_twips : Int) -> String {
 
 ///|
 /// side-by-side preview instead of clipping an unscaled desktop page.
-fn twips_cqw(value : Int, content_width_twips : Int) -> String {
+fn twips_cqw(value : Int32, content_width_twips : Int32) -> String {
   "\{value.to_double() * 100.0 / content_width_twips.to_double()}cqw"
 }
 
 ///|
 fn preview_runs(
   runs : Array[@contractdoc.ContractPreviewRun],
-  content_width_twips : Int,
+  content_width_twips : Int32,
 ) -> @rabbita.Html {
   if runs.is_empty() {
     return @html.span(" ")
@@ -979,14 +979,14 @@ fn preview_runs(
 fn apply_paragraph_layout(
   attrs : @html.Attrs,
   alignment : String?,
-  spacing_before_twips : Int?,
-  spacing_after_twips : Int?,
-  line_twips : Int?,
+  spacing_before_twips : Int32?,
+  spacing_after_twips : Int32?,
+  line_twips : Int32?,
   line_rule : String?,
-  left_indent_twips : Int?,
-  right_indent_twips : Int?,
-  first_line_twips : Int?,
-  content_width_twips : Int,
+  left_indent_twips : Int32?,
+  right_indent_twips : Int32?,
+  first_line_twips : Int32?,
+  content_width_twips : Int32,
 ) -> Unit {
   match alignment {
     Some("center") => ignore(attrs.style("text-align", "center"))
@@ -1036,7 +1036,7 @@ fn apply_paragraph_layout(
 ///|
 fn preview_cell_paragraph(
   paragraph : @contractdoc.ContractPreviewParagraph,
-  content_width_twips : Int,
+  content_width_twips : Int32,
 ) -> @rabbita.Html {
   let attrs = @html.Attrs::build()
   apply_paragraph_layout(
@@ -1059,7 +1059,10 @@ fn preview_cell_paragraph(
 }
 
 ///|
-fn cell_grid_start(row : @contractdoc.ContractPreviewRow, index : Int) -> Int {
+fn cell_grid_start(
+  row : @contractdoc.ContractPreviewRow,
+  index : Int32,
+) -> Int32 {
   let start = Ref(0)
   for cell_index = 0; cell_index < index; cell_index = cell_index + 1 {
     start.val = start.val + row.cells[cell_index].grid_span.max(1)
@@ -1070,7 +1073,7 @@ fn cell_grid_start(row : @contractdoc.ContractPreviewRow, index : Int) -> Int {
 ///|
 fn continuation_at(
   row : @contractdoc.ContractPreviewRow,
-  grid_start : Int,
+  grid_start : Int32,
 ) -> Bool {
   let cursor = Ref(0)
   for cell in row.cells {
@@ -1085,9 +1088,9 @@ fn continuation_at(
 ///|
 fn cell_rowspan(
   rows : Array[@contractdoc.ContractPreviewRow],
-  row_index : Int,
-  cell_index : Int,
-) -> Int {
+  row_index : Int32,
+  cell_index : Int32,
+) -> Int32 {
   if rows[row_index].cells[cell_index].vertical_merge != Some("restart") {
     return 1
   }
@@ -1106,7 +1109,7 @@ fn cell_rowspan(
 ///|
 fn preview_block(
   block : @contractdoc.ContractPreviewBlock,
-  content_width_twips : Int,
+  content_width_twips : Int32,
 ) -> @rabbita.Html {
   let attrs = @html.Attrs::build()
   apply_paragraph_layout(
@@ -1262,7 +1265,7 @@ fn preview_block(
 }
 
 ///|
-fn page_percent(value_twips : Int, page_width_twips : Int) -> String {
+fn page_percent(value_twips : Int32, page_width_twips : Int32) -> String {
   "\{value_twips.to_double() * 100.0 / page_width_twips.to_double()}%"
 }
 
@@ -1511,7 +1514,7 @@ fn role_missing_count(
   form : @contractdoc.ContractFormDefinition,
   values : Array[@contractdoc.ContractFieldValue],
   actor : @contractdoc.ContractFieldOwner,
-) -> Int {
+) -> Int32 {
   let mut missing = 0
   for field_id in form.field_ids {
     match manifest.field(field_id) {

@@ -48,6 +48,7 @@ pub async fn FileWorkspaceDirectory::self_view(Self, String, Int64) -> @workspac
 pub async fn FileWorkspaceDirectory::snapshot(Self, Int64) -> @workspace.WorkspaceDirectorySnapshot
 pub async fn FileWorkspaceDirectory::suspend_user(Self, String, Int64) -> @workspace.WorkspaceUser
 pub async fn FileWorkspaceDirectory::suspend_user_with_prior(Self, String, Int64) -> (@workspace.WorkspaceUser, @workspace.WorkspaceUser)
+pub async fn FileWorkspaceDirectory::sync_policy_output_budget(Self, String, String, Int, Int64, input_bytes? : Int) -> Int
 pub async fn FileWorkspaceDirectory::workload_owned_by(Self, String, String, String, Int64) -> Bool
 pub async fn FileWorkspaceDirectory::workload_owned_by_subject(Self, String, String, Int64) -> Bool
 

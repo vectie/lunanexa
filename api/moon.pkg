@@ -1,4 +1,7 @@
 import {
+  "vectie/lunanexa/benchmark",
+  "vectie/lunanexa/controller/model_pool",
+  "vectie/lunanexa/event_trial",
   "vectie/lunanexa/controller/reservation_host",
   "vectie/lunanexa/access",
   "vectie/lunanexa/account",

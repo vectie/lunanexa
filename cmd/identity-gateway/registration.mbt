@@ -48,7 +48,7 @@ priv struct RegistrationRequest {
 ///|
 /// The most a registration body may occupy. The fields are bounded far below
 /// this; the cap keeps a hostile body from allocating before it is parsed.
-const MaximumRegistrationRequestBytes : Int = 4096
+const MaximumRegistrationRequestBytes : Int32 = 4096
 
 ///|
 /// The provider's client-credentials answer. It carries no ID token, so it
@@ -72,7 +72,7 @@ fn registration_stage_failed(stage : String, detail : String) -> Unit {
 
 ///|
 /// A registration failure the browser is allowed to distinguish.
-fn registration_failure_response(error : RegistrationError) -> (Int, String) {
+fn registration_failure_response(error : RegistrationError) -> (Int32, String) {
   match error {
     EmailTaken => (409, "email-taken")
     PasswordRejected => (400, "password-rejected")
@@ -241,7 +241,7 @@ fn registration_user_body(request : RegistrationRequest) -> Json {
 /// Translate the provider's answer. The provider is the authority on whether an
 /// address is already taken and on whether the password meets the realm policy,
 /// so both are read from its status and never guessed here.
-fn registration_create_failure(status : Int) -> RegistrationError {
+fn registration_create_failure(status : Int32) -> RegistrationError {
   if status == 409 {
     EmailTaken
   } else if status == 400 {
@@ -403,12 +403,13 @@ async fn handle_registration(
       "Vary": "Cookie",
     },
     cookies=[
-      browser_cookie(
-        config.cookie_name_for_host(audience, host),
-        cookie_reference,
-        (session.expires_unix_ms - now) / 1000L,
-        secure=config.browser_secure(),
-      ),
-    ],
+        browser_cookie(
+          config.cookie_name_for_host(audience, host),
+          cookie_reference,
+          (session.expires_unix_ms - now) / 1000L,
+          secure=config.browser_secure(),
+        ),
+      ] +
+      legacy_port_cookie_cleanup(config, audience),
   )
 }

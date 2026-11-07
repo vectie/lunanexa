@@ -1,0 +1,22 @@
+[Unit]
+Description=LunaNexa model runtime lifecycle adapter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cluster-admin
+Group=cluster-admin
+WorkingDirectory=/home/cluster-admin
+EnvironmentFile=/etc/lunanexa/runtime-control.env
+ExecStart=/opt/lunanexa/bin/runtime-control.exe
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

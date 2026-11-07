@@ -86,7 +86,7 @@ pub(all) struct AccessOnboardingRecord {
   intent : AccessOnboardingIntent
   step : AccessOnboardingStep
   status : AccessOnboardingStatus
-  attempts : Int
+  attempts : Int32
   last_error_code : String?
   last_error_message : String?
   created_unix_ms : Int64

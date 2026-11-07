@@ -33,7 +33,7 @@ pub fn S3ArtifactStore::new(
   endpoint_ref : String,
   bucket : String,
   credential_ref : String,
-  require_tls? : Bool = true,
+  require_tls~ : Bool = true,
 ) -> S3ArtifactStore raise StorageError {
   if endpoint_ref == "" || !require_tls {
     raise UntrustedEndpoint
@@ -69,7 +69,7 @@ pub struct S3HttpVerifier {
 pub fn S3HttpVerifier::new(
   endpoint : String,
   credential_value : String,
-  allow_http_loopback? : Bool = false,
+  allow_http_loopback~ : Bool = false,
 ) -> S3HttpVerifier raise StorageError {
   let secure = endpoint.has_prefix("https://")
   let loopback = allow_http_loopback &&
@@ -184,8 +184,8 @@ pub fn OciRuntimeRegistry::runtime_spec(
   version : String,
   architectures : Array[String],
   capabilities : Array[@contracts.Capability],
-  supports_batching? : Bool = false,
-  supports_multi_node? : Bool = false,
+  supports_batching~ : Bool = false,
+  supports_multi_node~ : Bool = false,
 ) -> @contracts.RuntimeSpec raise StorageError {
   if self.registry_ref == "" || !self.require_signature {
     raise UntrustedEndpoint

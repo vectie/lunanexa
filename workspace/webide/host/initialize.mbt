@@ -3,7 +3,10 @@
 // existing name. NFS supports this even when RENAME_NOREPLACE returns EINVAL.
 // This runs only in the single-purpose init process before any app is served.
 #borrow(source, destination)
-extern "c" fn publish_initial_link(source : Bytes, destination : Bytes) -> Int = "link"
+extern "c" fn publish_initial_link(
+  source : Bytes,
+  destination : Bytes,
+) -> Int32 = "link"
 
 ///|
 /// Runs as an init container before ComfyUI starts, with only the workspace

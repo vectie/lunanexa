@@ -5,8 +5,8 @@ pub(all) struct RuntimeSettings {
   node_name : String
   node_id : String
   model_cache_root : String
-  runtime_port : Int
-  run_as_user : Int
+  runtime_port : Int32
+  run_as_user : Int32
   device_class_name : String
   controller_addresses : Array[String]
   /// The extended resource a cluster exposes its GPUs through when it uses the
@@ -72,7 +72,7 @@ fn private_address(value : String) -> Bool {
   if parts.length() != 4 {
     return false
   }
-  let numbers : Array[Int] = []
+  let numbers : Array[Int32] = []
   for part in parts {
     let number = @string.parse_int(part) catch { _ => return false }
     if number < 0 || number > 255 || number.to_string() != part.to_owned() {

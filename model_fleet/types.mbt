@@ -8,7 +8,7 @@ pub(all) struct Query {
   schema_version : String
   now_unix_ms : Int64
   maximum_age_ms : Int64
-  memory_reserve_mib : Int
+  memory_reserve_mib : Int32
   model_id : String
   version : String
   node_id : String
@@ -21,7 +21,7 @@ pub(all) struct Row {
   artifact_digest : String
   recorded_model_state : @contracts.ModelState
   declared_architectures : Array[String]
-  declared_minimum_memory_mib : Int
+  declared_minimum_memory_mib : Int32
   required_with_reserve_mib : Int64
   node_id : String
   recorded_node_state : String
@@ -30,8 +30,8 @@ pub(all) struct Row {
   device_id : String?
   device_architecture : String?
   recorded_device_healthy : Bool?
-  observed_total_mib : Int?
-  observed_free_mib : Int?
+  observed_total_mib : Int32?
+  observed_free_mib : Int32?
   memory_margin_mib : Int64?
   architecture_matches : Bool?
   memory_matches : Bool?
@@ -70,9 +70,9 @@ pub extend Report with ToJson::{to_json}
 pub(all) struct ModelSummary {
   model_id : String
   version : String
-  compared_devices : Int
-  devices_matching_declarations : Int
-  nodes_without_devices : Int
+  compared_devices : Int32
+  devices_matching_declarations : Int32
+  nodes_without_devices : Int32
 } derive(Eq, ToJson)
 
 ///|
@@ -80,10 +80,10 @@ pub(all) struct Report {
   schema_version : String
   scope : String
   query : Query
-  source_model_count : Int
-  source_node_count : Int
-  selected_model_count : Int
-  selected_node_count : Int
+  source_model_count : Int32
+  source_node_count : Int32
+  selected_model_count : Int32
+  selected_node_count : Int32
   unassessed : Array[String]
   models : Array[ModelSummary]
   rows : Array[Row]

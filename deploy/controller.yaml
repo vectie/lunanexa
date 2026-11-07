@@ -360,16 +360,22 @@ spec:
                   name: lunanexa-control-config
                   key: shared-trial-offerings
                   optional: true
-            - name: LUNANEXA_GLM_CONTROL_ORIGIN
+            - name: LUNANEXA_RUNTIME_CONTROLS_JSON
               valueFrom:
                 configMapKeyRef:
                   name: lunanexa-control-config
-                  key: glm-control-origin
+                  key: runtime-controls
                   optional: true
-            - name: LUNANEXA_GLM_CONTROL_TOKEN
+            - name: LUNANEXA_MODEL_SERVICES_JSON
+              valueFrom:
+                configMapKeyRef:
+                  name: lunanexa-control-config
+                  key: model-services
+                  optional: true
+            - name: LUNANEXA_PROCESS_GROUP_CONTROL_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: lunanexa-glm-control
+                  name: lunanexa-runtime-control
                   key: token
                   optional: true
             - name: LUNANEXA_RUNTIME_VERSION

@@ -10,6 +10,7 @@ test "trial aggregate has explicit unavailable and no revenue claim" {
       active_trials: 3,
       expired_trials: 5,
       converted_trials: 4,
+      participants: None,
     }),
   })
   assert_true(rendered.contains("Registered trials"))
@@ -18,6 +19,38 @@ test "trial aggregate has explicit unavailable and no revenue claim" {
   assert_false(rendered.contains("Trial statistics unavailable"))
   let chinese = @ui.render({ ..base, locale: ChineseSimplified, })
   assert_true(chinese.contains("试用统计暂不可用"))
+}
+
+///|
+test "individual ongoing trial usage distinguishes requests from durable metering" {
+  let html = @ui.render({
+    ..@ui.default_state(),
+    route: Users,
+    locale: ChineseSimplified,
+    trial_summary: Some({
+      registered_trials: 1,
+      active_trials: 1,
+      expired_trials: 0,
+      converted_trials: 0,
+      participants: Some([
+        {
+          account_id: "account-1",
+          display_name: "Visitor",
+          starts_unix_ms: 1000L,
+          expires_unix_ms: 604801000L,
+          requests: 201L,
+          metered_requests: 198,
+          input_units: 1300L,
+          output_units: 9900L,
+          accelerator_ms: 45000L,
+        },
+      ]),
+    }),
+  })
+  assert_true(html.contains("七天试用 · 每人用量"))
+  assert_true(html.contains("调用 201 次"))
+  assert_true(html.contains("已计量 198 次"))
+  assert_true(html.contains("输出 9900"))
 }
 
 ///|

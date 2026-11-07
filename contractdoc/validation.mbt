@@ -32,7 +32,7 @@ fn valid_calendar_date(value : String) -> Bool {
 }
 
 ///|
-fn printable_bounded(value : String, maximum : Int) -> Bool {
+fn printable_bounded(value : String, maximum : Int32) -> Bool {
   value.length() <= maximum &&
   value.all(character => character.is_printable() && character != '\u{0000}')
 }

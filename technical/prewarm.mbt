@@ -210,7 +210,7 @@ fn valid_digest(value : String) -> Bool {
   }
   raw.all(char => {
     match char {
-      '0'..='9' | 'a'..='f' => true
+      '0'..<='9' | 'a'..<='f' => true
       _ => false
     }
   })

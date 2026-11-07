@@ -60,6 +60,7 @@ async test "model delivery API key is one time bound and stops with delivery" {
       public_api_base_url: "https://moongate.example.invalid/v1",
       handoff_lifetime_ms: 120000L,
       maximum_requests: 1000L,
+      allowed_organization_ids: None,
     })
     .with_personal_desktop_launches([
       {

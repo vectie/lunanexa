@@ -1,0 +1,131 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/controller/model_pool"
+
+import {
+  "moonbitlang/async",
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "vectie/lunanexa/contracts",
+}
+
+// Values
+pub fn authenticated_transport(String, String, String, String, Array[Target]) -> (async (String, String, Json?) -> (Int, Json)) raise PoolError
+
+pub fn default_tuning() -> Tuning
+
+pub fn kubernetes_runtime_control(async (String, String, Json?) -> (Int, Json), String, Target, String) -> async (String) -> String
+
+// Errors
+pub(all) suberror PoolError {
+  InvalidConfiguration
+  InvalidDeployment
+  OutsideScope
+  NotAdopted
+  Conflict
+  Unavailable
+} derive(Eq, @debug.Debug)
+pub fn PoolError::equal(Self, Self) -> Bool
+pub fn PoolError::not_equal(Self, Self) -> Bool
+pub fn PoolError::to_repr(Self) -> @debug.Repr
+
+// Types and methods
+type Journal derive(ToJson, @json.FromJson)
+pub fn Journal::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Journal::to_json(Self) -> Json
+
+pub struct Pool {
+  transport : async (String, String, Json?) -> (Int, Json)
+  namespace_name : String
+  targets : Array[Target]
+  path : String
+  runtime_image : String
+  profiles : Array[RuntimeProfile]
+  mut journal : Journal
+  mutex : @async.Mutex
+}
+pub async fn Pool::activate(Self) -> Unit
+pub fn Pool::active(Self) -> Bool
+pub async fn Pool::adopt(Self) -> Unit
+pub fn Pool::adopted(Self) -> Bool
+pub async fn Pool::configuration(Self, String) -> ReplicaConfiguration
+pub fn Pool::generation(Self) -> Int64
+pub fn Pool::node_name(Self, String) -> String
+pub async fn Pool::open(async (String, String, Json?) -> (Int, Json), String, Array[Target], String, runtime_image? : String, profiles? : Array[RuntimeProfile]) -> Self
+pub async fn Pool::pause_excluded(Self, String) -> Unit
+pub async fn Pool::paused(Self, String) -> Bool
+pub async fn Pool::rollback(Self) -> Unit
+pub fn Pool::runtime_image(Self) -> String
+pub async fn Pool::select(Self, Selection) -> Unit
+pub async fn Pool::select_nodes(Self, Array[String], Map[String, String]) -> Unit
+pub fn Pool::selected_targets(Self) -> Array[Target]
+pub fn Pool::selection(Self) -> Selection?
+pub async fn Pool::set_speculative_tokens(Self, Int) -> Unit
+pub async fn Pool::set_tuning(Self, Tuning) -> Unit
+pub fn Pool::speculative_tokens(Self) -> Int
+pub fn Pool::supports_artifact(Self, String, Array[String]) -> Bool
+pub async fn Pool::switch_replica(Self, String) -> Unit
+pub fn Pool::switched(Self) -> Array[String]
+pub fn Pool::targets(Self) -> Array[Target]
+pub fn Pool::tuning(Self) -> Tuning
+
+pub(all) struct ReplicaConfiguration {
+  speculative_tokens : Int
+  ready : Bool
+} derive(Eq, ToJson)
+pub fn ReplicaConfiguration::equal(Self, Self) -> Bool
+pub fn ReplicaConfiguration::not_equal(Self, Self) -> Bool
+pub fn ReplicaConfiguration::to_json(Self) -> Json
+
+pub(all) struct RuntimeProfile {
+  artifact_digests : Array[String]
+  architecture : String
+  arguments : Array[String]
+  speculative : Json?
+} derive(Eq, ToJson, @json.FromJson)
+pub fn RuntimeProfile::equal(Self, Self) -> Bool
+pub fn RuntimeProfile::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn RuntimeProfile::not_equal(Self, Self) -> Bool
+pub fn RuntimeProfile::to_json(Self) -> Json
+
+type SavedReplica derive(ToJson, @json.FromJson)
+pub fn SavedReplica::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn SavedReplica::to_json(Self) -> Json
+
+pub(all) struct Selection {
+  model_id : String
+  version : String
+  model_alias : String
+  served_model : String
+  artifact : @contracts.ArtifactRef
+} derive(Eq, ToJson, @json.FromJson)
+pub fn Selection::equal(Self, Self) -> Bool
+pub fn Selection::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Selection::not_equal(Self, Self) -> Bool
+pub fn Selection::to_json(Self) -> Json
+
+pub(all) struct Target {
+  deployment : String
+  node_id : String
+  kube_node : String
+  cache_root : String
+} derive(Eq, ToJson, @json.FromJson)
+pub fn Target::equal(Self, Self) -> Bool
+pub fn Target::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Target::not_equal(Self, Self) -> Bool
+pub fn Target::to_json(Self) -> Json
+
+pub(all) struct Tuning {
+  prefix_caching : Bool?
+  cache_aware_routing : Bool
+  chunked_prefill : Bool?
+  max_num_batched_tokens : Int
+} derive(Eq, ToJson, @json.FromJson)
+pub fn Tuning::equal(Self, Self) -> Bool
+pub fn Tuning::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Tuning::not_equal(Self, Self) -> Bool
+pub fn Tuning::to_json(Self) -> Json
+
+// Type aliases
+pub type Transport = async (String, String, Json?) -> (Int, Json)
+
+// Traits

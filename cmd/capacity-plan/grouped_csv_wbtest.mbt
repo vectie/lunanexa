@@ -1,5 +1,5 @@
 ///|
-async fn grouped_invoke(args : Array[String]) -> (Int, String, String) {
+async fn grouped_invoke(args : Array[String]) -> (Int32, String, String) {
   let executable = @env.get_env_var("CAPACITY_PLAN_EXE").unwrap_or("")
   if executable == "" {
     fail("Set CAPACITY_PLAN_EXE to the built native capacity-plan executable")

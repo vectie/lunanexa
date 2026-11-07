@@ -1,5 +1,5 @@
 ///|
-fn text_order(a : String, b : String) -> Int {
+fn text_order(a : String, b : String) -> Int32 {
   for index = 0; index < a.length() && index < b.length(); index = index + 1 {
     let order = a[index].compare(b[index])
     if order != 0 {

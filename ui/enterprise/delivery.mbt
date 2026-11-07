@@ -5,7 +5,7 @@ pub(all) struct DeliveryView {
   kind : String
   template_id : String
   template_version : String
-  node_count : Int
+  node_count : Int32
   stage : String
   generation : Int64
   cache_hit : Bool
@@ -18,11 +18,12 @@ pub(all) struct DeliveryView {
 
 ///|
 pub(all) struct ExternalModelServiceView {
+  service_id : String
   model_alias : String
   state : String
   can_stop : Bool
   ready : Bool
-  context_window_tokens : Int?
+  context_window_tokens : Int32?
 } derive(Eq)
 
 ///|
@@ -42,7 +43,7 @@ pub impl @json.FromJson for ExternalModelServiceView with fn from_json(
     } else {
     raise JsonDecodeError((path, "expected external model service"))
   }
-  let context_window_tokens : Int? = match value {
+  let context_window_tokens : Int32? = match value {
     { "context_window_tokens": Array([limit]), .. }
     | { "context_window_tokens": Number(_, ..) as limit, .. } =>
       Some(@json.from_json(limit, path=path.add_key("context_window_tokens")))
@@ -54,6 +55,10 @@ pub impl @json.FromJson for ExternalModelServiceView with fn from_json(
     _ => None
   }
   {
+    service_id: match value {
+      { "service_id": String(id), .. } => id
+      _ => ""
+    },
     model_alias: @json.from_json(model_alias, path=path.add_key("model_alias")),
     state: @json.from_json(state, path=path.add_key("state")),
     can_stop: @json.from_json(can_stop, path=path.add_key("can_stop")),
@@ -69,7 +74,7 @@ fn public_maas_base_url() -> String {
 }
 
 ///|
-fn model_context_label(tokens : Int?) -> String {
+fn model_context_label(tokens : Int32?) -> String {
   match tokens {
     Some(value) if value % 1024 == 0 => "\{value / 1024}K"
     Some(value) => value.to_string()
@@ -85,7 +90,7 @@ extern "js" fn browser_public_origin() -> String =
 pub(all) struct DeliveryReservationOption {
   reservation_id : String
   label : String
-  node_count : Int
+  node_count : Int32
   expires_at_ms : Int64
 } derive(Eq, FromJson)
 
@@ -102,6 +107,12 @@ pub(all) struct SharedTrialSlotOption {
   shared : Bool
   request_limit : String
 } derive(Eq, FromJson)
+
+///|
+pub extend SharedTrialSlotOption with Eq::{equal, not_equal}
+
+///|
+pub extend SharedTrialSlotOption with FromJson::{from_json}
 
 ///|
 pub(all) struct DeliveryTemplateOption {
@@ -172,6 +183,7 @@ pub(all) struct DeliveryApiAccess {
 pub(all) struct DeliveryPanel {
   operations : Array[DeliveryView]
   external_model : ExternalModelServiceView?
+  shared_models : Array[ExternalModelServiceView]
   options : DeliveryOptions
   company_workspace : CompanyWorkspaceStatus?
   reservation_id : String
@@ -194,6 +206,7 @@ pub(all) enum DeliveryMessage {
   ActivateCompanyWorkspace
   SelectReservation(String)
   SelectTemplate(String)
+  SelectSharedModel(String)
   Start
   Retry(String)
   RequestStop(String)
@@ -213,6 +226,7 @@ pub fn default_delivery_panel() -> DeliveryPanel {
   {
     operations: [],
     external_model: None,
+    shared_models: [],
     options: { reservations: [], templates: [], shared_trials: [], },
     company_workspace: None,
     reservation_id: "",
@@ -296,6 +310,20 @@ pub fn DeliveryPanel::update(
     return self
   }
   match message {
+    SelectSharedModel(id) => {
+      guard self.shared_models.iter().find_first(s => s.service_id == id)
+        is Some(service) else {
+        return self
+      }
+      {
+        ..self,
+        external_model: Some(service),
+        external_stop_confirmation: false,
+        external_start_confirmation: false,
+        poll_generation: self.poll_generation + 1L,
+        error: None,
+      }
+    }
     SelectReservation(value) =>
       {
         ..self,
@@ -963,10 +991,35 @@ fn delivery_panel_view(
         ])
       None => @html.nothing
     },
+    if kind == "ModelApi" && panel.shared_models.length() > 1 {
+      @html.label([
+        @html.span(copy(locale, "Model service", "模型服务")),
+        @html.select(
+          attrs=@html.Attrs::build().aria_label(
+            copy(locale, "Model service", "模型服务"),
+          ),
+          disabled=panel.loading,
+          on_change=text_command(emit, id => Delivery(SelectSharedModel(id))),
+          [
+            ..panel.shared_models.map(s => {
+              @html.option(
+                value=s.service_id,
+                selected=panel.external_model.map_or(false, selected => {
+                  selected.service_id == s.service_id
+                }),
+                s.model_alias,
+              )
+            }),
+          ],
+        ),
+      ])
+    } else {
+      @html.nothing
+    },
     if kind == "ModelApi" {
       match panel.external_model {
         Some(service) =>
-          @html.article(class="record-card", [
+          @html.article(class="record-card model-api-card", [
             @html.div(class="record-main", [
               @html.h3(
                 copy(
@@ -978,13 +1031,10 @@ fn delivery_panel_view(
                 match service.state {
                   "Running" =>
                     if service.ready {
-                      copy(
-                        locale, "Running on the Spark pair", "运行中 · 占用两台 Spark",
-                      )
+                      copy(locale, "Running", "运行中")
                     } else {
                       copy(
-                        locale, "Starting on the Spark pair; inference is not ready yet",
-                        "两台 Spark 启动中 · 推理尚未就绪",
+                        locale, "Starting; inference is not ready yet", "启动中 · 推理尚未就绪",
                       )
                     }
                   "Stopped" =>
@@ -1006,44 +1056,33 @@ fn delivery_panel_view(
                     )
                 },
               ),
-              @html.div(
-                style=[
-                  "display:flex", "align-items:center", "gap:.5rem", "flex-wrap:wrap",
-                ],
-                [
-                  @html.p(
-                    class="mono",
-                    style=["overflow-wrap:anywhere"],
-                    public_maas_base_url(),
-                  ),
-                  @controls.icon_button(
-                    Copy,
-                    copy(locale, "Copy API endpoint", "复制 API 接口地址"),
-                    command(emit, CopyDetail(public_maas_base_url())),
-                  ),
-                ],
-              ),
-              @html.p(class="mono", "Authorization: Bearer <API_KEY>"),
-              @html.div(
-                style=[
-                  "display:flex", "align-items:center", "gap:.5rem", "flex-wrap:wrap",
-                ],
-                [
-                  @html.p(
-                    class="mono",
-                    copy(locale, "Model: ", "模型名：") +
-                    service.model_alias +
-                    " · " +
-                    copy(locale, "Context: ", "上下文：") +
-                    model_context_label(service.context_window_tokens),
-                  ),
-                  @controls.icon_button(
-                    Copy,
-                    copy(locale, "Copy model name", "复制模型名"),
-                    command(emit, CopyDetail(service.model_alias)),
-                  ),
-                ],
-              ),
+              @html.div(class="connection-value", [
+                @html.p(
+                  class="mono",
+                  style=["overflow-wrap:anywhere"],
+                  public_maas_base_url(),
+                ),
+                @controls.icon_button(
+                  Copy,
+                  copy(locale, "Copy API endpoint", "复制 API 接口地址"),
+                  command(emit, CopyDetail(public_maas_base_url())),
+                ),
+              ]),
+              @html.div(class="connection-value", [
+                @html.p(
+                  class="mono",
+                  copy(locale, "Model: ", "模型名：") +
+                  service.model_alias +
+                  " · " +
+                  copy(locale, "Context: ", "上下文：") +
+                  model_context_label(service.context_window_tokens),
+                ),
+                @controls.icon_button(
+                  Copy,
+                  copy(locale, "Copy model name", "复制模型名"),
+                  command(emit, CopyDetail(service.model_alias)),
+                ),
+              ]),
               model_connection_guides(locale, service, emit),
             ]),
             @html.div(class="record-actions", [
@@ -1077,7 +1116,7 @@ fn delivery_panel_view(
                   class="quiet-button",
                   disabled=panel.loading,
                   on_click=command(emit, Delivery(RequestStopExternal)),
-                  copy(locale, "Stop GLM service", "停止 GLM 服务"),
+                  copy(locale, "Stop service", "停止服务"),
                 )
               } else {
                 @html.nothing
@@ -1088,7 +1127,7 @@ fn delivery_panel_view(
                   class="primary-button",
                   disabled=panel.loading,
                   on_click=command(emit, Delivery(RequestStartExternal)),
-                  copy(locale, "Start GLM service", "启动 GLM 服务"),
+                  copy(locale, "Start service", "启动服务"),
                 )
               } else {
                 @html.nothing
@@ -1322,8 +1361,8 @@ fn delivery_panel_view(
       @html.div(class="request-boundary", [
         @html.p(
           copy(
-            locale, "Stop the company-shared GLM for all members? This releases its two GPU runtimes but keeps model files and personal WebIDE data.",
-            "确认停止企业共享 GLM？所有成员的推理会中断；两台 GPU 运行实例将关闭，模型文件和个人 WebIDE 数据保留。",
+            locale, "Stop this company model service? Inference will be interrupted. Model files and personal files are retained.",
+            "确认停止此模型服务？所有成员的推理会中断，模型文件和个人文件保留。",
           ),
         ),
         @html.button(
@@ -1331,7 +1370,7 @@ fn delivery_panel_view(
           class="danger-button",
           disabled=panel.loading,
           on_click=command(emit, Delivery(ConfirmStopExternal)),
-          copy(locale, "Confirm stop GLM", "确认停止 GLM"),
+          copy(locale, "Confirm stop", "确认停止"),
         ),
         @html.button(
           type_="button",
@@ -1348,8 +1387,7 @@ fn delivery_panel_view(
       @html.div(class="request-boundary", [
         @html.p(
           copy(
-            locale, "Start the company-shared GLM on the two Spark nodes? Confirm that other workloads have been coordinated first. Inference becomes available after the model passes its health check.",
-            "确认在两台 Spark 上启动企业共享 GLM？请先协调其他运行任务；模型健康检查通过后，企业成员才能调用推理。",
+            locale, "Start this model service on its allocated resources?", "确认使用已分配资源启动此模型服务？",
           ),
         ),
         @html.button(
@@ -1357,7 +1395,7 @@ fn delivery_panel_view(
           class="primary-button",
           disabled=panel.loading,
           on_click=command(emit, Delivery(ConfirmStartExternal)),
-          copy(locale, "Confirm start GLM", "确认启动 GLM"),
+          copy(locale, "Confirm start", "确认启动"),
         ),
         @html.button(
           type_="button",

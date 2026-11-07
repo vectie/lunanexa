@@ -1,4 +1,27 @@
 ///|
+fn application_choices(state : EnterpriseState) -> Array[(String, String)] {
+  let choices : Array[(String, String)] = []
+  for client in state.desktop_clients {
+    if !choices.any(entry => entry.0 == client.client_id) {
+      choices.push((client.client_id, client.display_name))
+    }
+  }
+  // Keep an existing reserved workspace reachable even without a hosted client.
+  if !choices.any(entry => entry.0 == "comfyui") &&
+    state.deliveries.operations.any(operation => {
+      operation.stage == "Ready" &&
+      operation.expires_at_ms > state.machine_access.now_unix_ms &&
+      delivery_launch_template(state.deliveries, operation.operation_id).map_or(
+        false,
+        template => template.client_id == Some("comfyui"),
+      )
+    }) {
+    choices.push(("comfyui", "ComfyUI"))
+  }
+  choices
+}
+
+///|
 fn application_cards(
   state : EnterpriseState,
   emit : @rabbita.Emit[EnterpriseMessage]?,
@@ -7,20 +30,25 @@ fn application_cards(
     @html.style_tag(
       ".application-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1rem}.application-card{display:flex;flex-direction:column;align-items:flex-start;gap:1rem;min-width:0;padding:1.4rem;border:1px solid var(--line);border-radius:1rem;background:var(--panel)}.application-card.is-selected{border-color:var(--mint)}.application-card img{display:block;width:64px;height:64px;object-fit:contain;border-radius:15px}.application-card h3{margin:0;font-size:1.15rem}.application-card p{margin:0;color:var(--muted);font-size:.9rem}.application-card button{min-height:44px;margin-top:auto;width:100%}.application-settings>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;gap:.5rem}.application-settings>summary:focus-visible{outline:2px solid var(--mint);outline-offset:3px}.application-settings[open]>summary{margin-bottom:1rem}.application-settings-content{display:grid;gap:1rem}.delivery-new-service{margin-top:1rem}.delivery-new-service>summary,.record-main details>summary{min-height:44px;padding:.7rem 0;cursor:pointer}.delivery-new-service>summary:focus-visible,.record-main details>summary:focus-visible{outline:2px solid var(--mint);outline-offset:2px}@media(max-width:1250px){.application-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:540px){.application-grid{grid-template-columns:minmax(0,1fr)}}",
     ),
-    @html.h2(enterprise_copy(state.locale, ChooseYourWebide)),
+    @html.h2(copy(state.locale, "My applications", "我的应用")),
+    if application_choices(state).is_empty() {
+      @html.p(
+        copy(
+          state.locale,
+          "No applications have been enabled for this organization. Contact your administrator to request access.",
+          "当前组织尚未开通应用，请联系管理员开通。",
+        ),
+      )
+    } else {
+      @html.nothing
+    },
     @html.style_tag(
-      ".application-settings>summary{display:list-item;padding:.7rem 0}",
+      ".application-settings>summary{display:list-item;padding:.7rem 0}.application-icon{display:flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:15px;background:#edf4f7;color:#294a62;font-size:1rem;font-weight:700;letter-spacing:.08em}",
     ),
     @html.div(
       class="application-grid",
       [
-        for
-          (id, name) in [
-            ("comfyui", "ComfyUI"),
-            ("desktop-workspace", "MoonDesk"),
-            ("moonrobo", "MoonRobo"),
-            ("moontown", "MoonTown"),
-          ] => {
+        for (id, name) in application_choices(state) => {
           let client = state.desktop_clients
             .iter()
             .find_first(client => client.client_id == id)
@@ -59,17 +87,23 @@ fn application_cards(
               "application-card"
             },
             [
-              @html.img(
-                src="./apps/\{logo}.svg",
-                alt="\{name} logo",
-                width=64,
-                height=64,
-              ),
+              if ["comfyui", "desktop-workspace", "moonrobo", "moontown"].contains(
+                  id,
+                ) {
+                @html.img(
+                  src="./apps/\{logo}.svg",
+                  alt="\{name} logo",
+                  width=64,
+                  height=64,
+                )
+              } else {
+                @html.span(class="application-icon", "APP")
+              },
               @html.h3(name),
-              @html.p(
-                if ready {
-                  copy(state.locale, "Ready", "已就绪")
-                } else {
+              if ready {
+                @html.nothing
+              } else {
+                @html.p(
                   match client {
                     None => copy(state.locale, "Not configured", "暂未配置")
                     Some(client) if id == "comfyui" &&
@@ -95,9 +129,9 @@ fn application_cards(
                         "Access unavailable",
                         "访问暂不可用",
                       )
-                  }
-                },
-              ),
+                  },
+                )
+              },
               @html.button(
                 type_="button",
                 class=if ready { "primary-button" } else { "quiet-button" },

@@ -4,7 +4,7 @@ suberror FontInspectError {
 } derive(Debug)
 
 ///|
-fn u16_be(data : Bytes, offset : Int) -> Int raise FontInspectError {
+fn u16_be(data : Bytes, offset : Int32) -> Int32 raise FontInspectError {
   if offset < 0 || offset + 2 > data.length() {
     raise InvalidFont("truncated UInt16")
   }
@@ -12,7 +12,7 @@ fn u16_be(data : Bytes, offset : Int) -> Int raise FontInspectError {
 }
 
 ///|
-fn u32_be(data : Bytes, offset : Int) -> Int raise FontInspectError {
+fn u32_be(data : Bytes, offset : Int32) -> Int32 raise FontInspectError {
   if offset < 0 || offset + 4 > data.length() {
     raise InvalidFont("truncated UInt32")
   }
@@ -23,7 +23,7 @@ fn u32_be(data : Bytes, offset : Int) -> Int raise FontInspectError {
 }
 
 ///|
-fn table_offset(data : Bytes, name : String) -> Int? raise FontInspectError {
+fn table_offset(data : Bytes, name : String) -> Int32? raise FontInspectError {
   if data.length() < 12 {
     raise InvalidFont("truncated sfnt header")
   }

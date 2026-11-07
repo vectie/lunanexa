@@ -1,5 +1,5 @@
 ///|
-const MaximumBytes : Int = 67108864
+const MaximumBytes : Int32 = 67108864
 
 ///|
 priv struct Intent {
@@ -69,7 +69,7 @@ fn same_digest(left : String, right : String) -> Bool {
 }
 
 ///|
-fn failure_status(error : Error) -> (Int, String) {
+fn failure_status(error : Error) -> (Int32, String) {
   match error {
     Failure::Failure("body-too-large") => (413, "body-too-large")
     Failure::Failure("session-conflict" | "object-write-conflict") =>
@@ -100,7 +100,7 @@ fn safe_component(value : String) -> Bool {
   value != ".." &&
   value
   .iter()
-  .all(c => c is ('a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '.'))
+  .all(c => c is ('a'..<='z' | 'A'..<='Z' | '0'..<='9' | '-' | '_' | '.'))
 }
 
 ///|
@@ -134,7 +134,7 @@ fn trusted_service_endpoint(endpoint : String) -> Bool {
     if endpoint.has_prefix(prefix) {
       let authority = endpoint[prefix.length():].split("/").next().unwrap_or("")
       return !authority.is_empty() &&
-        authority.iter().all(c => c is ('0'..='9'))
+        authority.iter().all(c => c is ('0'..<='9'))
     }
   }
   false
@@ -198,7 +198,7 @@ fn matches_magic(bytes : Bytes, media : String) -> Bool {
 }
 
 ///|
-async fn bounded(reader : &@io.Reader, limit : Int) -> Bytes {
+async fn bounded(reader : &@io.Reader, limit : Int32) -> Bytes {
   let buffer = @buffer.Buffer()
   for total = 0 {
     match reader.read_some(max_len=(limit + 1 - total).min(65536)) {
@@ -216,7 +216,7 @@ async fn bounded(reader : &@io.Reader, limit : Int) -> Bytes {
 }
 
 ///|
-async fn bounded_file(file : @fs.File, limit : Int) -> Bytes {
+async fn bounded_file(file : @fs.File, limit : Int32) -> Bytes {
   // Use the filesystem read operation for regular files. Generic IO Reader
   // polling is not supported by epoll for regular files on Linux.
   let output = @buffer.Buffer()
@@ -284,8 +284,8 @@ async fn s3(config : Config, args : Array[String]) -> Unit {
 async fn bounded_command_output(
   program : String,
   args : Array[String],
-  limit : Int,
-) -> (Int, Bytes) {
+  limit : Int32,
+) -> (Int32, Bytes) {
   let (reader, writer) = @process.read_from_process()
   defer reader.close()
   let mut status = -1
@@ -305,7 +305,7 @@ async fn bounded_command_output(
 async fn read_object(
   config : Config,
   reference : String,
-  maximum : Int,
+  maximum : Int32,
 ) -> Bytes {
   let key = object_key(reference, config.bucket)
   let directory = @fs.tmpdir(prefix="lunanexa-offline-get-")
@@ -521,7 +521,7 @@ fn header(request : @http.Request, name : String) -> String {
 ///|
 async fn json_reply(
   connection : @http.ServerConnection,
-  code : Int,
+  code : Int32,
   body : Json,
 ) -> Unit {
   connection.send_response(code, "Response", extra_headers={

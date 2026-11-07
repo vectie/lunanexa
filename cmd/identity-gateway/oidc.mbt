@@ -273,7 +273,7 @@ async fn verified_userinfo(
 }
 
 ///|
-fn safe_registration_claim(value : String, maximum : Int) -> Bool {
+fn safe_registration_claim(value : String, maximum : Int32) -> Bool {
   value.length() > 0 &&
   value.length() <= maximum &&
   !value.contains("\n") &&

@@ -117,7 +117,7 @@ fn management_node(
   heartbeat : @contracts.NodeHeartbeat,
   now_unix_ms : Int64,
   heartbeat_timeout_ms : Int64,
-  observed_available_memory_mib? : Int? = None,
+  observed_available_memory_mib~ : Int32? = None,
 ) -> @deployment.ManagementNode {
   let healthy = heartbeat.inventory.accelerators.filter(value => value.healthy)
   let declared_memory_free_mib = healthy.fold(init=0, (total, accelerator) => {
@@ -169,7 +169,7 @@ fn observed_available_memory_mib(
   node_id : String,
   now_unix_ms : Int64,
   maximum_age_ms : Int64,
-) -> Int? {
+) -> Int32? {
   let mut latest : @contracts.TelemetrySample? = None
   for sample in samples {
     if sample.node_id == node_id &&
@@ -215,7 +215,9 @@ async fn ApiService::deployment_planning_context(
             self.global_settings.control_timing.heartbeat_timeout_ms,
           ),
         )
-        if self.scheduler is Some(scheduler) &&
+        if self.node_has_service_allocation(heartbeat.node_id) {
+          { ..node, state: Cordoned, }
+        } else if self.scheduler is Some(scheduler) &&
           scheduler.node_is_reserved(heartbeat.node_id) {
           { ..node, state: Cordoned, }
         } else {
@@ -255,6 +257,7 @@ async fn ApiService::publish_planned_assignment(
   unsigned : @contracts.DesiredAssignment,
   reservation_id? : String,
   tenant_ref? : String,
+  actor~ : String = "management-plane",
 ) -> Unit {
   self.resource_mutex.acquire()
   defer self.resource_mutex.release()
@@ -270,6 +273,22 @@ async fn ApiService::publish_planned_assignment(
     raise @deployment.DeploymentError::InvalidState("registry unavailable")
   }
   let now = @async.now()
+  let owner : @deployment.ServiceOwner = match
+    (reservation_id, self.scheduler) {
+    (Some(id), Some(scheduler)) => {
+      guard scheduler.node_reservation(id) is Some(reservation) else {
+        raise @deployment.DeploymentError::InvalidState(
+          "node reservation unavailable",
+        )
+      }
+      {
+        tenant_ref: reservation.request.tenant_ref,
+        organization_id: reservation.request.organization_id,
+        reservation_id: Some(id),
+      }
+    }
+    _ => { tenant_ref: "", organization_id: "", reservation_id: None, }
+  }
   if self.scheduler is Some(scheduler) &&
     scheduler.node_is_reserved(unsigned.node_id) {
     guard reservation_id is Some(id) &&
@@ -340,9 +359,12 @@ async fn ApiService::publish_planned_assignment(
     _ => ()
   }
   let receipt = "assignment:\{signed.assignment_id}:\{signed.generation}"
+  // Commit resource identity before publishing a runtime assignment. A failed
+  // publish holds its claim for reconciliation rather than enabling a rival.
+  self.register_assignment_service(unsigned, owner)
   self.with_audit_lock(() => {
     let audit = self.next_audit(
-      "management-plane",
+      actor,
       "assignment.publish",
       signed.assignment_id,
       "unknown",
@@ -359,12 +381,13 @@ async fn ApiService::publish_planned_assignment(
 async fn ApiService::remove_deployment_assignments(
   self : ApiService,
   deployment_id : String,
-  keep? : Array[String] = [],
+  keep~ : Array[String] = [],
 ) -> Unit {
   for assignment in self.store.assignments() {
     if assignment.deployment_id == deployment_id &&
       !keep.any(value => value == assignment.assignment_id) {
       let receipt = "assignment-stop:\{assignment.assignment_id}:\{@async.now()}"
+      self.retire_assignment_service(assignment.assignment_id)
       self.with_audit_lock(() => {
         let audit = self.next_audit(
           "management-plane",

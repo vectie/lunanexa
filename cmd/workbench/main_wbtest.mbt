@@ -52,6 +52,28 @@ test "trial bootstrap rejects expired wrong-type and missing-CSRF sessions" {
 }
 
 ///|
+test "bootstrap surfaces rejected route and status without raw server details" {
+  validate_bootstrap_reply("{\"authorized\":true}", "/v1/workspace/self")
+  try
+    validate_bootstrap_reply(
+      "{\"public_error\":{\"status\":401,\"code\":\"browser-bearer-rejected\",\"message\":\"do not expose this upstream detail\",\"retryable\":false}}",
+      "/v1/workspace/self",
+    )
+  catch {
+    WorkbenchClientError::PublicRejected(code, message, _, stale, retryable) => {
+      assert_eq(code, "browser-bearer-rejected")
+      assert_eq(message, "GET /v1/workspace/self · HTTP 401")
+      assert_true(stale)
+      assert_false(retryable)
+      assert_false(message.contains("upstream detail"))
+    }
+    _ => fail("expected a classified bootstrap rejection")
+  } noraise {
+    _ => fail("expected route rejection")
+  }
+}
+
+///|
 #warnings("-alert_unstable")
 test "public plain HTTP workbench blocks credential entry before transport" {
   let model : AppModel = {
@@ -80,12 +102,74 @@ test "workbench builds an ephemeral bounded canonical workload" {
   assert_eq(envelope.version, @contracts.contract_version)
   assert_eq(envelope.tenant_ref, "tenant-opaque-demo")
   assert_eq(envelope.capability, TextGenerate)
+  guard envelope.payload is { "input": String(prompt), .. } else {
+    fail("runtime input must use the canonical text shape")
+  }
+  assert_true(prompt.contains("instruction"))
+  assert_true(prompt.contains("Hello from LunaNexa"))
   assert_true(envelope.data_policy.retention is Ephemeral)
   assert_false(envelope.data_policy.allow_cache)
   assert_false(envelope.data_policy.allow_training_reuse)
   assert_eq(envelope.resource_ceiling.max_accelerator_memory_mib, 8192)
   assert_eq(envelope.deadline_unix_ms, 2000000030000L)
   assert_false(envelope.stream)
+}
+
+///|
+test "normalized text is readable while structured results remain available" {
+  assert_eq(
+    normalized_output_text({ "output_text": "第一条\n第二条" }),
+    "第一条\n第二条",
+  )
+  assert_eq(normalized_output_text(Json("回答")), "回答")
+  assert_eq(
+    normalized_output_text({
+      "id": "response-id",
+      "output": [
+        {
+          "type": "message",
+          "role": "assistant",
+          "content": [{ "type": "output_text", "text": "业务答案" }],
+        },
+      ],
+      "usage": { "input_tokens": 84 },
+    }),
+    "业务答案",
+  )
+  assert_eq(normalized_output_text({ "count": 3 }), "{\"count\":3}")
+}
+
+///|
+test "trial workbench uses selected catalog resources without shrinking output" {
+  let memory = trial_model_memory(
+    "[{\"alias_name\":\"text.qwen\",\"minimum_memory_mib\":24576},{\"alias_name\":\"other\",\"minimum_memory_mib\":8192}]",
+    "text.qwen",
+  )
+  assert_eq(memory, 24576)
+  let state = @workbench_ui.demo_state()
+  let envelope = make_workload(
+    state,
+    2000000000000L,
+    memory_ceiling_mib=memory,
+    runtime_ms=120000L,
+    classification=Confidential,
+  )
+  assert_eq(envelope.resource_ceiling.max_accelerator_memory_mib, 24576)
+  assert_eq(envelope.deadline_unix_ms, 2000000120000L)
+  assert_true(envelope.data_policy.classification is Confidential)
+  assert_eq(
+    envelope.resource_ceiling.max_output_units,
+    make_workload(state, 2000000000000L).resource_ceiling.max_output_units,
+  )
+  try trial_model_memory("[]", "missing") catch {
+    WorkbenchClientError::PublicRejected(code, _, _, stale, _) => {
+      assert_eq(code, "ModelMetadataUnavailable")
+      assert_false(stale)
+    }
+    _ => fail("expected missing catalog error")
+  } noraise {
+    _ => fail("missing model must not use an invented resource ceiling")
+  }
 }
 
 ///|

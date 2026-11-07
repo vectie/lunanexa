@@ -44,8 +44,8 @@ pub struct CosignVerifier {
 pub fn CosignVerifier::new(
   binary : String,
   public_key_path : String,
-  trusted_root_path? : String? = None,
-  offline_public_key_paths? : Array[String] = [],
+  trusted_root_path~ : String? = None,
+  offline_public_key_paths~ : Array[String] = [],
 ) -> CosignVerifier raise SignatureVerificationError {
   if !(binary == "/usr/bin/cosign" || binary == "/usr/local/bin/cosign") ||
     ![public_key_path, ..offline_public_key_paths].all(path => {

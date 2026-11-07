@@ -27,9 +27,9 @@ pub(all) struct DeploymentRow {
   runtime_name : String?
   runtime_version : String?
   runtime_image_digest : String?
-  requested_replicas : Int
-  planned_replicas : Int
-  selected_placements : Int
+  requested_replicas : Int32
+  planned_replicas : Int32
+  selected_placements : Int32
   created_unix_ms : Int64
   updated_unix_ms : Int64
 } derive(Eq, ToJson)
@@ -53,8 +53,8 @@ pub(all) struct PlacementRow {
 pub(all) struct Report {
   schema_version : String
   query : Query
-  source_operation_count : Int
-  source_node_count : Int
+  source_operation_count : Int32
+  source_node_count : Int32
   deployments : Array[DeploymentRow]
   placements : Array[PlacementRow]
 } derive(Eq, ToJson)

@@ -58,17 +58,9 @@ test "static enterprise catalog has complete unique bilingual entries" {
     TryAPromptInTheWorkbench,
     CreateTrialApiKey,
     ViewTrialApiKey,
-    NeedAManagedCapacityException,
-    UseThisPathWhenTheSelf,
     RequestManagedCapacity,
     AgreementsToReview,
-    LegalSignerAction,
     OpenLeaseRequests,
-    OperatorReviewQueue,
-    ModelsEntitled,
-    SharedCentralCatalog,
-    CurrentSpend,
-    ProvisionalCentralLedger,
     OrganizationAdministrator,
     LegalSigner,
     LeaseRequester,
@@ -85,7 +77,6 @@ test "static enterprise catalog has complete unique bilingual entries" {
     Inference,
     QuotaExhausted,
     CreateApiKey,
-    TheSecretIsShownOnceTrial,
     BillingProject,
     KeyName,
     Scopes,
@@ -217,9 +208,7 @@ test "static enterprise catalog has complete unique bilingual entries" {
     YourOperatorNeedsToEnableThe,
     TheSelectedPaidEndpointIsUnavailable,
     YourAccessIsReadyOpenThe,
-    ChooseYourWebide,
     ModelSource,
-    AuthorizedSharedModels,
     SelectedOrderIsUnavailable,
     CompleteMasterlease,
     Connecting,
@@ -449,5 +438,5 @@ test "static enterprise catalog has complete unique bilingual entries" {
     assert_false(seen.contains(pair))
     seen[pair] = true
   }
-  assert_eq(keys.length(), 428)
+  assert_eq(keys.length(), 417)
 }

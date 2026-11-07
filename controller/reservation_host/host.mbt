@@ -1,5 +1,5 @@
 ///|
-pub type Transport = async (String, String, Json?) -> (Int, Json)
+pub type Transport = async (String, String, Json?) -> (Int32, Json)
 
 ///|
 /// Exact infrastructure identity, never an entire namespace exemption.

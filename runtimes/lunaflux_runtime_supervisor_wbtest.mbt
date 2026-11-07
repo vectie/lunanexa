@@ -1,8 +1,8 @@
 ///|
 fn lunaflux_ready_output(
-  runtime_origin? : String = "http://127.0.0.1:43120",
-  control_origin? : String = runtime_origin,
-  runtime_protocol? : String = "openai-responses-v1",
+  runtime_origin~ : String = "http://127.0.0.1:43120",
+  control_origin~ : String = runtime_origin,
+  runtime_protocol~ : String = "openai-responses-v1",
 ) -> String {
   let prefix =
     #|LunaFlux OpenAI Responses service

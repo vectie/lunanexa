@@ -92,6 +92,18 @@ async fn ApiService::workspace_admit(
     )
   }
   let now = @async.now()
+  self.sync_subject_trial_output(subject_ref, now) catch {
+    _ =>
+      return (
+        Some(
+          api_error(
+            503, "TrialOutputSyncPending", "trial workspace synchronization is pending",
+            true,
+          ),
+        ),
+        false,
+      )
+  }
   guard workspace_capability(request.capability) is Some(capability) else {
     return (
       Some(
@@ -155,7 +167,9 @@ async fn ApiService::workspace_admit(
     return (
       Some(
         api_error(
-          403, "WorkspaceLimitExceeded", "the request resource ceiling exceeds the active workspace lease",
+          400,
+          "WorkspaceLimitExceeded",
+          "request budget exceeds the active workspace lease: input maximum \{limit.max_input_units_per_request} UTF-8 bytes, output maximum \{limit.max_output_units_per_request} tokens; reduce the request or ask the operator to update trial settings",
           false,
         ),
       ),

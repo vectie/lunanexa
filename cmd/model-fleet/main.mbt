@@ -1,5 +1,5 @@
 ///|
-fn read_input(path : String, maximum : Int) -> String raise {
+fn read_input(path : String, maximum : Int32) -> String raise {
   // x/fs reads the selected file before checking this bound. This is not a
   // streaming acquisition limit; use only ordinary bounded local files.
   let bytes = @fs.read_file_to_bytes(path)

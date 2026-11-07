@@ -14,7 +14,7 @@ pub async fn ApiService::record_component_event(
   correlation_id : String,
   target_type : String,
   outcome : String,
-  status_code : Int,
+  status_code : Int32,
   duration_ms : Int64,
 ) -> Unit {
   match self.observability_store {
@@ -30,7 +30,7 @@ pub async fn ApiService::record_component_event(
 ///|
 pub async fn ApiService::observability_readiness(
   self : ApiService,
-  now_unix_ms? : Int64 = 0L,
+  now_unix_ms~ : Int64 = 0L,
 ) -> @observability.ObservabilityReadiness? {
   match self.observability_store {
     Some(store) =>

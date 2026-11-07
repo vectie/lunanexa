@@ -53,6 +53,9 @@ async test "durable inference receipt is rated exactly once" {
       database,
     )
     .with_inference_rate_card(rate)
+  // Production creates durable organization/project metadata before issuing a
+  // billable key. Seed that existing snapshot for the incremental write path.
+  service.persist_commercial_state()
   let request : @contracts.WorkloadEnvelope = {
     version: @contracts.contract_version,
     idempotency_key: "billing-idempotency",

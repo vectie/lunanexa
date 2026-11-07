@@ -107,7 +107,7 @@ fn safe_readiness_path(value : String) -> Bool {
 ///|
 pub fn validate_template(
   template : ModelServiceTemplate,
-  require_signature? : Bool = true,
+  require_signature~ : Bool = true,
 ) -> Unit raise DeploymentError {
   if !@contracts.valid_identifier(template.template_id, maximum_length=128) ||
     !@contracts.valid_identifier(template.version, maximum_length=128) ||
@@ -273,7 +273,7 @@ pub fn preflight(
   templates : Array[ModelServiceTemplate],
   intent : ModelServiceIntent,
   context : PlanningContext,
-  preferred_node_ids? : Array[String] = [],
+  preferred_node_ids~ : Array[String] = [],
 ) -> DeploymentPlan {
   let findings : Array[PreflightFinding] = []
   try validate_intent(intent) catch {

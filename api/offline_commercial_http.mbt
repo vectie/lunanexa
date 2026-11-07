@@ -223,7 +223,7 @@ priv struct SelfUploadIntent {
   order_id : String
   artifact_id : String
   kind : @offline.DocumentArtifactKind
-  revision : Int
+  revision : Int32
   allowed_media_types : Array[String]
   maximum_byte_count : Int64
   expires_unix_ms : Int64
@@ -296,7 +296,7 @@ pub(all) struct OfflineArtifactView {
   artifact_id : String
   order_id : String
   kind : @offline.DocumentArtifactKind
-  revision : Int
+  revision : Int32
   locale : String
   media_type : String
   byte_count : Int64

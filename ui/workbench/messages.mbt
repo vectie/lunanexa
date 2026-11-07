@@ -52,7 +52,7 @@ fn lease_remaining_message(
 }
 
 ///|
-fn local_drafts_message(locale : @i18n.Locale, count : Int) -> String {
+fn local_drafts_message(locale : @i18n.Locale, count : Int32) -> String {
   @i18n.copy(locale, "\{count} LOCAL", "\{count} 个本地草稿")
 }
 

@@ -21,6 +21,7 @@ pub struct FileDeploymentStore {
   signing_secret : String
   templates : Map[String, @deployment.ModelServiceTemplate]
   operations : Map[String, @deployment.DeploymentOperation]
+  services : Map[String, @deployment.ModelServiceInstance]
   mutex : @async.Mutex
 }
 
@@ -145,6 +146,7 @@ pub async fn FileDeploymentStore::open(
     signing_secret,
     templates: Map([]),
     operations: Map([]),
+    services: Map([]),
     mutex: Mutex(),
   }
   if @fs.exists(path) {
@@ -174,6 +176,7 @@ pub async fn FileDeploymentStore::open(
   } else {
     write_snapshot(path, store.snapshot_unlocked())
   }
+  store.load_services()
   store
 }
 
@@ -192,6 +195,7 @@ pub async fn FileDeploymentStore::open_postgres(
     signing_secret,
     templates: Map([]),
     operations: Map([]),
+    services: Map([]),
     mutex: Mutex(),
   }
   let payload = database.load_snapshot("deployments", "lunanexa.deployments.v2")
@@ -223,6 +227,7 @@ pub async fn FileDeploymentStore::open_postgres(
     }
     None => store.persist()
   }
+  store.load_services()
   store
 }
 

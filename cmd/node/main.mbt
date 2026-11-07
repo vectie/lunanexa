@@ -59,7 +59,7 @@ fn endpoint(base : String, path : String) -> String {
 /// read: endpoint and status. These were swallowed by callers that only
 /// checked the status, which made a node being refused look the same as one
 /// that had simply gone quiet.
-fn log_bad_response(verb : String, path : String, code : Int) -> Unit {
+fn log_bad_response(verb : String, path : String, code : Int32) -> Unit {
   if code < 200 || code >= 300 {
     println("node agent: \{verb} \{path} -> HTTP \{code}")
   }
@@ -578,7 +578,7 @@ async fn materialize_while_heartbeating(
   materializer : @node_agent.ArtifactMaterializer,
   artifact_verifier : @node_agent.CosignArtifactSignatureVerifier,
   assignment : @contracts.DesiredAssignment,
-  heartbeat_interval_ms : Int,
+  heartbeat_interval_ms : Int32,
 ) -> @node_agent.MaterializedArtifact {
   @async.with_task_group <| group => {
     let task = group.spawn(() => {
@@ -654,7 +654,7 @@ async fn reconcile_once(
   exclusive_leases_enabled : Bool,
   lease_guard : @nodelease.LeaseAgentGuard,
   lease_state_path : String,
-  materialization_heartbeat_interval_ms : Int,
+  materialization_heartbeat_interval_ms : Int32,
   lease_receipt_stale_after_ms : Int64,
   telemetry_limits : @settings.TelemetrySafetySettings,
 ) -> Unit {

@@ -3,7 +3,7 @@ pub(all) suberror WorkerVerificationError {
   InvalidInput(String)
   UnsupportedKind(@offline.DocumentArtifactKind)
   MoonLeafRejected(String)
-  FormulaErrors(Int)
+  FormulaErrors(Int32)
 } derive(Debug, Eq)
 
 ///|
@@ -16,9 +16,9 @@ pub extend WorkerVerificationError with Eq::{not_equal, equal}
 pub(all) struct OoxmlVerification {
   moonleaf_verified : Bool
   diagnostic_codes : Array[String]
-  formula_error_count : Int
+  formula_error_count : Int32
   active_content_detected : Bool
-  reopened_byte_count : Int
+  reopened_byte_count : Int32
 } derive(Debug, Eq)
 
 ///|
@@ -48,8 +48,8 @@ pub extend TextReplacement with FromJson::{from_json}
 ///|
 pub(all) struct CellReplacement {
   sheet_name : String
-  row : Int
-  column : Int
+  row : Int32
+  column : Int32
   value : String
 } derive(Debug, Eq, ToJson, FromJson)
 
@@ -68,7 +68,7 @@ pub extend CellReplacement with FromJson::{from_json}
 ///|
 pub(all) struct CustomizedOoxml {
   bytes : FixedArray[Byte]
-  replacement_count : Int
+  replacement_count : Int32
   verification : OoxmlVerification
 } derive(Debug, Eq)
 
@@ -165,7 +165,7 @@ pub fn verify_ooxml(
 }
 
 ///|
-fn safe_replacement_text(value : String, maximum : Int) -> Bool {
+fn safe_replacement_text(value : String, maximum : Int32) -> Bool {
   value.length() <= maximum &&
   value.all(character => character.is_printable() && character != '\u{0000}')
 }

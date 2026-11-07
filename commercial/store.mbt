@@ -206,7 +206,7 @@ fn safe_display_name(value : String) -> Bool {
 }
 
 ///|
-fn safe_legal_text(value : String, maximum_length : Int) -> Bool {
+fn safe_legal_text(value : String, maximum_length : Int32) -> Bool {
   let trimmed = value.trim()
   trimmed != "" &&
   value.length() <= maximum_length &&

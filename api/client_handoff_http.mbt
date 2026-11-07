@@ -302,7 +302,10 @@ async fn ApiService::handle_client_handoff(
       organization_id: redeemed.organization_id,
       project_id: redeemed.project_id,
     })
-    if !authorized || !contracted || delivery_denied is Some(_) {
+    if !authorized ||
+      !contracted ||
+      delivery_denied is Some(_) ||
+      !config.allows_organization(redeemed.organization_id) {
       ignore(
         try
           handoffs.revoke_for_subject(
@@ -434,40 +437,50 @@ async fn ApiService::handle_client_handoff(
         portal_view.membership.tenant_ref,
         subject_ref,
       )
-      let views = configs.map(config => {
-        let aliases = self.client_models(config.client_id, aliases)
-        let launch_uri = self.client_launch_uri(config, subject_ref)
-        let model_required = !self.gpu_container_offering.map_or(false, offering => {
-          offering.client_id == config.client_id
+      let views = configs
+        .filter(config => {
+          config.allows_organization(portal_view.membership.organization_id)
         })
-        let client_blockers = blockers.copy()
-        if model_required && aliases.is_empty() {
-          client_blockers.push("ServingModelRequired")
-        }
-        if launch_uri is None {
-          client_blockers.push("PersonalWorkspaceNotConfigured")
-        }
-        (
-          {
-            "client_id": config.client_id,
-            "display_name": config.display_name,
-            "launch_uri": launch_uri.unwrap_or(""),
-            "handoff_lifetime_ms": config.handoff_lifetime_ms.to_json(),
-            "contract_required": !self.private_cloud_workspace_access,
-            "contract_ready": contract_ready,
-            "workspace_ready": workspace_ready,
-            "models_ready": aliases.length() > 0,
-            "model_required": model_required,
-            "ready": client_blockers.length() == 0,
-            "blocker_codes": client_blockers.to_json(),
-            "approved_model_aliases": aliases.to_json(),
-            "handoffs": subject_handoffs
-            .filter(handoff => handoff.client_id == config.client_id)
-            .to_json(),
-          } : Json)
-      })
+        .map(config => {
+          let aliases = self.client_models(config.client_id, aliases)
+          let launch_uri = self.client_launch_uri(config, subject_ref)
+          let model_required = !self.gpu_container_offering.map_or(false, offering => {
+            offering.client_id == config.client_id
+          })
+          let client_blockers = blockers.copy()
+          if model_required && aliases.is_empty() {
+            client_blockers.push("ServingModelRequired")
+          }
+          if launch_uri is None {
+            client_blockers.push("PersonalWorkspaceNotConfigured")
+          }
+          (
+            {
+              "client_id": config.client_id,
+              "display_name": config.display_name,
+              "launch_uri": launch_uri.unwrap_or(""),
+              "handoff_lifetime_ms": config.handoff_lifetime_ms.to_json(),
+              "contract_required": !self.private_cloud_workspace_access,
+              "contract_ready": contract_ready,
+              "workspace_ready": workspace_ready,
+              "models_ready": aliases.length() > 0,
+              "model_required": model_required,
+              "ready": client_blockers.length() == 0,
+              "blocker_codes": client_blockers.to_json(),
+              "approved_model_aliases": aliases.to_json(),
+              "handoffs": subject_handoffs
+              .filter(handoff => handoff.client_id == config.client_id)
+              .to_json(),
+            } : Json)
+        })
       if path == "/v1/portal/self/client" {
-        json_reply(200, views[0])
+        match views.get(0) {
+          Some(view) => json_reply(200, view)
+          None =>
+            api_error(
+              404, "NotFound", "no client is published for this organization", false,
+            )
+        }
       } else {
         json_reply(200, views.to_json())
       }
@@ -479,6 +492,11 @@ async fn ApiService::handle_client_handoff(
         (intent.allowed_models.length() > 0 || intent.delivery_id is Some(_)) else {
         return api_error(
           400, "InvalidRequest", "invalid client handoff intent", false,
+        )
+      }
+      guard config.allows_organization(portal_view.membership.organization_id) else {
+        return api_error(
+          404, "NotFound", "client is not published for this organization", false,
         )
       }
       guard self.client_launch_uri(config, subject_ref) is Some(launch_uri) else {

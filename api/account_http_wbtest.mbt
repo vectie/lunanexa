@@ -512,6 +512,7 @@ async test "free registration provisions one bounded shared-inference trial" {
     .with_access_store(access)
     .with_notification_store(notices)
     .with_open_registration_trial(86400000L, 100L, ["text.qwen"])
+    .with_private_cloud_workspace_access(true)
   let now = @async.now()
   let response = service.handle_with_transport(
     Post,
@@ -678,6 +679,10 @@ async test "free registration provisions one bounded shared-inference trial" {
     key_body,
   )
   assert_eq(key_reply.status, 201)
+  assert_eq(
+    accounts.trial_for_account(registered.account.account_id).unwrap().api_key_id,
+    Some("trial-api-key"),
+  )
   assert_true(
     @json.parse(key_reply.body)
     is { "api_base_url": Null, "allowed_models": [String("text.qwen")], .. },
@@ -1089,4 +1094,32 @@ async test "operator account creation returns only the safe public view" {
     _ => fail("suspending an account did not revoke its personal API key")
   }
   @fs.rmdir(directory, recursive=true)
+}
+
+///|
+test "trial budget projection follows policy in both optional wire encodings" {
+  let plain : Json = { "trial_id": "current", "consumed_requests": 15 }
+  assert_true(
+    trial_budget_projection(plain, 65536, 16384)
+    is {
+      "trial_id": "current",
+      "consumed_requests": 15,
+      "max_input_bytes": 65536,
+      "max_output_tokens": 16384,
+    },
+  )
+  let legacy : Json = [{ "trial_id": "legacy" }]
+  assert_true(
+    trial_budget_projection(legacy, 32768, 8192)
+    is [
+      {
+        "trial_id": "legacy",
+        "max_input_bytes": 32768,
+        "max_output_tokens": 8192,
+      },
+    ],
+  )
+  let absent : Json = @json.parse("null")
+  assert_eq(trial_budget_projection(absent, 65536, 16384), absent)
+  assert_eq(trial_budget_projection(Json([]), 65536, 16384), Json([]))
 }

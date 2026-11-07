@@ -3,7 +3,7 @@ pub(all) struct Explorer {
   run_id : String
   failed_only : Bool
   order : @planning.SampleOrder
-  page : Int
+  page : Int32
   export_csv : String?
 } derive(Eq)
 

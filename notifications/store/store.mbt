@@ -12,8 +12,8 @@ pub struct NotificationStore {
   mut preferences : Map[String, @notifications.NotificationPreference]
   mut worker_health : @notifications.NotificationWorkerHealth
   redrive_audit : Array[@notifications.NotificationDeliveryRedriveReceipt]
-  history_limit : Int
-  maximum_delivery_attempts : Int
+  history_limit : Int32
+  maximum_delivery_attempts : Int32
   mutex : @async.Mutex
 }
 
@@ -190,8 +190,8 @@ fn NotificationStore::restore(
 ///|
 fn NotificationStore::empty(
   persistence : NotificationPersistence,
-  history_limit : Int,
-  maximum_delivery_attempts : Int,
+  history_limit : Int32,
+  maximum_delivery_attempts : Int32,
 ) -> NotificationStore raise @notifications.NotificationError {
   if history_limit <= 0 ||
     history_limit > 1000000 ||
@@ -215,8 +215,8 @@ fn NotificationStore::empty(
 ///|
 pub async fn NotificationStore::open(
   path : String,
-  history_limit? : Int = 100000,
-  maximum_delivery_attempts? : Int = 5,
+  history_limit~ : Int32 = 100000,
+  maximum_delivery_attempts~ : Int32 = 5,
 ) -> NotificationStore {
   if path.trim() == "" {
     raise @notifications.NotificationError::InvalidInput(
@@ -245,8 +245,8 @@ pub async fn NotificationStore::open(
 ///|
 pub async fn NotificationStore::open_postgres(
   database : @database.PostgresDatabase,
-  history_limit? : Int = 100000,
-  maximum_delivery_attempts? : Int = 5,
+  history_limit~ : Int32 = 100000,
+  maximum_delivery_attempts~ : Int32 = 5,
 ) -> NotificationStore {
   let store = NotificationStore::empty(
     NotificationPostgres(database),
@@ -601,7 +601,7 @@ pub async fn NotificationStore::record(
 pub async fn NotificationStore::expire_silences(
   self : NotificationStore,
   now_unix_ms : Int64,
-) -> Int {
+) -> Int32 {
   if now_unix_ms <= 0L {
     raise @notifications.NotificationError::InvalidInput(
       "invalid notification time",
@@ -638,8 +638,8 @@ pub async fn NotificationStore::expire_silences(
 pub async fn NotificationStore::delivery_readiness(
   self : NotificationStore,
   adapter_configured : Bool,
-  now_unix_ms? : Int64 = 0L,
-  worker_freshness_ms? : Int64 = 300000L,
+  now_unix_ms~ : Int64 = 0L,
+  worker_freshness_ms~ : Int64 = 300000L,
 ) -> @notifications.NotificationDeliveryReadiness {
   let now = if now_unix_ms > 0L { now_unix_ms } else { @async.now() }
   self.mutex.acquire()
@@ -707,10 +707,10 @@ pub async fn NotificationStore::delivery_readiness(
 pub async fn NotificationStore::record_worker_pass(
   self : NotificationStore,
   now_unix_ms : Int64,
-  attempted : Int,
-  delivered : Int,
-  retry_scheduled : Int,
-  dead_lettered : Int,
+  attempted : Int32,
+  delivered : Int32,
+  retry_scheduled : Int32,
+  dead_lettered : Int32,
 ) -> @notifications.NotificationWorkerHealth {
   if now_unix_ms <= 0L ||
     attempted < 0 ||
@@ -950,7 +950,7 @@ fn delivery_ineligible_reason(
 pub async fn NotificationStore::skip_delivery_if_ineligible(
   self : NotificationStore,
   delivery_id : String,
-  expected_attempt_count : Int,
+  expected_attempt_count : Int32,
   now_unix_ms : Int64,
 ) -> @notifications.NotificationDelivery? {
   self.mutex.acquire()
@@ -1052,7 +1052,7 @@ pub async fn NotificationStore::claim_due_deliveries(
   self : NotificationStore,
   now_unix_ms : Int64,
   lease_duration_ms : Int64,
-  limit : Int,
+  limit : Int32,
 ) -> Array[@notifications.NotificationDelivery] {
   if now_unix_ms <= 0L ||
     lease_duration_ms <= 0L ||
@@ -1155,7 +1155,7 @@ pub async fn NotificationStore::snapshot(
 /// preferences and redrive receipts for every Prometheus request.
 pub async fn NotificationStore::delivery_metrics(
   self : NotificationStore,
-) -> (Int, Int, @notifications.NotificationWorkerHealth) {
+) -> (Int32, Int32, @notifications.NotificationWorkerHealth) {
   self.mutex.acquire()
   let pending = self.deliveries
     .values()

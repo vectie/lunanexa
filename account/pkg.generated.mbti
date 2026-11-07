@@ -6,6 +6,7 @@ import {
   "moonbitlang/core/debug",
   "moonbitlang/core/json",
   "vectie/lunanexa/database",
+  "vectie/lunanexa/event_trial",
 }
 
 // Values
@@ -115,6 +116,8 @@ pub(all) struct AccountSnapshot {
   sessions : Array[BrowserSession]
   invitations : Array[AccountInvitation]?
   trials : Array[TrialEntitlement]?
+  events : Array[@event_trial.Policy]?
+  event_mode_selected : Bool?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 pub fn AccountSnapshot::equal(Self, Self) -> Bool
 pub fn AccountSnapshot::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
@@ -141,6 +144,8 @@ pub struct AccountStore {
   mut sessions : Map[String, BrowserSession]
   mut invitations : Map[String, AccountInvitation]
   mut trials : Map[String, TrialEntitlement]
+  mut events : Map[String, @event_trial.Policy]
+  mut event_mode_selected : Bool
   mutex : @async.Mutex
 }
 pub async fn AccountStore::accept_invitation(Self, String, String, Int64) -> AccountInvitationView
@@ -149,12 +154,14 @@ pub async fn AccountStore::authorize(Self, String, Int64, required_role? : Accou
 pub async fn AccountStore::bind_trial_api_key(Self, String, String, Int64) -> TrialEntitlement
 pub async fn AccountStore::consume_trial_request(Self, String, Int64, Int64) -> Bool
 pub async fn AccountStore::create(Self, HumanAccount) -> AccountView
-pub async fn AccountStore::ensure_trial(Self, TrialEntitlementIntent, Int64) -> TrialEntitlement
+pub async fn AccountStore::ensure_trial(Self, TrialEntitlementIntent, Int64, event_id? : String, operator_enrollment? : Bool) -> TrialEntitlement
+pub async fn AccountStore::event_for_tenant(Self, String) -> @event_trial.Policy?
 pub async fn AccountStore::invitation_views(Self) -> Array[AccountInvitationView]
 pub async fn AccountStore::issue_invitation(Self, AccountInvitationIntent, Int64) -> IssuedAccountInvitation
 pub async fn AccountStore::issue_session(Self, String, String, String, Int64, Int64) -> IssuedBrowserSession
 pub async fn AccountStore::open(String, String) -> Self
 pub async fn AccountStore::open_postgres(@database.PostgresDatabase, String) -> Self
+pub async fn AccountStore::put_event(Self, @event_trial.Policy) -> @event_trial.Policy
 pub async fn AccountStore::register_open(Self, String, String, String, String, String, Int64, Int64) -> OpenRegisteredAccount
 pub async fn AccountStore::register_with_invitation(Self, String, String, String, String, String, String, Int64, Int64) -> RegisteredAccount
 pub async fn AccountStore::revoke_all_sessions(Self, String, Int64) -> Int
@@ -277,6 +284,7 @@ pub fn RegisteredAccount::to_json(Self) -> Json
 pub fn RegisteredAccount::to_repr(Self) -> @debug.Repr
 
 pub(all) struct TrialEntitlement {
+  event_id : String?
   trial_id : String
   account_id : String
   organization_id : String

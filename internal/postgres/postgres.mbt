@@ -26,7 +26,7 @@ extern "c" fn native_execute(
   connection : NativeConnection,
   sql : Bytes,
   parameters : Bytes,
-  parameter_count : Int,
+  parameter_count : Int32,
 ) -> NativeResult = "lunanexa_pg_execute"
 
 ///|
@@ -39,26 +39,26 @@ extern "c" fn native_result_error(result : NativeResult) -> Bytes = "lunanexa_pg
 
 ///|
 #borrow(result)
-extern "c" fn native_row_count(result : NativeResult) -> Int = "lunanexa_pg_row_count"
+extern "c" fn native_row_count(result : NativeResult) -> Int32 = "lunanexa_pg_row_count"
 
 ///|
 #borrow(result)
-extern "c" fn native_column_count(result : NativeResult) -> Int = "lunanexa_pg_column_count"
+extern "c" fn native_column_count(result : NativeResult) -> Int32 = "lunanexa_pg_column_count"
 
 ///|
 #borrow(result)
 extern "c" fn native_is_null(
   result : NativeResult,
-  row : Int,
-  column : Int,
+  row : Int32,
+  column : Int32,
 ) -> Bool = "lunanexa_pg_is_null"
 
 ///|
 #borrow(result)
 extern "c" fn native_value(
   result : NativeResult,
-  row : Int,
-  column : Int,
+  row : Int32,
+  column : Int32,
 ) -> Bytes = "lunanexa_pg_value"
 
 ///|
@@ -116,7 +116,7 @@ pub fn connect(connection_url : String) -> Connection raise PostgresError {
 }
 
 ///|
-fn append_length(output : Array[Byte], length : Int) -> Unit {
+fn append_length(output : Array[Byte], length : Int32) -> Unit {
   output.push((length >> 24).to_byte())
   output.push((length >> 16).to_byte())
   output.push((length >> 8).to_byte())
@@ -159,7 +159,7 @@ fn encode_parameters(parameters : Array[String?]) -> Bytes raise PostgresError {
 pub fn Connection::execute(
   self : Connection,
   sql : String,
-  parameters? : Array[String?] = [],
+  parameters~ : Array[String?] = [],
 ) -> QueryResult raise PostgresError {
   if sql.trim() == "" || sql.contains_char('\u0000') || sql.length() > 1048576 {
     raise InvalidParameter("SQL statement is invalid")
@@ -183,20 +183,20 @@ pub fn Connection::close(self : Connection) -> Unit {
 }
 
 ///|
-pub fn QueryResult::row_count(self : QueryResult) -> Int {
+pub fn QueryResult::row_count(self : QueryResult) -> Int32 {
   native_row_count(self.handle)
 }
 
 ///|
-pub fn QueryResult::column_count(self : QueryResult) -> Int {
+pub fn QueryResult::column_count(self : QueryResult) -> Int32 {
   native_column_count(self.handle)
 }
 
 ///|
 pub fn QueryResult::value(
   self : QueryResult,
-  row : Int,
-  column : Int,
+  row : Int32,
+  column : Int32,
 ) -> String? {
   if row < 0 ||
     row >= self.row_count() ||

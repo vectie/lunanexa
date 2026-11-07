@@ -11,6 +11,24 @@ pub async fn ManagedRuntimeSupervisor::ensure_started(
   assignment : @contracts.DesiredAssignment,
   materialized : MaterializedArtifact,
 ) -> RuntimeInstance {
+  if assignment.runtime.name == "lunanexa-artifact-preparation" {
+    if materialized.digest != assignment.artifact.digest ||
+      materialized.size_bytes != assignment.artifact.size_bytes ||
+      assignment.resources.accelerator_count != 0 ||
+      !assignment.devices.is_empty() ||
+      assignment.group is Some(_) {
+      raise ArtifactMaterializationError::InvalidConfiguration
+    }
+    return {
+      assignment_id: assignment.assignment_id,
+      container_name: "",
+      image_ref: "",
+      artifact_digest: materialized.digest,
+      observed_state: Ready,
+      container_address: "",
+      endpoint: None,
+    }
+  }
   match self {
     Oci(supervisor) => supervisor.ensure_started(assignment, materialized)
     Kubernetes(supervisor) => {

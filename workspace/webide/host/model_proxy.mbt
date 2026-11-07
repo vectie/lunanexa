@@ -150,7 +150,7 @@ fn model_route(verb : @http.RequestMethod, path : String) -> Bool {
 ///|
 async fn proxy_reply(
   connection : @http.ServerConnection,
-  code : Int,
+  code : Int32,
   message : String,
 ) -> Unit {
   connection.send_response(code, "Model gateway", extra_headers={
@@ -179,6 +179,7 @@ pub async fn handle_model_proxy(
     return proxy_reply(connection, 403, "Unsupported managed model operation")
   }
   let mut stage = "workspace authority"
+  let response_started = Ref(false)
   @async.with_timeout(300000, () => {
     let file = @fs.open(config_file, mode=ReadOnly)
     defer file.close()
@@ -204,6 +205,7 @@ pub async fn handle_model_proxy(
         })
         .to_json(),
       }
+      response_started.val = true
       connection.send_response(200, "OK", extra_headers={
         "content-type": "application/json",
         "cache-control": "no-store",
@@ -297,6 +299,7 @@ pub async fn handle_model_proxy(
     let response_type = request_header(response.headers, "content-type").unwrap_or(
       "application/octet-stream",
     )
+    response_started.val = true
     connection.send_response(response.code, "OK", extra_headers={
       "content-type": response_type,
       "cache-control": "no-store",
@@ -315,8 +318,12 @@ pub async fn handle_model_proxy(
   }) catch {
     _ => {
       println("Managed model operation failed during " + stage)
-      proxy_reply(connection, 502, "Managed model operation could not complete") catch {
-        _ => ()
+      if !response_started.val {
+        proxy_reply(
+          connection, 502, "Managed model operation could not complete",
+        ) catch {
+          _ => ()
+        }
       }
       connection.close()
     }

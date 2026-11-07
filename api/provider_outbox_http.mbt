@@ -77,7 +77,7 @@ fn provider_request_digest(organization_id : String, key : String) -> String {
 async fn ApiService::queue_provider_record(
   self : ApiService,
   record : @commercial_integrations.ExternalRecord,
-  commercial_lock_held? : Bool = false,
+  commercial_lock_held~ : Bool = false,
 ) -> @commercial_integrations.ExternalRecordView {
   if !commercial_lock_held {
     self.commercial_mutex.acquire()

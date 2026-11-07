@@ -94,11 +94,12 @@ async fn main {
   // Replace only explicitly selected sites; retain fonts, previews and other apps.
   for site in sites {
     if site == "docs" {
-      // Documentation is served at the image root; preserve its runtime,
-      // branding and other assets while replacing the reviewed guide content.
+      // Documentation is served at the image root. Replace its reviewed runtime
+      // and guide together while retaining branding and other static assets.
       for
         name in [
-          "coursebook.json", "coursebook.zh-CN.json", "coursebook-evidence.json",
+          "index.html", "app.js", "styles.css", "coursebook.json",
+          "coursebook.zh-CN.json", "coursebook-evidence.json",
         ] {
         @shell.Cmd("cp", [dist + "/docs/" + name, staging + "/" + name]).run()
       }

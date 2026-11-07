@@ -3,7 +3,7 @@
 /// Howard Hinnant's `days_from_civil`. The pure arithmetic lets the contract
 /// expiry scan compute day deltas without a wall-clock dependency inside this
 /// package.
-pub fn days_from_civil(year : Int, month : Int, day : Int) -> Int64 {
+pub fn days_from_civil(year : Int32, month : Int32, day : Int32) -> Int64 {
   let adjusted = if month <= 2 { year - 1 } else { year }
   let era = adjusted / 400
   let year_of_era = adjusted - era * 400

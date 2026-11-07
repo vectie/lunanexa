@@ -15,7 +15,7 @@ pub extend ContractError with Debug::{to_repr}
 pub extend ContractError with Eq::{not_equal, equal}
 
 ///|
-pub fn valid_identifier(value : String, maximum_length? : Int = 256) -> Bool {
+pub fn valid_identifier(value : String, maximum_length~ : Int32 = 256) -> Bool {
   value != "" &&
   value.length() <= maximum_length &&
   value.all(character => {
@@ -32,7 +32,7 @@ pub fn valid_identifier(value : String, maximum_length? : Int = 256) -> Bool {
 ///|
 pub fn valid_optional_identifier(
   value : String,
-  maximum_length? : Int = 512,
+  maximum_length~ : Int32 = 512,
 ) -> Bool {
   value == "" || valid_identifier(value, maximum_length~)
 }

@@ -102,7 +102,7 @@ pub async fn FileEnrollmentService::enroll(
   node_auth_secret : String,
   public_key_ref : String,
   now_unix_ms : Int64,
-  certificate_lifetime_ms? : Int64 = 3600000L,
+  certificate_lifetime_ms~ : Int64 = 3600000L,
 ) -> NodeCertificate {
   self.mutex.acquire()
   defer self.mutex.release()
@@ -140,8 +140,8 @@ pub async fn FileEnrollmentService::renew(
   public_key_ref : String,
   current_serial : Int64,
   now_unix_ms : Int64,
-  certificate_lifetime_ms? : Int64 = 3600000L,
-  renewal_grace_ms? : Int64 = 86400000L,
+  certificate_lifetime_ms~ : Int64 = 3600000L,
+  renewal_grace_ms~ : Int64 = 86400000L,
 ) -> NodeCertificate {
   self.mutex.acquire()
   defer self.mutex.release()
@@ -185,7 +185,7 @@ pub async fn FileEnrollmentService::rotate(
   node_id : String,
   public_key_ref : String,
   now_unix_ms : Int64,
-  certificate_lifetime_ms? : Int64 = 3600000L,
+  certificate_lifetime_ms~ : Int64 = 3600000L,
 ) -> NodeCertificate {
   self.mutex.acquire()
   defer self.mutex.release()

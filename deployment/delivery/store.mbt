@@ -163,7 +163,7 @@ fn DeliveryStore::index(
   self : DeliveryStore,
   operation_id : String,
   generation : Int64,
-) -> Int raise DeliveryError {
+) -> Int32 raise DeliveryError {
   for index, operation in self.operations {
     if operation.operation_id == operation_id {
       if operation.generation != generation {

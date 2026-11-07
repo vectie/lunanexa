@@ -254,7 +254,7 @@ async fn probe_lunaflux_control_endpoint(
 /// This does not publish, proxy, or upgrade the endpoint to TLS.
 pub async fn LunaFluxRuntimeDiscovery::probe_control(
   self : LunaFluxRuntimeDiscovery,
-  timeout_milliseconds? : Int = 5000,
+  timeout_milliseconds~ : Int32 = 5000,
 ) -> Unit {
   if timeout_milliseconds <= 0 || timeout_milliseconds > 60000 {
     raise LunaFluxRuntimeDiscoveryError::InvalidControlProbeTimeout

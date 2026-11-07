@@ -34,15 +34,15 @@ pub(all) struct NodeSnapshot {
   cx7_peer : String
   state : @contracts.NodeState
   architecture : String
-  memory_free_mib : Int
+  memory_free_mib : Int32
   runtimes : Array[String]
   licensed_models : Array[String]
   ready_models : Array[String]
   allowed_data_classes : Array[@contracts.DataClass]
   warm_models : Array[String]
-  queue_depth : Int
-  reliability_per_mille : Int
-  accelerator_utilization_per_mille : Int
+  queue_depth : Int32
+  reliability_per_mille : Int32
+  accelerator_utilization_per_mille : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -62,7 +62,7 @@ pub(all) struct PlacementRequirements {
   workload_id : String
   model_key : String
   architecture : String
-  memory_mib : Int
+  memory_mib : Int32
   runtime : String
   data_class : @contracts.DataClass
   deadline_unix_ms : Int64
@@ -87,11 +87,11 @@ pub extend PlacementRequirements with FromJson::{from_json}
 ///|
 pub(all) struct ScorePolicy {
   version : String
-  warm_model_weight : Int
-  headroom_weight : Int
-  queue_weight : Int
-  reliability_weight : Int
-  utilization_weight : Int
+  warm_model_weight : Int32
+  headroom_weight : Int32
+  queue_weight : Int32
+  reliability_weight : Int32
+  utilization_weight : Int32
   validated_topology_profiles : Array[String]
 } derive(Debug, Eq, ToJson, FromJson)
 
@@ -110,12 +110,12 @@ pub extend ScorePolicy with FromJson::{from_json}
 ///|
 pub(all) struct CandidateScore {
   node_id : String
-  total : Int
-  warm_model : Int
-  headroom : Int
-  queue : Int
-  reliability : Int
-  utilization : Int
+  total : Int32
+  warm_model : Int32
+  headroom : Int32
+  queue : Int32
+  reliability : Int32
+  utilization : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -356,7 +356,7 @@ pub fn place(
 ///|
 pub(all) struct TenantQuota {
   tenant_ref : String
-  max_inflight : Int
+  max_inflight : Int32
   max_accelerator_ms : Int64
   window_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
@@ -375,7 +375,7 @@ pub extend TenantQuota with FromJson::{from_json}
 
 ///|
 pub(all) enum AdmissionResult {
-  Accepted(queue_position~ : Int)
+  Accepted(queue_position~ : Int32)
   Rejected(reason~ : RejectionReason)
 } derive(Debug, Eq, ToJson, FromJson)
 
@@ -393,9 +393,9 @@ pub extend AdmissionResult with FromJson::{from_json}
 
 ///|
 pub fn priority_capacity_limit(
-  capacity : Int,
+  capacity : Int32,
   priority : @contracts.Priority,
-) -> Int {
+) -> Int32 {
   let bounded = capacity.max(1)
   match priority {
     Background => (bounded * 3 / 4).max(1)
@@ -406,11 +406,11 @@ pub fn priority_capacity_limit(
 
 ///|
 pub fn priority_capacity_limit_with_policy(
-  capacity : Int,
+  capacity : Int32,
   priority : @contracts.Priority,
-  background_percent : Int,
-  normal_percent : Int,
-) -> Int {
+  background_percent : Int32,
+  normal_percent : Int32,
+) -> Int32 {
   let bounded = capacity.max(1)
   match priority {
     Background => (bounded * background_percent / 100).max(1)
@@ -422,16 +422,16 @@ pub fn priority_capacity_limit_with_policy(
 ///|
 pub struct AdmissionController {
   quotas : Map[String, TenantQuota]
-  inflight : Map[String, Int]
+  inflight : Map[String, Int32]
   accelerator_ms : Map[String, Int64]
   window_started_unix_ms : Map[String, Int64]
   cancelled : Map[String, Bool]
-  mut queue_depth : Int
-  capacity : Int
+  mut queue_depth : Int32
+  capacity : Int32
 }
 
 ///|
-pub fn AdmissionController::new(capacity : Int) -> AdmissionController {
+pub fn AdmissionController::new(capacity : Int32) -> AdmissionController {
   {
     quotas: Map([]),
     inflight: Map([]),
@@ -521,8 +521,8 @@ pub fn AdmissionController::complete(
 ///|
 pub fn retry_allowed(
   idempotency_key : String,
-  attempt : Int,
-  max_attempts : Int,
+  attempt : Int32,
+  max_attempts : Int32,
   before_first_output : Bool,
 ) -> Bool {
   idempotency_key != "" && attempt < max_attempts && before_first_output
@@ -530,9 +530,9 @@ pub fn retry_allowed(
 
 ///|
 pub(all) struct CapacityForecast {
-  schedulable_nodes : Int
-  total_free_memory_mib : Int
-  estimated_additional_instances : Int
+  schedulable_nodes : Int32
+  total_free_memory_mib : Int32
+  estimated_additional_instances : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -550,7 +550,7 @@ pub extend CapacityForecast with FromJson::{from_json}
 ///|
 pub fn forecast(
   nodes : Array[NodeSnapshot],
-  instance_memory_mib : Int,
+  instance_memory_mib : Int32,
 ) -> CapacityForecast {
   let mut schedulable_nodes = 0
   let mut total = 0

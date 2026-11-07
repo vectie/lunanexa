@@ -20,9 +20,9 @@ pub(all) struct ResourceReservationRequest {
   node_ids : Array[String]
   starts_unix_ms : Int64
   expires_unix_ms : Int64
-  memory_mib_per_node : Int
-  gpu_memory_mib_per_node : Int
-  max_concurrency_per_node : Int
+  memory_mib_per_node : Int32
+  gpu_memory_mib_per_node : Int32
+  max_concurrency_per_node : Int32
 } derive(Eq, ToJson, FromJson)
 
 ///|
@@ -38,7 +38,7 @@ pub(all) struct ResourceDeliveryRow {
   template_id : String
   template_version : String
   kind : String
-  node_count : Int
+  node_count : Int32
   stage : String
   failure_code : String?
   cache_hit : Bool

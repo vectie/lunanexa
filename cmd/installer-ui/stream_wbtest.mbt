@@ -68,7 +68,7 @@ extern "js" fn restore_stream_fixture(fixture : StreamFixture) -> Unit =
   #| }
 
 ///|
-extern "js" fn fixture_requests(fixture : StreamFixture) -> Int =
+extern "js" fn fixture_requests(fixture : StreamFixture) -> Int32 =
   #| (fixture) => fixture.requests
 
 ///|
@@ -78,7 +78,7 @@ extern "js" fn fixture_log(fixture : StreamFixture) -> String =
 ///|
 async fn stream_fixture_result(
   mode : String,
-  endpoint? : String = "http://127.0.0.1:4198",
+  endpoint~ : String = "http://127.0.0.1:4198",
 ) -> RunResult {
   let fixture = install_stream_fixture(mode)
   defer restore_stream_fixture(fixture)

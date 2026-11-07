@@ -19,7 +19,7 @@ priv struct CommercialFinalizeRequest {
   ended_unix_ms : Int64
   billing_timezone : String
   currency : String
-  scale : Int
+  scale : Int32
   finalized_by : String
   finalized_unix_ms : Int64
 } derive(FromJson)

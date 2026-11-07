@@ -29,9 +29,9 @@ pub(all) struct ExclusiveContainer {
   companion_image : String?
   command : Array[String]
   args : Array[String]
-  port : Int
-  cpu_millis : Int
-  memory_mib : Int
+  port : Int32
+  cpu_millis : Int32
+  memory_mib : Int32
   gpu : Bool
 } derive(FromJson, ToJson, Eq, Debug)
 

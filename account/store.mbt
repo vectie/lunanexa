@@ -12,6 +12,8 @@ pub struct AccountStore {
   mut sessions : Map[String, BrowserSession]
   mut invitations : Map[String, AccountInvitation]
   mut trials : Map[String, TrialEntitlement]
+  mut events : Map[String, @event_trial.Policy]
+  mut event_mode_selected : Bool
   mutex : @async.Mutex
 }
 
@@ -38,7 +40,7 @@ fn constant_time_equal(left : String, right : String) -> Bool {
 }
 
 ///|
-fn valid_text(value : String, maximum : Int) -> Bool {
+fn valid_text(value : String, maximum : Int32) -> Bool {
   value.trim() != "" &&
   value.length() <= maximum &&
   value.all(character => {
@@ -173,7 +175,7 @@ let completed_session_retention_ms : Int64 = 2592000000L
 /// How many sessions one account may hold at once. Reaching it evicts the least
 /// recently used session; it never refuses a sign-in that just presented the
 /// account's own credential.
-const MaximumActiveSessionsPerAccount : Int = 8
+const MaximumActiveSessionsPerAccount : Int32 = 8
 
 ///|
 fn AccountStore::prune_completed_sessions_unlocked(
@@ -201,6 +203,8 @@ fn AccountStore::snapshot_unlocked(self : AccountStore) -> AccountSnapshot {
     sessions: sorted_sessions(self.sessions),
     invitations: Some(sorted_invitations(self.invitations)),
     trials: Some(sorted_trials(self.trials)),
+    events: Some(self.events.values().to_array()),
+    event_mode_selected: Some(self.event_mode_selected),
   }
 }
 
@@ -283,6 +287,13 @@ fn AccountStore::restore(
     }
     self.invitations[invitation.invitation_id] = invitation
   }
+  self.event_mode_selected = snapshot.event_mode_selected.unwrap_or(false)
+  for event in snapshot.events.unwrap_or([]) {
+    if !event.valid() || self.events.contains(event.event_id) {
+      raise InvalidSnapshot("invalid event trial policy")
+    }
+    self.events[event.event_id] = event
+  }
   for trial in snapshot.trials.unwrap_or([]) {
     if !@contracts.valid_identifier(trial.trial_id) ||
       !self.accounts.contains(trial.account_id) ||
@@ -293,10 +304,12 @@ fn AccountStore::restore(
       trial.allowed_models.length() > 16 ||
       trial.allowed_models.any(model => !@contracts.valid_identifier(model)) ||
       trial.allowed_models.any(model => trial.allowed_models.count(model) != 1) ||
-      trial.maximum_requests <= 0L ||
+      trial.maximum_requests < 0L ||
+      (trial.maximum_requests == 0L && trial.event_id is None) ||
       trial.maximum_requests > 10000L ||
       trial.consumed_requests.map_or(false, consumed => {
-        consumed < 0L || consumed > trial.maximum_requests
+        consumed < 0L ||
+        (trial.maximum_requests > 0L && consumed > trial.maximum_requests)
       }) ||
       trial.starts_unix_ms <= 0L ||
       trial.expires_unix_ms <= trial.starts_unix_ms ||
@@ -307,11 +320,54 @@ fn AccountStore::restore(
       trial.revoked_unix_ms.map_or(false, revoked => {
         revoked < trial.starts_unix_ms
       }) ||
+      trial.event_id.map_or(false, id => !self.events.contains(id)) ||
       self.trials.contains(trial.trial_id) ||
-      self.trials.values().any(value => value.account_id == trial.account_id) {
+      self.trials
+      .values()
+      .any(value => {
+        value.account_id == trial.account_id &&
+        (
+          value.event_id == trial.event_id ||
+          (
+            value.starts_unix_ms <
+            trial.expires_unix_ms.min(
+              trial.revoked_unix_ms.unwrap_or(trial.expires_unix_ms),
+            ) &&
+            trial.starts_unix_ms <
+            value.expires_unix_ms.min(
+              value.revoked_unix_ms.unwrap_or(value.expires_unix_ms),
+            )
+          )
+        )
+      }) {
       raise InvalidSnapshot("invalid trial entitlement")
     }
     self.trials[trial.trial_id] = trial
+  }
+  for event in self.events.values() {
+    let registrations = self.trials
+      .values()
+      .filter(t => t.event_id == Some(event.event_id))
+      .to_array()
+    if (event.maximum_users > 0 && registrations.length() > event.maximum_users) ||
+      registrations.any(t => {
+        t.allowed_models != event.allowed_models ||
+        t.maximum_requests != event.maximum_requests ||
+        t.expires_unix_ms != event.grant_expires(t.starts_unix_ms) ||
+        t.starts_unix_ms < event.starts_unix_ms
+      }) ||
+      (
+        event.registration_open &&
+        self.events
+        .values()
+        .any(other => {
+          other.event_id != event.event_id &&
+          other.registration_open &&
+          event.overlaps(other)
+        })
+      ) {
+      raise InvalidSnapshot("event trial authority conflicts with policy")
+    }
   }
 }
 
@@ -332,6 +388,8 @@ pub async fn AccountStore::open(
     sessions: Map([]),
     invitations: Map([]),
     trials: Map([]),
+    events: Map([]),
+    event_mode_selected: false,
     mutex: Mutex(),
   }
   if @fs.exists(path) {
@@ -362,6 +420,8 @@ pub async fn AccountStore::open_postgres(
     sessions: Map([]),
     invitations: Map([]),
     trials: Map([]),
+    events: Map([]),
+    event_mode_selected: false,
     mutex: Mutex(),
   }
   match database.load_snapshot("accounts", snapshot_schema_version) {
@@ -385,12 +445,14 @@ pub async fn AccountStore::snapshot(self : AccountStore) -> AccountSnapshot {
 }
 
 ///|
-/// Creates or resumes the single bounded free trial associated with an
-/// account. The deterministic intent makes registration retries safe.
+/// Creates or resumes a bounded trial. Self-registration remains one-time;
+/// an operator may invite a past participant to a distinct later event.
 pub async fn AccountStore::ensure_trial(
   self : AccountStore,
   intent : TrialEntitlementIntent,
   now_unix_ms : Int64,
+  event_id? : String,
+  operator_enrollment~ : Bool = false,
 ) -> TrialEntitlement {
   if !@contracts.valid_identifier(intent.trial_id) ||
     !@contracts.valid_identifier(intent.account_id) ||
@@ -401,7 +463,8 @@ pub async fn AccountStore::ensure_trial(
     intent.allowed_models.length() > 16 ||
     intent.allowed_models.any(model => !@contracts.valid_identifier(model)) ||
     intent.allowed_models.any(model => intent.allowed_models.count(model) != 1) ||
-    intent.maximum_requests <= 0L ||
+    intent.maximum_requests < 0L ||
+    (intent.maximum_requests == 0L && event_id is None) ||
     intent.maximum_requests > 10000L ||
     now_unix_ms <= 0L ||
     intent.expires_unix_ms <= now_unix_ms ||
@@ -422,6 +485,7 @@ pub async fn AccountStore::ensure_trial(
   match self.trials.get(intent.trial_id) {
     Some(existing) => {
       if existing.account_id != intent.account_id ||
+        existing.event_id != event_id ||
         existing.organization_id != intent.organization_id ||
         existing.tenant_ref != intent.tenant_ref ||
         existing.project_id != intent.project_id ||
@@ -433,10 +497,38 @@ pub async fn AccountStore::ensure_trial(
     }
     None => ()
   }
-  if self.trials.values().any(value => value.account_id == intent.account_id) {
+  if self.trials
+    .values()
+    .any(value => {
+      value.account_id == intent.account_id &&
+      (
+        !operator_enrollment ||
+        event_id is None ||
+        value.event_id == event_id ||
+        (value.revoked_unix_ms is None && value.expires_unix_ms > now_unix_ms)
+      )
+    }) {
     raise AlreadyExists(intent.account_id)
   }
+  if event_id is Some(id) {
+    guard self.events.get(id) is Some(event) &&
+      (event.registration_open || operator_enrollment) &&
+      event.within_window(now_unix_ms) &&
+      event.allowed_models == intent.allowed_models &&
+      event.maximum_requests == intent.maximum_requests &&
+      event.grant_expires(now_unix_ms) == intent.expires_unix_ms &&
+      (
+        event.maximum_users == 0 ||
+        self.trials.values().filter(t => t.event_id == Some(id)).count() <
+        event.maximum_users
+      ) else {
+      raise InvalidInput(
+        "event is closed, full, or trial scope differs from policy",
+      )
+    }
+  }
   let trial : TrialEntitlement = {
+    event_id,
     trial_id: intent.trial_id,
     account_id: intent.account_id,
     organization_id: intent.organization_id,
@@ -461,9 +553,7 @@ pub async fn AccountStore::trial_for_account(
   account_id : String,
 ) -> TrialEntitlement? {
   self.mutex.acquire()
-  let value = self.trials
-    .values()
-    .find_first(trial => trial.account_id == account_id)
+  let value = self.latest_trial(account_id)
   self.mutex.release()
   value
 }
@@ -520,7 +610,7 @@ pub async fn AccountStore::consume_trial_request(
   if legacy_consumed < 0L {
     raise InvalidInput("invalid legacy trial usage")
   }
-  if consumed >= trial.maximum_requests {
+  if trial.maximum_requests > 0L && consumed >= trial.maximum_requests {
     return false
   }
   self.trials[trial_id] = { ..trial, consumed_requests: Some(consumed + 1L), }
@@ -573,8 +663,7 @@ pub async fn AccountStore::revoke_trial_for_account(
   errdefer {
     self.trials = previous
   }
-  guard self.trials.values().find_first(trial => trial.account_id == account_id)
-    is Some(trial) else {
+  guard self.latest_trial(account_id) is Some(trial) else {
     raise NotFound(account_id)
   }
   let updated = match trial.revoked_unix_ms {
@@ -584,6 +673,21 @@ pub async fn AccountStore::revoke_trial_for_account(
   self.trials[trial.trial_id] = updated
   self.persist()
   updated
+}
+
+///|
+fn AccountStore::latest_trial(
+  self : AccountStore,
+  account_id : String,
+) -> TrialEntitlement? {
+  let mut latest : TrialEntitlement? = None
+  for trial in self.trials.values() {
+    if trial.account_id == account_id &&
+      latest.map_or(true, t => trial.starts_unix_ms >= t.starts_unix_ms) {
+      latest = Some(trial)
+    }
+  }
+  latest
 }
 
 ///|
@@ -1036,7 +1140,7 @@ fn AccountStore::session_material(
   self : AccountStore,
   account_id : String,
   now_unix_ms : Int64,
-  ordinal : Int,
+  ordinal : Int32,
 ) -> String {
   @crypto.bytes_to_hex_string(
     @crypto.hmac(
@@ -1229,7 +1333,7 @@ pub async fn AccountStore::revoke_all_sessions(
   self : AccountStore,
   account_id : String,
   now_unix_ms : Int64,
-) -> Int {
+) -> Int32 {
   self.mutex.acquire()
   defer self.mutex.release()
   let previous = self.sessions.copy()

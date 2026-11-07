@@ -26,8 +26,8 @@ fn message(locale : @i18n.Locale, key : GuidanceMessage) -> String {
       )
     TrialSecret =>
       (
-        "Only one key is issued per trial, and the secret is shown once. Save it before closing. A lost or revoked trial key cannot be reissued; create or join an organization to request continued access. Expiry does not grant a new trial.",
-        "每次体验仅签发一把密钥，且只显示一次，请在关闭前保存。丢失或撤销后无法补发；请创建或加入组织申请继续使用。到期不会自动获得新体验。",
+        "One key is bound to each trial. View, copy or test your active key in Account & API keys. A revoked key is not restored; expiry does not grant a new trial.",
+        "每次体验绑定一把密钥。可在「账户与 API 密钥」查看、复制或测试有效密钥；已撤销密钥不会恢复，到期不会自动获得新体验。",
       )
   }
   @i18n.copy(locale, en, zh)

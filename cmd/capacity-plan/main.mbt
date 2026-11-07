@@ -1,5 +1,5 @@
 ///|
-async fn read_input(path : String, analysis? : Bool = false) -> String {
+async fn read_input(path : String, analysis~ : Bool = false) -> String {
   let file = @fs.open(path, mode=ReadOnly)
   defer file.close()
   let size = file.size()

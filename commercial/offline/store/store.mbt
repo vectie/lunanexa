@@ -2030,7 +2030,7 @@ pub async fn OfflineCommerceStore::consume_transfer_session(
 pub async fn OfflineCommerceStore::expire_transfer_sessions(
   self : OfflineCommerceStore,
   now_unix_ms : Int64,
-) -> Int {
+) -> Int32 {
   self.mutex.acquire()
   defer self.mutex.release()
   let before = self.transfer_sessions.copy()
@@ -2083,7 +2083,7 @@ pub async fn OfflineCommerceStore::transfer_session(
 pub async fn OfflineCommerceStore::claim_generation_requests(
   self : OfflineCommerceStore,
   now_unix_ms : Int64,
-  limit? : Int = 100,
+  limit~ : Int32 = 100,
 ) -> Array[@offline.ArtifactGenerationRequest] {
   if limit < 1 || limit > 1000 || now_unix_ms <= 0L {
     raise @offline.OfflineCommerceError::InvalidInput(
@@ -2135,8 +2135,8 @@ pub async fn OfflineCommerceStore::claim_generation_requests(
 pub async fn OfflineCommerceStore::claim_authority_work(
   self : OfflineCommerceStore,
   now_unix_ms : Int64,
-  limit? : Int = 100,
-  blocked_activation_orders? : Array[String] = [],
+  limit~ : Int32 = 100,
+  blocked_activation_orders~ : Array[String] = [],
 ) -> @offline.OfflineAuthorityWorkBatch {
   if limit < 1 || limit > 1000 || now_unix_ms <= 0L {
     raise @offline.OfflineCommerceError::InvalidInput(

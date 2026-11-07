@@ -1,35 +1,48 @@
 ///|
 #warnings("-alert_unstable")
-test "application launcher keeps all four branded cards when a profile is unavailable" {
+test "application launcher shows authorized applications without unavailable placeholders" {
   let base = demo_state()
   let desktop = base.desktop_client.unwrap()
   let state = { ..base, route: DesktopIde, desktop_clients: [desktop], }
   let cards = @rabbita.render_to_string(() => {
     @rabbita.Val::constant(application_cards(state, None))
   })
-  assert_eq(cards.split("<article ").to_array().length(), 5)
-  for
-    (name, logo) in [
-      ("ComfyUI", "comfyui"),
-      ("MoonDesk", "moondesk"),
-      ("MoonRobo", "moonrobo"),
-      ("MoonTown", "moontown"),
-    ] {
-    assert_true(cards.contains("<h3>\{name}</h3>"))
-    assert_true(cards.contains("src=\"./apps/\{logo}.svg\""))
-    assert_true(cards.contains("alt=\"\{name} logo\""))
-  }
-  assert_true(cards.contains("Open MoonDesk"))
+  assert_eq(cards.split("<article ").to_array().length(), 2)
+  assert_true(cards.contains("src=\"./apps/moondesk.svg\""))
+  assert_true(cards.contains("Open " + desktop.display_name))
   assert_false(cards.contains("Open MoonRobo"))
-  assert_true(cards.contains("Not configured"))
-  assert_true(cards.contains("disabled"))
+  assert_false(cards.contains("Not configured"))
+  assert_false(cards.contains("MoonTown"))
   let robo = { ..desktop, client_id: "moonrobo", display_name: "MoonRobo", }
   let configured = render({ ..state, desktop_clients: [desktop, robo], })
   assert_true(configured.contains("Open MoonRobo"))
   let busy = @rabbita.render_to_string(() => {
     @rabbita.Val::constant(application_cards({ ..state, loading: true, }, None))
   })
-  assert_eq(busy.split(" disabled").to_array().length(), 5)
+  assert_eq(busy.split(" disabled").to_array().length(), 2)
+}
+
+///|
+#warnings("-alert_unstable")
+test "additional application cards come only from the authorized catalog" {
+  let base = demo_state()
+  let client = {
+    ..base.desktop_client.unwrap(),
+    client_id: "document-tool",
+    display_name: "Document tool",
+    launch_uri: "https://platform.example/user/business/tool/connect",
+  }
+  let with_client = { ..base, route: DesktopIde, desktop_clients: [client], }
+  assert_true(render(with_client).contains("Document tool"))
+  assert_false(
+    render({ ..with_client, desktop_clients: [], }).contains("Document tool"),
+  )
+  assert_eq(
+    application_choices({ ..with_client, desktop_clients: [client, client], })
+    .filter(item => item.0 == "document-tool")
+    .length(),
+    1,
+  )
 }
 
 ///|

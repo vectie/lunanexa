@@ -456,7 +456,10 @@ test "model mounts cannot escape the verified cache and ingress cannot become pu
 }
 
 ///|
-fn paired_assignment(rank : Int, peer : String) -> @contracts.DesiredAssignment {
+fn paired_assignment(
+  rank : Int32,
+  peer : String,
+) -> @contracts.DesiredAssignment {
   {
     ..runtime_assignment(),
     group: Some({

@@ -26,15 +26,21 @@ pub struct FileDeploymentStore {
   signing_secret : String
   templates : Map[String, @deployment.ModelServiceTemplate]
   operations : Map[String, @deployment.DeploymentOperation]
+  services : Map[String, @deployment.ModelServiceInstance]
   mutex : @async.Mutex
 }
+pub async fn FileDeploymentStore::adopt_service(Self, @deployment.ModelServiceInstance) -> Unit
 pub async fn FileDeploymentStore::create_operation(Self, @deployment.DeploymentPlan, Int64) -> @deployment.DeploymentOperation
 pub async fn FileDeploymentStore::deployment(Self, String) -> @deployment.DeploymentOperation?
+pub async fn FileDeploymentStore::observe_service(Self, String, Int64, @deployment.ServiceRuntimeState, Int64) -> Unit
 pub async fn FileDeploymentStore::open(String, String) -> Self
 pub async fn FileDeploymentStore::open_postgres(@database.PostgresDatabase, String) -> Self
 pub async fn FileDeploymentStore::operation(Self, String) -> @deployment.DeploymentOperation?
 pub async fn FileDeploymentStore::operations(Self) -> Array[@deployment.DeploymentOperation]
 pub async fn FileDeploymentStore::register_template(Self, @deployment.ModelServiceTemplate) -> @deployment.ModelServiceTemplate
+pub async fn FileDeploymentStore::service(Self, String) -> @deployment.ModelServiceInstance?
+pub async fn FileDeploymentStore::services(Self) -> Array[@deployment.ModelServiceInstance]
+pub async fn FileDeploymentStore::set_service_desired(Self, String, Int64, Bool, Int64) -> @deployment.ModelServiceInstance
 pub async fn FileDeploymentStore::snapshot(Self) -> @deployment.DeploymentSnapshot
 pub async fn FileDeploymentStore::template(Self, @deployment.TemplateRef) -> @deployment.ModelServiceTemplate?
 pub async fn FileDeploymentStore::templates(Self) -> Array[@deployment.ModelServiceTemplate]

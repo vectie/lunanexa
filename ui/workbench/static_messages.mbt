@@ -27,7 +27,6 @@ priv enum StaticMessage {
   ThisCapacityLeaseIsAwaitingApproval
   TheActiveLeaseIsOutsideIts
   ConnectWithAScopedInferenceToken
-  LunanexaDeveloperWorkspace
   YourWorkspaceIsNotReady
   VerifyIdentity
   LoadAnOpaqueSubjectThroughTrusted
@@ -157,12 +156,8 @@ fn static_message(locale : @i18n.Locale, key : StaticMessage) -> String {
       )
     ConnectWithAScopedInferenceToken =>
       @i18n.copy(
-        locale, "Connect with a scoped inference token and verified identity to load your authorization. Loopback acceptance may also use an opaque subject reference.",
-        "使用限定范围的推理令牌和已验证身份进行连接，以加载限定范围的访问权限。本地回环验收也可使用不透明主体引用。",
-      )
-    LunanexaDeveloperWorkspace =>
-      @i18n.copy(
-        locale, "LUNANEXA DEVELOPER WORKSPACE", "LUNANEXA 开发者工作台",
+        locale, "Open an enabled workspace from your account. If none is available, ask your organization administrator to enable one.",
+        "从账号中打开已开通的工作区；如未开通，请联系组织管理员。",
       )
     YourWorkspaceIsNotReady =>
       @i18n.copy(locale, "Your workspace is not ready", "工作区尚未就绪")

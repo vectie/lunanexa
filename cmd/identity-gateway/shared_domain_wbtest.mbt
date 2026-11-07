@@ -35,8 +35,7 @@ test "one HTTPS host keeps management and user sessions in separate paths" {
   )
   for
     denied in [
-      "suanli.example.com:5002", "suanli.example.com:8444", "suanli.example.com:443",
-      "attacker.example:8443",
+      "suanli.example.com:5002", "suanli.example.com:8444", "attacker.example:8443",
     ] {
     assert_true(config.browser_audience(denied, Some("/user")) is None)
   }
@@ -58,7 +57,11 @@ test "one HTTPS host keeps management and user sessions in separate paths" {
   )
   assert_eq(
     config.cookie_name_for_host(Enterprise, "suanli.example.com:8443"),
-    "\{config.enterprise_cookie_name}_8443",
+    config.enterprise_cookie_name,
+  )
+  assert_true(
+    config.browser_audience("suanli.example.com:443", Some("/user")) ==
+    Some(Enterprise),
   )
   assert_true(
     config.browser_audience("attacker.example", Some("/mana")) is None,

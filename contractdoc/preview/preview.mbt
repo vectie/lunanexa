@@ -145,7 +145,7 @@ fn marker_preserving_pages(
   let source_table_row = Ref(0)
   fn skip_non_content(
     blocks : Array[@docx.DocxFlowBlock],
-    source_index : Ref[Int],
+    source_index : Ref[Int32],
   ) -> Unit {
     while source_index.val < blocks.length() {
       match blocks[source_index.val] {

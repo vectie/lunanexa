@@ -78,6 +78,23 @@ fn expired_cookie(name : String, secure~ : Bool = true) -> @http.Cookie {
 }
 
 ///|
+fn legacy_port_cookie_cleanup(
+  config : GatewayConfig,
+  audience : BrowserAudience,
+) -> Array[@http.Cookie] {
+  if config.alternate_https_port {
+    [
+      expired_cookie(
+        "\{config.cookie_name(audience)}_8443",
+        secure=config.browser_secure(),
+      ),
+    ]
+  } else {
+    []
+  }
+}
+
+///|
 fn host_and_audience(
   config : GatewayConfig,
   request : @http.Request,
@@ -102,7 +119,16 @@ fn exact_origin(
   secure~ : Bool = true,
 ) -> Bool {
   let scheme = if secure { "https" } else { "http" }
-  header(request.headers, "Origin") == Some("\{scheme}://\{host}") &&
+  let default_port_host = if secure && host.has_suffix(":443") {
+    host[:host.length() - 4].to_owned()
+  } else {
+    host
+  }
+  (
+    header(request.headers, "Origin") == Some("\{scheme}://\{host}") ||
+    header(request.headers, "Origin") ==
+    Some("\{scheme}://\{default_port_host}")
+  ) &&
   (
     header(request.headers, "Sec-Fetch-Site") == Some("same-origin") ||
     (!secure && missing_fetch_metadata(request))
@@ -157,7 +183,7 @@ fn valid_cookie_session(
   config : GatewayConfig,
   now : Int64,
 ) -> Bool {
-  value.host == host &&
+  session_host_matches(value, host, audience, config) &&
   value.audience == audience.name() &&
   value.created_unix_ms <= now &&
   value.expires_unix_ms > now &&
@@ -173,13 +199,51 @@ async fn browser_state(
   audience : BrowserAudience,
 ) -> (String, GatewayCookie)? {
   guard header(request.headers, "Host") is Some(host) &&
-    cookie_value(request.headers, config.cookie_name_for_host(audience, host))
+    browser_cookie_reference(config, request.headers, audience, host)
     is Some(raw) &&
     decode_cookie_reference(raw, config.cookie_secret(audience)) is Some(id) &&
     store.load(id) is Some(value) else {
     return None
   }
   Some((id, value))
+}
+
+///|
+fn session_host_matches(
+  value : GatewayCookie,
+  host : String,
+  audience : BrowserAudience,
+  config : GatewayConfig,
+) -> Bool {
+  if value.host == host {
+    return true
+  }
+  // Keep unfinished OIDC flows tied to their redirect origin. Completed login
+  // sessions may move between the two HTTPS ingress ports on this one host.
+  if value.kind == "flow" || !config.browser_secure() {
+    return false
+  }
+  let expected = match audience {
+    Operator => config.operator_host
+    Enterprise => config.enterprise_host
+  }
+  config.matches_browser_host(value.host, expected) &&
+  config.matches_browser_host(host, expected)
+}
+
+///|
+fn browser_cookie_reference(
+  config : GatewayConfig,
+  headers : @http.Headers,
+  audience : BrowserAudience,
+  host : String,
+) -> String? {
+  let name = config.cookie_name_for_host(audience, host)
+  match cookie_value(headers, name) {
+    Some(value) => Some(value)
+    None if config.alternate_https_port => cookie_value(headers, "\{name}_8443")
+    None => None
+  }
 }
 
 ///|
@@ -328,13 +392,14 @@ async fn handle_oidc_callback(
       "Content-Length": "0",
     },
     cookies=[
-      browser_cookie(
-        config.cookie_name_for_host(audience, host),
-        cookie_reference,
-        config.session_absolute_ms / 1000L,
-        secure=config.browser_secure(),
-      ),
-    ],
+        browser_cookie(
+          config.cookie_name_for_host(audience, host),
+          cookie_reference,
+          config.session_absolute_ms / 1000L,
+          secure=config.browser_secure(),
+        ),
+      ] +
+      legacy_port_cookie_cleanup(config, audience),
   )
   connection.end_response()
 }
@@ -413,13 +478,14 @@ async fn handle_browser_session(
       "Vary": "Cookie",
     },
     cookies=[
-      browser_cookie(
-        config.cookie_name_for_host(audience, host),
-        cookie_reference,
-        (refreshed.expires_unix_ms - now) / 1000L,
-        secure=config.browser_secure(),
-      ),
-    ],
+        browser_cookie(
+          config.cookie_name_for_host(audience, host),
+          cookie_reference,
+          (refreshed.expires_unix_ms - now) / 1000L,
+          secure=config.browser_secure(),
+        ),
+      ] +
+      legacy_port_cookie_cleanup(config, audience),
   )
 }
 
@@ -463,7 +529,7 @@ async fn handle_logout(
       204,
       "No Content",
       extra_headers={ "Cache-Control": "no-store", "Content-Length": "0" },
-      cookies=[cookie],
+      cookies=[cookie] + legacy_port_cookie_cleanup(config, audience),
     )
     connection.end_response()
   } else {
@@ -473,7 +539,7 @@ async fn handle_logout(
       "{\"error\":\"logout-upstream-failed\"}",
       "application/json; charset=utf-8",
       headers={ "Cache-Control": "no-store" },
-      cookies=[cookie],
+      cookies=[cookie] + legacy_port_cookie_cleanup(config, audience),
     )
   }
 }

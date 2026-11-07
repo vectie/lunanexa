@@ -14,10 +14,10 @@ pub extend DraftFile with Eq::{not_equal, equal}
 
 ///|
 pub(all) struct UsageSummary {
-  requests_used : Int
-  requests_limit : Int
-  input_units : Int
-  output_units : Int
+  requests_used : Int32
+  requests_limit : Int32
+  input_units : Int32
+  output_units : Int32
   accelerator_ms : Int64
 } derive(Debug, Eq)
 
@@ -485,13 +485,17 @@ fn lease_gate(state : WorkbenchState) -> @rabbita.Html {
   }
   @html.main_(id="main", class="entry-gate", [
     @html.div(class="gate-copy", [
-      @html.p(
-        class="eyebrow",
-        static_message(state.locale, LunanexaDeveloperWorkspace),
-      ),
       @html.h1(static_message(state.locale, YourWorkspaceIsNotReady)),
       @html.p(class="gate-lede", gate_message),
-      @html.div(class="gate-steps", [
+      @html.a(
+        class="primary-action",
+        href="/user/",
+        @i18n.copy(state.locale, "Open my workspace", "前往我的工作台"),
+      ),
+      @html.details(class="gate-steps", [
+        @html.summary(
+          @i18n.copy(state.locale, "Access requirements", "查看开通条件"),
+        ),
         @html.div(class="gate-step", [
           @html.span(class="step-number", "01"),
           @html.div([
@@ -519,10 +523,10 @@ fn lease_gate(state : WorkbenchState) -> @rabbita.Html {
             ),
           ]),
         ]),
-      ]),
-      @html.p(class="boundary-note gate-boundary", [
-        @html.strong(static_message(state.locale, TrustBoundary)),
-        @html.span(static_message(state.locale, ALeaseNeverGrantsADgx)),
+        @html.p(class="boundary-note gate-boundary", [
+          @html.strong(static_message(state.locale, TrustBoundary)),
+          @html.span(static_message(state.locale, ALeaseNeverGrantsADgx)),
+        ]),
       ]),
     ]),
   ])
@@ -899,6 +903,19 @@ fn run_panel(
         static_message(state.locale, ChooseAnAuthorizedAliasManualInput),
       ),
       @html.label(for_="instruction", static_message(state.locale, Instruction)),
+      if state.lease is Some(lease) &&
+        @workspace.capability_limit(lease, TextGenerate) is Some(limit) {
+        @html.p(
+          class="privacy-copy",
+          @i18n.copy(
+            state.locale,
+            "Output ceiling: \{limit.max_output_units_per_request} tokens. Refresh the connection after an administrator changes it.",
+            "单次输出上限：\{limit.max_output_units_per_request} tokens。管理员调整后，请刷新连接以获取最新设置。",
+          ),
+        )
+      } else {
+        @html.nothing
+      },
       @html.textarea(
         id="instruction",
         rows=6,
@@ -923,19 +940,32 @@ fn run_panel(
         class="privacy-copy request-policy",
         static_message(state.locale, EphemeralNoCacheNoTrainingReuse),
       ),
-      @html.div(class="usage", [
+      @html.details(class="usage", [
+        @html.summary(static_message(state.locale, SessionUsage)),
         @html.div(class="usage-heading", [
           @html.h3(static_message(state.locale, SessionUsage)),
           @html.strong(
             class="mono",
-            "\{state.usage.requests_used}/\{state.usage.requests_limit}",
+            if state.usage.requests_limit == 0 {
+              @i18n.copy(
+                state.locale,
+                "\{state.usage.requests_used} / Unlimited",
+                "\{state.usage.requests_used} / 不限",
+              )
+            } else {
+              "\{state.usage.requests_used}/\{state.usage.requests_limit}"
+            },
           ),
         ]),
-        @html.progress(
-          value=state.usage.requests_used,
-          max=state.usage.requests_limit.max(1),
-          static_message(state.locale, RequestQuota),
-        ),
+        if state.usage.requests_limit > 0 {
+          @html.progress(
+            value=state.usage.requests_used,
+            max=state.usage.requests_limit.max(1),
+            static_message(state.locale, RequestQuota),
+          )
+        } else {
+          @html.nothing
+        },
         @html.div(class="usage-stats", [
           @html.div([
             @html.strong(class="mono", "\{state.usage.input_units}"),
@@ -1243,7 +1273,16 @@ fn workbench_view(
             ]),
             run_panel(state, emit),
           ]),
-          integrations(state, emit),
+          @html.details(class="client-options", [
+            @html.summary(
+              @i18n.copy(
+                state.locale,
+                "Connect another client",
+                "连接其他客户端",
+              ),
+            ),
+            integrations(state, emit),
+          ]),
         ])
       } else {
         lease_gate(state)

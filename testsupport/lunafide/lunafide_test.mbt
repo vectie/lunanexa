@@ -1,7 +1,7 @@
 ///|
 fn verification_request(
   idempotency_key : String,
-  tenant_ref? : String = "tenant-a",
+  tenant_ref~ : String = "tenant-a",
 ) -> @lunafide.VerificationRequest {
   {
     protocol_version: @lunafide.protocol_version,
@@ -31,8 +31,8 @@ fn envelope_request(idempotency_key : String) -> @lunafide.EnvelopeRequest {
 ///|
 fn invoice_request(
   idempotency_key : String,
-  currency? : String = "CNY",
-  amount_minor? : Int64 = 4200L,
+  currency~ : String = "CNY",
+  amount_minor~ : Int64 = 4200L,
 ) -> @lunafide.InvoiceRequest {
   {
     protocol_version: @lunafide.protocol_version,

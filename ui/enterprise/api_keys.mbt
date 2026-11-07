@@ -33,7 +33,12 @@ pub fn api_key_uses_unmetered_model(state : EnterpriseState) -> Bool {
   let private_model = state.deliveries.external_model.map_or(false, service => {
     models.all(model => model == service.model_alias)
   })
-  private_model || models.all(model => {
+  private_model ||
+  state.trial.map_or(false, trial => {
+    trial.maximum_requests == 0L &&
+    models.all(model => personal_trial_model(state, model))
+  }) ||
+  models.all(model => {
     state.deliveries.options.shared_trials.any(slot => {
       slot.kind == "Text" && slot.model_alias == model
     })
@@ -98,6 +103,17 @@ fn saved_api_key_controls(
         disabled=!active,
         busy~,
       ),
+      if state.trial.map_or(false, trial => trial.api_key_id == Some(key.key_id)) {
+        @html.button(
+          type_="button",
+          class="quiet-button",
+          on_click=command(emit, TestSavedTrialApiKey(key.key_id)),
+          disabled=!active || state.loading,
+          copy(state.locale, "Test API connection", "测试 API 连接"),
+        )
+      } else {
+        @html.nothing
+      },
     ],
   )
 }

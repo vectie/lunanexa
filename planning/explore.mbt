@@ -12,7 +12,7 @@ pub extend SampleOrder with Eq::{equal, not_equal}
 ///|
 /// One-based index in the captured run, stable through filtering and sorting.
 pub(all) struct IndexedSample {
-  sample_index : Int
+  sample_index : Int32
   sample : @benchmark.BenchmarkSample
 } derive(Eq)
 

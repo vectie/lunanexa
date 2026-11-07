@@ -32,7 +32,7 @@ priv struct NotificationPreferenceRequest {
 
 ///|
 priv struct NotificationRedriveRequest {
-  expected_attempt_count : Int
+  expected_attempt_count : Int32
   expected_updated_unix_ms : Int64
 } derive(FromJson)
 
@@ -777,7 +777,7 @@ pub async fn ApiService::reconcile_notifications(
 /// no user has a page open.
 pub async fn ApiService::run_notification_reconciler_forever(
   self : ApiService,
-  interval_ms : Int,
+  interval_ms : Int32,
 ) -> Unit noraise {
   if interval_ms < 1000 || interval_ms > 300000 {
     return

@@ -30,7 +30,7 @@ pub fn ApiService::with_offline_template_approvals(
       approval.approval_ref.length() <= 1024 &&
       approval.sha256.length() == 71 &&
       approval.sha256.has_prefix("sha256:") &&
-      approval.sha256[7:].all(c => c is ('a'..='f' | '0'..='9')) &&
+      approval.sha256[7:].all(c => c is ('a'..<='f' | '0'..<='9')) &&
       !seen.contains(key) else {
       fail("invalid or duplicate template approval")
     }

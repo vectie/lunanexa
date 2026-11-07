@@ -1,8 +1,8 @@
 ///|
 async fn authority_execution_fixture(
   directory : String,
-  tenant? : String = "tenant-a",
-  kind? : @offline.EntitlementKind = WorkspaceLease,
+  tenant~ : String = "tenant-a",
+  kind~ : @offline.EntitlementKind = WorkspaceLease,
 ) -> (
   @api.ApiService,
   @offline_store.OfflineCommerceStore,

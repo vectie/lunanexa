@@ -12,8 +12,8 @@ pub(all) struct Evidence {
   source_ref : String
   workload_ref : String
   output_unit : String
-  memory_total_mib : Int
-  memory_peak_mib : Int
+  memory_total_mib : Int32
+  memory_peak_mib : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -26,12 +26,12 @@ pub(all) struct Workload {
   kind : @benchmark.BenchmarkKind
   workload_ref : String
   output_unit : String
-  minimum_tested_concurrency : Int
+  minimum_tested_concurrency : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
 pub(all) struct Input {
-  schema_version : Int
+  schema_version : Int32
   workload : Workload
   objective : @benchmark.ServiceObjective
   evidence : Array[Evidence]
@@ -40,7 +40,7 @@ pub(all) struct Input {
 ///|
 pub(all) struct Choice {
   run_id : String
-  tested_concurrency : Int
+  tested_concurrency : Int32
   origin : Origin
   source_ref : String
   recommendation : @benchmark.RecommendationEvidence
@@ -50,7 +50,7 @@ pub(all) struct Choice {
 ///|
 /// This is a reproducible decision-support artifact, never an allocation.
 pub(all) struct Packet {
-  schema_version : Int
+  schema_version : Int32
   packet_id : String
   input : Input
   choices : Array[Choice]
@@ -142,7 +142,7 @@ pub fn compatible(evidence : Evidence, workload : Workload) -> Bool {
 
 ///|
 /// Actual failed sample count, before the legacy per-mille integer rounding.
-pub fn observed_failure_count(evidence : Evidence) -> Int {
+pub fn observed_failure_count(evidence : Evidence) -> Int32 {
   evidence.run.samples.filter(sample => sample.failed).length()
 }
 

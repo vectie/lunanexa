@@ -13,14 +13,14 @@ pub(all) struct CsvColumns {
 
 ///|
 pub(all) struct CsvImportSpec {
-  schema_version : Int
+  schema_version : Int32
   run_id : String
   profile : String
   model_digest : String
   runtime_digest : String
   hardware_profile : String
   kind : @benchmark.BenchmarkKind
-  concurrency : Int
+  concurrency : Int32
   metadata : RecordedMetadata
   columns : CsvColumns
 } derive(Eq, ToJson, FromJson)
@@ -28,7 +28,7 @@ pub(all) struct CsvImportSpec {
 ///|
 pub(all) struct CsvPreview {
   headers : Array[String]
-  sample_count : Int
+  sample_count : Int32
   first_rows : Array[Array[String]]
 } derive(Eq)
 
@@ -150,9 +150,9 @@ pub fn csv_column_names(columns : CsvColumns) -> Array[String] {
 ///|
 fn csv_integer(
   value : String,
-  record : Int,
+  record : Int32,
   header : String,
-) -> Int raise PlanningError {
+) -> Int32 raise PlanningError {
   let text = value.trim()
   if text.is_empty() || !text.iter().all(c => c >= '0' && c <= '9') {
     raise InvalidInput(
@@ -188,9 +188,9 @@ pub fn import_csv_spec(text : String) -> CsvImportSpec raise PlanningError {
 fn csv_metric_indices(
   headers : Array[String],
   columns : CsvColumns,
-) -> Array[Int] raise PlanningError {
+) -> Array[Int32] raise PlanningError {
   let names = csv_column_names(columns)
-  let indices : Array[Int] = []
+  let indices : Array[Int32] = []
   let used : Map[String, Bool] = Map([])
   for name in names {
     if used.contains(name) {
@@ -214,11 +214,11 @@ fn csv_metric_indices(
 ///|
 fn csv_sample(
   row : Array[String],
-  record : Int,
+  record : Int32,
   names : Array[String],
-  indices : Array[Int],
+  indices : Array[Int32],
 ) -> @benchmark.BenchmarkSample raise PlanningError {
-  let values : Array[Int] = []
+  let values : Array[Int32] = []
   for metric = 0; metric < 7; metric = metric + 1 {
     values.push(csv_integer(row[indices[metric]], record, names[metric]))
   }

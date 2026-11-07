@@ -51,8 +51,8 @@ pub extend CatalogModel with ToJson::{to_json}
 pub(all) struct CatalogPage {
   models : Array[CatalogModel]
   total_count : Int64
-  page_number : Int
-  page_size : Int
+  page_number : Int32
+  page_size : Int32
 } derive(Debug, Eq, ToJson)
 
 ///|
@@ -92,8 +92,8 @@ pub(all) struct ImportOperation {
   model_id : String
   revision : String
   state : ImportState
-  files_total : Int
-  files_completed : Int
+  files_total : Int32
+  files_completed : Int32
   bytes_total : Int64
   bytes_completed : Int64
   manifest_digest : String
@@ -256,7 +256,7 @@ pub fn valid_local_directory(value : String) -> Bool {
 /// operator action on the Models page.
 pub fn local_directory_entry(
   directory : String,
-  files : Int,
+  files : Int32,
   bytes : Int64,
   registered : Bool,
 ) -> Json raise ModelSourceError {

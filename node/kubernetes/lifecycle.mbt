@@ -1,6 +1,6 @@
 ///|
 pub(all) suberror LifecycleError {
-  ApiRejected(Int)
+  ApiRejected(Int32)
   InvalidResource
   OwnershipConflict
   LeaseExpired
@@ -15,7 +15,7 @@ pub extend LifecycleError with Eq::{not_equal, equal}
 ///|
 /// Transport implementations must authenticate the API server, bound response
 /// sizes and deadlines, and never include Kubernetes response bodies in errors.
-pub type Transport = async (String, String, Json?) -> (Int, Json)
+pub type Transport = async (String, String, Json?) -> (Int32, Json)
 
 ///|
 pub struct PodManager {

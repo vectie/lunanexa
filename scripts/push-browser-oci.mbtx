@@ -15,10 +15,11 @@ async fn main {
     )
   }
   guard registry.has_prefix("https://") &&
-    repository == "moon/lunanexa-web" &&
-    tag.has_prefix("retire-demo-") &&
+    (repository == "moon/lunanexa-web" ||
+      repository == "moon/lunanexa-coursebook") &&
+    (tag.has_prefix("retire-demo-") || tag.has_prefix("model-catalog-ui-")) &&
     tag.all(c => c is ('a'..='z' | '0'..='9' | '-')) else {
-    fail("Expected the browser repository and a retire-demo release tag")
+    fail("Expected the browser repository and a reviewed browser release tag")
   }
   let index = @json.parse(@fs.read_file(directory + "/index.json").text())
   guard index

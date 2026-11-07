@@ -95,6 +95,50 @@ async fn ApiService::trial_summary(self : ApiService, now : Int64) -> Json {
     None => []
   }
   let account_views = accounts.views()
+  let policies = accounts.snapshot().events.unwrap_or([])
+  let observations = self.commercial_store.durable_snapshot().commercial.usage_observations
+  let usages = self.store.workload_usages()
+  let participants : Array[Json] = []
+  for trial in trials {
+    if !policies.any(p => {
+        p.expires_unix_ms == 0L && trial.event_id == Some(p.event_id)
+      }) {
+      continue
+    }
+    let person = account_views
+      .iter()
+      .find_first(a => a.account_id == trial.account_id)
+    let seen : Map[String, Unit] = Map([])
+    let mut input_units = 0L
+    let mut output_units = 0L
+    let mut accelerator_ms = 0L
+    for o in observations {
+      if o.organization_id == trial.organization_id &&
+        o.project_id == trial.project_id &&
+        person.map_or(false, a => a.subject_ref == o.actor_ref) &&
+        !seen.contains(o.workload_id) {
+        if usages.get(o.workload_id) is Some(usage) {
+          seen[o.workload_id] = ()
+          input_units += usage.input_units.to_int64()
+          output_units += usage.output_units.to_int64()
+          accelerator_ms += usage.accelerator_ms
+        }
+      }
+    }
+    participants.push({
+      "account_id": trial.account_id,
+      "display_name": person
+      .map(a => a.display_name)
+      .unwrap_or(trial.account_id),
+      "starts_unix_ms": Json(trial.starts_unix_ms),
+      "expires_unix_ms": Json(trial.expires_unix_ms),
+      "requests": Json(trial.consumed_requests.unwrap_or(0L)),
+      "metered_requests": seen.length(),
+      "input_units": Json(input_units),
+      "output_units": Json(output_units),
+      "accelerator_ms": Json(accelerator_ms),
+    })
+  }
   let converted = trials.count_if(trial => {
     trial.revoked_unix_ms is Some(_) &&
     account_views.any(account => {
@@ -121,6 +165,7 @@ async fn ApiService::trial_summary(self : ApiService, now : Int64) -> Json {
     .to_json(),
     "converted_trials": converted.to_json(),
     "generated_unix_ms": now.to_json(),
+    "participants": Json(participants),
   }
 }
 

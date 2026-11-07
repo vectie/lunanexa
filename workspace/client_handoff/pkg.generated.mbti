@@ -177,7 +177,9 @@ pub(all) struct ClientLaunchConfig {
   public_api_base_url : String
   handoff_lifetime_ms : Int64
   maximum_requests : Int64
+  allowed_organization_ids : Array[String]?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ClientLaunchConfig::allows_organization(Self, String) -> Bool
 pub fn ClientLaunchConfig::equal(Self, Self) -> Bool
 pub fn ClientLaunchConfig::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
 pub fn ClientLaunchConfig::not_equal(Self, Self) -> Bool

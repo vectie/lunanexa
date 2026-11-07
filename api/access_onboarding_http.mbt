@@ -1,6 +1,7 @@
 ///|
 fn access_onboarding_path(path : String) -> Bool {
   path == "/v1/onboarding/access-packages" ||
+  path == "/v1/onboarding/access-packages/options" ||
   path == "/v1/onboarding/access-packages/operations" ||
   (
     path.has_prefix("/v1/onboarding/access-packages/") &&
@@ -17,8 +18,8 @@ priv struct WebIdeAccessPackageIntent {
   organization_id : String
   tenant_ref : String
   template_id : String
-  lifetime_days : Int
-  lifetime_minutes : Int?
+  lifetime_days : Int32
+  lifetime_minutes : Int32?
   identity_verified : Bool
 } derive(FromJson)
 
@@ -171,6 +172,20 @@ async fn ApiService::create_webide_access_package(
         value => value
       }
   }
+  self.resume_access_package(record)
+}
+
+///|
+async fn ApiService::resume_access_package(
+  self : ApiService,
+  record : @onboarding.AccessOnboardingRecord,
+) -> HttpReply {
+  guard self.access_onboarding_store is Some(journal) else {
+    return api_error(
+      503, "AccessOnboardingUnavailable", "onboarding journal unavailable", true,
+    )
+  }
+  let now = @async.now()
   let intent = record.intent
   if record.status == Conflicted {
     return api_error(
@@ -328,6 +343,8 @@ async fn ApiService::access_package_view_for_membership(
     })
   let aliases = self.serving_client_model_aliases(
     access_package_approved_aliases(self.registry),
+    tenant_ref=membership.tenant_ref,
+    organization_id=membership.organization_id,
   )
   let account_active = account.state == Active &&
     @account.role_allows(account.roles, EnterpriseUser)
@@ -852,7 +869,7 @@ async fn ApiService::execute_webide_access_package(
 pub async fn ApiService::reconcile_access_onboarding(
   self : ApiService,
   now_unix_ms : Int64,
-) -> Int {
+) -> Int32 {
   guard self.access_onboarding_store is Some(journal) else { return 0 }
   let pending = journal.pending()
   let mut completed = 0
@@ -999,7 +1016,14 @@ async fn ApiService::enable_webide_access_package(
       false,
     )
   }
-  if access_package_approved_aliases(self.registry).length() == 0 {
+  if self
+    .serving_client_model_aliases(
+      access_package_approved_aliases(self.registry),
+      tenant_ref=membership.tenant_ref,
+      organization_id=membership.organization_id,
+    )
+    .length() ==
+    0 {
     return api_error(
       409, "ApprovedModelRequired", "at least one approved model alias is required",
       false,
@@ -1112,7 +1136,13 @@ async fn ApiService::handle_access_onboarding(
       }
     (Get, "/v1/onboarding/access-packages") =>
       json_reply(200, self.access_package_views().to_json())
+    (Get, "/v1/onboarding/access-packages/options") =>
+      json_reply(200, self.access_organization_options())
     (Post, "/v1/onboarding/access-packages") => {
+      if (@json.parse(body) catch { _ => Json::null() })
+        is { "account_id": String(_), .. } {
+        return self.prepare_registered_access(operator_id, body)
+      }
       guard decode_webide_access_package(body) is Some(intent) else {
         return api_error(
           400, "InvalidRequest", "invalid WebIDE access package", false,

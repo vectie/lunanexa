@@ -3,11 +3,11 @@ fn node_snapshot(
   id : String,
   state : @contracts.NodeState,
   architecture : String,
-  memory : Int,
+  memory : Int32,
   warm : Bool,
-  queue : Int,
-  licensed? : Bool = true,
-  cx7_peer? : String = "",
+  queue : Int32,
+  licensed~ : Bool = true,
+  cx7_peer~ : String = "",
 ) -> @scheduler.NodeSnapshot {
   {
     node_id: id,
@@ -39,7 +39,7 @@ fn node_snapshot(
 }
 
 ///|
-fn requirements(memory? : Int = 4000) -> @scheduler.PlacementRequirements {
+fn requirements(memory~ : Int32 = 4000) -> @scheduler.PlacementRequirements {
   {
     workload_id: "workload-1",
     model_key: "model.text@v1",
@@ -341,7 +341,7 @@ async test "durable scheduler preserves quotas usage and placement receipts" {
 fn cx7_node(
   id : String,
   state : @contracts.NodeState,
-  peer? : String = "",
+  peer~ : String = "",
 ) -> @scheduler.NodeSnapshot {
   node_snapshot(id, state, "nvidia-gb10", 80000, false, 0, cx7_peer=peer)
 }

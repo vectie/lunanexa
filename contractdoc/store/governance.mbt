@@ -1,5 +1,5 @@
 ///|
-fn valid_governance_text(value : String, maximum : Int) -> Bool {
+fn valid_governance_text(value : String, maximum : Int32) -> Bool {
   let trimmed = value.trim()
   trimmed != "" &&
   trimmed.length() <= maximum &&
@@ -16,7 +16,7 @@ fn valid_digest(value : String) -> Bool {
 ///|
 /// Returns the proleptic-Gregorian UTC year without depending on a host clock
 /// or locale. Contract numbers must not drift by using a fixed 365-day year.
-fn utc_year(now_unix_ms : Int64) -> Int {
+fn utc_year(now_unix_ms : Int64) -> Int32 {
   if now_unix_ms <= 0L {
     return 0
   }

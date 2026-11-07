@@ -49,7 +49,7 @@ test "navigation retains launch choices and refresh cannot switch a removed rese
       returned.session_generation,
       returned.portal.selected_organization_id,
       returned.portal.deliveries.poll_generation,
-      Ok((options, [], None, None, None)),
+      Ok((options, [], None, [], None, None)),
     ),
     emit,
   )
@@ -63,7 +63,7 @@ test "navigation retains launch choices and refresh cannot switch a removed rese
       refreshed.session_generation,
       Some("another-company"),
       refreshed.portal.deliveries.poll_generation,
-      Ok((options, [], None, None, None)),
+      Ok((options, [], None, [], None, None)),
     ),
     emit,
   )
@@ -167,7 +167,7 @@ test "background delivery refresh preserves a stop decision until the service ac
     portal: { ..portal, route: Models, deliveries: panel, },
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
-  let result = Ok((panel.options, [operation], None, None, None))
+  let result = Ok((panel.options, [operation], None, [], None, None))
   let (refreshed, _) = update(
     model,
     DeliveriesLoaded(
@@ -183,7 +183,7 @@ test "background delivery refresh preserves a stop decision until the service ac
     Some(operation.operation_id),
   )
   let stopped = Ok(
-    (panel.options, [{ ..operation, stage: "Stopped", }], None, None, None),
+    (panel.options, [{ ..operation, stage: "Stopped", }], None, [], None, None),
   )
   let (ended, _) = update(
     refreshed,

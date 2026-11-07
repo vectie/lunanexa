@@ -2,11 +2,11 @@
 /// One-based position in the supplied capture list. The digest identifies the
 /// typed canonical snapshot, not its original whitespace or a trusted signature.
 pub(all) struct UsageCaptureSource {
-  source_index : Int
+  source_index : Int32
   snapshot_sha256 : String
-  selected_row_count : Int
-  usage_count : Int
-  ledger_count : Int
+  selected_row_count : Int32
+  usage_count : Int32
+  ledger_count : Int32
 } derive(ToJson)
 
 ///|
@@ -16,8 +16,8 @@ pub extend UsageCaptureSource with ToJson::{to_json}
 pub(all) struct UsageRowSources {
   event_id : String
   entry_id : String
-  observation_sources : Array[Int]
-  ledger_sources : Array[Int]
+  observation_sources : Array[Int32]
+  ledger_sources : Array[Int32]
 } derive(ToJson)
 
 ///|
@@ -28,10 +28,10 @@ pub(all) struct UsageConsolidation {
   report : UsageReport
   sources : Array[UsageCaptureSource]
   row_sources : Array[UsageRowSources]
-  unique_usage_count : Int
-  unique_ledger_count : Int
-  duplicate_usage_count : Int
-  duplicate_ledger_count : Int
+  unique_usage_count : Int32
+  unique_ledger_count : Int32
+  duplicate_usage_count : Int32
+  duplicate_ledger_count : Int32
 }
 
 ///|
@@ -40,7 +40,7 @@ fn[T : Eq] consolidate_record(
   key : String,
   value : T,
   kind : String,
-  source_index : Int,
+  source_index : Int32,
 ) -> Unit raise CommercialError {
   match records.get(key) {
     Some(previous) =>
@@ -60,9 +60,9 @@ fn[T : Eq] consolidate_record(
 
 ///|
 fn record_source(
-  sources : Map[String, Array[Int]],
+  sources : Map[String, Array[Int32]],
   identity : String,
-  index : Int,
+  index : Int32,
 ) -> Unit {
   match sources.get(identity) {
     Some(indices) => indices.push(index)
@@ -86,8 +86,8 @@ pub fn consolidate_usage(
   let projects : Map[String, Project] = Map([])
   let observations : Map[String, UsageObservation] = Map([])
   let entries : Map[String, LedgerEntry] = Map([])
-  let observation_sources : Map[String, Array[Int]] = Map([])
-  let ledger_sources : Map[String, Array[Int]] = Map([])
+  let observation_sources : Map[String, Array[Int32]] = Map([])
+  let ledger_sources : Map[String, Array[Int32]] = Map([])
   let sources : Array[UsageCaptureSource] = []
   let mut total_usage = 0
   let mut total_ledger = 0

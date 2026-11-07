@@ -148,7 +148,7 @@ fn pinned_image(image : String) -> Bool {
 }
 
 ///|
-async fn kubectl(args : Array[String]) -> (Int, String) {
+async fn kubectl(args : Array[String]) -> (Int32, String) {
   let process_env : Map[String, String] = {
     "PATH": "/usr/local/bin:/usr/bin:/bin",
   }

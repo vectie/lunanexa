@@ -1,5 +1,5 @@
 ///|
-async fn sweep_invoke(args : Array[String]) -> (Int, String, String) {
+async fn sweep_invoke(args : Array[String]) -> (Int32, String, String) {
   let exe = @env.get_env_var("SWEEP_EXE").unwrap_or("")
   if exe == "" {
     fail("Set SWEEP_EXE to the built native capacity-plan executable")

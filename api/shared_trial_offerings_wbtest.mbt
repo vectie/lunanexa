@@ -240,7 +240,7 @@ async test "shared trial billing authority requires an explicit unlimited compan
       subject_ref: "subject-a",
       organization_id: "org-energy",
       project_id: "project-a",
-      display_name: "MoonDesk trial",
+      display_name: "Desktop client trial",
       allowed_models: ["text.qwen"],
       handoff_expires_unix_ms: 200000L,
       credential_expires_unix_ms: 300000L,
@@ -252,11 +252,12 @@ async test "shared trial billing authority requires an explicit unlimited compan
   let handoff_key = handoffs.snapshot().credentials[0]
   let with_handoff = service.with_client_handoff_store(handoffs, {
     client_id: "desktop-client",
-    display_name: "MoonDesk trial",
-    launch_uri: "https://example.test/moondesk/connect",
+    display_name: "Desktop client trial",
+    launch_uri: "https://example.test/desktop-client/connect",
     public_api_base_url: "https://example.test/user/v1",
     handoff_lifetime_ms: 120000L,
     maximum_requests: 100L,
+    allowed_organization_ids: None,
   })
   let handoff_authority = { ..authority, key_id: handoff_key.key_id, }
   assert_true(

@@ -30,7 +30,7 @@ let observation_test_secret : String = "guide-observation-test-secret-at-least-3
 ///|
 async fn send_json(
   connection : @http.ServerConnection,
-  status : Int,
+  status : Int32,
   reason : String,
   body : String,
 ) -> Unit {

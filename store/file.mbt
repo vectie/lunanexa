@@ -364,10 +364,31 @@ pub async fn FileStore::commit_workload(
   response : @contracts.WorkloadResponse,
   audit : @contracts.AuditEvent,
 ) -> Unit {
-  self.update(next => {
-    next.put_workload_result(idempotency_key, response)
-    next.append_audit(audit)
-  })
+  self.mutex.acquire()
+  defer self.mutex.release()
+  let next = self.state.candidate()
+  next.put_workload_result(idempotency_key, response)
+  next.append_audit(audit)
+  match self.persistence {
+    StorePostgres(database, holder_id, fencing_token) => {
+      if self.leadership_lost ||
+        !database.controller_leadership_is_current(holder_id, fencing_token) {
+        self.leadership_lost = true
+        raise DurableStoreError::InvalidState(
+          "controller PostgreSQL leadership was lost",
+        )
+      }
+      let record : WorkloadResultRecord = { idempotency_key, response, }
+      database.commit_control_workload(
+        fencing_token,
+        response.workload_id,
+        Json(record).stringify(),
+        Json(audit).stringify(),
+      )
+    }
+    StoreFile(_) => self.persist(next)
+  }
+  self.state = next
 }
 
 ///|
@@ -379,6 +400,20 @@ pub async fn FileStore::workload_result(
   let value = self.state.workload_result(workload_id)
   self.mutex.release()
   value
+}
+
+///|
+/// Metering-only projection: no prompt, output, or credential material.
+pub async fn FileStore::workload_usages(
+  self : FileStore,
+) -> Map[String, @contracts.Usage] {
+  self.mutex.acquire()
+  defer self.mutex.release()
+  Map::from_array(
+    self.state
+    .workload_results()
+    .map(record => (record.response.workload_id, record.response.usage)),
+  )
 }
 
 ///|

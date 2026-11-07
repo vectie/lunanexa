@@ -469,7 +469,9 @@ fn GatewayConfig::matches_browser_host(
   host : String,
   expected : String,
 ) -> Bool {
-  host == expected || (self.alternate_https_port && host == "\{expected}:8443")
+  host == expected ||
+  (self.browser_secure() && host == "\{expected}:443") ||
+  (self.alternate_https_port && host == "\{expected}:8443")
 }
 
 ///|
@@ -552,14 +554,9 @@ fn GatewayConfig::cookie_name(
 fn GatewayConfig::cookie_name_for_host(
   self : GatewayConfig,
   audience : BrowserAudience,
-  host : String,
+  _host : String,
 ) -> String {
-  let name = self.cookie_name(audience)
-  if self.alternate_https_port && host == "\{self.operator_host}:8443" {
-    "\{name}_8443"
-  } else {
-    name
-  }
+  self.cookie_name(audience)
 }
 
 ///|

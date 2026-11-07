@@ -381,7 +381,7 @@ pub async fn ApiService::reconcile_expired_exclusive_leases(
 /// supervisor so the process cannot remain Ready with a dead expiry loop.
 pub async fn ApiService::run_exclusive_lease_expiry_reconciler_forever(
   self : ApiService,
-  interval_ms : Int,
+  interval_ms : Int32,
 ) -> Unit {
   if interval_ms < 1000 || interval_ms > 300000 {
     raise Failure::Failure("exclusive lease reconcile interval is invalid")
@@ -533,6 +533,11 @@ async fn ApiService::handle_exclusive_lease_management(
       if !self.node_exists(intent.node_id) {
         return api_error(
           409, "NodeUnavailable", "exclusive lease node is not enrolled", false,
+        )
+      }
+      if self.node_has_service_allocation(intent.node_id) {
+        return api_error(
+          409, "NodeUnavailable", "node belongs to a model service allocation", false,
         )
       }
       if self.scheduler is Some(scheduler) &&

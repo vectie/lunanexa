@@ -1125,7 +1125,7 @@ async test "contract expiry reconciler notifies tiered windows with dedup" {
     )
     .with_contract_document_store(documents)
     .with_notification_store(notifications)
-  fn day_ms(year : Int, month : Int, day : Int) -> Int64 {
+  fn day_ms(year : Int32, month : Int32, day : Int32) -> Int64 {
     @contractdoc.days_from_civil(year, month, day) * 86400000L
   }
   // 24 days remaining: only the 30-day window fires.
@@ -1639,7 +1639,7 @@ async test "contract expiry reconciler auto-closes past the grace period once" {
     .with_access_store(access)
     .with_contract_document_store(documents)
     .with_notification_store(notifications)
-  fn day_ms(year : Int, month : Int, day : Int) -> Int64 {
+  fn day_ms(year : Int32, month : Int32, day : Int32) -> Int64 {
     @contractdoc.days_from_civil(year, month, day) * 86400000L
   }
   let scan_now = day_ms(2026, 8, 12)

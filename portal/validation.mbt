@@ -1,5 +1,5 @@
 ///|
-fn safe_text(value : String, maximum_length : Int) -> Bool {
+fn safe_text(value : String, maximum_length : Int32) -> Bool {
   let trimmed = value.trim()
   trimmed != "" &&
   value.length() <= maximum_length &&

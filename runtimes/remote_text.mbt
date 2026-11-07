@@ -53,6 +53,7 @@ pub struct OpenAiTextRuntime {
   text_chat_completions : Bool
   served_model_name : String?
   disable_thinking : Bool
+  prefix_cache_isolation : Bool
 }
 
 ///|
@@ -131,6 +132,7 @@ pub fn OpenAiTextRuntime::new(
     text_chat_completions: false,
     served_model_name: None,
     disable_thinking: false,
+    prefix_cache_isolation: false,
   }
 }
 
@@ -169,6 +171,7 @@ pub fn OpenAiTextRuntime::native(
     text_chat_completions: false,
     served_model_name: None,
     disable_thinking: false,
+    prefix_cache_isolation: false,
   }
 }
 
@@ -564,6 +567,15 @@ pub fn OpenAiTextRuntime::uses_direct_node_routing(
 }
 
 ///|
+/// Readiness probe for a strict routing target; exposes no endpoint or secret.
+pub fn OpenAiTextRuntime::has_node_endpoint(
+  self : OpenAiTextRuntime,
+  node_id : String,
+) -> Bool {
+  self.direct_node_routing && self.node_endpoints.contains(node_id)
+}
+
+///|
 pub async fn OpenAiTextRuntime::invoke(
   self : OpenAiTextRuntime,
   request : @contracts.WorkloadEnvelope,
@@ -607,6 +619,7 @@ pub async fn OpenAiTextRuntime::invoke_at(
     self.disable_thinking,
   )
   let endpoint = self.endpoint_for(node_id)
+  self.isolate_prefix_cache(request, upstream_request)
   let (response, body) = @http.post(endpoint, upstream_request, headers~)
   let body_text = body.text()
   if body_text.length() > self.maximum_response_bytes {
@@ -675,6 +688,7 @@ pub async fn OpenAiTextRuntime::invoke_stream_at(
     self.disable_thinking,
   )
   let endpoint = self.endpoint_for(node_id)
+  self.isolate_prefix_cache(request, upstream_request)
   let stream = @http.post_stream(endpoint, headers~)
   defer stream.close()
   stream.write(upstream_request)
@@ -688,6 +702,7 @@ pub async fn OpenAiTextRuntime::invoke_stream_at(
   let mut sequence = 0
   let mut total_output_bytes = 0
   let mut saw_done = false
+  let mut cache_tokens = Json::null()
   let output_text : Array[String] = []
   while stream.read_until("\n") is Some(line) {
     let trimmed = line.trim()
@@ -710,6 +725,7 @@ pub async fn OpenAiTextRuntime::invoke_stream_at(
       error => raise InvalidUpstreamResponse("\{Repr(error)}")
     }
     if responses_event_completed(event_json) is Some(completed_usage) {
+      cache_tokens = cached_input_tokens(event_json)
       if completed_usage is Some(usage) {
         input_units = usage.input_tokens
         output_units = usage.output_tokens
@@ -751,8 +767,12 @@ pub async fn OpenAiTextRuntime::invoke_stream_at(
       "upstream stream ended before its completion marker",
     )
   }
+  let output : Json = { "output_text": output_text.join(""), "chunks": chunks }
+  if cache_tokens is Number(_) && output is Object(fields) {
+    fields["cached_input_tokens"] = cache_tokens
+  }
   {
-    output: { "output_text": output_text.join(""), "chunks": chunks },
+    output,
     artifact_digest: self.artifact_digest,
     runtime_version: self.runtime_version,
     input_units,

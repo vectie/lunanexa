@@ -93,7 +93,7 @@ pub(all) struct BenchmarkProfile {
   p95_ms : Double
   p99_ms : Double
   throughput_per_second : Double
-  peak_memory_mib : Int
+  peak_memory_mib : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -444,7 +444,7 @@ pub fn ModelRegistry::approve(
   model_id : String,
   version : String,
   now_unix_ms : Int64,
-  require_evaluation? : Bool = false,
+  require_evaluation~ : Bool = false,
 ) -> @contracts.ModelRecord raise RegistryError {
   let key = model_key(model_id, version)
   guard self.models.get(key) is Some(model) else { raise ModelNotFound(key) }
@@ -488,7 +488,7 @@ pub fn ModelRegistry::promote(
   stage : RolloutStage,
   actor : String,
   now_unix_ms : Int64,
-  require_evaluation? : Bool = false,
+  require_evaluation~ : Bool = false,
 ) -> PromotionReceipt raise RegistryError {
   if !@contracts.valid_identifier(alias_name, maximum_length=128) ||
     !@contracts.valid_identifier(model_id, maximum_length=128) ||

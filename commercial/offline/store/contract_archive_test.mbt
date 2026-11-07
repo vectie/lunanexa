@@ -26,11 +26,11 @@ async fn archive_pair(
   store : @store.OfflineCommerceStore,
   docx : @store.ContractArchiveObject,
   pdf : @store.ContractArchiveObject,
-  tenant? : String = "tenant-a",
-  organization? : String = "org-a",
-  subject? : String = "buyer-a",
-  template_id? : String = "youthpolicy-device-undertaking-v1",
-  template_version? : String = "v1",
+  tenant~ : String = "tenant-a",
+  organization~ : String = "org-a",
+  subject~ : String = "buyer-a",
+  template_id~ : String = "youthpolicy-device-undertaking-v1",
+  template_version~ : String = "v1",
 ) -> Array[@offline.DocumentArtifact] {
   store.archive_contract_generation(
     tenant_ref=tenant,

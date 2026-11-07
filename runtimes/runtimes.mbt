@@ -77,7 +77,7 @@ pub fn FakeRuntime::is_ready(self : FakeRuntime) -> Bool {
 }
 
 ///|
-pub fn FakeRuntime::invocation_count(self : FakeRuntime) -> Int {
+pub fn FakeRuntime::invocation_count(self : FakeRuntime) -> Int32 {
   self.invocations.length()
 }
 

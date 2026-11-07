@@ -18,7 +18,7 @@ pub(all) struct UsageCorrelationManifest {
 pub(all) struct UsageCorrelationMatch {
   link : UsageCorrelationLink
   status : String
-  row_count : Int
+  row_count : Int32
   source_row_ids : Array[String]
 } derive(Debug, Eq, ToJson)
 
@@ -32,7 +32,7 @@ pub(all) struct UsageCorrelationGroup {
 ///|
 pub(all) struct UsageCorrelationReport {
   query : UsageQuery
-  duplicate_link_count : Int
+  duplicate_link_count : Int32
   references : Array[UsageCorrelationGroup]
   unassigned : UsageReport
 } derive(Debug, Eq)

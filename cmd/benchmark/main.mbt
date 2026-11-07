@@ -60,7 +60,7 @@ async fn run_sample(
   inference_token : String,
   template : @contracts.WorkloadEnvelope,
   kind : @telemetry.BenchmarkKind,
-  index : Int,
+  index : Int32,
 ) -> @telemetry.BenchmarkSample {
   let accepted = @async.now()
   let request = {

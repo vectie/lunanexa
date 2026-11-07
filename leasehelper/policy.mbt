@@ -49,7 +49,7 @@ pub fn valid_host_root(root : String) -> Bool {
 pub fn scoped_host_path(
   root : String,
   identifier : String,
-  maximum_identifier_length? : Int = 128,
+  maximum_identifier_length~ : Int32 = 128,
 ) -> String? {
   if valid_host_root(root) &&
     identifier != "." &&

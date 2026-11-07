@@ -12,7 +12,7 @@ pub struct AccessOnboardingStore {
 }
 
 ///|
-fn step_rank(step : AccessOnboardingStep) -> Int {
+fn step_rank(step : AccessOnboardingStep) -> Int32 {
   match step {
     IntentRecorded => 0
     AccountReady => 1

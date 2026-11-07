@@ -29,7 +29,7 @@ pub fn VideoRuntime::new(
   resolve : async (String) -> @provider.Provider,
   authorized : async (@jobs.Owner, String, String) -> Bool,
   settle : async (@jobs.StoredJob) -> String,
-  now? : () -> Int64 = @async.now,
+  now~ : () -> Int64 = @async.now,
 ) -> VideoRuntime {
   { store, resolve, authorized, settle, now, }
 }
@@ -55,8 +55,8 @@ pub async fn VideoRuntime::submit(
   deployment_id : String,
   deadline_unix_ms : Int64,
   retain_until_unix_ms : Int64,
-  maximum_active? : Int = 1,
-  maximum_per_hour? : Int = 100,
+  maximum_active~ : Int32 = 1,
+  maximum_per_hour~ : Int32 = 100,
   execution_context? : @jobs.ExecutionContext,
 ) -> @jobs.StoredJob {
   if !(self.authorized)(owner, request.model(), deployment_id) {
@@ -247,7 +247,7 @@ pub async fn VideoRuntime::reconcile_submission(
 ///|
 /// A bounded sweep returns only counts, never tenant prompts or provider URLs.
 /// One unavailable provider must not block cancellation for unrelated orders.
-pub async fn VideoRuntime::reconcile(self : VideoRuntime) -> (Int, Int) {
+pub async fn VideoRuntime::reconcile(self : VideoRuntime) -> (Int32, Int32) {
   let saved = self.store.snapshot()
   let mut updated = 0
   let mut failed = 0

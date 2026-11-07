@@ -3,11 +3,11 @@
 pub(all) struct Profile {
   model : String
   provider_model : String
-  widths : Array[Int]
-  heights : Array[Int]
-  maximum_frames : Int
-  maximum_fps : Int
-  maximum_steps : Int
+  widths : Array[Int32]
+  heights : Array[Int32]
+  maximum_frames : Int32
+  maximum_fps : Int32
+  maximum_steps : Int32
   sound_supported : Bool
   image_reference_supported : Bool?
   image_reference_required : Bool?
@@ -33,7 +33,7 @@ pub struct VideoRequest {
 pub(all) struct Observation {
   id : String
   state : @jobs.State
-  progress : Int?
+  progress : Int32?
 } derive(Debug, Eq)
 
 ///|
@@ -63,5 +63,5 @@ pub struct Provider {
   origin : String
   bearer : String?
   profile : Profile
-  timeout_ms : Int
+  timeout_ms : Int32
 }

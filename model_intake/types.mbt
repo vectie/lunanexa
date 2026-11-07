@@ -19,13 +19,13 @@ pub(all) struct Columns {
 
 ///|
 pub(all) struct Mapping {
-  schema_version : Int
+  schema_version : Int32
   columns : Columns
 } derive(ToJson, FromJson)
 
 ///|
 pub(all) struct Draft {
-  schema_version : Int
+  schema_version : Int32
   models : Array[@contracts.ModelRecord]
 } derive(ToJson, FromJson)
 
@@ -47,10 +47,10 @@ pub(all) struct ReviewRow {
 
 ///|
 pub(all) struct Review {
-  schema_version : Int
-  new_count : Int
-  already_registered_count : Int
-  conflict_count : Int
+  schema_version : Int32
+  new_count : Int32
+  already_registered_count : Int32
+  conflict_count : Int32
   rows : Array[ReviewRow]
 } derive(ToJson)
 

@@ -90,7 +90,7 @@ async fn ApiService::undertaking_idle_capacity(
   self : ApiService,
   node_ids : Array[String],
   now : Int64,
-) -> Int? {
+) -> Int32? {
   guard self.telemetry is Some(telemetry) && self.scheduler is Some(scheduler) else {
     return None
   }
@@ -133,9 +133,9 @@ async fn ApiService::undertaking_idle_capacity(
       }) else {
       return None
     }
-    budget = Int::min(
+    budget = Int32::min(
       budget,
-      Int::min((host.memory_total_mib - 16384L).to_int(), available - 4096),
+      Int32::min((host.memory_total_mib - 16384L).to_int(), available - 4096),
     )
   }
   if budget >= 32768 {

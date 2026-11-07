@@ -433,7 +433,7 @@ async fn load_global_admin_settings() -> @settings.GlobalAdminSettings {
           @env.get_env_var("LUNANEXA_ADMISSION_CAPACITY").unwrap_or("128"),
         ).to_int(),
         runtime_concurrency: @string.parse_int64(
-          @env.get_env_var("LUNANEXA_RUNTIME_CONCURRENCY").unwrap_or("4"),
+          @env.get_env_var("LUNANEXA_RUNTIME_CONCURRENCY").unwrap_or("0"),
         ).to_int(),
       }
       { ..defaults, scheduler, }
@@ -479,6 +479,8 @@ async fn run_access_onboarding_reconciler(service : @api.ApiService) -> Unit {
 async fn run_delivery_reconciler(service : @api.ApiService) -> Unit {
   for ;; {
     service.reconcile_resource_reservations()
+    service.reconcile_model_services()
+    service.reconcile_model_pool()
     service.reconcile_deliveries()
     service.reconcile_resource_reservations()
     @async.sleep(5000)
@@ -1077,6 +1079,7 @@ async fn main {
       [
         {
           client_id: required_environment("LUNANEXA_CLIENT_ID"),
+          allowed_organization_ids: None,
           display_name: required_environment("LUNANEXA_CLIENT_DISPLAY_NAME"),
           launch_uri: required_environment("LUNANEXA_CLIENT_LAUNCH_URI"),
           public_api_base_url: required_environment(
@@ -1722,36 +1725,36 @@ async fn main {
     }
     _ => service
   }
-  let service = match
-    (
-      @env.get_env_var("LUNANEXA_GLM_CONTROL_ORIGIN"),
-      @env.get_env_var("LUNANEXA_GLM_CONTROL_TOKEN"),
-    ) {
-    (Some(origin), Some(raw_token)) if @glmcontrol.valid_origin(origin) &&
-      raw_token.trim().length() >= 32 &&
-      service.has_external_text_route() => {
-      let token = raw_token.trim().to_owned()
-      service.with_external_text_control(action => {
-        let headers : @http.Headers = { "authorization": "Bearer " + token }
-        let (response, body) = if action == "stop" {
-          @http.post(origin + "/v1/glm-control", Json::null(), headers~)
-        } else if action == "start" {
-          @http.post(origin + "/v1/glm-control:start", Json::null(), headers~)
-        } else {
-          @http.get(origin + "/v1/glm-control", headers~)
-        }
-        guard response.code == 200 &&
-          body.text().length() < 4096 &&
-          @json.parse(body.text()) is { "state": String(state), .. } &&
-          (state == "Running" || state == "Stopped" || state == "Partial") else {
-          raise Failure("GLM control status is unavailable")
-        }
-        state
-      })
+  let service = match @env.get_env_var("LUNANEXA_EVENT_TEXT_POOL_JSON") {
+    Some(raw) if raw != "" => {
+      guard raw.length() <= 16384 else {
+        raise Failure("event text pool is too large")
+      }
+      let pool : @api.EventTextPool = @json.from_json(@json.parse(raw))
+      service.with_event_text_pool(
+        pool,
+        required_environment("LUNANEXA_EVENT_TEXT_CREDENTIAL"),
+      )
     }
-    (None, None) | (Some(_), None) => service
-    _ => raise Failure("GLM control configuration is incomplete")
+    _ => service
   }
+  let service = service.with_model_pool_json(
+    @env.get_env_var("LUNANEXA_MODEL_POOL_JSON"),
+  )
+  let service = service.with_model_benchmark_json(
+    @env.get_env_var("LUNANEXA_MODEL_BENCHMARK_JSON"),
+  )
+  let service = service.with_runtime_controls(configured_runtime_controls())
+  let service = service.adopt_model_services_json(
+    @env.get_env_var("LUNANEXA_MODEL_SERVICES_JSON"),
+  )
+  service.reconcile_model_services()
+  let (trial_keys_bound, trial_keys_capped, trial_keys_unresolved) = service.reconcile_trial_api_keys(
+    @async.now(),
+  )
+  println(
+    "trial-key reconciliation: bound=\{trial_keys_bound}, expiry-capped=\{trial_keys_capped}, ambiguous=\{trial_keys_unresolved}",
+  )
   let server = @http.Server(@socket.Addr::parse(address), reuse_addr=true)
   let identity_server = @http.Server(
     @socket.Addr::parse(identity_address),
@@ -1808,6 +1811,9 @@ async fn main {
     }
     group.spawn_bg(allow_failure=false) <| () => {
       run_delivery_reconciler(service)
+    }
+    group.spawn_bg(allow_failure=false) <| () => {
+      service.run_model_benchmark_forever()
     }
     group.spawn_bg(allow_failure=false) <| () => {
       service.run_exclusive_lease_expiry_reconciler_forever(

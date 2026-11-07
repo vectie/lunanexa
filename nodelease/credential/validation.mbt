@@ -150,7 +150,7 @@ pub fn validate_issuer_request_intent(
 pub fn connection_command(
   username : String,
   host_alias : String,
-  ssh_port : Int,
+  ssh_port : Int32,
 ) -> String raise CredentialHandoffError {
   if !@nodelease.valid_unix_username(username) ||
     !safe_host_alias(host_alias) ||
