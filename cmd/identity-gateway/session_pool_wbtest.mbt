@@ -58,12 +58,8 @@ async fn gateway_pool_scenario(url : String) -> Unit {
       store.replace(first, { ..session, last_used_unix_ms: now + 1L, })
     })
     @async.sleep(50)
-    let other = @async.with_timeout(500, () => store.load(second)) catch {
-      e => {
-        ignore(blocker.execute("ROLLBACK"))
-        raise e
-      }
-    }
+    errdefer ignore(blocker.execute("ROLLBACK"))
+    let other = @async.with_timeout(500, () => store.load(second))
     assert_true(other is Some({ subject: "independent", .. }))
     ignore(blocker.execute("ROLLBACK"))
   })

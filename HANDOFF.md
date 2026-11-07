@@ -642,3 +642,42 @@ mutation was needed. GLM is left running; Qwen/MiniMax remain running.
 No native source changed, so the previous strict native check and 1,956-test gate
 were not repeated for this configuration/documentation change. Actual runtime,
 JSON/SSE, effective unit arguments and the official portal are the acceptance.
+
+## Concurrent browser identity reads — 2026-11-08
+
+Account authorization still checks the current session, expiry, revocation,
+account state and required role on every call. Session activity is approximate
+telemetry: touch it in memory and checkpoint globally once per 30 seconds, not
+once per request or once per user. Security mutations retain immediate durable
+persistence. Preserve `activity_checkpoint_ms` in both store constructors and
+its failure rollback; the field is intentionally absent from saved snapshots.
+
+Browser session storage now uses the existing four-worker asynchronous PgPool.
+Every lookup remains a live database read. A refresh cannot move last-used time
+backwards when requests finish out of order; deleted sessions cannot reappear.
+The dedicated *_test database regression locks one session row while another
+session remains readable. Do not point the database test at production, and use
+the verified service IP when a management host cannot resolve cluster DNS.
+
+GET `/v1/auth/self` sends a freshly authorized response before recording its
+ordinary operational event in the same request task. Its metric can be lost if
+the process crashes immediately after the response. Mutation audit ordering is
+unchanged. A broken metrics store never grants a revoked session: the real HTTP
+test returns 200 while valid and 401 after revocation. No completed authority
+cache, timeout increase or TLS/origin bypass was added.
+
+A later controller source snapshot had dropped the earlier activity-checkpoint
+patch. Do not deploy just one layer of this fix. The final build receipt pins
+both account/API source hashes and the resulting executable. Controller SHA256
+is `7bef5632a0cabb04ed42020e9a5651bf3a2c2f105b416bcd823141671027b463`;
+browser gateway SHA256 is
+`2c973649c7d9c6d585289beb7f3d88cab01f9ea327a9b72815ccb5d4a26f7f9f`.
+Current model configuration and runtime processes were preserved.
+
+Twenty real identities completed sixty profile checks: gateway profile P95
+57ms, session P95 42ms, direct controller profile P95 6ms. A sustained 1,000-read
+twenty-client run returned 1,000 HTTP200. Strict native check passes; the complete
+native workspace suite reports **1,959 passed, zero failed**. Native gateway
+tests also passed **44/44** against the dedicated test database, and the deployed
+source account package passed **16/16**. These identity measurements do not
+constitute a model-serving or whole-cluster qualification.

@@ -1294,9 +1294,9 @@ pub async fn AccountStore::authorize(
   self.sessions[session.session_id] = touched
   // One global checkpoint coalesces a burst across different users as well as
   // repeated reads by one user. Security mutations retain immediate persistence.
-  if previous_checkpoint.map(time =>
-    now_unix_ms < time || now_unix_ms - time >= 30000L
-  ).unwrap_or(true) {
+  if previous_checkpoint
+    .map(time => now_unix_ms < time || now_unix_ms - time >= 30000L)
+    .unwrap_or(true) {
     self.persist()
     self.activity_checkpoint_ms = Some(now_unix_ms)
   }

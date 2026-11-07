@@ -146,6 +146,7 @@ pub struct AccountStore {
   mut trials : Map[String, TrialEntitlement]
   mut events : Map[String, @event_trial.Policy]
   mut event_mode_selected : Bool
+  mut activity_checkpoint_ms : Int64?
   mutex : @async.Mutex
 }
 pub async fn AccountStore::accept_invitation(Self, String, String, Int64) -> AccountInvitationView
