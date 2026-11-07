@@ -4,11 +4,11 @@
 pub(all) struct BridgeConfig {
   client_id : String
   public_origin : String
-  maximum_sessions : Int
-  maximum_request_bytes : Int
-  maximum_socket_message_bytes : Int
-  request_timeout_ms : Int
-  authorization_interval_ms : Int
+  maximum_sessions : Int32
+  maximum_request_bytes : Int32
+  maximum_socket_message_bytes : Int32
+  request_timeout_ms : Int32
+  authorization_interval_ms : Int32
 } derive(Debug, Eq)
 
 ///|
@@ -80,6 +80,8 @@ pub struct Bridge {
   authorize : async (Grant) -> Bool
   provision : async (String, Grant) -> Backend
   stop : (async (String) -> Unit)?
+  authorize_browser : (async (Grant, String) -> Bool)?
+  handle_authorized : (async (Grant, @http.Request, @http.ServerConnection) -> Bool)?
   sessions : Map[String, Session]
   challenges : Map[String, Int64]
   authorizations : Map[String, AuthorizationFlight]

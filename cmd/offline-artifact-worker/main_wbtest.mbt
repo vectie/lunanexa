@@ -79,10 +79,10 @@ fn signed_manifest(
   artifact_sha256 : String,
   visual_sha256 : String,
   rendered_unix_ms : Int64,
-  kind? : @offline.DocumentArtifactKind = EditableContractDocx,
-  page_or_sheet_count? : Int = 1,
-  visual_evidence_filename? : String = "render.png",
-  source_sha256? : String = artifact_sha256,
+  kind~ : @offline.DocumentArtifactKind = EditableContractDocx,
+  page_or_sheet_count~ : Int32 = 1,
+  visual_evidence_filename~ : String = "render.png",
+  source_sha256~ : String = artifact_sha256,
 ) -> RenderEvidenceManifest {
   let digest = "sha256:" + "a".repeat(64)
   let unsigned : RenderEvidenceManifest = {

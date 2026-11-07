@@ -137,7 +137,7 @@ pub struct ArtifactMaterializer {
   credential : String
   node_id : String
   maximum_artifact_size_bytes : Int64
-  io_chunk_bytes : Int
+  io_chunk_bytes : Int32
   signature_maximum_bytes : Int64
   allow_http_loopback : Bool
   s3_sigv4 : S3SigV4Configuration?
@@ -161,7 +161,7 @@ fn safe_transport_credential(value : String) -> Bool {
 }
 
 ///|
-fn safe_s3_credential(value : String, maximum_length : Int) -> Bool {
+fn safe_s3_credential(value : String, maximum_length : Int32) -> Bool {
   value.length() > 0 &&
   value.length() <= maximum_length &&
   value.all(character => character >= '!' && character <= '~')
@@ -250,11 +250,11 @@ pub async fn ArtifactMaterializer::open(
   cache_root : String,
   endpoint : String,
   credential : String,
-  node_id? : String = "",
-  maximum_artifact_size_bytes? : Int64 = 1099511627776L,
-  io_chunk_bytes? : Int = 1048576,
-  signature_maximum_bytes? : Int64 = 1048576L,
-  allow_http_loopback? : Bool = false,
+  node_id~ : String = "",
+  maximum_artifact_size_bytes~ : Int64 = 1099511627776L,
+  io_chunk_bytes~ : Int32 = 1048576,
+  signature_maximum_bytes~ : Int64 = 1048576L,
+  allow_http_loopback~ : Bool = false,
 ) -> ArtifactMaterializer {
   let secure_endpoint = endpoint.has_prefix("https://")
   let loopback_endpoint = allow_http_loopback &&
@@ -312,10 +312,10 @@ pub async fn ArtifactMaterializer::open_s3(
   secret_access_key : String,
   region : String,
   session_token : String?,
-  maximum_artifact_size_bytes? : Int64 = 1099511627776L,
-  io_chunk_bytes? : Int = 1048576,
-  signature_maximum_bytes? : Int64 = 1048576L,
-  allow_http_loopback? : Bool = false,
+  maximum_artifact_size_bytes~ : Int64 = 1099511627776L,
+  io_chunk_bytes~ : Int32 = 1048576,
+  signature_maximum_bytes~ : Int64 = 1048576L,
+  allow_http_loopback~ : Bool = false,
 ) -> ArtifactMaterializer {
   if !@contracts.valid_identifier(node_id, maximum_length=128) ||
     !safe_s3_credential(access_key_id, 128) ||
@@ -341,7 +341,7 @@ pub async fn ArtifactMaterializer::open_s3(
 }
 
 ///|
-fn decimal(value : Int, width : Int) -> String {
+fn decimal(value : Int32, width : Int32) -> String {
   let raw = value.to_string()
   if raw.length() >= width {
     raw
@@ -493,7 +493,7 @@ fn ArtifactMaterializer::ready_path(
 }
 
 ///|
-async fn digest_file(path : String, io_chunk_bytes : Int) -> (String, Int64) {
+async fn digest_file(path : String, io_chunk_bytes : Int32) -> (String, Int64) {
   let file = @fs.open(path, mode=ReadOnly)
   defer file.close()
   let digest = @crypto.SHA256::new()
@@ -1057,11 +1057,11 @@ async fn[V : ArtifactSignatureVerifier] ArtifactMaterializer::materialize_inner(
 pub async fn ArtifactMaterializer::prune_unassigned(
   self : ArtifactMaterializer,
   desired_digests : Array[String],
-  now_unix_ms? : Int64 = @async.now(),
-  idle_retention_ms? : Int64 = 604800000L,
-  high_watermark_bytes? : Int64 = 1099511627776L,
-  low_watermark_bytes? : Int64 = 824633720832L,
-  pinned_digests? : Array[String] = [],
+  now_unix_ms~ : Int64 = @async.now(),
+  idle_retention_ms~ : Int64 = 604800000L,
+  high_watermark_bytes~ : Int64 = 1099511627776L,
+  low_watermark_bytes~ : Int64 = 824633720832L,
+  pinned_digests~ : Array[String] = [],
 ) -> Unit {
   if idle_retention_ms < 0L ||
     low_watermark_bytes < 0L ||

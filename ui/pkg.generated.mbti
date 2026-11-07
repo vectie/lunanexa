@@ -8,6 +8,7 @@ import {
   "moonbitlang/core/json",
   "vectie/lunanexa/contracts",
   "vectie/lunanexa/deployment",
+  "vectie/lunanexa/event_trial",
   "vectie/lunanexa/notifications",
   "vectie/lunanexa/ui/capacity_planner",
   "vectie/lunanexa/ui/contract_documents",
@@ -33,6 +34,10 @@ pub fn data_class_name(@contracts.DataClass) -> String
 
 pub fn data_class_options() -> Array[@contracts.DataClass]
 
+pub fn decode_model_pool_view(Json) -> ModelPoolView raise
+
+pub fn default_model_tuning() -> ModelTuning
+
 pub fn default_resource_delivery_panel() -> ResourceDeliveryPanel
 
 pub fn default_runtime_draft() -> RuntimeProfileDraft
@@ -43,9 +48,13 @@ pub fn demo_state() -> ConsoleState
 
 pub fn empty_announcement_draft() -> AnnouncementDraft
 
+pub fn empty_event_trial_panel() -> EventTrialPanel
+
 pub fn empty_model_alias_draft() -> ModelAliasDraft
 
 pub fn empty_model_license_draft() -> ModelLicenseDraft
+
+pub fn empty_model_pool_panel() -> ModelPoolPanel
 
 pub fn empty_template_draft() -> TemplateDraft
 
@@ -80,6 +89,12 @@ pub fn parse_data_class(String) -> @contracts.DataClass
 pub fn parse_quick_topology(String) -> QuickTopology
 
 pub fn parse_runtime_capability(String) -> @contracts.Capability
+
+pub fn pool_scope_names(ModelPoolPanel, ModelPoolView) -> Map[String, String]
+
+pub fn pool_scope_nodes(ModelPoolPanel, ModelPoolView) -> Array[String]
+
+pub fn registered_access_ready(ConsoleState) -> Bool
 
 pub fn render(ConsoleState) -> String
 
@@ -125,6 +140,8 @@ pub fn template_runtime_name_valid(String) -> Bool
 
 pub fn template_signature_reference_valid(String) -> Bool
 
+pub fn tuning_value(ModelTuning, String) -> String
+
 pub fn undertaking_allocation_available(ResourceDeliveryPanel) -> Bool
 
 pub fn view(ConsoleState) -> @html.Html
@@ -151,6 +168,16 @@ pub fn AccessGrantRow::from_json(Json, @json.JsonPath) -> Self raise @json.JsonD
 pub fn AccessGrantRow::not_equal(Self, Self) -> Bool
 pub fn AccessGrantRow::to_json(Self) -> Json
 pub fn AccessGrantRow::to_repr(Self) -> @debug.Repr
+
+pub(all) struct AccessOrganizationOption {
+  organization_id : String
+  display_name : String
+  tenant_ref : String
+} derive(Eq, ToJson, @json.FromJson)
+pub fn AccessOrganizationOption::equal(Self, Self) -> Bool
+pub fn AccessOrganizationOption::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn AccessOrganizationOption::not_equal(Self, Self) -> Bool
+pub fn AccessOrganizationOption::to_json(Self) -> Json
 
 pub(all) struct AccessPackageDraft {
   identity_issuer : String
@@ -322,10 +349,16 @@ pub fn Confirmation::to_json(Self) -> Json
 pub fn Confirmation::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ConsoleMessage {
+  ModelPoolSelect(String)
+  ModelPoolSpeculativeSelect(String)
+  ModelPoolTuningSelect(String, String)
+  ModelPoolAction(String)
+  EventTrial(EventTrialMessage)
   CapacityPlanner(@capacity_planner.Message)
   ResourceDelivery(ResourceDeliveryMessage)
   LocaleChanged(@i18n.Locale)
   Navigate(OperatorRoute)
+  ToggleNavigation
   OpenAccessStep(String, String, OperatorRoute)
   ClearAccessContext
   AlertsWindowChanged(AlertsWindow)
@@ -425,6 +458,8 @@ pub(all) enum ConsoleMessage {
   AnnouncementLifetimeChosen(Int)
   SubmitAnnouncement
   AccessPackageIssuerChanged(String)
+  RegisteredAccessAccountChanged(String)
+  SubmitRegisteredAccess
   AccessPackageSubjectChanged(String)
   AccessPackageDisplayNameChanged(String)
   AccessPackageEmailChanged(String)
@@ -447,6 +482,7 @@ pub fn ConsoleMessage::not_equal(Self, Self) -> Bool
 pub(all) struct ConsoleState {
   locale : @i18n.Locale
   route : OperatorRoute
+  navigation_open : Bool
   overview : OverviewMetrics
   nodes : Array[NodeRow]
   storage_nodes : Array[StorageNodeRow]
@@ -465,11 +501,15 @@ pub(all) struct ConsoleState {
   notification_deliveries : Array[NotificationDeliveryRow]
   accounts : Array[AccountView]
   trial_summary : TrialSummary?
+  event_trial : EventTrialPanel
+  model_pool : ModelPoolPanel
   announcement_draft : AnnouncementDraft
   authenticated_account : AccountView?
   account_sessions : Array[BrowserSessionView]
   account_invite : AccountInviteDraft
   access_package_draft : AccessPackageDraft
+  registered_access_account : String
+  access_organizations : Array[AccessOrganizationOption]
   access_packages : Array[AccessPackageView]
   access_package_context : (String, String)?
   users : Array[UserAccessRow]
@@ -530,6 +570,9 @@ pub fn CostCenterRow::to_json(Self) -> Json
 pub fn CostCenterRow::to_repr(Self) -> @debug.Repr
 
 pub(all) struct DeploymentRow {
+  model_digest : String
+  node_id : String
+  resource_owner : String
   assignment_id : String
   deployment_id : String
   desired : @contracts.DeploymentState
@@ -585,6 +628,43 @@ pub fn EnterpriseLeaseRequestRow::not_equal(Self, Self) -> Bool
 pub fn EnterpriseLeaseRequestRow::to_json(Self) -> Json
 pub fn EnterpriseLeaseRequestRow::to_repr(Self) -> @debug.Repr
 
+pub(all) struct EventTrialDraft {
+  event_id : String
+  title : String
+  starts : String
+  expires : String
+  maximum_users : String
+  maximum_requests : String
+  max_input_bytes : String
+  max_output_tokens : String
+  model : String
+  nodes : Array[String]
+  per_node_concurrency : String
+} derive(Eq)
+pub fn EventTrialDraft::equal(Self, Self) -> Bool
+pub fn EventTrialDraft::not_equal(Self, Self) -> Bool
+
+pub(all) enum EventTrialMessage {
+  Field(String, String)
+  ToggleNode(String)
+  New
+  Edit(String)
+  Save
+  SetRegistration(String, Bool)
+} derive(Eq)
+pub fn EventTrialMessage::equal(Self, Self) -> Bool
+pub fn EventTrialMessage::not_equal(Self, Self) -> Bool
+
+pub(all) struct EventTrialPanel {
+  draft : EventTrialDraft
+  events : Array[@event_trial.View]?
+  public_origin : String
+  now_unix_ms : Int64
+  editing : Bool
+} derive(Eq)
+pub fn EventTrialPanel::equal(Self, Self) -> Bool
+pub fn EventTrialPanel::not_equal(Self, Self) -> Bool
+
 pub(all) struct ExclusiveNodeLeaseRow {
   lease_id : String
   node_id : String
@@ -620,6 +700,51 @@ pub(all) struct ModelAliasDraft {
 pub fn ModelAliasDraft::equal(Self, Self) -> Bool
 pub fn ModelAliasDraft::not_equal(Self, Self) -> Bool
 pub fn ModelAliasDraft::to_repr(Self) -> @debug.Repr
+
+pub(all) struct ModelBenchmarkSample {
+  status : Int?
+  error : String?
+  cached_input_tokens : Int?
+  input_tokens : Int?
+  user : Int
+  concurrency : Int
+  round : Int
+  output_tokens : Int
+  ttft_ms : Int64
+  decode_tokens_per_second : Double
+  end_to_end_tokens_per_second : Double
+  valid : Bool
+  timings : Map[String, Int64]
+} derive(Eq, @json.FromJson)
+pub fn ModelBenchmarkSample::equal(Self, Self) -> Bool
+pub fn ModelBenchmarkSample::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ModelBenchmarkSample::not_equal(Self, Self) -> Bool
+
+pub(all) struct ModelBenchmarkView {
+  tuning : ModelTuning?
+  quality_samples : Array[ModelBenchmarkSample]
+  status : String
+  phase : String
+  prepared_users : Int
+  cleaned_users : Int
+  samples : Array[ModelBenchmarkSample]
+  node_counts : Map[String, Int]
+  wall_ms : Int64
+  error : String
+  warmup_samples : Array[ModelBenchmarkSample]
+  speculative_tokens : Int
+  model : String
+  artifact_digest : String
+  runtime_image : String
+  profile : String
+  run_id : String
+  node_ids : Array[String]?
+  quality_suite_digest : String?
+  quality_node_counts : Map[String, Int]?
+} derive(Eq, @json.FromJson)
+pub fn ModelBenchmarkView::equal(Self, Self) -> Bool
+pub fn ModelBenchmarkView::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ModelBenchmarkView::not_equal(Self, Self) -> Bool
 
 pub(all) struct ModelImportRow {
   import_id : String
@@ -702,6 +827,49 @@ pub fn ModelLocalRegistrationDraft::not_equal(Self, Self) -> Bool
 pub fn ModelLocalRegistrationDraft::to_json(Self) -> Json
 pub fn ModelLocalRegistrationDraft::to_repr(Self) -> @debug.Repr
 
+pub(all) struct ModelPoolPanel {
+  tuning_draft : Map[String, String]
+  view : ModelPoolView?
+  model : String
+  speculative_tokens : String
+} derive(Eq)
+pub fn ModelPoolPanel::equal(Self, Self) -> Bool
+pub fn ModelPoolPanel::not_equal(Self, Self) -> Bool
+
+pub(all) struct ModelPoolReplica {
+  node_id : String
+  deployment : String
+  can_prepare : Bool
+  cache_ready : Bool
+  switched : Bool
+  ready : Bool
+  progress : String
+  speculative_tokens : Int
+  configuration_ready : Bool
+  selected : Bool?
+  display_name : String?
+  paused : Bool?
+} derive(Eq, @json.FromJson)
+pub fn ModelPoolReplica::equal(Self, Self) -> Bool
+pub fn ModelPoolReplica::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ModelPoolReplica::not_equal(Self, Self) -> Bool
+
+pub(all) struct ModelPoolView {
+  tuning : ModelTuning
+  adopted : Bool
+  active : Bool
+  generation : Int64
+  model : String
+  models : Array[String]
+  replicas : Array[ModelPoolReplica]
+  benchmark : ModelBenchmarkView?
+  baseline_benchmark : ModelBenchmarkView?
+  speculative_tokens : Int
+} derive(Eq, @json.FromJson)
+pub fn ModelPoolView::equal(Self, Self) -> Bool
+pub fn ModelPoolView::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ModelPoolView::not_equal(Self, Self) -> Bool
+
 pub(all) struct ModelRow {
   model_id : String
   version : String
@@ -753,6 +921,16 @@ pub fn ModelSourceCatalogRow::from_json(Json, @json.JsonPath) -> Self raise @jso
 pub fn ModelSourceCatalogRow::not_equal(Self, Self) -> Bool
 pub fn ModelSourceCatalogRow::to_json(Self) -> Json
 pub fn ModelSourceCatalogRow::to_repr(Self) -> @debug.Repr
+
+pub(all) struct ModelTuning {
+  prefix_caching : Bool?
+  cache_aware_routing : Bool
+  chunked_prefill : Bool?
+  max_num_batched_tokens : Int
+} derive(Eq, @json.FromJson)
+pub fn ModelTuning::equal(Self, Self) -> Bool
+pub fn ModelTuning::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ModelTuning::not_equal(Self, Self) -> Bool
 
 pub(all) struct NodeRow {
   node_id : String
@@ -1195,11 +1373,29 @@ pub fn TemplateFlag::equal(Self, Self) -> Bool
 pub fn TemplateFlag::not_equal(Self, Self) -> Bool
 pub fn TemplateFlag::to_repr(Self) -> @debug.Repr
 
+pub(all) struct TrialParticipantUsage {
+  account_id : String
+  display_name : String
+  starts_unix_ms : Int64
+  expires_unix_ms : Int64
+  requests : Int64
+  metered_requests : Int
+  input_units : Int64
+  output_units : Int64
+  accelerator_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn TrialParticipantUsage::equal(Self, Self) -> Bool
+pub fn TrialParticipantUsage::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn TrialParticipantUsage::not_equal(Self, Self) -> Bool
+pub fn TrialParticipantUsage::to_json(Self) -> Json
+pub fn TrialParticipantUsage::to_repr(Self) -> @debug.Repr
+
 pub(all) struct TrialSummary {
   registered_trials : Int
   active_trials : Int
   expired_trials : Int
   converted_trials : Int
+  participants : Array[TrialParticipantUsage]?
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
 pub fn TrialSummary::equal(Self, Self) -> Bool
 pub fn TrialSummary::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError

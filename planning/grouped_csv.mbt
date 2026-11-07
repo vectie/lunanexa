@@ -7,14 +7,14 @@ pub(all) struct CsvRunContext {
   runtime_digest : String
   hardware_profile : String
   kind : @benchmark.BenchmarkKind
-  concurrency : Int
+  concurrency : Int32
   metadata : RecordedMetadata
 } derive(Eq, ToJson, FromJson)
 
 ///|
 /// A shared metric mapping and explicit context for every run-ID group.
 pub(all) struct GroupedCsvImportSpec {
-  schema_version : Int
+  schema_version : Int32
   run_id_column : String
   columns : CsvColumns
   runs : Array[CsvRunContext]
@@ -55,7 +55,7 @@ pub fn import_grouped_csv(
   if spec.runs.is_empty() || spec.runs.length() > 8 {
     raise InvalidInput("grouped CSV requires context for 1..8 runs")
   }
-  let by_id : Map[String, Int] = Map([])
+  let by_id : Map[String, Int32] = Map([])
   let samples : Array[Array[@benchmark.BenchmarkSample]] = []
   for index, run in spec.runs {
     require_text(run.run_id, "grouped CSV run_id")

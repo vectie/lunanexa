@@ -216,14 +216,14 @@ async fn ApiService::offline_generation_plan(
       "output_filename": "output.\{output_suffix}",
       "result_filename": "result.json",
       "render_manifest_filename": "render.json",
-      "docx_replacements": docx_replacements.to_json(),
-      "xlsx_replacements": xlsx_replacements.to_json(),
+      "docx_replacements": Json(docx_replacements),
+      "xlsx_replacements": Json(xlsx_replacements),
     },
   }
   let plan = match (base_plan, retained) {
     (Object(fields), Some({ "contract_binding": raw, .. })) => {
       fields["contract_binding"] = raw
-      fields.to_json()
+      Json(fields)
     }
     _ => base_plan
   }

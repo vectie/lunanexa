@@ -323,7 +323,8 @@ priv enum Outcome {
   OrganizationsLoaded(
     Int64,
     Array[@enterprise_ui.SelfServiceOrganizationView],
-    String?
+    String?,
+    @enterprise_ui.AccountView?
   )
   OrganizationCreated(@enterprise_ui.SelfServiceOrganizationView)
   OrganizationJoined
@@ -384,6 +385,7 @@ priv enum Outcome {
   ContractPreviewLoaded(Int64, @contractdoc.ContractPreviewDocument)
   ContractPreviewFailed(Int64, @i18n.Locale, String)
   ApiKeyIssued(Int64, @enterprise_ui.IssuedApiKeyView)
+  TrialApiTested(Int64, Result[String, String])
   ApiKeyRevoked(Int64, String, Int64?)
   ApiKeySecretLoaded(Int64, Int64, String, String, KeySecretPurpose)
   ApiKeySecretLoadFailed(Int64, Int64)
@@ -405,6 +407,7 @@ priv struct IssuedMemberInvitationResponse {
 
 ///|
 priv enum AppMessage {
+  ScopedOutcome(Int64, String?, Outcome)
   DeliveryAccessIssued(
     Int64,
     String?,
@@ -420,6 +423,7 @@ priv enum AppMessage {
         @enterprise_ui.DeliveryOptions,
         Array[@enterprise_ui.DeliveryView],
         @enterprise_ui.ExternalModelServiceView?,
+        Array[@enterprise_ui.ExternalModelServiceView],
         @enterprise_ui.CompanyWorkspaceStatus?,
         String?,
       ),
@@ -439,6 +443,8 @@ priv enum AppMessage {
   EnterpriseAuthRefused(@i18n.Locale, String)
   WifiTrialRedeem
   WifiTrialFinished(Int64, String?)
+  EventTrialRedeem
+  EventTrialFinished(Int64, String?)
   Connect
   Bootstrap
   BootstrapReady(Int64, GatewayBrowserBootstrap)
@@ -467,6 +473,7 @@ extern "js" fn configured_endpoint() -> String =
 extern "js" fn wifi_trial_entry() -> Bool =
   #| () => {
   #|   const key = "lunanexa.wifi-trial-entry";
+  #|   if (new URLSearchParams(globalThis.location?.search || "").get("trial") === "event") return false;
   #|   const scanned = new URLSearchParams(globalThis.location?.search || "").get("trial") === "wifi";
   #|   try {
   #|     if (scanned) { sessionStorage.setItem(key, String(Date.now())); return true; }
@@ -681,7 +688,22 @@ extern "js" fn random_identifier(prefix : String) -> String =
 
 ///|
 /// after redemption.
-extern "js" fn open_desktop_client(
+fn open_desktop_client(
+  launch_uri : String,
+  client_id : String,
+  handoff_code : String,
+  controls : Bool,
+) -> Unit {
+  assign_desktop_client(
+    hosted_application_uri(launch_uri, configured_endpoint()),
+    client_id,
+    handoff_code,
+    controls,
+  )
+}
+
+///|
+extern "js" fn assign_desktop_client(
   launch_uri : String,
   client_id : String,
   handoff_code : String,
@@ -969,8 +991,11 @@ fn organization_bootstrap_command(
   let requested = model.portal.selected_organization_id.unwrap_or(
     stored_organization_preference(),
   )
-  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
-    try load_self_service_organizations(model) catch {
+  @rabbita.perform(result => emit(scoped_outcome(model, result)), async fn() noraise {
+    try {
+      let account = load_onboarding_account(model)
+      (load_self_service_organizations(model), account)
+    } catch {
       error =>
         Failed(
           model.portal.locale,
@@ -981,8 +1006,8 @@ fn organization_bootstrap_command(
           ),
         )
     } noraise {
-      organizations =>
-        OrganizationsLoaded(generation, organizations, Some(requested))
+      (organizations, account) =>
+        OrganizationsLoaded(generation, organizations, Some(requested), account)
     }
   })
 }
@@ -1064,7 +1089,7 @@ fn organization_create_command(
   model : AppModel,
   emit : @rabbita.Emit[AppMessage],
 ) -> @rabbita.Cmd {
-  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+  @rabbita.perform(result => emit(scoped_outcome(model, result)), async fn() noraise {
     try create_self_service_organization(model) catch {
       error =>
         Failed(
@@ -1086,7 +1111,7 @@ fn organization_join_command(
   model : AppModel,
   emit : @rabbita.Emit[AppMessage],
 ) -> @rabbita.Cmd {
-  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+  @rabbita.perform(result => emit(scoped_outcome(model, result)), async fn() noraise {
     try join_self_service_organization(model) catch {
       error =>
         Failed(
@@ -1429,7 +1454,7 @@ fn machine_commerce_command(
   model : AppModel,
   emit : @rabbita.Emit[AppMessage],
 ) -> @rabbita.Cmd {
-  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+  @rabbita.perform(result => emit(scoped_outcome(model, result)), async fn() noraise {
     try load_machine_commerce(model) catch {
       error =>
         Failed(
@@ -1830,27 +1855,11 @@ async fn load_self(
     model.subject_ref,
   )
   let view : @portal.EnterpriseSelfView = @json.from_json(@json.parse(body))
-  let account : @enterprise_ui.AccountView? = if model.token.has_prefix("lnxs_") {
-    Some(
-      @json.from_json(
-        @json.parse(
-          request(
-            "GET",
-            model.endpoint,
-            "/v1/auth/self",
-            model.token,
-            model.subject_ref,
-          ),
-        ),
-      ),
-    )
-  } else {
-    None
-  }
+  let account = load_onboarding_account(model)
   let trial : @enterprise_ui.TrialEntitlementView? = if model.token.has_prefix(
       "lnxs_",
     ) {
-    @json.from_json(
+    @enterprise_ui.decode_trial_projection(
       @json.parse(
         request(
           "GET",
@@ -2120,7 +2129,7 @@ async fn load_self(
             provisional_spend: if entries.length() == 0 {
               "—"
             } else {
-              "\{currency} \{minor_units} minor units · scale \{scale}"
+              machine_money({ currency, minor_units, scale, })
             },
             budget_posture: "\{snapshot.budgets.length()} budget policies",
           }
@@ -2135,7 +2144,11 @@ async fn load_self(
       for entry in snapshot.ledger_entries {
         minor_units = minor_units + entry.amount.minor_units
       }
-      "\{first.currency} \{minor_units} minor units · scale \{first.scale}"
+      machine_money({
+        currency: first.currency,
+        minor_units,
+        scale: first.scale,
+      })
     }
     _ => "—"
   }
@@ -2623,6 +2636,7 @@ fn copy_api_key_secret_command(
 fn bootstrap_command(
   model : AppModel,
   emit : @rabbita.Emit[AppMessage],
+  rejected_token~ : String = "",
 ) -> @rabbita.Cmd {
   let generation = model.session_generation
   @rabbita.perform(result => emit(result), async fn() noraise {
@@ -2630,6 +2644,7 @@ fn bootstrap_command(
       let body : String = gateway_session_promise().wait().cast()
       let session : GatewayBrowserBootstrap = @json.from_json(@json.parse(body))
       if !session.session_token.has_prefix("lnxs_") ||
+        session.session_token == rejected_token ||
         session.csrf_token == "" ||
         session.expires_unix_ms <= current_unix_ms() {
         raise Failure("gateway returned an invalid or expired browser session")
@@ -2645,6 +2660,7 @@ fn bootstrap_command(
 fn wifi_trial_command(
   model : AppModel,
   emit : @rabbita.Emit[AppMessage],
+  event~ : Bool = false,
 ) -> @rabbita.Cmd {
   let generation = model.session_generation
   @rabbita.perform(result => emit(result), async fn() noraise {
@@ -2654,16 +2670,29 @@ fn wifi_trial_command(
           request(
             "POST",
             model.endpoint,
-            "/v1/auth/wifi-trial:redeem",
+            if event {
+              "/v1/auth/event-trial:redeem"
+            } else {
+              "/v1/auth/wifi-trial:redeem"
+            },
             model.token,
             model.subject_ref,
             body="{}",
           ),
         ),
       )
-      WifiTrialFinished(generation, Some(trial.organization_id))
+      if event {
+        EventTrialFinished(generation, Some(trial.organization_id))
+      } else {
+        WifiTrialFinished(generation, Some(trial.organization_id))
+      }
     } catch {
-      _ => WifiTrialFinished(generation, None)
+      _ =>
+        if event {
+          EventTrialFinished(generation, None)
+        } else {
+          WifiTrialFinished(generation, None)
+        }
     }
   })
 }
@@ -2847,7 +2876,7 @@ fn load_command(
   model : AppModel,
   emit : @rabbita.Emit[AppMessage],
 ) -> @rabbita.Cmd {
-  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+  @rabbita.perform(result => emit(scoped_outcome(model, result)), async fn() noraise {
     try load_self(model) catch {
       error =>
         Failed(
@@ -3275,7 +3304,7 @@ fn lease_command(
   model : AppModel,
   emit : @rabbita.Emit[AppMessage],
 ) -> @rabbita.Cmd {
-  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+  @rabbita.perform(result => emit(scoped_outcome(model, result)), async fn() noraise {
     try submit_lease(model) catch {
       error =>
         Failed(
@@ -3864,6 +3893,13 @@ fn update(
   emit : @rabbita.Emit[AppMessage],
 ) -> (AppModel, @rabbita.Cmd) {
   match message {
+    ScopedOutcome(generation, organization, result) =>
+      if generation != model.session_generation ||
+        organization != model.portal.selected_organization_id {
+        (model, @rabbita.none)
+      } else {
+        update(model, Outcome(result), emit)
+      }
     RentalWaitDue(generation, organization, remaining) =>
       if rental_wait_active(model, generation, organization) {
         (
@@ -3965,8 +4001,9 @@ fn update(
         },
         @rabbita.none,
       )
-    WifiTrialRedeem =>
-      if !wifi_trial_entry() ||
+    WifiTrialRedeem | EventTrialRedeem =>
+      if (!(message is EventTrialRedeem) && !wifi_trial_entry()) ||
+        (message is EventTrialRedeem && !event_trial_entry()) ||
         model.demo_mode ||
         model.token == "" ||
         model.connecting {
@@ -3977,9 +4014,13 @@ fn update(
           connecting: true,
           portal: { ..model.portal, error_message: None, },
         }
-        (next, wifi_trial_command(next, emit))
+        (
+          next,
+          wifi_trial_command(next, emit, event=message is EventTrialRedeem),
+        )
       }
-    WifiTrialFinished(generation, trial_organization) =>
+    WifiTrialFinished(generation, trial_organization)
+    | EventTrialFinished(generation, trial_organization) =>
       if generation != model.session_generation {
         (model, @rabbita.none)
       } else if trial_organization is Some(organization_id) {
@@ -4001,11 +4042,19 @@ fn update(
             portal: {
               ..model.portal,
               error_message: Some(
-                portal_copy(
-                  model.portal.locale,
-                  "Trial could not start. Connect to the guest Wi-Fi and retry; an existing trial cannot be extended.",
-                  "体验未能开始。请连接访客 Wi-Fi 后重试；已有体验不可延长。",
-                ),
+                if message is EventTrialFinished(_, _) {
+                  portal_copy(
+                    model.portal.locale,
+                    "Event trial could not start. Registration may be closed, full or awaiting model capacity; an existing trial cannot be replaced or extended.",
+                    "活动体验未能开始。可能尚未开放、名额已满或模型未就绪；已有体验不能替换或延长。",
+                  )
+                } else {
+                  portal_copy(
+                    model.portal.locale,
+                    "Trial could not start. Connect to the guest Wi-Fi and retry; an existing trial cannot be extended.",
+                    "体验未能开始。请连接访客 Wi-Fi 后重试；已有体验不可延长。",
+                  )
+                },
               ),
             },
           },
@@ -4113,7 +4162,16 @@ fn update(
       }
       let panel = model.portal.deliveries
       let deliveries = match result {
-        Ok((options, operations, external_model, company_workspace, error)) =>
+        Ok(
+          (
+            options,
+            operations,
+            external_model,
+            shared_models,
+            company_workspace,
+            error,
+          )
+        ) =>
           {
             ..panel,
             options,
@@ -4129,6 +4187,7 @@ fn update(
             },
             operations,
             external_model,
+            shared_models,
             company_workspace,
             loaded: true,
             loading: false,
@@ -4204,6 +4263,7 @@ fn update(
       }
       let next = { ..model, portal: model.portal.update(Delivery(message)), }
       match message {
+        SelectSharedModel(_) => (next, delivery_poll_command(next, emit))
         OpenWorkspace(id) if !model.demo_mode =>
           (next, delivery_workspace_command(next, id, emit))
         IssueApiAccess(id) if !model.demo_mode =>
@@ -4295,7 +4355,8 @@ fn update(
       match portal.route {
         Overview | DesktopIde | MachineAccess | Models if !model.demo_mode => {
           let next = { ..next, portal: next.portal.update(Delivery(Refresh)), }
-          (next, delivery_command(next, None, emit))
+          let (next, wait) = start_rental_wait(next, emit)
+          (next, @rabbita.batch([delivery_command(next, None, emit), wait]))
         }
         ContractDocuments =>
           schedule_contract_preview(next, portal.contract_documents, 0, emit)
@@ -4305,6 +4366,7 @@ fn update(
             portal.selected_organization_id &&
             value.organization.state == PendingVerification
           }) => start_rental_wait(next, emit)
+        LeaseRequests if !model.demo_mode => start_rental_wait(next, emit)
         SelfService if !model.demo_mode &&
           @enterprise_ui.selected_organization_header(portal) is Some(_) => {
           let loading = {
@@ -4329,6 +4391,12 @@ fn update(
       )
       let next = {
         ..model,
+        session_generation: if portal.selected_organization_id !=
+          model.portal.selected_organization_id {
+          model.session_generation + 1L
+        } else {
+          model.session_generation
+        },
         portal: {
           ..portal,
           deliveries: @enterprise_ui.default_delivery_panel(),
@@ -4766,6 +4834,9 @@ fn update(
           (model, copy_api_key_secret_command(model, value.secret, emit))
         _ => (model, @rabbita.none)
       }
+    Portal(TestPersonalTrialApiKey) => trial_api_test_command(model, emit)
+    Portal(TestSavedTrialApiKey(key_id)) =>
+      saved_trial_api_test_command(model, key_id, emit)
     Portal(ToggleApiKeySecret(key_id))
     | Portal(CopySavedApiKey(key_id))
     | Portal(UseSavedKeyForConnectionQr(key_id)) => {
@@ -5584,8 +5655,19 @@ fn update(
           @rabbita.none,
         )
       }
-    Portal(portal_message) =>
-      ({ ..model, portal: model.portal.update(portal_message), }, @rabbita.none)
+    Portal(portal_message) => {
+      let next = { ..model, portal: model.portal.update(portal_message), }
+      if next.portal.route == SelfService &&
+        next.portal.self_service.step == Organization &&
+        (
+          model.portal.route != SelfService ||
+          model.portal.self_service.step != Organization
+        ) {
+        start_rental_wait(next, emit)
+      } else {
+        (next, @rabbita.none)
+      }
+    }
     Outcome(MemberInvitationIssued(generation, secret)) =>
       if generation != model.session_generation {
         (model, @rabbita.none)
@@ -5605,6 +5687,29 @@ fn update(
                   "邀请已创建，请将一次性邀请码发给同事。",
                 ),
               ),
+            },
+          },
+          @rabbita.none,
+        )
+      }
+    Outcome(TrialApiTested(generation, result)) =>
+      if generation != model.session_generation {
+        (model, @rabbita.none)
+      } else {
+        (
+          {
+            ..model,
+            portal: {
+              ..model.portal,
+              loading: false,
+              success_message: match result {
+                Ok(value) => Some(value)
+                Err(_) => None
+              },
+              error_message: match result {
+                Err(value) => Some(value)
+                Ok(_) => None
+              },
             },
           },
           @rabbita.none,
@@ -5793,9 +5898,15 @@ fn update(
           @rabbita.none,
         )
       }
-    Outcome(OrganizationsLoaded(generation, organizations, preferred_id)) => {
+    Outcome(
+      OrganizationsLoaded(generation, organizations, preferred_id, account)
+    ) => {
       if generation != model.session_generation {
         return (model, @rabbita.none)
+      }
+      let model = {
+        ..model,
+        portal: onboarding_account_defaults(model.portal, account),
       }
       let requested_id = preferred_id.unwrap_or("")
       match preferred_organization(organizations, requested_id) {
@@ -5812,6 +5923,12 @@ fn update(
           )
           let next = {
             ..model,
+            session_generation: if model.portal.selected_organization_id !=
+              Some(organization_id) {
+              model.session_generation + 1L
+            } else {
+              model.session_generation
+            },
             connecting: true,
             portal,
             contract_poll_generation: model.contract_poll_generation + 1L,
@@ -5821,42 +5938,36 @@ fn update(
         None => {
           commit_enterprise_organization("")
           let empty = organizations.length() == 0
-          (
-            {
-              ..model,
-              connecting: false,
-              portal: {
-                ..model.portal,
-                route: SelfService,
-                organizations,
-                selected_organization_id: None,
-                membership: None,
-                self_service: {
-                  ..model.portal.self_service,
-                  step: Organization,
-                  action_loading: false,
-                  action_error: None,
-                },
-                success_message: None,
-                error_message: Some(
-                  if empty {
-                    portal_copy(
-                      model.portal.locale,
-                      "Create a company or accept an invitation to continue.",
-                      "请创建公司或接受邀请后继续。",
-                    )
-                  } else {
-                    portal_copy(
-                      model.portal.locale,
-                      "Choose the organization for this session. Scoped requests remain blocked until you do.",
-                      "请选择本次会话使用的组织；选择前，限定组织范围的请求保持关闭。",
-                    )
-                  },
-                ),
+          let next = {
+            ..model,
+            connecting: false,
+            portal: {
+              ..model.portal,
+              route: SelfService,
+              organizations,
+              selected_organization_id: None,
+              membership: None,
+              self_service: {
+                ..model.portal.self_service,
+                step: Organization,
+                action_loading: false,
+                action_error: None,
+              },
+              success_message: None,
+              error_message: if empty {
+                None
+              } else {
+                Some(
+                  portal_copy(
+                    model.portal.locale,
+                    "Choose the organization for this session. Scoped requests remain blocked until you do.",
+                    "请选择本次会话使用的组织；选择前，限定组织范围的请求保持关闭。",
+                  ),
+                )
               },
             },
-            @rabbita.none,
-          )
+          }
+          start_rental_wait(next, emit)
         }
       }
     }
@@ -6143,7 +6254,7 @@ fn update(
               {
                 ..model.portal.api_key_issue_draft,
                 allowed_models: value.allowed_models.join(", "),
-                lifetime_days: 1,
+                lifetime_days: 7,
                 maximum_requests: value.maximum_requests,
               }
             None => model.portal.api_key_issue_draft
@@ -6288,10 +6399,7 @@ fn update(
       let (next, poll) = if next.portal.route == ContractDocuments {
         schedule_contract_preview(next, next.portal.contract_documents, 0, emit)
       } else {
-        match selected_contract {
-          Some(packet) => start_contract_poll(next, packet, emit)
-          None => start_rental_wait(next, emit)
-        }
+        start_rental_wait(next, emit)
       }
       let (next, delivery_refresh) = if next.portal.route == Overview &&
         !next.demo_mode {
@@ -6328,28 +6436,15 @@ fn update(
         }) {
         return (model, @rabbita.none)
       }
-      // Launch failures are delivered through a separate outcome from normal
-      // portal requests. An expired browser session must still return to the
-      // login screen instead of leaving a stale user name and a raw HTTP 401.
+      // A different ingress tab may have renewed the shared cookie. Recover
+      // that session before asking for another password; do not replay launch.
       if model.token.has_prefix("lnxs_") &&
         result is Err(message) &&
         message.contains("HTTP 401") {
-        let signed_out = signed_out_model(model)
+        let recovering = { ..signed_out_model(model), connecting: true, }
         return (
-          {
-            ..signed_out,
-            portal: {
-              ..signed_out.portal,
-              error_message: Some(
-                portal_copy(
-                  signed_out.portal.locale,
-                  "Your session has expired. Sign in again.",
-                  "会话已过期，请重新登录。",
-                ),
-              ),
-            },
-          },
-          @rabbita.none,
+          recovering,
+          bootstrap_command(recovering, emit, rejected_token=model.token),
         )
       }
       let (success, error) = match result {
@@ -6364,7 +6459,8 @@ fn update(
             ),
             None,
           )
-        Err(error) => (None, Some(error))
+        Err(error) =>
+          (None, Some(portal_failure_message(model.portal.locale, error)))
       }
       (
         {
@@ -6651,26 +6747,25 @@ fn update(
         },
         @rabbita.none,
       )
-    Outcome(LeaseCreated(request)) =>
-      (
-        {
-          ..model,
-          portal: {
-            ..model.portal,
-            lease_requests: [request, ..model.portal.lease_requests],
-            loading: false,
-            success_message: Some(
-              portal_copy(
-                model.portal.locale,
-                "Lease request submitted to the operator queue.",
-                "租用申请已提交至运维审核队列。",
-              ),
+    Outcome(LeaseCreated(request)) => {
+      let next = {
+        ..model,
+        portal: {
+          ..model.portal,
+          lease_requests: [request, ..model.portal.lease_requests],
+          loading: false,
+          success_message: Some(
+            portal_copy(
+              model.portal.locale,
+              "Lease request submitted to the operator queue.",
+              "租用申请已提交至运维审核队列。",
             ),
-            error_message: None,
-          },
+          ),
+          error_message: None,
         },
-        @rabbita.none,
-      )
+      }
+      start_rental_wait(next, emit)
+    }
     Outcome(NotificationRead(notification)) =>
       (
         {
@@ -6802,22 +6897,10 @@ fn update(
       }
     Outcome(Failed(dispatched_locale, raw_message)) => {
       if model.token.has_prefix("lnxs_") && raw_message.contains("HTTP 401") {
-        let signed_out = signed_out_model(model)
+        let recovering = { ..signed_out_model(model), connecting: true, }
         return (
-          {
-            ..signed_out,
-            portal: {
-              ..signed_out.portal,
-              error_message: Some(
-                portal_copy(
-                  signed_out.portal.locale,
-                  "Your session has expired. Sign in again.",
-                  "会话已过期，请重新登录。",
-                ),
-              ),
-            },
-          },
-          @rabbita.none,
+          recovering,
+          bootstrap_command(recovering, emit, rejected_token=model.token),
         )
       }
       let message = portal_failure_message(model.portal.locale, raw_message)
@@ -7006,12 +7089,6 @@ fn app_view(
                     !transport_allowed || model.connecting,
                   ),
                   on_input=emit.map(value => LoginEmailChanged(value)),
-                ),
-                @html.small(
-                  portal_copy(
-                    locale, "Sign in with the email used at registration, not your display name.",
-                    "登录请使用注册时的邮箱，不是显示名称。",
-                  ),
                 ),
               ]),
               if model.registering {
@@ -7250,6 +7327,19 @@ fn app_view(
       ),
     ])
   }
+  if model.connecting && model.portal.membership is None {
+    return @html.main_(class="login-gate", [
+      @html.style_tag(shell_styles),
+      @html.section(class="login-card", [
+        @html.p(
+          attrs=@html.Attrs::build().role("status").aria_live("polite"),
+          portal_copy(
+            locale, "Loading your account and applications…", "正在载入你的账户和应用…",
+          ),
+        ),
+      ]),
+    ])
+  }
   let session_scope = match model.portal.account {
     Some(account) => account.display_name
     None => portal_copy(locale, "Signed in", "已登录")
@@ -7275,7 +7365,23 @@ fn app_view(
         portal_copy(locale, "Log out", "退出登录"),
       ),
     ]),
-    if wifi_trial_entry() {
+    if event_trial_entry() {
+      @html.section(class="login-card", [
+        @html.h2(portal_copy(locale, "Event trial", "活动体验")),
+        @html.p(
+          portal_copy(
+            locale, "Join with your verified account. Your trial card shows the original expiry and model scope; signing in again does not renew it. No machine or administrator access is included.",
+            "使用已验证账户加入。具体到期时间与模型范围以下方体验卡片为准，重新登录不会续期；不包含机器或管理员权限。",
+          ),
+        ),
+        @html.button(
+          type_="button",
+          disabled=model.connecting || model.portal.trial is Some(_),
+          on_click=emit(EventTrialRedeem),
+          portal_copy(locale, "Join current event", "加入当前活动"),
+        ),
+      ])
+    } else if wifi_trial_entry() {
       @html.section(class="login-card", [
         @html.h2(
           portal_copy(locale, "One-hour guest trial", "一小时访客体验"),

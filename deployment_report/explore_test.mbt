@@ -159,10 +159,10 @@ test "exact operation model runtime placement associations and node-only members
     state: Blocked,
     plan: { ..op.plan, template: None, replicas: [], },
   }
-  let before = [op, blank].to_json().stringify()
+  let before = Json([op, blank]).stringify()
   let report = @deployment_report.explore(
     @deployment_report.import_operations(before),
-    @deployment_report.import_nodes(nodes().to_json().stringify()),
+    @deployment_report.import_nodes(Json(nodes()).stringify()),
     query(),
   )
   assert_eq(report.deployments.length(), 2)
@@ -190,7 +190,7 @@ test "exact operation model runtime placement associations and node-only members
       query(),
     ).json_text(),
   )
-  assert_eq(before, [op, blank].to_json().stringify())
+  assert_eq(before, Json([op, blank]).stringify())
   let json = report.json_text()
   for
     hidden in [

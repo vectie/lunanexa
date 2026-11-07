@@ -1,12 +1,12 @@
 ///|
-const MaximumJobBytes : Int = 1048576
+const MaximumJobBytes : Int32 = 1048576
 
 ///|
-const MaximumVisualEvidenceBytes : Int = 20971520
+const MaximumVisualEvidenceBytes : Int32 = 20971520
 
 ///|
 pub(all) struct OfflineArtifactJob {
-  schema_version : Int
+  schema_version : Int32
   request : @offline.ArtifactGenerationRequest
   template_filename : String
   prepared_filename : String
@@ -19,19 +19,19 @@ pub(all) struct OfflineArtifactJob {
 
 ///|
 pub(all) struct RenderVisualEvidence {
-  page_or_sheet_index : Int
+  page_or_sheet_index : Int32
   filename : String
   sha256 : String
 } derive(Debug, Eq, FromJson, ToJson)
 
 ///|
 pub(all) struct RenderEvidenceManifest {
-  schema_version : Int
+  schema_version : Int32
   request_id : String
   artifact_sha256 : String
   source_sha256 : String
   kind : @offline.DocumentArtifactKind
-  page_or_sheet_count : Int
+  page_or_sheet_count : Int32
   passed : Bool
   renderer_receipt : String
   rendered_unix_ms : Int64
@@ -93,7 +93,7 @@ fn staging_path(root : String, filename : String) -> String raise Failure {
 }
 
 ///|
-async fn read_bounded_bytes(path : String, maximum : Int) -> FixedArray[Byte] {
+async fn read_bounded_bytes(path : String, maximum : Int32) -> FixedArray[Byte] {
   let bytes = @fs.read_file(path).binary()
   if bytes.length() == 0 || bytes.length() > maximum {
     raise Failure("staged input is empty or exceeds its size bound")
@@ -110,7 +110,7 @@ fn sha256(bytes : FixedArray[Byte]) -> String {
 
 ///|
 /// tests, without reimplementing OOXML parsing outside MoonLeaf.
-pub fn ooxml_package_part_count(bytes : FixedArray[Byte]) -> Int raise {
+pub fn ooxml_package_part_count(bytes : FixedArray[Byte]) -> Int32 raise {
   @opc.open(bytes).parts.length()
 }
 
@@ -221,7 +221,7 @@ fn valid_visual_evidence(filename : String, bytes : FixedArray[Byte]) -> Bool {
 fn bytes_contain_ascii(
   bytes : FixedArray[Byte],
   value : String,
-  start : Int,
+  start : Int32,
 ) -> Bool {
   if value.length() == 0 || bytes.length() - start < value.length() {
     return false

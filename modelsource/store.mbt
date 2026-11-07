@@ -1,6 +1,6 @@
 ///|
 priv struct ImportSnapshot {
-  schema_version : Int
+  schema_version : Int32
   operations : Array[ImportOperation]
 } derive(FromJson, ToJson)
 
@@ -8,7 +8,7 @@ priv struct ImportSnapshot {
 extend ImportSnapshot with ToJson::{to_json}
 
 ///|
-const ImportSnapshotSchemaVersion : Int = 3
+const ImportSnapshotSchemaVersion : Int32 = 3
 
 ///|
 fn snapshot_schema_version(value : Json) -> Double? {
@@ -135,8 +135,8 @@ async fn FileImportStore::create_record(
   license : String,
   local_directory : String,
   now_unix_ms : Int64,
-  component? : String = "",
-  supersede? : Bool = false,
+  component~ : String = "",
+  supersede~ : Bool = false,
 ) -> ImportOperation {
   let id = if component == "" {
     import_id(request.model_id, request.revision)
@@ -203,7 +203,7 @@ pub async fn FileImportStore::create_local(
   local_directory : String,
   model_root : String,
   now_unix_ms : Int64,
-  component? : String = "",
+  component~ : String = "",
 ) -> ImportOperation {
   if !valid_local_directory(local_directory) {
     raise InvalidRepositoryPath

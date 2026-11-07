@@ -62,8 +62,8 @@ pub fn icon_button(
   icon : Icon,
   label : String,
   on_click : @rabbita.Cmd,
-  disabled? : Bool = false,
-  busy? : Bool = false,
+  disabled~ : Bool = false,
+  busy~ : Bool = false,
 ) -> @rabbita.Html {
   @html.button(
     type_="button",
@@ -96,7 +96,7 @@ pub fn styles() -> String {
     #|.ln-icon-button[aria-busy=true] .ln-command-glyph{animation:ln-refresh 1.2s linear infinite}
     #|.ln-command-tooltip{position:absolute;z-index:50;top:calc(100% + 6px);right:0;width:max-content;max-width:min(18rem,75vw);padding:.35rem .55rem;border-radius:.35rem;background:#17282b;color:#fff;font:500 .75rem/1.4 system-ui;white-space:normal;text-align:left;pointer-events:none;visibility:hidden;opacity:0}.ln-icon-button:hover .ln-command-tooltip,.ln-icon-button:focus-visible .ln-command-tooltip{visibility:visible;opacity:1}
     #|@keyframes ln-refresh{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.ln-icon-button[aria-busy=true] .ln-command-glyph{animation:none}}
-  css
+  css + layout_styles()
 }
 
 ///|

@@ -1,7 +1,7 @@
 ///|
 pub(all) suberror TelemetryCollectorError {
   UnsupportedBinary(String)
-  CommandFailed(Int)
+  CommandFailed(Int32)
   MalformedSample(String)
 } derive(Debug, Eq)
 
@@ -13,7 +13,7 @@ pub extend TelemetryCollectorError with Eq::{not_equal, equal}
 
 ///|
 pub(all) struct AcceleratorSensorSnapshot {
-  accelerator_count : Int
+  accelerator_count : Int32
   memory_used_mib : Double
   memory_total_mib : Double
   /// False when the driver reports unified-memory values as `N/A` (for
@@ -154,7 +154,7 @@ pub fn parse_nvidia_smi_csv_with_limits(
 /// environment, so inventory or control-plane data cannot become commands.
 pub async fn collect_accelerator_sensors(
   binary : String,
-  limits? : @settings.TelemetrySafetySettings = @settings.default_global_admin_settings().telemetry_safety,
+  limits~ : @settings.TelemetrySafetySettings = @settings.default_global_admin_settings().telemetry_safety,
 ) -> AcceleratorSensorSnapshot {
   if binary != "/usr/bin/nvidia-smi" && binary != "/usr/local/bin/nvidia-smi" {
     raise TelemetryCollectorError::UnsupportedBinary(binary)

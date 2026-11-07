@@ -16,6 +16,8 @@ pub fn preflight(Array[ModelServiceTemplate], ModelServiceIntent, PlanningContex
 
 pub fn preflight_on_node(Array[ModelServiceTemplate], ModelServiceIntent, PlanningContext, String) -> DeploymentPlan
 
+pub fn service_conflicts(ModelServiceInstance, ModelServiceInstance) -> Bool
+
 pub fn validate_intent(ModelServiceIntent) -> Unit raise DeploymentError
 
 pub fn validate_template(ModelServiceTemplate, require_signature? : Bool) -> Unit raise DeploymentError
@@ -151,6 +153,28 @@ pub fn ManagementNode::not_equal(Self, Self) -> Bool
 pub fn ManagementNode::to_json(Self) -> Json
 pub fn ManagementNode::to_repr(Self) -> @debug.Repr
 
+pub(all) struct ModelServiceInstance {
+  service_id : String
+  model_alias : String
+  artifact_digest : String
+  owner : ServiceOwner
+  node_ids : Array[String]
+  runtime_kind : ServiceRuntimeKind
+  binding_ref : String
+  exclusive : Bool
+  generation : Int64
+  desired_running : Bool
+  observed : ServiceRuntimeState
+  updated_unix_ms : Int64
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ModelServiceInstance::equal(Self, Self) -> Bool
+pub fn ModelServiceInstance::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ModelServiceInstance::holds_resources(Self) -> Bool
+pub fn ModelServiceInstance::not_equal(Self, Self) -> Bool
+pub fn ModelServiceInstance::reserves_company_node(Self) -> Bool
+pub fn ModelServiceInstance::to_json(Self) -> Json
+pub fn ModelServiceInstance::to_repr(Self) -> @debug.Repr
+
 pub(all) struct ModelServiceIntent {
   version : String
   idempotency_key : String
@@ -271,6 +295,40 @@ pub fn ServiceEndpoint::from_json(Json, @json.JsonPath) -> Self raise @json.Json
 pub fn ServiceEndpoint::not_equal(Self, Self) -> Bool
 pub fn ServiceEndpoint::to_json(Self) -> Json
 pub fn ServiceEndpoint::to_repr(Self) -> @debug.Repr
+
+pub(all) struct ServiceOwner {
+  tenant_ref : String
+  organization_id : String
+  reservation_id : String?
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ServiceOwner::equal(Self, Self) -> Bool
+pub fn ServiceOwner::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ServiceOwner::not_equal(Self, Self) -> Bool
+pub fn ServiceOwner::to_json(Self) -> Json
+pub fn ServiceOwner::to_repr(Self) -> @debug.Repr
+
+pub(all) enum ServiceRuntimeKind {
+  NodeAssignment
+  Kubernetes
+  ProcessGroup
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ServiceRuntimeKind::equal(Self, Self) -> Bool
+pub fn ServiceRuntimeKind::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ServiceRuntimeKind::not_equal(Self, Self) -> Bool
+pub fn ServiceRuntimeKind::to_json(Self) -> Json
+pub fn ServiceRuntimeKind::to_repr(Self) -> @debug.Repr
+
+pub(all) enum ServiceRuntimeState {
+  Running
+  Stopped
+  Partial
+  Unknown
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn ServiceRuntimeState::equal(Self, Self) -> Bool
+pub fn ServiceRuntimeState::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ServiceRuntimeState::not_equal(Self, Self) -> Bool
+pub fn ServiceRuntimeState::to_json(Self) -> Json
+pub fn ServiceRuntimeState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct TemplateRef {
   template_id : String

@@ -1,5 +1,5 @@
 ///|
-fn valid_request(apply? : Bool = false) -> @installer.InstallRequest {
+fn valid_request(apply~ : Bool = false) -> @installer.InstallRequest {
   {
     version: @installer.request_version,
     deployment_target: ManagementAndCompute,

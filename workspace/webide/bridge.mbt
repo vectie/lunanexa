@@ -216,6 +216,7 @@ async fn Bridge::connect(
   if !self.valid_grant(grant, @async.now()) || !(self.authorize)(grant) {
     raise BridgeError::InvalidGrant
   }
+  self.check_browser(grant, request.headers)
   let id = workspace_id(grant)
   stage = "workspace provisioning"
   let backend = (self.provision)(id, grant)
@@ -368,6 +369,7 @@ async fn Bridge::proxy_http(
   request : @http.Request,
   body : &@io.Reader,
   connection : @http.ServerConnection,
+  response_started : Ref[Bool],
 ) -> Unit {
   if self.config.client_id == "moontown" {
     eprintln("MoonTown HTTP proxy request received")
@@ -434,6 +436,7 @@ async fn Bridge::proxy_http(
       None => ()
     }
   }
+  response_started.val = true
   connection.send_response(response.code, "WebIDE", extra_headers=outgoing)
   if request.meth != Head {
     while upstream.read_some(max_len=65536) is Some(bytes) {
@@ -497,7 +500,8 @@ async fn Bridge::proxy_socket(
         @async.sleep(self.config.authorization_interval_ms)
         ignore(
           @async.with_timeout(self.config.request_timeout_ms, () => {
-            self.session(token)
+            let current = self.session(token)
+            self.check_bound_browser(token, current.grant, request.headers)
           }),
         )
       }
@@ -523,6 +527,7 @@ pub async fn Bridge::handle(
   body : &@io.Reader,
   connection : @http.ServerConnection,
 ) -> Unit {
+  let response_started = Ref(false)
   let origin = self.config.public_origin
   let authority = origin[if origin.has_prefix("https://") { 8 } else { 7 }:].to_owned()
   if header(request.headers, "host") != Some(authority) ||
@@ -553,7 +558,9 @@ pub async fn Bridge::handle(
       raise BridgeError::Unauthorized
     }
     let session = @async.with_timeout(self.config.request_timeout_ms, () => {
-      self.session(token)
+      let current = self.session(token)
+      self.check_bound_browser(token, current.grant, request.headers)
+      current
     })
     if self.config.client_id == "moontown" &&
       request.path == "/platform-scope.js" &&
@@ -585,6 +592,12 @@ pub async fn Bridge::handle(
         connection, 403, "Route is not available in managed workspaces.",
       )
     }
+    if self.handle_authorized is Some(handle) &&
+      @async.with_timeout(self.config.request_timeout_ms, () => {
+        handle(session.grant, request, connection)
+      }) {
+      return
+    }
     if request.path.split("?").next() == Some("/ws") ||
       (
         (
@@ -601,7 +614,7 @@ pub async fn Bridge::handle(
       self.proxy_socket(token, session, request, connection)
     } else {
       @async.with_timeout(self.config.request_timeout_ms, () => {
-        self.proxy_http(session, request, body, connection)
+        self.proxy_http(session, request, body, connection, response_started)
       })
     }
   } catch {
@@ -630,8 +643,14 @@ pub async fn Bridge::handle(
     _ => {
       // Never log or return upstream errors: they may contain credentials,
       // prompts, filesystem paths or infrastructure addresses.
-      reply(connection, 502, "Workspace is not ready. Retry from your portal.") catch {
-        _ => ()
+      // An interrupted video stream already has headers. A second HTTP response
+      // would panic the sender and terminate every user's gateway connection.
+      if !response_started.val {
+        reply(
+          connection, 502, "Workspace is not ready. Retry from your portal.",
+        ) catch {
+          _ => ()
+        }
       }
       connection.close()
     }

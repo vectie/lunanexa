@@ -73,9 +73,12 @@ fn resource_delivery_command(
             node.total_memory_mib >= 49152 else {
             raise Failure("refresh measured free memory before reserving")
           }
-          memory_mib = Int::min(
+          memory_mib = Int32::min(
             memory_mib,
-            Int::min(node.total_memory_mib - 16384, node.free_memory_mib - 4096),
+            Int32::min(
+              node.total_memory_mib - 16384,
+              node.free_memory_mib - 4096,
+            ),
           )
         }
         let request_body : @ui.ResourceReservationRequest = {
@@ -118,7 +121,7 @@ fn resource_delivery_command(
         }
         let body : Json = {
           "order_id": order.order_id,
-          "node_ids": panel.undertaking_selected_nodes.to_json(),
+          "node_ids": Json(panel.undertaking_selected_nodes),
           "readiness_confirmation": "allocate-idle-nodes:\{order.order_id}",
         }
         for _ in 0..<20 {

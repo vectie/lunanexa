@@ -1,5 +1,6 @@
 ///|
-const MaximumRequestBytes : Int = 1048576
+// Match the controller's configurable transport ceiling for million-token inputs.
+const MaximumRequestBytes : Int32 = 16777216
 
 ///|
 const FlowLifetimeMs : Int64 = 600000L
@@ -112,9 +113,9 @@ priv struct IdTokenClaims {
   sub : String
   aud : Json
   azp : String?
-  exp : Int
-  nbf : Int?
-  iat : Int?
+  exp : Int32
+  nbf : Int32?
+  iat : Int32?
   nonce : String?
 } derive(FromJson)
 
@@ -132,7 +133,7 @@ priv struct Introspection {
   sub : String?
   client_id : String?
   azp : String?
-  exp : Int?
+  exp : Int32?
 } derive(FromJson)
 
 ///|

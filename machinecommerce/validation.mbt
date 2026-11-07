@@ -4,7 +4,7 @@ fn valid_id(value : String) -> Bool {
 }
 
 ///|
-fn valid_label(value : String, maximum_length : Int) -> Bool {
+fn valid_label(value : String, maximum_length : Int32) -> Bool {
   value.trim() != "" &&
   value.length() <= maximum_length &&
   value.all(character => {

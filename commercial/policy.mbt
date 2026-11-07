@@ -52,7 +52,7 @@ pub fn CommercialStore::add_quota(
 }
 
 ///|
-fn warning_threshold(limit : Int64, percent : Int) -> Int64 {
+fn warning_threshold(limit : Int64, percent : Int32) -> Int64 {
   limit / 100L * Int64::from_int(percent) +
   limit % 100L * Int64::from_int(percent) / 100L
 }

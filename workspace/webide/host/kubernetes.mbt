@@ -326,6 +326,10 @@ async fn WorkspaceHost::reconcile_page(
     // Multiple product and personal gateways can share this namespace. A
     // gateway must never revoke another gateway's workspace just because its
     // own delivery policy cannot authorize that workspace's grant.
+    if grant is Some(value) &&
+      self.require_exclusive != (value.delivery_id is Some(_)) {
+      continue
+    }
     if client_id != "" {
       guard grant is Some(value) &&
         reconciliation_owns_grant(value, client_id, subject_ref) else {

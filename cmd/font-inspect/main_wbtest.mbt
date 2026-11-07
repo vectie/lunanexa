@@ -1,10 +1,10 @@
 ///|
-fn be16(value : Int) -> Array[Byte] {
+fn be16(value : Int32) -> Array[Byte] {
   [(value / 256).to_byte(), (value % 256).to_byte()]
 }
 
 ///|
-fn be32(value : Int) -> Array[Byte] {
+fn be32(value : Int32) -> Array[Byte] {
   [
     (value / 16777216).to_byte(),
     (value / 65536 % 256).to_byte(),
@@ -31,7 +31,7 @@ fn utf16_be(value : String) -> Array[Byte] {
 }
 
 ///|
-fn fixture_font(family : String, fs_type : Int) -> Bytes {
+fn fixture_font(family : String, fs_type : Int32) -> Bytes {
   let family_bytes = utf16_be(family)
   let header = [
     b'\x00',

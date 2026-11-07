@@ -18,7 +18,7 @@ pub(all) struct UsageCorrelationManifest {
 pub(all) struct UsageCorrelationMatch {
   link : UsageCorrelationLink
   status : String
-  row_count : Int
+  row_count : Int32
   source_row_ids : Array[String]
 } derive(Debug, Eq, ToJson)
 
@@ -32,7 +32,7 @@ pub(all) struct UsageCorrelationGroup {
 ///|
 pub(all) struct UsageCorrelationReport {
   query : UsageQuery
-  duplicate_link_count : Int
+  duplicate_link_count : Int32
   references : Array[UsageCorrelationGroup]
   unassigned : UsageReport
 } derive(Debug, Eq)
@@ -58,7 +58,7 @@ pub fn import_usage_correlation_manifest(
 
 ///|
 fn correlation_key(project_id : String, event_id : String) -> String {
-  [project_id, event_id].to_json().stringify()
+  Json([project_id, event_id]).stringify()
 }
 
 ///|
@@ -182,7 +182,7 @@ pub fn correlate_usage(
   let matches : Map[String, Array[UsageCorrelationMatch]] = Map([])
   let sorted_links = links.values().to_array()
   sorted_links.sort_by_key(link => {
-    [link.external_ref, link.project_id, link.event_id].to_json().stringify()
+    Json([link.external_ref, link.project_id, link.event_id]).stringify()
   })
   for link in sorted_links {
     let source_row_ids = source_rows.get_or_default(

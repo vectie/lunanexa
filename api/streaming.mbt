@@ -1,7 +1,7 @@
 ///|
 pub(all) enum StreamEvent {
   Opened
-  Chunk(sequence~ : Int, output~ : Json)
+  Chunk(sequence~ : Int32, output~ : Json)
   Usage(@contracts.Usage)
   Completed(receipt~ : String)
   Failed(@contracts.PublicError)
@@ -35,7 +35,7 @@ pub extend StreamError with Eq::{not_equal, equal}
 ///|
 pub struct StreamSession {
   workload_id : String
-  capacity : Int
+  capacity : Int32
   events : Array[StreamEvent]
   mut closed : Bool
   mut cancelled : Bool
@@ -44,7 +44,7 @@ pub struct StreamSession {
 ///|
 pub fn StreamSession::new(
   workload_id : String,
-  capacity : Int,
+  capacity : Int32,
 ) -> StreamSession {
   {
     workload_id,

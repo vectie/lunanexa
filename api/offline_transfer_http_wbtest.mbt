@@ -44,7 +44,7 @@ async fn exercise_offline_transfer_adapter(
                 {
                   "session_id": "transfer-test-session",
                   "transfer_url": "http://\{server.addr}/v1/offline-transfers/transfer-test-session",
-                  "expires_unix_ms": 2000L.to_json(),
+                  "expires_unix_ms": Json(2000L),
                   "provider_receipt": "transfer-provider-receipt",
                 } : Json).stringify(),
             )
@@ -244,7 +244,7 @@ async test "opaque transfer survives restart and consumes exactly once" {
             {
               "session_id": "transfer-grant-transfer-api",
               "transfer_url": "http://\{server.addr}/v1/offline-transfers/transfer-grant-transfer-api",
-              "expires_unix_ms": (now + 300000L).to_json(),
+              "expires_unix_ms": Json(now + 300000L),
               "provider_receipt": "provider-transfer-receipt",
             } : Json).stringify(),
         )
@@ -305,7 +305,7 @@ async test "opaque transfer survives restart and consumes exactly once" {
         "session_id": transfer.session_id,
         "session_token": transfer.session_token,
         "media_type": "application/pdf",
-        "byte_count": 321L.to_json(),
+        "byte_count": Json(321L),
         "sha256": "sha256:" + "d".repeat(64),
         "provider_receipt": "provider-byte-transfer-receipt",
       } : Json).stringify()
@@ -323,7 +323,7 @@ async test "opaque transfer survives restart and consumes exactly once" {
         "session_id": transfer.session_id,
         "session_token": transfer.session_token,
         "media_type": "application/pdf",
-        "byte_count": (transfer.maximum_byte_count + 1L).to_json(),
+        "byte_count": Json(transfer.maximum_byte_count + 1L),
         "sha256": "sha256:" + "d".repeat(64),
         "provider_receipt": "provider-byte-transfer-receipt",
       } : Json).stringify()

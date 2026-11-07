@@ -136,7 +136,7 @@ async fn contract_bridge_fixture(
 ///|
 fn bridge_result(
   request : @offline.ArtifactGenerationRequest,
-  count : Int?,
+  count : Int32?,
 ) -> @offline.ArtifactGenerationResult {
   {
     request_id: request.request_id,
@@ -198,7 +198,7 @@ async test "MoonEdit generate queues frozen pair and recovers packet commit afte
   defer @fs.rmdir(dir, recursive=true)
   let (service, commerce, documents, packet) = contract_bridge_fixture(dir)
   let body : Json = {
-    "expected_revision": packet.revision.to_json(),
+    "expected_revision": Json(packet.revision),
     "expected_values_sha256": packet.values_sha256.unwrap(),
   }
   let headers = {
@@ -368,7 +368,7 @@ async test "contract bridge resumes enqueue failure and preserves legacy packet 
   defer @fs.rmdir(dir, recursive=true)
   let (service, commerce, documents, packet) = contract_bridge_fixture(dir)
   let body : Json = {
-    "expected_revision": packet.revision.to_json(),
+    "expected_revision": Json(packet.revision),
     "expected_values_sha256": packet.values_sha256.unwrap(),
   }
   let headers = {

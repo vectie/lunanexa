@@ -46,7 +46,7 @@ fn decode_component(value : String) -> String raise {
 }
 
 ///|
-fn hex_digit(byte : Byte) -> Int raise ProviderError {
+fn hex_digit(byte : Byte) -> Int32 raise ProviderError {
   if byte >= b'0' && byte <= b'9' {
     byte.to_int() - 48
   } else if byte >= b'a' && byte <= b'f' {
@@ -233,7 +233,7 @@ pub fn VideoRequest::decode(
 }
 
 ///|
-fn little_u32(bytes : Bytes, offset : Int) -> Int {
+fn little_u32(bytes : Bytes, offset : Int32) -> Int32 {
   if bytes[offset + 3] > b'\x7f' {
     return -1
   }
@@ -274,10 +274,10 @@ pub fn VideoRequest::model(self : VideoRequest) -> String {
 ///|
 pub fn VideoRequest::within_workspace_budget(
   self : VideoRequest,
-  maximum_input : Int,
-  maximum_output : Int,
+  maximum_input : Int32,
+  maximum_output : Int32,
 ) -> Bool {
-  @utf8.encode(self.fields.to_json().stringify()).length() <= maximum_input &&
+  @utf8.encode(Json(self.fields).stringify()).length() <= maximum_input &&
   (@string.parse_int(self.fields["num_frames"]) catch {
     _ => maximum_output + 1
   }) <=

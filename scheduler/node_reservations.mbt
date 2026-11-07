@@ -16,18 +16,18 @@ pub(all) struct NodeReservationRequest {
   node_ids : Array[String]
   starts_unix_ms : Int64
   expires_unix_ms : Int64
-  memory_mib_per_node : Int
-  gpu_memory_mib_per_node : Int
-  max_concurrency_per_node : Int
+  memory_mib_per_node : Int32
+  gpu_memory_mib_per_node : Int32
+  max_concurrency_per_node : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
 pub(all) struct NodeServiceClaim {
   service_id : String
   node_id : String
-  memory_mib : Int
-  gpu_memory_mib : Int
-  concurrency : Int
+  memory_mib : Int32
+  gpu_memory_mib : Int32
+  concurrency : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|

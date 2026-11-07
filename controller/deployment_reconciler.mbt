@@ -57,7 +57,7 @@ pub fn deployment_operation_ready(
   assignments : Array[@contracts.DesiredAssignment],
   heartbeats : Array[@contracts.NodeHeartbeat],
   now_unix_ms : Int64,
-  heartbeat_timeout_ms? : Int64 = 15000L,
+  heartbeat_timeout_ms~ : Int64 = 15000L,
 ) -> Bool {
   group_complete(operation, assignments) &&
   operation.assignment_ids.length() > 0 &&

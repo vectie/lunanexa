@@ -42,9 +42,11 @@ async test "operator artifact downloads are attributed scoped short lived and ne
         connection.write_string(
           (
             {
-              "session_id": id.to_json(),
+              "session_id": Json(id),
               "expires_unix_ms": expires,
-              "transfer_url": "http://\{server.addr}/v1/offline-transfers/\{id}".to_json(),
+              "transfer_url": Json(
+                "http://\{server.addr}/v1/offline-transfers/\{id}",
+              ),
               "provider_receipt": "test-only-storage",
             } : Json).stringify(),
         )

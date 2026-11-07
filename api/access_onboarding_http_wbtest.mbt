@@ -256,8 +256,8 @@ async test "one access package intent is resumable and enables only after contra
     "display_name": "Private key",
     "scopes": ["ModelList", "Inference"],
     "allowed_models": ["private.model"],
-    "expires_unix_ms": (@async.now() + 3600000L).to_json(),
-    "maximum_requests": 10000L.to_json(),
+    "expires_unix_ms": Json(@async.now() + 3600000L),
+    "maximum_requests": Json(10000L),
   }
   let key_reply = model_service.handle(
     Post,
@@ -279,9 +279,9 @@ async test "one access package intent is resumable and enables only after contra
     "display_name": "Company annual key",
     "scopes": ["ModelList", "Inference"],
     "allowed_models": ["private.model"],
-    "expires_unix_ms": (clock_start + 31622400000L).to_json(),
+    "expires_unix_ms": Json(clock_start + 31622400000L),
     "lifetime_days": 365,
-    "maximum_requests": 0L.to_json(),
+    "maximum_requests": Json(0L),
   }
   let clock_reply = model_service.handle(
     Post,
@@ -402,8 +402,8 @@ async test "one access package intent is resumable and enables only after contra
     guard key_intent is Object(fields) else { fail("missing key intent") }
     let changed = fields.copy()
     changed["key_id"] = "rejected-key"
-    changed["maximum_requests"] = 0L.to_json()
-    changed["allowed_models"] = models.to_json()
+    changed["maximum_requests"] = Json(0L)
+    changed["allowed_models"] = Json(models)
     assert_eq(
       model_service.handle(
         Post,

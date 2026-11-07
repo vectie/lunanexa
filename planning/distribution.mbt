@@ -20,9 +20,9 @@ pub extend DistributionMetric with FromJson::{from_json}
 ///|
 /// Inclusive upper bounds; an overflow bucket is always added.
 pub(all) struct DistributionPlan {
-  schema_version : Int
+  schema_version : Int32
   metric : DistributionMetric
-  upper_bounds_ms : Array[Int]
+  upper_bounds_ms : Array[Int32]
 } derive(Eq, ToJson, FromJson)
 
 ///|
@@ -36,14 +36,14 @@ pub extend DistributionPlan with FromJson::{from_json}
 
 ///|
 pub(all) struct DistributionBucket {
-  lower_exclusive_ms : Int?
-  upper_inclusive_ms : Int?
-  sample_count : Int
-  succeeded_count : Int
-  failed_count : Int
-  cumulative_sample_count : Int
-  cumulative_succeeded_count : Int
-  cumulative_failed_count : Int
+  lower_exclusive_ms : Int32?
+  upper_inclusive_ms : Int32?
+  sample_count : Int32
+  succeeded_count : Int32
+  failed_count : Int32
+  cumulative_sample_count : Int32
+  cumulative_succeeded_count : Int32
+  cumulative_failed_count : Int32
 } derive(Eq)
 
 ///|
@@ -58,26 +58,26 @@ pub impl ToJson for DistributionBucket with fn to_json(
 ) -> Json {
   {
     "lower_exclusive_ms": match self.lower_exclusive_ms {
-      Some(n) => n.to_json()
+      Some(n) => Json(n)
       None => Json::null()
     },
     "upper_inclusive_ms": match self.upper_inclusive_ms {
-      Some(n) => n.to_json()
+      Some(n) => Json(n)
       None => Json::null()
     },
-    "sample_count": self.sample_count.to_json(),
-    "succeeded_count": self.succeeded_count.to_json(),
-    "failed_count": self.failed_count.to_json(),
-    "cumulative_sample_count": self.cumulative_sample_count.to_json(),
-    "cumulative_succeeded_count": self.cumulative_succeeded_count.to_json(),
-    "cumulative_failed_count": self.cumulative_failed_count.to_json(),
+    "sample_count": Json(self.sample_count),
+    "succeeded_count": Json(self.succeeded_count),
+    "failed_count": Json(self.failed_count),
+    "cumulative_sample_count": Json(self.cumulative_sample_count),
+    "cumulative_succeeded_count": Json(self.cumulative_succeeded_count),
+    "cumulative_failed_count": Json(self.cumulative_failed_count),
   }
 }
 
 ///|
 /// Derived exploration output; the original packet remains the reopenable evidence.
 pub(all) struct DistributionReport {
-  schema_version : Int
+  schema_version : Int32
   packet_id : String
   run_id : String
   observation_sha256 : String
@@ -89,13 +89,13 @@ pub(all) struct DistributionReport {
   runtime_digest : String
   hardware_profile : String
   kind : @benchmark.BenchmarkKind
-  tested_concurrency : Int
+  tested_concurrency : Int32
   metric : DistributionMetric
   unit : String
-  upper_bounds_ms : Array[Int]
-  sample_count : Int
-  succeeded_count : Int
-  failed_count : Int
+  upper_bounds_ms : Array[Int32]
+  sample_count : Int32
+  succeeded_count : Int32
+  failed_count : Int32
   buckets : Array[DistributionBucket]
 } derive(ToJson)
 
@@ -153,7 +153,7 @@ pub fn import_distribution_plan(
 fn sample_metric(
   sample : @benchmark.BenchmarkSample,
   metric : DistributionMetric,
-) -> Int {
+) -> Int32 {
   match metric {
     LatencyMs => sample.latency_ms
     QueueMs => sample.queue_ms

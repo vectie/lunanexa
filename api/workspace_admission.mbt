@@ -55,6 +55,26 @@ async fn ApiService::private_workspace_authorized(
   if !self.private_cloud_workspace_access {
     return false
   }
+  // A personal trial also has a Developer workspace grant. That grant is
+  // derivative of the trial, not an administrator-issued company grant.
+  // Keep the distinction after expiry/revocation; a different company tenant
+  // for the same person is unaffected.
+  match self.account_store {
+    Some(accounts) =>
+      match
+        accounts
+        .views()
+        .iter()
+        .find_first(account => account.subject_ref == subject_ref) {
+        Some(account) =>
+          if accounts.trial_for_account(account.account_id) is Some(trial) &&
+            trial.tenant_ref == tenant_ref {
+            return false
+          }
+        None => ()
+      }
+    None => ()
+  }
   match self.workspace_directory {
     Some(directory) =>
       try {

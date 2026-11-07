@@ -107,7 +107,7 @@ priv struct LunaFluxControlDigestMaterial {
   health_readiness_contract_digest : String
   drain_contract_digest : String
   listener_origin : String
-  listener_port : Int
+  listener_port : Int32
   health_path : String
   readiness_path : String
   drain_path : String

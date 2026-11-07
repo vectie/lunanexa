@@ -132,9 +132,9 @@ async fn ApiService::technical_authorization_view(self : ApiService) -> Json {
     })
   }
   {
-    "authorizations": self.technical_acceptance_authorization
-    .map_or([], s => [s])
-    .to_json(),
-    "prepared_targets": targets.to_json(),
+    "authorizations": Json(
+      self.technical_acceptance_authorization.map_or([], s => [s]),
+    ),
+    "prepared_targets": Json(targets),
   }
 }

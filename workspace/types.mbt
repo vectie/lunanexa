@@ -149,12 +149,13 @@ pub extend WorkspaceCapability with FromJson::{from_json}
 ///|
 pub(all) struct CapabilityLimit {
   capability : WorkspaceCapability
-  max_concurrent_requests : Int
-  max_requests_per_hour : Int
+  max_concurrent_requests : Int32
+  // Zero records usage without an hourly request-count cap.
+  max_requests_per_hour : Int32
   /// Northbound admission safety limit measured as UTF-8 bytes of canonical
   /// workload payload JSON, matching ResourceCeiling.max_input_units.
-  max_input_units_per_request : Int
-  max_output_units_per_request : Int
+  max_input_units_per_request : Int32
+  max_output_units_per_request : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -174,7 +175,7 @@ pub(all) struct WorkspaceLimits {
   /// Maximum simultaneously connected server-side editor/workbench sessions.
   /// The current browser-local workbench does not create these sessions;
   /// inference concurrency is governed independently by capability limits.
-  max_active_sessions : Int
+  max_active_sessions : Int32
   /// Maximum lifetime of one server-side WorkspaceSession. This does not bound
   /// inference request duration, which is carried by the workload envelope.
   max_session_duration_ms : Int64

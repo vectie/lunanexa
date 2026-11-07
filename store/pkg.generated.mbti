@@ -86,6 +86,7 @@ pub async fn FileStore::put_heartbeat(Self, @contracts.NodeHeartbeat) -> Unit
 pub async fn FileStore::put_node_directive(Self, @contracts.NodeDirective) -> Unit
 pub async fn FileStore::put_workload_result(Self, String, @contracts.WorkloadResponse) -> Unit
 pub async fn FileStore::workload_result(Self, String) -> @contracts.WorkloadResponse?
+pub async fn FileStore::workload_usages(Self) -> Map[String, @contracts.Usage]
 
 pub(all) struct FullBackupBundle {
   version : String

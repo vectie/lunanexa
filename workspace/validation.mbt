@@ -35,7 +35,7 @@ pub extend WorkspaceDirectoryError with Debug::{to_repr}
 pub extend WorkspaceDirectoryError with Eq::{not_equal, equal}
 
 ///|
-pub fn valid_identifier(value : String, maximum_length? : Int = 256) -> Bool {
+pub fn valid_identifier(value : String, maximum_length~ : Int32 = 256) -> Bool {
   value != "" &&
   value.length() <= maximum_length &&
   value.all(character => {
@@ -66,7 +66,7 @@ fn require_identifier(
 fn require_bounded_text(
   value : String,
   field : String,
-  maximum_length : Int,
+  maximum_length : Int32,
 ) -> Unit raise WorkspaceContractError {
   if value.trim() == "" {
     raise MissingField(field)
@@ -139,7 +139,7 @@ pub fn validate_capability_limit(
   if limit.max_concurrent_requests <= 0 || limit.max_concurrent_requests > 1024 {
     raise InvalidLimit("max_concurrent_requests")
   }
-  if limit.max_requests_per_hour <= 0 || limit.max_requests_per_hour > 10000000 {
+  if limit.max_requests_per_hour < 0 || limit.max_requests_per_hour > 10000000 {
     raise InvalidLimit("max_requests_per_hour")
   }
   if limit.max_input_units_per_request <= 0 ||

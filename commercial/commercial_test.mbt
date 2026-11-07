@@ -69,8 +69,8 @@ fn base_store() -> @commercial.CommercialStore raise {
 fn usage(
   event_id : String,
   quantity : Int64,
-  started_unix_ms? : Int64 = 2000L,
-  ended_unix_ms? : Int64 = 3000L,
+  started_unix_ms~ : Int64 = 2000L,
+  ended_unix_ms~ : Int64 = 3000L,
 ) -> @commercial.UsageObservation {
   {
     event_id,

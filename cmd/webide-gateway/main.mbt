@@ -8,10 +8,12 @@ fn required(name : String) -> String raise {
 
 ///|
 async fn main {
+  let mut startup_stage = "loading configuration"
   try {
     let config : @host.HostConfig = @json.from_json(
       @json.parse(@fs.read_file(required("LUNANEXA_WEBIDE_CONFIG_FILE")).text()),
     )
+    startup_stage = "validating workspace host"
     let require_exclusive = @env.get_env_var(
         "LUNANEXA_WEBIDE_REQUIRE_EXCLUSIVE",
       ) ==
@@ -80,6 +82,7 @@ async fn main {
         "Hosted personal WebIDE requires an isolated container image",
       )
     }
+    startup_stage = "creating authenticated bridge"
     let bridge = @webide.Bridge::new(
       {
         client_id,
@@ -118,10 +121,13 @@ async fn main {
         Some("true"),
       stop=Some(id => host.stop(id)),
     )
+    startup_stage = "binding listener"
     let server = @http.Server(
       @socket.Addr::parse(required("LUNANEXA_WEBIDE_BIND")),
+      reuse_addr=true,
     )
     defer server.close()
+    startup_stage = "serving requests"
     @async.with_task_group <| group => {
       group.spawn_bg(() => {
         while true {
@@ -141,10 +147,17 @@ async fn main {
       )
     }
   } catch {
-    _ => {
+    error => {
       // Full exceptions may include a secret-bearing JSON input or upstream URL.
+      let code = match error {
+        @os_error.OSError(errno, ..) => " (OS error " + errno.to_string() + ")"
+        _ => ""
+      }
       println(
-        "WebIDE gateway stopped: verify deployment configuration and private service connectivity",
+        "WebIDE gateway stopped at " +
+        startup_stage +
+        code +
+        ": verify deployment configuration and private service connectivity",
       )
       @sys.exit(1)
     }

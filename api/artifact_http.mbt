@@ -396,7 +396,7 @@ async fn ApiService::consume_artifact_grant(
 ///|
 async fn send_artifact_error(
   connection : @http.ServerConnection,
-  status : Int,
+  status : Int32,
   message : String,
 ) -> Unit {
   let reply = api_error(status, "ArtifactDenied", message, false)

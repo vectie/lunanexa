@@ -386,7 +386,7 @@ async fn RuntimeSupervisor::stop_record(
       "apiVersion": "v1",
       "kind": "DeleteOptions",
       "propagationPolicy": "Foreground",
-      "preconditions": { "uid": uid.to_json() },
+      "preconditions": { "uid": Json(uid) },
     }
     let (deleted_status, _) = (self.transport)("DELETE", path, Some(options))
     if deleted_status == 409 {

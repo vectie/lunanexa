@@ -399,7 +399,7 @@ async test "offline commerce chain walks order evidence entitlement transfer and
             {
               "session_id": intent.session_id,
               "transfer_url": "\{endpoint}/\{intent.session_id}",
-              "expires_unix_ms": intent.expires_unix_ms.to_json(),
+              "expires_unix_ms": Json(intent.expires_unix_ms),
               "provider_receipt": "provider-\{intent.idempotency_key}",
             } : Json).stringify(),
         )
@@ -463,7 +463,7 @@ async test "offline commerce chain walks order evidence entitlement transfer and
       "project_id": "project-chain",
       "selected_service_code": "exclusive-dgx",
       "selected_sla_code": "standard",
-      "expires_unix_ms": (now + 7200000L).to_json(),
+      "expires_unix_ms": Json(now + 7200000L),
     }
     let created = service.handle(
       Post,
@@ -520,7 +520,7 @@ async test "offline commerce chain walks order evidence entitlement transfer and
     // 4. Start the approval/offline state machine.
     let begin_body : Json = {
       "order_id": order_id,
-      "expected_generation": quoted_order.generation.to_json(),
+      "expected_generation": Json(quoted_order.generation),
     }
     let begun = service.handle(
       Post,
@@ -652,7 +652,9 @@ async test "offline commerce chain walks order evidence entitlement transfer and
     // 8a. The offline packet cannot be released before review.
     let early_release_body : Json = {
       "order_id": order_id,
-      "expected_generation": chain_order(chain_snapshot(service), order_id).generation.to_json(),
+      "expected_generation": Json(
+        chain_order(chain_snapshot(service), order_id).generation,
+      ),
     }
     let early_release = service.handle(
       Post,
@@ -679,10 +681,10 @@ async test "offline commerce chain walks order evidence entitlement transfer and
         "order_id": order_id,
         "artifact_id": entry.0,
         "kind": entry.1.to_json(),
-        "revision": (1 : Int).to_json(),
-        "allowed_media_types": (["application/pdf"] : Array[String]).to_json(),
-        "maximum_byte_count": 1000000L.to_json(),
-        "expires_unix_ms": (now + 900000L).to_json(),
+        "revision": Json((1 : Int32)),
+        "allowed_media_types": Json((["application/pdf"] : Array[String])),
+        "maximum_byte_count": Json(1000000L),
+        "expires_unix_ms": Json(now + 900000L),
       }
       let response = service.handle(
         Post,
@@ -783,7 +785,7 @@ async test "offline commerce chain walks order evidence entitlement transfer and
       "accepted": true,
       "reason_code": "EvidenceVerified",
       "audit_receipt": "audit-chain-approval",
-      "reviewed_unix_ms": now.to_json(),
+      "reviewed_unix_ms": Json(now),
     }
     let approval_review = service.handle(
       Post,
@@ -803,7 +805,9 @@ async test "offline commerce chain walks order evidence entitlement transfer and
     // 8b. With the reviewed PDF gate satisfied the packet is released.
     let release_body : Json = {
       "order_id": order_id,
-      "expected_generation": chain_order(chain_snapshot(service), order_id).generation.to_json(),
+      "expected_generation": Json(
+        chain_order(chain_snapshot(service), order_id).generation,
+      ),
     }
     let released = service.handle(
       Post,
@@ -826,13 +830,13 @@ async test "offline commerce chain walks order evidence entitlement transfer and
         "grant_id": grant.grant_id,
         "expected_object_ref": grant.expected_object_ref,
         "media_type": "application/pdf",
-        "byte_count": 50000L.to_json(),
+        "byte_count": Json(50000L),
         "sha256": digest_c,
         "scan_passed": true,
         "active_content_detected": false,
         "scanner_receipt": "scanner-\{entry.0}",
         "verified": true,
-        "completed_unix_ms": (grant.created_unix_ms + 1L).to_json(),
+        "completed_unix_ms": Json(grant.created_unix_ms + 1L),
       }
       let response = service.handle(
         Post,
@@ -861,7 +865,7 @@ async test "offline commerce chain walks order evidence entitlement transfer and
       "accepted": true,
       "reason_code": "EvidenceVerified",
       "audit_receipt": "audit-chain-contract-forged",
-      "reviewed_unix_ms": now.to_json(),
+      "reviewed_unix_ms": Json(now),
     }
     let forged_review = service.handle(
       Post,
@@ -883,7 +887,7 @@ async test "offline commerce chain walks order evidence entitlement transfer and
         "accepted": true,
         "reason_code": "EvidenceVerified",
         "audit_receipt": "audit-\{entry.0}",
-        "reviewed_unix_ms": now.to_json(),
+        "reviewed_unix_ms": Json(now),
       }
       let response = service.handle(
         Post,
@@ -978,7 +982,7 @@ async test "offline commerce chain walks order evidence entitlement transfer and
       "accepted": true,
       "reason_code": "EvidenceVerified",
       "audit_receipt": "audit-chain-sod",
-      "reviewed_unix_ms": now.to_json(),
+      "reviewed_unix_ms": Json(now),
     }
     let self_review = service.handle(
       Post,
@@ -995,7 +999,7 @@ async test "offline commerce chain walks order evidence entitlement transfer and
     assert_eq(reconciled_order.state, UnderReconciliation)
     let fulfillment_body : Json = {
       "order_id": order_id,
-      "expected_generation": reconciled_order.generation.to_json(),
+      "expected_generation": Json(reconciled_order.generation),
       "activation_id": "activation-chain-a",
       "idempotency_key": "activate-chain-a",
       "entitlement_kind": "ExclusiveMachineLease",
@@ -1079,7 +1083,7 @@ async test "offline commerce chain walks order evidence entitlement transfer and
       "session_id": upload_transfer.session_id,
       "session_token": upload_transfer.session_token,
       "media_type": "image/png",
-      "byte_count": 50000L.to_json(),
+      "byte_count": Json(50000L),
       "sha256": digest_c,
       "provider_receipt": "provider-receipt-chain-wrong-media",
     }
@@ -1096,7 +1100,7 @@ async test "offline commerce chain walks order evidence entitlement transfer and
       "session_id": upload_transfer.session_id,
       "session_token": upload_transfer.session_token,
       "media_type": "application/pdf",
-      "byte_count": 50000L.to_json(),
+      "byte_count": Json(50000L),
       "sha256": digest_c,
       "provider_receipt": "provider-receipt-chain-upload",
     }
@@ -1171,7 +1175,7 @@ async test "offline commerce chain walks order evidence entitlement transfer and
       "session_id": capability.session_id,
       "session_token": capability.session_token,
       "media_type": "application/pdf",
-      "byte_count": 30000L.to_json(),
+      "byte_count": Json(30000L),
       "sha256": digest_c,
       "provider_receipt": "provider-receipt-chain-download-wrong",
     }
@@ -1188,7 +1192,7 @@ async test "offline commerce chain walks order evidence entitlement transfer and
       "session_id": capability.session_id,
       "session_token": capability.session_token,
       "media_type": "application/pdf",
-      "byte_count": 30000L.to_json(),
+      "byte_count": Json(30000L),
       "sha256": digest_b,
       "provider_receipt": "provider-receipt-chain-download",
     }

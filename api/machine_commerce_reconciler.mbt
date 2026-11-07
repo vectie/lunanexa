@@ -93,6 +93,9 @@ async fn ApiService::machine_offering_nodes(
     telemetry.snapshot().samples
   })
   for heartbeat in self.store.heartbeats() {
+    if self.node_has_service_allocation(heartbeat.node_id) {
+      continue
+    }
     if self.scheduler is Some(scheduler) &&
       scheduler.node_is_reserved(heartbeat.node_id) {
       continue
@@ -761,7 +764,7 @@ pub async fn ApiService::reconcile_machine_commerce(self : ApiService) -> Unit {
 /// abandoning paid orders.
 pub async fn ApiService::run_machine_commerce_reconciler_forever(
   self : ApiService,
-  interval_ms : Int,
+  interval_ms : Int32,
 ) -> Unit {
   if interval_ms < 1000 || interval_ms > 300000 {
     raise Failure::Failure("machine-commerce reconcile interval is invalid")

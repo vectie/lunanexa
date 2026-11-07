@@ -16,7 +16,7 @@ fn csv_cell(value : String) -> String {
 }
 
 ///|
-fn entry_compare(left : LedgerEntry, right : LedgerEntry) -> Int {
+fn entry_compare(left : LedgerEntry, right : LedgerEntry) -> Int32 {
   let by_time = left.service_started_unix_ms.compare(
     right.service_started_unix_ms,
   )
@@ -279,7 +279,7 @@ pub fn CommercialStore::summary(
   self : CommercialStore,
   organization_id : String,
   currency : String,
-  scale : Int,
+  scale : Int32,
   now_unix_ms : Int64,
 ) -> CommercialSummary raise CommercialError {
   let snapshot = self.snapshot(organization_id)

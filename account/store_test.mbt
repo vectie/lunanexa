@@ -173,8 +173,8 @@ async test "session listing and revoke-all expose no credential material" {
   )
   let views = store.sessions_for_account("account-user")
   assert_eq(views.length(), 2)
-  assert_false(views.to_json().stringify().contains("sha256"))
-  assert_false(views.to_json().stringify().contains("lnxs_"))
+  assert_false(Json(views).stringify().contains("sha256"))
+  assert_false(Json(views).stringify().contains("lnxs_"))
   assert_eq(store.revoke_all_sessions("account-user", now + 3L), 2)
   try store.authorize(first.secret, now + 4L) catch {
     @account.AccountError::Unauthorized => ()

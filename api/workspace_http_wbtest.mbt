@@ -48,6 +48,7 @@ test "OpenAI bridge declares the actual canonical input size" {
     parallel_tool_calls: None,
     temperature: None,
     top_p: None,
+    runtime_prefix_cache: None,
   }
   let (workload, _) = openai_workload(
     value,
@@ -87,6 +88,7 @@ test "OpenAI bridge does not under-declare an over-budget canonical payload" {
     parallel_tool_calls: None,
     temperature: None,
     top_p: None,
+    runtime_prefix_cache: None,
   }
   let (workload, _) = openai_workload(
     value,

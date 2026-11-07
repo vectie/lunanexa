@@ -603,7 +603,7 @@ test "matching browser-session expiry clears the local session" {
 }
 
 ///|
-test "HTTP 401 signs out a stale browser session with a clear message" {
+test "HTTP 401 clears stale account data and recovers the shared browser session" {
   let model : AppModel = {
     ..gateway_auth_test_model(),
     token: "lnxs_expired",
@@ -629,10 +629,11 @@ test "HTTP 401 signs out a stale browser session with a clear message" {
   assert_eq(signed_out.subject_ref, "")
   assert_eq(signed_out.login_password, "")
   assert_eq(signed_out.session_generation, 8L)
-  assert_eq(
-    signed_out.portal.error_message,
-    Some("Your session has expired. Sign in again."),
-  )
+  assert_eq(signed_out.portal.error_message, None)
+  assert_true(signed_out.connecting)
+  let (unavailable, _) = update(signed_out, BootstrapUnavailable(8L), emit)
+  assert_false(unavailable.connecting)
+  assert_eq(unavailable.token, "")
   let (forbidden, _) = update(
     model,
     Outcome(Failed(model.portal.locale, "HTTP 403 Forbidden")),
@@ -642,7 +643,7 @@ test "HTTP 401 signs out a stale browser session with a clear message" {
 }
 
 ///|
-test "MoonDesk launch HTTP 401 signs out the stale browser session" {
+test "launch HTTP 401 recovers the shared session without replaying the launch" {
   let model : AppModel = {
     ..gateway_auth_test_model(),
     token: "lnxs_expired",
@@ -664,10 +665,8 @@ test "MoonDesk launch HTTP 401 signs out the stale browser session" {
   )
   assert_eq(signed_out.token, "")
   assert_eq(signed_out.subject_ref, "")
-  assert_eq(
-    signed_out.portal.error_message,
-    Some("Your session has expired. Sign in again."),
-  )
+  assert_eq(signed_out.portal.error_message, None)
+  assert_true(signed_out.connecting)
 }
 
 ///|

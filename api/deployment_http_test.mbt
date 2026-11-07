@@ -64,7 +64,7 @@ fn management_template() -> @deployment.ModelServiceTemplate {
 async fn management_registry(
   path : String,
   template : @deployment.ModelServiceTemplate,
-  with_evaluation? : Bool = true,
+  with_evaluation~ : Bool = true,
 ) -> @registry.FileRegistry {
   let registry = @registry.FileRegistry::open(path)
   registry.register_runtime(template.runtime)
@@ -141,7 +141,7 @@ async fn management_registry(
 ///|
 fn management_heartbeat(
   running : Array[String],
-  observed_generation? : Int64 = 1L,
+  observed_generation~ : Int64 = 1L,
 ) -> @contracts.NodeHeartbeat {
   {
     node_id: "node-a",

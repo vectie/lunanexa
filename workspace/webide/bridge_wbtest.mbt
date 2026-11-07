@@ -93,6 +93,25 @@ test "shared platform workspace paths are product-specific" {
   )
   assert_eq(make("moonrobo", "/moonrobo").public_base_path, "/moonrobo")
   assert_eq(make("moontown", "/moontown").public_base_path, "/moontown")
+  assert_eq(
+    make("moontown", "/moontown/workspace").public_base_path,
+    "/moontown/workspace",
+  )
+  assert_eq(
+    make("desktop-workspace", "/moondesk/workspace").public_base_path,
+    "/moondesk/workspace",
+  )
+  for
+    path in [
+      "/moondesk/workspace", "/moontown/workspace/extra", "/moontown/../mana",
+    ] {
+    try make("moontown", path) catch {
+      InvalidConfiguration => ()
+      _ => fail("wrong nested path error")
+    } noraise {
+      _ => fail("unsafe workspace base accepted")
+    }
+  }
   try make("comfyui", "/moondesk") catch {
     InvalidConfiguration => ()
     _ => fail("wrong error for cross-product path")
@@ -217,6 +236,23 @@ test "managed route policy rejects traversal, administration and arbitrary tunne
   assert_false(allowed_path(Post, "/api/assets/download"))
   assert_false(allowed_path(Delete, "/api/assets/123"))
   assert_false(allowed_path(Connect, "/"))
+}
+
+///|
+test "video task recovery stays inside the existing workspace session" {
+  let id = "9805dafb6035426aa0e1a7a315428477"
+  assert_true(allowed_path(Get, "/lunanexa/video-tasks"))
+  assert_true(allowed_path(Get, "/api/lunanexa/video-tasks"))
+  assert_true(
+    allowed_path(Post, "/api/lunanexa/video-tasks/" + id + "/recover"),
+  )
+  assert_false(allowed_path(Post, "/lunanexa/video-tasks"))
+  assert_false(allowed_path(Delete, "/lunanexa/video-tasks/" + id))
+  assert_false(allowed_path(Post, "/lunanexa/video-tasks/invalid/recover"))
+  assert_false(allowed_path(Post, "/lunanexa/video-tasks/" + id + "/delete"))
+  assert_false(
+    allowed_path(Post, "/lunanexa/video-tasks/" + id + "/extra/recover"),
+  )
 }
 
 ///|

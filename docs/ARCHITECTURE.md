@@ -1,5 +1,15 @@
 # LunaNexa architecture
 
+## Unified model-service authority (2026-11-07)
+
+The active migration is specified in [unified model services](UNIFIED_MODEL_SERVICES.md).
+Operator and tenant lifecycle requests must converge on the deployment service
+ledger and the same reservation/conflict checks. Runtime adapters describe
+execution mechanics; model-family names are not control-plane branches.
+Existing process/Kubernetes instances are adopted without recreation. See the
+migration document for acceptance and preservation requirements; this paragraph
+does not assert that the deployed migration has completed.
+
 ## Exclusive delivery target
 
 The 2026-09-23 [exclusive-node design](EXCLUSIVE_NODE_DELIVERY.md) is the current
@@ -108,6 +118,25 @@ MoonGate remains responsible for deciding whether LunaNexa or an external
 provider should satisfy a MoonSuite request. LunaNexa never calls back into a
 MoonSuite product to make a scheduling decision.
 
+The adopted four-replica model pool owns typed MTP, prefix-cache and chunked
+prefill intent. UI actions persist that intent and compare the observed
+Deployment arguments, image and generation before reporting readiness. A
+routing-only update does not restart runtimes. The event router may use
+tenant-scoped prefix-digest affinity with a bounded load skew; no GPU KV bytes
+or raw prompts enter the router. The remote-text adapter derives authenticated
+cache salts and returns only usage counters to evidence. Benchmarks enter via
+the normal public MoonGate path with 32 separate, short-lived user credentials;
+cache statistics, latency timings and quality checks are separate evidence.
+
+Model-pool journals also retain a selected node subset and human display names.
+Configured Kubernetes authority remains restricted to the four original
+Deployment names. Routing uses the persisted subset even when the selected
+model route is inactive, so rollback cannot silently reintroduce parked nodes.
+An explicit UI scope action requires zero tracked in-flight streams before
+scaling excluded adopted services to zero, with UID/resourceVersion checks.
+Subsequent model/configuration actions touch only selected services. This is
+resource selection, not a per-user or per-node concurrency limiter.
+
 ### Control plane
 
 The controller stores desired state and continuously reconciles observed state.
@@ -181,6 +210,22 @@ artifact bytes are served only after a live assignment and one-time grant pass.
 The production profile intentionally excludes autoscaling and batch jobs.
 
 ### Browser experience plane
+
+The hosted WebIDE bridge supports optional deployment-owned browser-principal
+authorization and an authenticated request handler. These are generic callbacks,
+not product schemas or reverse dependencies: consumers can bind their platform
+identity to the existing controller-issued grant and serve redacted self views
+on the trusted gateway. Browser identity is checked before provisioning, on
+every HTTP request and during WebSocket renewal. Definite mismatches invalidate
+that browser session; authority outages deny access without destroying saved
+work. Browser credentials still never enter personal workspace backends.
+
+A product may place its public read-only shell at its established product base
+and mount the private execution gateway at that base plus `/workspace`.
+The bridge accepts only those two product-scoped bases (or its standalone base),
+never a sibling product's path. Ingress must strip the selected base exactly.
+This separation does not grant a workspace, relax model admission, or make the
+public shell an execution proxy.
 
 LunaNexa ships two Rabbita browser sites from shared public contracts:
 
@@ -268,11 +313,21 @@ not part of routine reconciliation.
 
 ### Data plane
 
+Event trials reuse account authority and workspace enforcement. A durable event
+policy binds each trial tenant to one approved text model and four existing
+trial-pool nodes. Readiness uses the same approved assignments, fresh heartbeat,
+strict endpoint map and reservation boundaries as normal placement. A bounded
+least-in-flight reservation chooses the event replica after scheduler admission;
+completion releases it, and the stream remains pinned. Event admission does not
+deploy a gateway, allocate nodes or bypass application readiness. See
+`docs/EVENT_TRIAL.md`.
+
 Inference traffic is sent only to a ready runtime selected by the scheduler.
 The platform supports streaming, bounded queues, cancellation, backpressure,
 deadline propagation and idempotent retry where the model operation permits it.
 Admission capacity bounds queued plus running work. A separately configured
-runtime-concurrency limit controls active adapter calls; accepted overflow waits
+runtime-concurrency limit controls active adapter calls only when explicitly
+positive and below total admission; zero adds no execution semaphore. Accepted overflow waits
 under its request deadline, remains cancellable, and reports queue time apart
 from accelerator time. Durable active workload IDs reject reconstruction-time
 relaunch, while the scoped idempotency key is also propagated to the serving
@@ -420,6 +475,37 @@ lunanexa/
 Public concrete types live in their owning public packages. `internal/*` must
 not own types exposed by `contracts`, `scheduler`, `registry` or `runtimes`.
 
+### Adopting an existing model replica pool
+
+The operator may adopt an explicitly configured set of existing Kubernetes
+model Deployments. The controller can get and patch only those named resources;
+it does not gain workload creation, exec, Secret access, or cluster-wide rights.
+Adoption saves each original spec for rollback. Model bytes use the existing
+node materializer and artifact gateway, not a shell-copy deployment shortcut.
+A signed assignment using the reserved `lunanexa-artifact-preparation` adapter
+warms the cache without starting a GPU runtime. It is sent only to agents
+advertising `artifact-preparation-v1`. Once caches are ready,
+the operator can switch the adopted replicas and inspect their actual health.
+This path adds no model execution concurrency limit or additional approval tier.
+
+The adopted Qwen3.6 A3B NVFP4 profile exposes MTP speculative decoding in the
+same operator panel. Zero disables it; 1–5 selects draft-token depth, not request
+concurrency. The artifact's BF16 MTP experts use Triton independently of the
+target's Marlin backend. Desired depth is journaled before applying the four
+existing Deployments. Exact arguments, pinned image and observed Deployment
+generation/replica readiness must match before UI readiness or benchmark
+acceptance. Disabling restores ordinary decoding of the selected model, not the
+pre-adoption model. This changes no RBAC scope or admission concurrency setting.
+Benchmarks retain a completed disabled baseline and stamp the model digest,
+runtime image, decoding depth, generation and fixed measurement profile.
+
+The optional fixed-quality profile fingerprints 64 credential-free request
+fixtures and expected answers. Six synchronized 32-user rounds repeat each
+case three times before the unchanged warmup and speed phases. Reports retain
+192 sanitized quality samples and receipt-derived node counts, never answer
+text. UI comparison rejects incomplete/duplicated cases, transport failures,
+different fingerprints or tuning, and missing participating-node coverage.
+
 ## Observability and benchmarks
 
 Per model/version/runtime/hardware profile, record:
@@ -435,3 +521,10 @@ Per model/version/runtime/hardware profile, record:
 
 Benchmarks are versioned evidence, not marketing claims. A deployment is
 promoted only against a named workload profile and declared service objective.
+
+Hosted client publication can be restricted by the deployment-owned
+`ClientLaunchConfig.allowed_organization_ids`. Catalog projection, one-time
+handoff issuance and redemption share the same exact-ID predicate. Application
+services retain their own business logic and per-subject document storage; they
+consume LunaNexa through its public handoff and model contracts. Neither an
+application route nor an organization label is identity authority.

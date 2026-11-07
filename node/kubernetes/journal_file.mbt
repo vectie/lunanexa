@@ -1,6 +1,6 @@
 ///|
 #borrow(output)
-extern "c" fn fill_secure_random(output : Bytes) -> Int = "lunanexa_node_secure_random"
+extern "c" fn fill_secure_random(output : Bytes) -> Int32 = "lunanexa_node_secure_random"
 
 ///|
 fn owner_nonce() -> String raise LifecycleError {

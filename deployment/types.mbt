@@ -18,7 +18,7 @@ pub extend TemplateRef with FromJson::{from_json}
 
 ///|
 pub(all) struct RolloutPolicy {
-  canary_replicas : Int
+  canary_replicas : Int32
   automatic_promotion : Bool
   automatic_rollback : Bool
   readiness_timeout_ms : Int64
@@ -77,7 +77,7 @@ pub(all) struct ModelServiceIntent {
   idempotency_key : String
   deployment_id : String
   template : TemplateRef
-  replicas : Int
+  replicas : Int32
   data_class : @contracts.DataClass
   lease_duration_ms : Int64
   promote_when_ready : Bool
@@ -133,7 +133,7 @@ pub(all) struct ManagementNode {
   node_id : String
   state : @contracts.NodeState
   architecture : String
-  memory_free_mib : Int
+  memory_free_mib : Int32
   runtime_names : Array[String]
   device_ids : Array[String]
   allowed_data_classes : Array[@contracts.DataClass]

@@ -59,6 +59,10 @@ pub struct ApiService {
   open_trial_allowed_models : Array[String]
   wifi_trial_maximum_requests : Int64
   wifi_trial_allowed_models : Array[String]
+  event_trial_router : @event_trial.Router
+  event_text_routes : Array[ExternalTextRoute]
+  model_pool : @model_pool.Pool?
+  model_benchmark : ModelBenchmark?
   access_store : @access.AccessStore?
   allow_legacy_unbound_access : Bool
   private_cloud_workspace_access : Bool
@@ -109,7 +113,7 @@ pub struct ApiService {
   shared_trial_offerings : Array[SharedTrialOffering]
   external_media_providers : Array[ExternalMediaProvider]
   client_model_policies : Map[String, Array[String]]
-  external_text_control : (async (String) -> String)?
+  runtime_controls : Map[String, async (String) -> String]
   operator_token : String
   retire_bootstrap_operator_token : Bool
   // Token → operator identity map for contract-document operator routes,
@@ -150,7 +154,7 @@ pub struct ApiService {
   reservation_host : @reservation_host.ReservationHost?
   gpu_container_offering : GpuContainerOffering?
   reservation_node_names : Map[String, String]
-  execution_slots : @async.Semaphore
+  execution_slots : @async.Semaphore?
 }
 
 ///|
@@ -174,6 +178,10 @@ pub fn ApiService::new(
     open_trial_allowed_models: [],
     wifi_trial_maximum_requests: 0L,
     wifi_trial_allowed_models: [],
+    event_trial_router: @event_trial.Router::new(),
+    event_text_routes: [],
+    model_pool: None,
+    model_benchmark: None,
     access_store: None,
     allow_legacy_unbound_access: false,
     private_cloud_workspace_access: false,
@@ -223,7 +231,7 @@ pub fn ApiService::new(
     shared_trial_offerings: [],
     external_media_providers: [],
     client_model_policies: Map([]),
-    external_text_control: None,
+    runtime_controls: Map([]),
     operator_token,
     retire_bootstrap_operator_token: false,
     operator_tokens: Map([(operator_token, "operator")]),
@@ -261,7 +269,7 @@ pub fn ApiService::new(
     reservation_host: None,
     gpu_container_offering: None,
     reservation_node_names: Map([]),
-    execution_slots: Semaphore(128),
+    execution_slots: None,
   }
 }
 
@@ -287,6 +295,10 @@ pub fn ApiService::with_registry(
     open_trial_allowed_models: [],
     wifi_trial_maximum_requests: 0L,
     wifi_trial_allowed_models: [],
+    event_trial_router: @event_trial.Router::new(),
+    event_text_routes: [],
+    model_pool: None,
+    model_benchmark: None,
     access_store: None,
     allow_legacy_unbound_access: false,
     private_cloud_workspace_access: false,
@@ -336,7 +348,7 @@ pub fn ApiService::with_registry(
     shared_trial_offerings: [],
     external_media_providers: [],
     client_model_policies: Map([]),
-    external_text_control: None,
+    runtime_controls: Map([]),
     operator_token,
     retire_bootstrap_operator_token: false,
     operator_tokens: Map([(operator_token, "operator")]),
@@ -374,7 +386,7 @@ pub fn ApiService::with_registry(
     reservation_host: None,
     gpu_container_offering: None,
     reservation_node_names: Map([]),
-    execution_slots: Semaphore(128),
+    execution_slots: None,
   }
 }
 
@@ -401,6 +413,10 @@ pub fn ApiService::with_services(
     open_trial_allowed_models: [],
     wifi_trial_maximum_requests: 0L,
     wifi_trial_allowed_models: [],
+    event_trial_router: @event_trial.Router::new(),
+    event_text_routes: [],
+    model_pool: None,
+    model_benchmark: None,
     access_store: None,
     allow_legacy_unbound_access: false,
     private_cloud_workspace_access: false,
@@ -450,7 +466,7 @@ pub fn ApiService::with_services(
     shared_trial_offerings: [],
     external_media_providers: [],
     client_model_policies: Map([]),
-    external_text_control: None,
+    runtime_controls: Map([]),
     operator_token,
     retire_bootstrap_operator_token: false,
     operator_tokens: Map([(operator_token, "operator")]),
@@ -488,7 +504,7 @@ pub fn ApiService::with_services(
     reservation_host: None,
     gpu_container_offering: None,
     reservation_node_names: Map([]),
-    execution_slots: Semaphore(128),
+    execution_slots: None,
   }
 }
 
@@ -517,6 +533,10 @@ pub fn ApiService::with_control_plane(
     open_trial_allowed_models: [],
     wifi_trial_maximum_requests: 0L,
     wifi_trial_allowed_models: [],
+    event_trial_router: @event_trial.Router::new(),
+    event_text_routes: [],
+    model_pool: None,
+    model_benchmark: None,
     access_store: None,
     allow_legacy_unbound_access: false,
     private_cloud_workspace_access: false,
@@ -566,7 +586,7 @@ pub fn ApiService::with_control_plane(
     shared_trial_offerings: [],
     external_media_providers: [],
     client_model_policies: Map([]),
-    external_text_control: None,
+    runtime_controls: Map([]),
     operator_token,
     retire_bootstrap_operator_token: false,
     operator_tokens: Map([(operator_token, "operator")]),
@@ -604,7 +624,7 @@ pub fn ApiService::with_control_plane(
     reservation_host: None,
     gpu_container_offering: None,
     reservation_node_names: Map([]),
-    execution_slots: Semaphore(128),
+    execution_slots: None,
   }
 }
 
@@ -1384,8 +1404,10 @@ pub fn ApiService::with_runtime_concurrency(
   self : ApiService,
   concurrency : Int32,
 ) -> ApiService raise {
-  if concurrency <= 0 || concurrency > 4096 {
-    raise Failure::Failure("runtime concurrency must be positive and bounded")
+  if concurrency < 0 || concurrency > 4096 {
+    raise Failure::Failure(
+      "runtime concurrency must be zero (no extra cap) or a positive bounded operator limit",
+    )
   }
   let scheduler = {
     ..self.global_settings.scheduler,
@@ -1394,7 +1416,11 @@ pub fn ApiService::with_runtime_concurrency(
   {
     ..self,
     global_settings: { ..self.global_settings, scheduler, },
-    execution_slots: Semaphore(concurrency),
+    execution_slots: if concurrency == 0 {
+      None
+    } else {
+      Some(Semaphore(concurrency))
+    },
   }
 }
 
@@ -1408,7 +1434,18 @@ pub fn ApiService::with_global_admin_settings(
   @settings.validate_global_admin_settings(global_settings)
   {
     ..self,
-    execution_slots: Semaphore(global_settings.scheduler.runtime_concurrency),
+    // A legacy limit at or above total admission cannot constrain admitted work.
+    // Treat it as redundant when the durable scheduler enforces that budget.
+    execution_slots: if global_settings.scheduler.runtime_concurrency == 0 ||
+      (
+        self.scheduler is Some(_) &&
+        global_settings.scheduler.runtime_concurrency >=
+        global_settings.scheduler.admission_capacity
+      ) {
+      None
+    } else {
+      Some(Semaphore(global_settings.scheduler.runtime_concurrency))
+    },
     global_settings,
   }
 }
@@ -1939,6 +1976,58 @@ async fn ApiService::schedule_and_admit(
   authority? : @access.ApiAuthorization,
 ) -> (HttpReply?, Array[String]) {
   let now = @async.now()
+  let event = match self.account_store {
+    Some(accounts) => accounts.event_for_tenant(request.tenant_ref)
+    None => None
+  }
+  let event_nodes = match event {
+    Some(policy) => {
+      if !policy.within_window(now) ||
+        !policy.allowed_models.contains(request.model_selector) ||
+        request.capability != TextGenerate ||
+        !self.require_workspace_lease ||
+        self.scheduler is None {
+        return (
+          Some(
+            api_error(
+              403, "EventScopeDenied", "request exceeds the event window or model scope",
+              false,
+            ),
+          ),
+          [],
+        )
+      }
+      // Valid credentials with an oversized request are not an auth failure.
+      // OpenAI clients classify 401/403 as an invalid key, hiding the remedy.
+      if request.resource_ceiling.max_input_units > policy.input_budget() ||
+        request.resource_ceiling.max_output_units > policy.output_budget() {
+        return (
+          Some(
+            api_error(
+              400,
+              "TrialRequestBudgetExceeded",
+              "trial request exceeds the configured budget: input maximum \{policy.input_budget()} UTF-8 bytes, output maximum \{policy.output_budget()} tokens; reduce the request or ask the operator to update trial settings",
+              false,
+            ),
+          ),
+          [],
+        )
+      }
+      let ready = self.event_trial_ready_nodes(policy, now)
+      if ready.is_empty() {
+        return (
+          Some(
+            api_error(
+              503, "EventCapacityNotReady", "no event replica is ready", true,
+            ),
+          ),
+          [],
+        )
+      }
+      ready
+    }
+    None => []
+  }
   let (delivery, delivery_error) = match authority {
     Some(value) => self.delivery_binding(value)
     None => (None, None)
@@ -2003,6 +2092,15 @@ async fn ApiService::schedule_and_admit(
         ),
       ),
       [],
+    )
+  }
+  if event is Some(policy) && !self.event_text_routes.is_empty() {
+    return self.admit_external_event(
+      request,
+      policy,
+      event_nodes,
+      required_deployment_id,
+      delivery is Some(_),
     )
   }
   if self.shared_trial_text_route is Some(route) &&
@@ -2131,10 +2229,10 @@ async fn ApiService::schedule_and_admit(
   }
   let assignments = self.store.assignments()
   let nodes = [
-    for heartbeat in self.store.heartbeats() if shared_trial_node_matches(
-      shared_trial,
-      heartbeat.node_id,
-    ) => {
+    for heartbeat in self.store.heartbeats() if (
+      event is None || event_nodes.contains(heartbeat.node_id)
+    ) &&
+    shared_trial_node_matches(shared_trial, heartbeat.node_id) => {
       let ready_models = if self.runtime.uses_direct_node_routing() {
         if assignments.any(assignment => {
             assignment.node_id == heartbeat.node_id &&
@@ -2201,6 +2299,17 @@ async fn ApiService::schedule_and_admit(
       )
   }
   guard decision.selected_node_id is Some(_) else {
+    if event is Some(_) {
+      return (
+        Some(
+          api_error(
+            503, "EventCapacityNotReady", "no event replica satisfies this request",
+            true,
+          ),
+        ),
+        [],
+      )
+    }
     return (
       Some(
         json_reply(409, {
@@ -2216,7 +2325,24 @@ async fn ApiService::schedule_and_admit(
     )
   }
   match scheduler.admit(request, now) {
-    Rejected(reason~) =>
+    Rejected(reason~) => {
+      if event is Some(_) {
+        return (
+          Some(
+            api_error(
+              if reason == WorkloadAlreadyActive {
+                409
+              } else {
+                429
+              },
+              "EventAdmissionRejected",
+              "event request admission was rejected; retry within the event limits",
+              true,
+            ),
+          ),
+          [],
+        )
+      }
       (
         Some(
           json_reply(if reason == WorkloadAlreadyActive { 409 } else { 429 }, {
@@ -2232,8 +2358,36 @@ async fn ApiService::schedule_and_admit(
         ),
         [],
       )
-    Accepted(_) =>
-      (None, [ for candidate in decision.candidates => candidate.node_id ])
+    }
+    Accepted(_) => {
+      let candidates = [
+        for candidate in decision.candidates => candidate.node_id
+      ]
+      match event {
+        Some(policy) =>
+          match
+            self.event_trial_router.reserve(
+              request.workload_id,
+              candidates,
+              policy.per_node_concurrency,
+            ) {
+            Some(node) => (None, [node])
+            None => {
+              scheduler.complete(request.workload_id, 0L)
+              (
+                Some(
+                  api_error(
+                    429, "EventCapacityBusy", "event replicas are busy; retry shortly",
+                    true,
+                  ),
+                ),
+                [],
+              )
+            }
+          }
+        None => (None, candidates)
+      }
+    }
   }
 }
 
@@ -2243,6 +2397,7 @@ async fn ApiService::complete_admission(
   workload_id : String,
   accelerator_ms : Int64,
 ) -> Unit {
+  self.event_trial_router.release(workload_id)
   if self.scheduler is Some(scheduler) {
     scheduler.complete(workload_id, accelerator_ms)
   }
@@ -2269,6 +2424,9 @@ async fn ApiService::invoke_with_bounded_retry(
   request : @contracts.WorkloadEnvelope,
   routing_nodes : Array[String],
 ) -> (@runtimes.RuntimeInvocationResult, String) {
+  if self.external_event_route(request, routing_nodes) is Some(route) {
+    return (route.runtime.invoke(request), route.node_id)
+  }
   if self.shared_trial_text_route is Some(route) &&
     request.model_selector == route.model_alias &&
     request.tenant_ref == route.tenant_ref &&
@@ -2316,6 +2474,9 @@ async fn ApiService::invoke_stream_with_bounded_retry(
   routing_nodes : Array[String],
   on_chunk : async (Json) -> Unit,
 ) -> (@runtimes.RuntimeInvocationResult, String) {
+  if self.external_event_route(request, routing_nodes) is Some(route) {
+    return (route.runtime.invoke_stream(request, on_chunk), route.node_id)
+  }
   if self.shared_trial_text_route is Some(route) &&
     request.model_selector == route.model_alias &&
     request.tenant_ref == route.tenant_ref &&
@@ -2592,10 +2753,13 @@ async fn ApiService::stop_assignment(
   self : ApiService,
   assignment_id : String,
 ) -> HttpReply {
+  self.resource_mutex.acquire()
+  defer self.resource_mutex.release()
   if assignment_id == "" || self.store.assignment(assignment_id) is None {
     return api_error(404, "NotFound", "desired assignment was not found", false)
   }
   let receipt = "assignment-stop:\{assignment_id}:\{@async.now()}"
+  self.retire_assignment_service(assignment_id)
   let removed = self.with_audit_lock(() => {
     let audit = self.next_audit(
       "operator",
@@ -2688,8 +2852,10 @@ async fn ApiService::invoke_workload(
           .clamp(min=1L, max=86400000L)
           .to_int()
         @async.with_timeout(queue_deadline, () => {
-          self.execution_slots.acquire()
-          defer self.execution_slots.release()
+          if self.execution_slots is Some(slots) {
+            slots.acquire()
+          }
+          defer (if self.execution_slots is Some(slots) { slots.release() })
           started = @async.now()
           if self.scheduler is Some(scheduler) {
             scheduler.mark_started(request.workload_id, started)
@@ -2892,6 +3058,9 @@ priv struct OpenAiStreamContext {
 
 ///|
 fn compatible_stream_delta(output : Json) -> Json {
+  if output is { "reasoning_delta": String(text), .. } {
+    return { "reasoning_content": text }
+  }
   match output {
     Object(fields) =>
       match fields.get("text_delta") {
@@ -2952,7 +3121,7 @@ async fn send_compatible_stream_event(
           {
             "index": 0,
             "delta": delta,
-            "finish_reason": (None : String?).to_json(),
+            "finish_reason": Json((None : String?)),
           },
         ],
       }
@@ -2974,7 +3143,7 @@ async fn send_compatible_stream_event(
               {
                 "index": 0,
                 "delta": compatible_stream_delta(chunk),
-                "finish_reason": (None : String?).to_json(),
+                "finish_reason": Json((None : String?)),
               },
             ],
           }
@@ -3003,16 +3172,19 @@ async fn send_compatible_stream_event(
           {
             "index": 0,
             "delta": ({} : Json),
-            "finish_reason": if context.tool_call_seen[0] ||
-              compatible_stream_has_tool_calls(completed_output) {
-              "tool_calls"
-            } else {
-              "stop"
-            },
+            "finish_reason": compatible_finish_reason(
+              completed_output,
+              context.tool_call_seen[0] ||
+              compatible_stream_has_tool_calls(completed_output),
+            ),
           },
         ],
         "lunanexa_receipt": receipt,
         "usage": usage,
+      }
+      if usage is Object(fields) &&
+        completed_output is Some({ "cached_input_tokens": Number(n, ..), .. }) {
+        fields["prompt_tokens_details"] = { "cached_tokens": Json(n) }
       }
       connection.write_string("data: \{completed_payload.stringify()}\n\n")
       connection.write_string("data: [DONE]\n\n")
@@ -3051,7 +3223,10 @@ async fn ApiService::stream_workload(
   connection : @http.ServerConnection,
   authority : @access.ApiAuthorization,
   openai~ : OpenAiStreamContext? = None,
+  received_unix_ms~ : Int64 = 0L,
+  authorized_unix_ms~ : Int64 = 0L,
 ) -> Unit {
+  let stream_entered = @async.now()
   if self.inference_billing_preflight(
       authority,
       request.model_selector,
@@ -3153,8 +3328,10 @@ async fn ApiService::stream_workload(
           .clamp(min=1L, max=86400000L)
           .to_int()
         @async.with_timeout(queue_deadline, () => {
-          self.execution_slots.acquire()
-          defer self.execution_slots.release()
+          if self.execution_slots is Some(slots) {
+            slots.acquire()
+          }
+          defer (if self.execution_slots is Some(slots) { slots.release() })
           started = @async.now()
           if self.scheduler is Some(scheduler) {
             scheduler.mark_started(request.workload_id, started)
@@ -3369,12 +3546,29 @@ async fn ApiService::stream_workload(
       audit,
     )
   })
+  let receipt_committed = @async.now()
   self.complete_admission(request.workload_id, completed - effective_started)
+  let admission_released = @async.now()
   if self.bill_or_retry_reply(request, response, authority) is Some(reply) {
     connection.write_string("data: \{reply.body}\n\n")
     connection.end_response()
     return
   }
+  self.record_benchmark_timing(request.workload_id, {
+    "server_auth_ms": if received_unix_ms > 0L {
+      authorized_unix_ms - received_unix_ms
+    } else {
+      0L
+    },
+    "server_admission_ms": accepted -
+    (if authorized_unix_ms > 0L { authorized_unix_ms } else { stream_entered }),
+    "server_queue_ms": effective_started - accepted,
+    "server_runtime_ttft_ms": first_output - effective_started,
+    "server_runtime_total_ms": completed - effective_started,
+    "server_receipt_ms": receipt_committed - completed,
+    "server_release_ms": admission_released - receipt_committed,
+    "server_billing_ms": @async.now() - admission_released,
+  })
   sequence += 1
   send_compatible_stream_event(
     connection,
@@ -3385,7 +3579,7 @@ async fn ApiService::stream_workload(
       output: None,
       response: Some({
         ..topology_free_workload_response(response),
-        output: None,
+        output: cache_usage_only(runtime_result.output),
       }),
     },
     openai,
@@ -3473,6 +3667,11 @@ async fn ApiService::dispatch_with_transport(
       verb, path, headers, allow_asserted_subject,
     )
   }
+  if model_services_path(path) {
+    return self.handle_model_services(
+      verb, path, headers, allow_asserted_subject,
+    )
+  }
   if machine_commerce_path(path) {
     return self.handle_machine_commerce(
       verb, path, headers, body, allow_asserted_subject,
@@ -3485,6 +3684,9 @@ async fn ApiService::dispatch_with_transport(
   }
   if resource_reservation_path(path) {
     return self.handle_resource_reservation(verb, path, headers, body)
+  }
+  if path == "/v1/model-pool" || path.has_prefix("/v1/model-pool:") {
+    return self.handle_model_pool(verb, path, headers, body)
   }
   if undertaking_allocation_path(path) {
     return self.handle_undertaking_allocation(verb, headers, body)
@@ -3586,6 +3788,7 @@ async fn ApiService::dispatch_with_transport(
     }
     (Get, "/v1/settings/effective") => {
       if !self.operator_authorized(headers) &&
+        self.enterprise_session_subject(headers) is None &&
         !bearer_authorized(headers, self.inference_token) &&
         self.api_key_authorization(headers, Inference, false) is None {
         return api_error(
@@ -3741,7 +3944,7 @@ async fn ApiService::dispatch_with_transport(
         Some(store) => store.snapshot().events
         None => []
       }
-      json_reply(200, events.to_json())
+      json_reply(200, Json(events))
     }
     (Get, "/v1/capabilities") => {
       if !bearer_authorized(headers, self.inference_token) &&
@@ -3811,7 +4014,10 @@ async fn ApiService::dispatch_with_transport(
           true,
         )
       }
-      let view = try directory.self_view(subject_ref, @async.now()) catch {
+      let view = try {
+        self.sync_subject_trial_output(subject_ref, @async.now())
+        directory.self_view(subject_ref, @async.now())
+      } catch {
         _ =>
           return api_error(
             403, "WorkspaceAccessDenied", "the asserted workspace subject is not recognized",
@@ -3849,7 +4055,7 @@ async fn ApiService::dispatch_with_transport(
           500, "InvalidProjection", "workspace projection is unavailable", false,
         )
       }
-      fields["allowed_models"] = allowed_models.to_json()
+      fields["allowed_models"] = Json(allowed_models)
       json_reply(200, projection)
     }
     (Post, "/v1/workspace/users") => {
@@ -4270,7 +4476,7 @@ async fn ApiService::dispatch_with_transport(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
       }
-      json_reply(200, self.store.heartbeats().to_json())
+      json_reply(200, Json(self.store.heartbeats()))
     }
     (Post, "/v1/enrollment/tokens") => {
       if !self.operator_authorized(headers) {
@@ -4562,7 +4768,7 @@ async fn ApiService::dispatch_with_transport(
           401, "Unauthenticated", "valid operator authority is required", false,
         )
       }
-      json_reply(200, self.store.assignments().to_json())
+      json_reply(200, Json(self.store.assignments()))
     }
     (Get, _) if path.has_prefix("/v1/nodes/") && path.has_suffix("/assignments") => {
       let prefix = "/v1/nodes/".length()
@@ -4575,16 +4781,16 @@ async fn ApiService::dispatch_with_transport(
       }
       json_reply(
         200,
-        [
-          for assignment in self.store.assignments() if assignment.node_id ==
-          node_id &&
-          assignment.lease_expires_unix_ms > @async.now() => assignment
-        ].to_json(),
+        Json(
+          [
+            for assignment in self.store.assignments() if assignment.node_id ==
+            node_id &&
+            assignment.lease_expires_unix_ms > @async.now() => assignment
+          ],
+        ),
       )
     }
     (Put, "/v1/assignments") => {
-      self.resource_mutex.acquire()
-      defer self.resource_mutex.release()
       if !self.operator_authorized(headers) {
         return api_error(
           401, "Unauthenticated", "valid operator authority is required", false,
@@ -4660,19 +4866,16 @@ async fn ApiService::dispatch_with_transport(
         )
       }
       let receipt = "assignment:\{signed_assignment.assignment_id}:\{signed_assignment.generation}"
-      self.with_audit_lock(() => {
-        let audit = self.next_audit(
-          "operator",
-          "assignment.publish",
-          signed_assignment.assignment_id,
-          "unknown",
-          "desired",
-          "accepted",
-          receipt,
-          now,
-        )
-        self.store.commit_assignment(signed_assignment, audit)
-      })
+      self.publish_planned_assignment(
+        assignment,
+        actor=self.operator_identity(headers).unwrap_or("operator"),
+      ) catch {
+        _ =>
+          return api_error(
+            409, "ResourceConflict", "node belongs to another model service allocation",
+            false,
+          )
+      }
       json_reply(202, { "accepted": true, "receipt": receipt })
     }
     (Delete, _) if path.has_prefix("/v1/assignments/") => {
@@ -5187,7 +5390,7 @@ async fn ApiService::dispatch_with_transport(
           401, "Unauthenticated", "valid audit authority is required", false,
         )
       }
-      json_reply(200, self.store.audit_events().to_json())
+      json_reply(200, Json(self.store.audit_events()))
     }
     _ => api_error(404, "NotFound", "route was not found", false)
   }
@@ -5592,6 +5795,7 @@ pub async fn ApiService::serve_on(
 ) -> Unit {
   self.refresh_deployment_operations()
   server.run_forever(allow_failure=true) <| ((request, reader, connection) => {
+    let received_unix_ms = @async.now()
     let headers = application_headers(request.headers)
     let allow_asserted_subject = loopback_client(connection.client_addr())
     // A fresh authority read must not queue behind durable operational metrics.
@@ -5758,7 +5962,7 @@ pub async fn ApiService::serve_on(
         headers,
         true,
         now,
-        self.global_settings.request_budgets,
+        self.trial_request_budgets(authority.tenant_ref),
       )
       try @contracts.validate_workload(workload) catch {
         _ => {
@@ -5788,6 +5992,8 @@ pub async fn ApiService::serve_on(
         workload,
         connection,
         authority,
+        received_unix_ms~,
+        authorized_unix_ms=now,
         openai=Some({
           id: "chatcmpl-\{request_digest[:32]}",
           model: value.model,

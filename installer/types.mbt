@@ -43,7 +43,7 @@ pub(all) struct InstallRequest {
   apply : Bool
   confirmation : String
   ssh_user : String
-  ssh_port : Int
+  ssh_port : Int32
   ssh_key_path : String
   known_hosts_path : String
   management_node : String

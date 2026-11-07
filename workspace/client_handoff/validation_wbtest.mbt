@@ -10,6 +10,7 @@ fn launch_fixture(
     public_api_base_url,
     handoff_lifetime_ms: 120_000L,
     maximum_requests: 100_000L,
+    allowed_organization_ids: None,
   }
 }
 

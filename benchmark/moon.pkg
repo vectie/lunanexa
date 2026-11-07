@@ -1,0 +1,18 @@
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/http",
+  "moonbitlang/core/json",
+  "moonbitlang/core/string",
+}
+
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/http",
+  "moonbitlang/async/socket",
+} for "test"
+
+supported_targets = "native"
+
+options(
+  link: { "native": { "cc-link-flags": "-pthread -ldl" } },
+)

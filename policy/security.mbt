@@ -289,7 +289,7 @@ pub fn RetentionLedger::expire(
 }
 
 ///|
-pub fn RetentionLedger::active_count(self : RetentionLedger) -> Int {
+pub fn RetentionLedger::active_count(self : RetentionLedger) -> Int32 {
   self.records.length()
 }
 

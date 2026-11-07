@@ -82,3 +82,74 @@ async test "core control state restores from PostgreSQL under leadership fencing
   )
   standby.close()
 }
+
+///|
+async test "incremental workload commits restore both indexes and audit atomically" {
+  guard test_database_url() is Some(url) else { return }
+  let database = @database.PostgresDatabase::open(url)
+  database.save_opaque_snapshot(
+    "control",
+    "lunanexa.store.v1",
+    @store.MemoryStore::new().snapshot(),
+  )
+  let token = database
+    .try_acquire_controller_leadership("workload-delta-test")
+    .unwrap()
+  let store = @store.FileStore::open_postgres(
+    database, "workload-delta-test", token,
+  )
+  store.fence_controller(token)
+  let response : @contracts.WorkloadResponse = {
+    version: @contracts.contract_version,
+    workload_id: "delta-one",
+    state: Succeeded,
+    output: None,
+    error: None,
+    usage: {
+      input_units: 10,
+      output_units: 512,
+      accelerator_ms: 15000L,
+      queue_ms: 0L,
+    },
+    artifact_digest: "sha256:" + "a".repeat(64),
+    runtime_version: "test-only",
+    execution_node_id: Some("test-node"),
+    timing: {
+      accepted_unix_ms: 1L,
+      started_unix_ms: 2L,
+      first_output_unix_ms: 3L,
+      completed_unix_ms: 15002L,
+    },
+    retryable: false,
+    audit_receipt: "receipt-delta",
+  }
+  store.commit_workload("delta-request", response, durable_event())
+  let restored = @store.FileStore::open_postgres(
+    database, "workload-delta-test", token,
+  )
+  assert_eq(restored.workload_result("delta-one"), Some(response))
+  assert_eq(restored.idempotent_result("delta-request"), Some(response))
+  assert_eq(restored.audit_events(), [durable_event()])
+  // A later full snapshot must retain the incrementally committed receipt.
+  store.append_audit({ ..durable_event(), sequence: 2L, event_id: "delta-two", })
+  assert_eq(
+    @store.FileStore::open_postgres(database, "workload-delta-test", token).workload_result(
+      "delta-one",
+    ),
+    Some(response),
+  )
+  let before = store.backup_snapshot()
+  database.close()
+  try
+    store.commit_workload(
+      "delta-failure",
+      { ..response, workload_id: "delta-two", },
+      durable_event(),
+    )
+  catch {
+    _ => ()
+  } noraise {
+    _ => fail("disconnected store acknowledged a receipt")
+  }
+  assert_eq(store.backup_snapshot(), before)
+}

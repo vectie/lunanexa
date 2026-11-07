@@ -279,7 +279,7 @@ pub async fn FileWorkspaceDirectory::authorize_subject_for_tenant_capability(
     lease.limits.capabilities.any(limit => {
       limit.capability == capability &&
       limit.max_concurrent_requests >= 1 &&
-      limit.max_requests_per_hour >= 1
+      limit.max_requests_per_hour >= 0
     })
   })
   match select_authorization(user, grants, leases, Developer, now_unix_ms) {

@@ -2,7 +2,7 @@
 fn safe_connection_command(
   username : String,
   host : String,
-  port : Int,
+  port : Int32,
 ) -> String? {
   try @credential.connection_command(username, host, port) catch {
     _ => None
@@ -15,7 +15,7 @@ fn safe_connection_command(
 // Reuse the credential authority's strict username/hostname/port validation.
 // The validated destination cannot contain shell quotes or command syntax.
 // An explicit loopback bind avoids inheriting a GatewayPorts wildcard default.
-fn tunnel_command(username : String, host : String, port : Int) -> String? {
+fn tunnel_command(username : String, host : String, port : Int32) -> String? {
   match safe_connection_command(username, host, port) {
     None => None
     Some(_) =>

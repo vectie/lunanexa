@@ -213,17 +213,17 @@ async fn ApiService::handle_contract_governance(
       json_reply(200, {
         "version": "lunanexa.contract-governance.export.v1",
         "tenant_ref": request.tenant_ref,
-        "generated_unix_ms": now.to_json(),
-        "packet_count": packet_ids.length().to_json(),
-        "amendment_count": amendment_count.to_json(),
+        "generated_unix_ms": Json(now),
+        "packet_count": Json(packet_ids.length()),
+        "amendment_count": Json(amendment_count),
         "dashboard": store
         .governance_dashboard(request.tenant_ref, now)
         .to_json(),
-        "approvals": approvals.to_json(),
-        "obligations": obligations.to_json(),
-        "closure_proposals": proposals.to_json(),
-        "contract_numbers": numbers.to_json(),
-        "audit_events": events.to_json(),
+        "approvals": Json(approvals),
+        "obligations": Json(obligations),
+        "closure_proposals": Json(proposals),
+        "contract_numbers": Json(numbers),
+        "audit_events": Json(events),
       })
     }
     (Post, "/v1/contract-governance/operator/amendments") => {

@@ -1,0 +1,66 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "vectie/lunanexa/event_trial"
+
+import {
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+}
+
+// Values
+
+// Errors
+
+// Types and methods
+pub(all) struct Policy {
+  event_id : String
+  title : String
+  starts_unix_ms : Int64
+  expires_unix_ms : Int64
+  maximum_users : Int
+  maximum_requests : Int64
+  max_input_bytes : Int?
+  max_output_tokens : Int?
+  allowed_models : Array[String]
+  node_ids : Array[String]
+  per_node_concurrency : Int
+  registration_open : Bool
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn Policy::accepting(Self, Int64) -> Bool
+pub fn Policy::ended(Self, Int64) -> Bool
+pub fn Policy::equal(Self, Self) -> Bool
+pub fn Policy::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn Policy::grant_expires(Self, Int64) -> Int64
+pub fn Policy::input_budget(Self) -> Int
+pub fn Policy::not_equal(Self, Self) -> Bool
+pub fn Policy::output_budget(Self) -> Int
+pub fn Policy::overlaps(Self, Self) -> Bool
+pub fn Policy::to_json(Self) -> Json
+pub fn Policy::to_repr(Self) -> @debug.Repr
+pub fn Policy::valid(Self) -> Bool
+pub fn Policy::within_window(Self, Int64) -> Bool
+
+pub struct Router {
+  active : Map[String, String]
+  mut cursor : Int
+  affinity : Map[String, (String, Int64)]
+}
+pub fn Router::in_flight(Self, String) -> Int
+pub fn Router::new() -> Self
+pub fn Router::release(Self, String) -> Unit
+pub fn Router::reserve(Self, String, Array[String], Int, prefix? : String, now? : Int64) -> String?
+
+pub(all) struct View {
+  policy : Policy
+  registered_users : Int
+  ready_nodes : Array[String]
+  blockers : Array[String]
+} derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn View::equal(Self, Self) -> Bool
+pub fn View::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn View::not_equal(Self, Self) -> Bool
+pub fn View::to_json(Self) -> Json
+pub fn View::to_repr(Self) -> @debug.Repr
+
+// Type aliases
+
+// Traits

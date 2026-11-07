@@ -22,8 +22,8 @@ pub(all) struct ProbeStagePolicy {
   initial_delay_ms : Int64
   period_ms : Int64
   timeout_ms : Int64
-  success_threshold : Int
-  failure_threshold : Int
+  success_threshold : Int32
+  failure_threshold : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -59,8 +59,8 @@ pub extend ProbePolicy with FromJson::{from_json}
 
 ///|
 pub(all) struct ProbeCounters {
-  consecutive_successes : Int
-  consecutive_failures : Int
+  consecutive_successes : Int32
+  consecutive_failures : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -223,8 +223,8 @@ fn valid_counters(counters : ProbeCounters) -> Bool {
 fn observe_counter(
   counters : ProbeCounters,
   success : Bool,
-  success_threshold : Int,
-  failure_threshold : Int,
+  success_threshold : Int32,
+  failure_threshold : Int32,
 ) -> ProbeCounters {
   if success {
     let next = if counters.consecutive_successes >= success_threshold {

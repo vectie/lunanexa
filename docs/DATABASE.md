@@ -7,7 +7,7 @@ to this database.
 
 ## Stored records
 
-Schema version 5 maintains the following normalized, indexed projections and
+Schema version 7 maintains the following normalized, indexed projections and
 leadership state:
 
 - `lunanexa.enterprise_memberships` — enterprise organization membership,
@@ -35,6 +35,27 @@ leadership state:
 The snapshot table is also authoritative for `control`, `model_registry`,
 `node_enrollment`, `scheduler`, `telemetry`, and `deployments`. Production
 replicas never use controller-local files for those domains.
+
+Version 6 selects LZ4 compression for snapshot payloads (PostgreSQL 14+ built
+with LZ4 support; the deployed PostgreSQL 16 image supports it). Existing
+values are not forcibly rewritten. Normal updates recompress them, preserving
+the JSON shape, durable acknowledgement, and compatibility with older
+controller readers. `database/migrations/006_snapshot_lz4.sql` is the scoped,
+idempotent upgrade. A large control snapshot previously spent about 158 ms per
+completion rewriting PGLZ-compressed JSON; a same-server temporary-copy test
+measured about 39 ms with LZ4. This removes compression overhead, not the
+remaining O(history-size) cost of the snapshot layout.
+
+Version 7 adds `lunanexa.control_workload_commits`, an atomic receipt/audit
+journal indexed by audit sequence. Workload completion appends only its own
+record. Control recovery overlays all journal rows in audit order, choosing
+the newest receipt for a repeated workload ID. An ordinary full control write
+checkpoints the complete in-memory state and deletes the incorporated journal
+inside the same transaction. The control-store mutex, leadership and epoch
+checks remain. Backups must include both tables. Before a pre-v7 binary
+rollback, quiesce writes and checkpoint via the v7 reader, then verify the
+journal is empty; old readers alone do not overlay it. Migration source:
+`database/migrations/007_control_workload_commits.sql`.
 
 The `commercial` and `commercial_integrations` snapshot rows are committed in
 one PostgreSQL transaction. A verified signature/payment/invoice callback and

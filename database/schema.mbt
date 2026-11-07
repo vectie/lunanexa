@@ -1,5 +1,5 @@
 ///|
-pub let schema_version : Int = 5
+pub let schema_version : Int32 = 7
 
 ///|
 pub let schema_sql : String =
@@ -15,6 +15,13 @@ pub let schema_sql : String =
   #|  revision bigint NOT NULL DEFAULT 1 CHECK (revision > 0),
   #|  payload jsonb NOT NULL,
   #|  updated_at timestamptz NOT NULL DEFAULT now()
+  #|);
+  #|ALTER TABLE lunanexa.snapshots ALTER COLUMN payload SET COMPRESSION lz4;
+  #|CREATE TABLE IF NOT EXISTS lunanexa.control_workload_commits (
+  #|  audit_sequence bigint PRIMARY KEY CHECK (audit_sequence > 0),
+  #|  workload_id text NOT NULL,
+  #|  record jsonb NOT NULL,
+  #|  audit jsonb NOT NULL
   #|);
   #|CREATE TABLE IF NOT EXISTS lunanexa.controller_leadership (
   #|  singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
@@ -115,6 +122,10 @@ pub let schema_sql : String =
   #|INSERT INTO lunanexa.schema_migrations(version) VALUES (4)
   #|ON CONFLICT (version) DO NOTHING;
   #|INSERT INTO lunanexa.schema_migrations(version) VALUES (5)
+  #|ON CONFLICT (version) DO NOTHING;
+  #|INSERT INTO lunanexa.schema_migrations(version) VALUES (6)
+  #|ON CONFLICT (version) DO NOTHING;
+  #|INSERT INTO lunanexa.schema_migrations(version) VALUES (7)
   #|ON CONFLICT (version) DO NOTHING;
   #|COMMIT;
 

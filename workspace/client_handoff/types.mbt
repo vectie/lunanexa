@@ -13,6 +13,7 @@ pub(all) struct ClientLaunchConfig {
   public_api_base_url : String
   handoff_lifetime_ms : Int64
   maximum_requests : Int64
+  allowed_organization_ids : Array[String]?
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|

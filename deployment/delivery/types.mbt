@@ -32,7 +32,7 @@ pub(all) struct Intent {
   template_id : String
   template_version : String
   model_digest : String?
-  node_count : Int
+  node_count : Int32
   expires_at_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
 

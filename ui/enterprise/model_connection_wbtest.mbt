@@ -40,6 +40,7 @@ test "private model call example uses chat completion without secrets or infrast
         state: "Running",
         can_stop: true,
         ready: true,
+        service_id: "fixture-model-service",
         context_window_tokens: Some(850000),
       }),
     },
@@ -175,7 +176,9 @@ test "private model call example uses chat completion without secrets or infrast
     },
   }
   assert_false(render(text_responding).contains("https://example.test/user/"))
-  assert_true(render({ ..trial, route: Models, }).contains("Shared trial machines"))
+  assert_true(
+    render({ ..trial, route: Models, }).contains("Shared trial machines"),
+  )
   let shared = api_key_first_call_example(state, {
     ..value,
     allowed_models: ["text.qwen"],

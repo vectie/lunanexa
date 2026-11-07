@@ -12,7 +12,7 @@ fn query() -> @model_fleet.Query {
 }
 
 ///|
-fn model(id : String, memory : Int) -> @contracts.ModelRecord {
+fn model(id : String, memory : Int32) -> @contracts.ModelRecord {
   {
     model_id: id,
     version: "v1",
@@ -62,7 +62,7 @@ fn node(
 fn device(
   id : String,
   architecture : String,
-  free : Int,
+  free : Int32,
   healthy : Bool,
 ) -> @contracts.AcceleratorInventory {
   {
@@ -85,7 +85,7 @@ test "single-device declarations retain health approval freshness and zero-devic
     node("b", Cordoned, 899L, [device("0", "other-arch", 16384, true)]),
     node("cpu", Active, 1001L, []),
   ]
-  let before = (models.to_json(), nodes.to_json())
+  let before = (Json(models), Json(nodes))
   let report = @model_fleet.explore(models, nodes, query())
   assert_eq(report.rows.length(), 8)
   assert_eq(report.models[0].model_id, "large")
@@ -109,7 +109,7 @@ test "single-device declarations retain health approval freshness and zero-devic
   assert_eq(absent.freshness, "future")
   assert_eq(absent.declaration_comparison, "no-device-observation")
   assert_false(report.json_text().contains("excluded"))
-  assert_eq(before, (models.to_json(), nodes.to_json()))
+  assert_eq(before, (Json(models), Json(nodes)))
 }
 
 ///|

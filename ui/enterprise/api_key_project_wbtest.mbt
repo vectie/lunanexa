@@ -4,6 +4,8 @@ test "refreshing the same company repairs a missing or foreign trial billing pro
   let organization = base.organizations[0]
   let expected = organization.default_project_id.unwrap()
   let trial : TrialEntitlementView = {
+    consumed_requests: None,
+    max_output_tokens: None,
     trial_id: "old-trial",
     organization_id: "old-trial-org",
     tenant_ref: "old-trial-tenant",

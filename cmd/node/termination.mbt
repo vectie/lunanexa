@@ -27,8 +27,8 @@ fn acknowledgement_matches(
 ///|
 fn termination_batch(
   pending : Array[@contracts.RuntimeTermination],
-  offset : Int,
-) -> (Array[@contracts.RuntimeTermination], Int) {
+  offset : Int32,
+) -> (Array[@contracts.RuntimeTermination], Int32) {
   if pending.is_empty() {
     return ([], 0)
   }
@@ -49,7 +49,7 @@ async fn send_pending_terminations(
   base : String,
   node_id : String,
   token : String,
-  cursor : Ref[Int],
+  cursor : Ref[Int32],
 ) -> Unit {
   let (records, next) = termination_batch(
     supervisor.pending_terminations(),

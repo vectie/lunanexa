@@ -84,7 +84,10 @@ test "prewarm cancellation and expiry are explicit terminal states" {
 }
 
 ///|
-fn probe_stage(successes : Int, failures : Int) -> @technical.ProbeStagePolicy {
+fn probe_stage(
+  successes : Int32,
+  failures : Int32,
+) -> @technical.ProbeStagePolicy {
   {
     initial_delay_ms: 0L,
     period_ms: 1000L,

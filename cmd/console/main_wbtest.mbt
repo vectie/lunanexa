@@ -1535,7 +1535,7 @@ fn node_row_sample(
 /// which is how a unified-memory descriptor is rendered today.
 fn node_row_heartbeat(
   node_id : String,
-  declared_memory_mib~ : Int,
+  declared_memory_mib~ : Int32,
 ) -> @contracts.NodeHeartbeat {
   {
     node_id,
@@ -1917,6 +1917,55 @@ fn deferred_read_test_model(route : @ui.OperatorRoute) -> AppModel {
 }
 
 ///|
+test "controller refresh outage retains operator page but authentication rejection does not" {
+  let model = deferred_read_test_model(Deployments)
+  let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
+  let (unavailable, _) = update(
+    model,
+    Outcome(
+      LoadFailed(
+        model.console.locale,
+        "temporarily unavailable",
+        authentication_rejected=false,
+      ),
+    ),
+    emit,
+  )
+  assert_true(unavailable.console.operator_authenticated)
+  assert_eq(unavailable.console.route, Deployments)
+  assert_eq(unavailable.credential, model.credential)
+  assert_false(unavailable.console.loading)
+  let (rejected, _) = update(
+    model,
+    Outcome(
+      LoadFailed(
+        model.console.locale,
+        "authentication rejected",
+        authentication_rejected=true,
+      ),
+    ),
+    emit,
+  )
+  assert_false(rejected.console.operator_authenticated)
+  let anonymous = {
+    ..model,
+    console: { ..model.console, operator_authenticated: false, },
+  }
+  let (still_anonymous, _) = update(
+    anonymous,
+    Outcome(
+      LoadFailed(
+        model.console.locale,
+        "unavailable",
+        authentication_rejected=false,
+      ),
+    ),
+    emit,
+  )
+  assert_false(still_anonymous.console.operator_authenticated)
+}
+
+///|
 test "page-scoped reads map routes to groups and load each group once" {
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   assert_true(console_read_group_for_route(Alerts) is Some(AlertsReads))
@@ -1967,7 +2016,7 @@ test "page-scoped reads map routes to groups and load each group once" {
     "/v1/model-sources/modelscope/imports",
   ])
   assert_eq(console_read_group_paths(AccessReads, ""), [
-    "/v1/accounts", "/v1/accounts/trial-summary", "/v1/onboarding/access-packages",
+    "/v1/accounts", "/v1/accounts/trial-summary", "/v1/accounts/event-trials", "/v1/onboarding/access-packages",
     "/v1/workspace", "/v1/exclusive-node-leases",
   ])
   assert_eq(console_read_group_paths(DeploymentReads, ""), [
@@ -2371,6 +2420,7 @@ test "the deployment group replaces the deployment rows and their operations" {
     updated_unix_ms: 2000L,
   }
   let payload : DeploymentReadPayload = {
+    model_pool: None,
     deployments: [
       {
         assignment_id: "service-1-r1",
@@ -2378,6 +2428,9 @@ test "the deployment group replaces the deployment rows and their operations" {
         desired: Ready,
         observed: Preparing,
         placement_reason: "node-1 · #1",
+        model_digest: "",
+        node_id: "",
+        resource_owner: "",
       },
     ],
     service_deployments: [operation],
@@ -2432,6 +2485,9 @@ test "the access group replaces only the account and workspace rows" {
           desired: Ready,
           observed: Ready,
           placement_reason: "node-1 · #1",
+          model_digest: "",
+          node_id: "",
+          resource_owner: "",
         },
       ],
     },
@@ -2439,6 +2495,8 @@ test "the access group replaces only the account and workspace rows" {
   let (opened, _) = update_live(model, Console(Navigate(Users)), emit)
   assert_true(opened.console_read_groups.contains(AccessReads))
   let payload : AccessReadPayload = {
+    access_organizations: [],
+    event_trials: Some([]),
     pending_organizations: [],
     accounts: [
       {
@@ -2459,6 +2517,7 @@ test "the access group replaces only the account and workspace rows" {
       active_trials: 2,
       expired_trials: 1,
       converted_trials: 0,
+      participants: None,
     }),
     access_packages: [],
     users: [

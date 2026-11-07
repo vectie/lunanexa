@@ -6,6 +6,13 @@ pub fn OpenAiTextRuntime::with_text_chat_completions(self : Self) -> Self {
 }
 
 ///|
+/// vLLM cache salts preserve the existing tenant/cache-policy boundary. This
+/// does not alter model input tokens or sampling and is only used by vLLM pools.
+pub fn OpenAiTextRuntime::with_prefix_cache_isolation(self : Self) -> Self {
+  { ..self, prefix_cache_isolation: true, }
+}
+
+///|
 fn chat_content(value : Json) -> Json raise RemoteRuntimeError {
   match value {
     String(_) => value
@@ -102,6 +109,24 @@ fn chat_text(value : Json, streaming : Bool) -> String? {
 }
 
 ///|
+fn chat_finish_reason(value : Json) -> String? {
+  match value {
+    { "choices": Array([{ "finish_reason": String(reason), .. }]), .. } =>
+      Some(reason)
+    _ => None
+  }
+}
+
+///|
+fn chat_output(text : String, finish : String?) -> Json {
+  let fields : Map[String, Json] = { "output_text": Json::string(text) }
+  if finish is Some(reason) {
+    fields["finish_reason"] = Json::string(reason)
+  }
+  Json::object(fields)
+}
+
+///|
 fn OpenAiTextRuntime::chat_headers(
   self : Self,
   request : @contracts.WorkloadEnvelope,
@@ -155,7 +180,7 @@ async fn OpenAiTextRuntime::invoke_text_chat(
   }
   let (input_units, output_units) = chat_usage(value)
   {
-    output: { "output_text": output },
+    output: chat_output(output, chat_finish_reason(value)),
     artifact_digest: self.artifact_digest,
     runtime_version: self.runtime_version,
     input_units,
@@ -179,6 +204,7 @@ async fn OpenAiTextRuntime::open_text_chat_request(
     raise InvalidUpstreamResponse("chat endpoint lacks request path")
   }
   let path_start = scheme + 3 + offset
+  self.isolate_prefix_cache(request, upstream)
   let body = @utf8.encode(upstream.stringify())
   let client = @http.Client(
     endpoint[:path_start].to_owned(),
@@ -211,6 +237,7 @@ async fn OpenAiTextRuntime::invoke_text_chat_stream(
   let mut output_units = 0
   let mut total = 0
   let mut done = false
+  let mut finish : String? = None
   while stream.read_until("\n") is Some(line) {
     let line = line.trim()
     if !line.has_prefix("data:") {
@@ -231,6 +258,9 @@ async fn OpenAiTextRuntime::invoke_text_chat_stream(
       raise UpstreamFailed(code="chat-stream-failed", retryable=false)
     }
     let (p, c) = chat_usage(event)
+    if chat_finish_reason(event) is Some(reason) {
+      finish = Some(reason)
+    }
     if p != 0 || c != 0 {
       input_units = p
       output_units = c
@@ -243,12 +273,26 @@ async fn OpenAiTextRuntime::invoke_text_chat_stream(
       texts.push(text)
       on_chunk({ "text_delta": text })
     }
+    if event
+      is {
+        "choices": Array(
+          [{ "delta": { "reasoning_content": String(text), .. }, .. }]
+        ),
+        ..
+      } &&
+      text != "" {
+      total += text.length()
+      guard total <= self.maximum_response_bytes else {
+        raise InvalidUpstreamResponse("chat stream too large")
+      }
+      on_chunk({ "reasoning_delta": text })
+    }
   }
   guard done else {
     raise InvalidUpstreamResponse("chat stream ended before DONE")
   }
   {
-    output: { "output_text": texts.join("") },
+    output: chat_output(texts.join(""), finish),
     artifact_digest: self.artifact_digest,
     runtime_version: self.runtime_version,
     input_units,

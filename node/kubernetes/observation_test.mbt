@@ -15,33 +15,31 @@ fn identity() -> @kubernetes.PodIdentity {
 }
 
 ///|
-fn pod(phase? : String = "Running", ready? : Bool = true) -> Json {
+fn pod(phase~ : String = "Running", ready~ : Bool = true) -> Json {
   let expected = identity()
   {
     "metadata": {
-      "namespace": expected.namespace_name.to_json(),
-      "name": expected.pod_name.to_json(),
-      "uid": expected.uid.to_json(),
-      "labels": { "lunanexa.io/assignment": expected.assignment_id.to_json() },
+      "namespace": Json(expected.namespace_name),
+      "name": Json(expected.pod_name),
+      "uid": Json(expected.uid),
+      "labels": { "lunanexa.io/assignment": Json(expected.assignment_id) },
       "annotations": {
         "lunanexa.io/generation": "1",
-        "lunanexa.io/artifact-digest": expected.artifact_digest.to_json(),
+        "lunanexa.io/artifact-digest": Json(expected.artifact_digest),
       },
     },
     "spec": {
-      "nodeName": expected.node_name.to_json(),
-      "containers": [
-        { "name": "runtime", "image": expected.image_ref.to_json() },
-      ],
+      "nodeName": Json(expected.node_name),
+      "containers": [{ "name": "runtime", "image": Json(expected.image_ref) }],
     },
     "status": {
-      "phase": phase.to_json(),
+      "phase": Json(phase),
       "conditions": [{ "type": "Ready", "status": "True" }],
       "containerStatuses": [
         {
           "name": "runtime",
-          "ready": ready.to_json(),
-          "imageID": expected.image_ref.to_json(),
+          "ready": Json(ready),
+          "imageID": Json(expected.image_ref),
           "state": { "running": {} },
         },
       ],

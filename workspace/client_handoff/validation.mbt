@@ -105,7 +105,21 @@ pub fn valid_client_launch_config(
   config.handoff_lifetime_ms >= 30000L &&
   config.handoff_lifetime_ms <= 300000L &&
   config.maximum_requests > 0L &&
-  config.maximum_requests <= 1000000000L
+  config.maximum_requests <= 1000000000L &&
+  config.allowed_organization_ids.map_or(true, ids => {
+    ids.length() <= 128 &&
+    ids.all(id => @contracts.valid_identifier(id) && ids.count(id) == 1)
+  })
+}
+
+///|
+pub fn ClientLaunchConfig::allows_organization(
+  self : ClientLaunchConfig,
+  organization_id : String,
+) -> Bool {
+  self.allowed_organization_ids.map_or(true, ids => {
+    ids.contains(organization_id)
+  })
 }
 
 ///|

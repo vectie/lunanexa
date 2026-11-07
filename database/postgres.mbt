@@ -42,7 +42,7 @@ pub struct PgOperation {
 async fn PgOperation::execute(
   self : PgOperation,
   sql : String,
-  parameters? : Array[String?] = [],
+  parameters~ : Array[String?] = [],
 ) -> @pgclient.PgResult raise DatabaseError {
   self.connection.execute(sql, parameters~) catch {
     @pgclient.PgError::QueryRejected(message) => {
@@ -178,7 +178,7 @@ async fn PostgresDatabase::leader_pool(
 /// Starts a pool, or raises if the operating system refuses its threads.
 async fn PostgresDatabase::make_pool(
   self : PostgresDatabase,
-  workers : Int,
+  workers : Int32,
 ) -> @pgclient.PgPool {
   try @pgclient.PgPool::connect(self.url, workers~) catch {
     @pgclient.PgError::InvalidArgument(message) => raise QueryFailed(message)
@@ -197,7 +197,7 @@ async fn PostgresDatabase::make_pool(
 fn run_admin(
   connection : @postgres.Connection,
   sql : String,
-  parameters? : Array[String?] = [],
+  parameters~ : Array[String?] = [],
 ) -> @postgres.QueryResult raise DatabaseError {
   connection.execute(sql, parameters~) catch {
     error => raise QueryFailed("\{Repr(error)}")
@@ -208,7 +208,7 @@ fn run_admin(
 async fn run(
   connection : PgOperation,
   sql : String,
-  parameters? : Array[String?] = [],
+  parameters~ : Array[String?] = [],
 ) -> @pgclient.PgResult raise DatabaseError {
   connection.execute(sql, parameters~)
 }
@@ -233,7 +233,7 @@ pub fn PostgresDatabase::open(
 /// Workers to run statements on. Reads and writes wait on these instead of on
 /// one shared connection, so a slow statement no longer queues every other
 /// request behind it.
-fn worker_count() -> Int {
+fn worker_count() -> Int32 {
   let configured = @env.get_env_var("LUNANEXA_DATABASE_WORKERS")
     .map(value => {
       try @string.parse_int(value) catch {
@@ -304,6 +304,7 @@ fn allowed_domain(domain : String) -> Bool {
   domain == "scheduler" ||
   domain == "telemetry" ||
   domain == "deployments" ||
+  domain == "model_services" ||
   domain == "exclusive_deliveries" ||
   domain == "access_onboarding" ||
   domain == "accounts" ||
@@ -503,7 +504,11 @@ pub async fn PostgresDatabase::load_snapshot(
   defer connection.release()
   let result = run(
     connection,
-    "SELECT schema_version, payload::text FROM lunanexa.snapshots WHERE domain = $1",
+    if domain == "control" {
+      control_snapshot_query
+    } else {
+      "SELECT schema_version, payload::text FROM lunanexa.snapshots WHERE domain = $1"
+    },
     parameters=[Some(domain)],
   )
   if result.row_count() == 0 {
@@ -541,6 +546,11 @@ async fn write_snapshot_row(
       parameters=[Some(domain), Some(version), Some(payload)],
     ),
   )
+  if domain == "control" {
+    // The active FileStore serializes checkpoint and receipt commits. The
+    // snapshot row lock also orders their transactions across recovery.
+    ignore(run(connection, "DELETE FROM lunanexa.control_workload_commits"))
+  }
 }
 
 ///|
@@ -640,7 +650,7 @@ pub async fn PostgresDatabase::append_operational_event(
 /// stable across restarts but is not necessarily the original arrival order.
 pub async fn PostgresDatabase::load_recent_operational_events(
   self : PostgresDatabase,
-  limit : Int,
+  limit : Int32,
 ) -> Array[String] {
   if limit <= 0 || limit > 1000000 {
     raise QueryFailed("operational event window is invalid")
@@ -691,7 +701,7 @@ pub async fn PostgresDatabase::operational_event_count(
 /// relation only has to stay bounded, not exactly trimmed on every request.
 pub async fn PostgresDatabase::prune_operational_events(
   self : PostgresDatabase,
-  keep : Int,
+  keep : Int32,
 ) -> Unit {
   if keep <= 0 || keep > 1000000 {
     raise QueryFailed("operational event retention window is invalid")

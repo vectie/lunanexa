@@ -170,6 +170,8 @@ pub(all) struct BrowserSessionView {
 
 ///|
 pub(all) struct TrialEntitlementView {
+  consumed_requests : Int64?
+  max_output_tokens : Int32?
   trial_id : String
   organization_id : String
   tenant_ref : String
@@ -186,6 +188,7 @@ pub(all) struct TrialEntitlementView {
 pub(all) struct EnterpriseState {
   docs_base_url : String?
   route : EnterpriseRoute
+  navigation_open : Bool
   locale : @i18n.Locale
   membership : @portal.EnterpriseMembership?
   organizations : Array[SelfServiceOrganizationView]
@@ -240,6 +243,7 @@ pub(all) struct EnterpriseState {
 ///|
 pub(all) enum EnterpriseMessage {
   Navigate(EnterpriseRoute)
+  ToggleNavigation
   SelfService(SelfServiceMessage)
   LocaleChanged(@i18n.Locale)
   OpenApiKeyIssue
@@ -256,6 +260,8 @@ pub(all) enum EnterpriseMessage {
   SubmitMemberInvite
   DismissMemberInviteSecret
   CopyOneTimeApiKeySecret
+  TestPersonalTrialApiKey
+  TestSavedTrialApiKey(String)
   ToggleApiKeySecret(String)
   CopySavedApiKey(String)
   UseSavedKeyForConnectionQr(String)
@@ -303,6 +309,7 @@ pub fn default_state(now_unix_ms : Int64) -> EnterpriseState {
   {
     docs_base_url: None,
     route: Overview,
+    navigation_open: false,
     locale: @i18n.default_locale(),
     membership: None,
     organizations: [],
@@ -948,6 +955,7 @@ pub fn EnterpriseState::update(
     return { ..self, model_connection_import: None, }.update(message)
   }
   match message {
+    ToggleNavigation => { ..self, navigation_open: !self.navigation_open, }
     ToggleApiKeySecret(key_id) => {
       let active = self.api_keys.any(key => {
         key.key_id == key_id &&
@@ -1019,7 +1027,8 @@ pub fn EnterpriseState::update(
     OpenModelConnectionQr(model_name) =>
       if self.deliveries.external_model.map_or(false, service => {
           service.ready && service.model_alias == model_name
-        }) {
+        }) ||
+        personal_trial_model(self, model_name) {
         {
           ..self,
           route: Models,
@@ -1113,6 +1122,9 @@ pub fn EnterpriseState::update(
       }
     }
     Navigate(route) => {
+      if self.navigation_open {
+        return { ..self, navigation_open: false, }.update(message)
+      }
       if route == OfflineCommerce && !customer_organization_ready(self) {
         return {
           ..self,
@@ -1177,6 +1189,11 @@ pub fn EnterpriseState::update(
         self_service: {
           ..selected,
           return_to_rental: false,
+          organization_mode: if product == SharedMaaS && !organization_ready {
+            JoinCompany
+          } else {
+            selected.organization_mode
+          },
           step: if organization_ready {
             Capacity
           } else {
@@ -1201,24 +1218,30 @@ pub fn EnterpriseState::update(
               previous.organization_id == organization_id &&
               previous.tenant_ref == value.membership.tenant_ref
             }) {
+            let selected_project = if self.project_id.trim() == "" ||
+              self.trial.map_or(false, trial => {
+                trial.project_id == self.project_id &&
+                (
+                  trial.organization_id != organization_id ||
+                  trial.tenant_ref != value.membership.tenant_ref
+                )
+              }) {
+              project_id
+            } else {
+              self.project_id
+            }
             return {
               ..self,
-              project_id: if self.project_id.trim() == "" ||
-                self.trial.map_or(false, trial => {
-                  trial.project_id == self.project_id &&
-                  (
-                    trial.organization_id != organization_id ||
-                    trial.tenant_ref != value.membership.tenant_ref
-                  )
-                }) {
-                project_id
-              } else {
-                self.project_id
-              },
+              project_id: selected_project,
               membership: Some(value.membership),
               selected_organization_id: Some(organization_id),
               self_service: {
                 ..self.self_service,
+                project_id: if self.self_service.project_id.trim() == "" {
+                  selected_project
+                } else {
+                  self.self_service.project_id
+                },
                 action_loading: false,
                 action_error: None,
               },
@@ -1383,7 +1406,7 @@ pub fn EnterpriseState::update(
           maximum_requests: value,
         },
       }
-    SubmitApiKeyIssue =>
+    SubmitApiKeyIssue | TestPersonalTrialApiKey | TestSavedTrialApiKey(_) =>
       { ..self, loading: true, success_message: None, error_message: None, }
     MemberInviteEmailChanged(value) => { ..self, member_invite_email: value, }
     SubmitMemberInvite =>
@@ -1521,7 +1544,10 @@ pub fn api_key_issue_valid(state : EnterpriseState) -> Bool {
     draft.lifetime_days == 90 ||
     draft.lifetime_days == 365
   ) &&
-  draft.maximum_requests > 0L &&
+  (
+    draft.maximum_requests > 0L ||
+    (draft.maximum_requests == 0L && api_key_uses_unmetered_model(state))
+  ) &&
   draft.maximum_requests <= 1000000000L &&
   !state.loading
 }
@@ -1794,89 +1820,115 @@ fn navigation(
   for
     route in [
       EnterpriseRoute::Overview,
-      MachineAccess,
-      Models,
       DesktopIde,
-      SelfService,
-      Agreements,
-      OfflineCommerce,
-      ContractDocuments,
-      LeaseRequests,
+      Models,
+      MachineAccess,
       AccountAccess,
-      Costs,
-      Notifications,
     ] {
-    let group = match route {
-      MachineAccess => Some(copy(state.locale, "Services", "服务"))
-      SelfService =>
-        Some(copy(state.locale, "Orders and contracts", "订单与合同"))
-      AccountAccess => Some(copy(state.locale, "Administration", "管理"))
-      _ => None
-    }
-    if group is Some(label) {
-      items.push(
-        @html.p(
-          class="nav-group-label",
-          style=[
-            "grid-column: 1 / -1", "margin: .9rem .65rem .2rem", "color: var(--muted)",
-            "font-size: .72rem", "font-weight: 800",
-          ],
-          label,
-        ),
-      )
-    }
+    items.push(enterprise_nav_link(state, emit, route))
+  }
+  for
+    (label, routes) in [
+      (
+        copy(state.locale, "Orders & contracts", "订单与合同"),
+        [
+          EnterpriseRoute::SelfService,
+          OfflineCommerce,
+          Agreements,
+          ContractDocuments,
+          LeaseRequests,
+        ],
+      ),
+      (
+        copy(state.locale, "Usage & notifications", "用量与消息"),
+        [Costs, Notifications],
+      ),
+    ] {
     items.push(
-      @html.button(
-        type_="button",
-        class=if state.route == route {
-          "nav-item is-active"
-        } else {
-          "nav-item"
-        },
-        attrs=@html.Attrs::build().aria_current(
-          if state.route == route {
-            "page"
-          } else {
-            "false"
-          },
-        ),
-        on_click=command(emit, Navigate(route)),
-        route_label(state.locale, route),
+      @html.details(
+        class="navigation-group",
+        open=routes.contains(state.route),
+        [
+          @html.summary(label),
+          @html.div(
+            [
+              for route in routes => enterprise_nav_link(state, emit, route)
+            ],
+          ),
+        ],
       ),
     )
   }
-  @html.aside(class="enterprise-sidebar", [
-    @html.a(class="enterprise-brand", href="./", [
-      @html.span(
-        class="brand-mark",
-        style=[
-          "overflow: hidden", "flex-shrink: 0", "width: 3.5rem", "height: 3.5rem",
-        ],
-        [
-          @html.img(src="/user/assets/platform-logo-light.png", alt="", style=[
-            "display: block", "width: 100%", "height: 100%", "object-fit: contain",
-            "transform: scale(1.22)", "transform-origin: center",
-          ]),
-        ],
-      ),
-      @html.span([
-        @html.strong("能源谷“创未来”生态街区"),
-        @html.small(enterprise_copy(state.locale, Enterprise)),
+  @html.aside(
+    class=if state.navigation_open {
+      "enterprise-sidebar is-open"
+    } else {
+      "enterprise-sidebar"
+    },
+    [
+      @html.a(class="enterprise-brand", href="./", [
+        @html.span(
+          class="brand-mark",
+          style=[
+            "overflow: hidden", "flex-shrink: 0", "width: 3.5rem", "height: 3.5rem",
+          ],
+          [
+            @html.img(src="/user/assets/platform-logo-light.png", alt="", style=[
+              "display: block", "width: 100%", "height: 100%", "object-fit: contain",
+              "transform: scale(1.22)", "transform-origin: center",
+            ]),
+          ],
+        ),
+        @html.span([
+          @html.strong("能源谷“创未来”生态街区"),
+          @html.small(enterprise_copy(state.locale, Enterprise)),
+        ]),
       ]),
-    ]),
-    @html.nav(
-      attrs=@html.Attrs::build().aria_label(
-        enterprise_copy(state.locale, EnterpriseNavigation),
+      @html.button(
+        type_="button",
+        class="quiet-button mobile-nav-toggle",
+        attrs=@html.Attrs::build()
+          .aria_controls("enterprise-navigation")
+          .aria_expanded(state.navigation_open.to_string()),
+        on_click=command(emit, ToggleNavigation),
+        copy(state.locale, "Menu", "菜单"),
       ),
-      items,
+      @html.nav(
+        id="enterprise-navigation",
+        attrs=@html.Attrs::build().aria_label(
+          enterprise_copy(state.locale, EnterpriseNavigation),
+        ),
+        items,
+      ),
+      @html.a(
+        class="nav-item nav-link",
+        href="/docs/",
+        style=["margin-top: 1rem"],
+        copy(state.locale, "Documentation", "使用文档"),
+      ),
+    ],
+  )
+}
+
+///|
+fn enterprise_nav_link(
+  state : EnterpriseState,
+  emit : @rabbita.Emit[EnterpriseMessage]?,
+  route : EnterpriseRoute,
+) -> @rabbita.Html {
+  @html.button(
+    type_="button",
+    class=if state.route == route { "nav-item is-active" } else { "nav-item" },
+    attrs=@html.Attrs::build().aria_current(
+      if state.route == route {
+        "page"
+      } else {
+        "false"
+      },
     ),
-    @html.a(
-      class="nav-item nav-link",
-      href="/docs/",
-      style=["margin-top: 1rem"],
-      copy(state.locale, "Documentation", "使用文档"),
-    ),
-  ])
+    on_click=command(emit, Navigate(route)),
+    route_label(state.locale, route),
+  )
 }
 
 ///|
@@ -1952,24 +2004,18 @@ fn page_header(
 }
 
 ///|
-fn overview_view(
+fn personal_trial_panel(
   state : EnterpriseState,
   emit : @rabbita.Emit[EnterpriseMessage]?,
 ) -> @rabbita.Html {
-  let pending = state.agreements
-    .filter(value => value.state == ReviewRequired)
-    .length()
-  let open_requests = state.lease_requests
-    .filter(value => value.state == Submitted)
-    .length()
-  let trial_panel = match state.trial {
+  match state.trial {
     Some(trial) if trial.revoked_unix_ms is None &&
       state.membership.map_or(false, membership => {
         membership.organization_id == trial.organization_id &&
         membership.tenant_ref == trial.tenant_ref
       }) => {
       let active = trial.expires_unix_ms > state.machine_access.now_unix_ms
-      let consumed = match trial.api_key_id {
+      let key_consumed = match trial.api_key_id {
         Some(key_id) =>
           state.api_keys
           .iter()
@@ -1978,6 +2024,7 @@ fn overview_view(
           .unwrap_or(0L)
         None => 0L
       }
+      let consumed = trial.consumed_requests.unwrap_or(0L).max(key_consumed)
       @html.section(class="welcome-panel trial-panel", [
         @html.div([
           @html.p(
@@ -1991,81 +2038,182 @@ fn overview_view(
               enterprise_copy(state.locale, YourTrialHasEnded)
             },
           ),
-          @html.p(
-            if active {
-              enterprise_copy(state.locale, UseTheApprovedModelThroughA)
-            } else {
-              enterprise_copy(state.locale, YourAccountRemainsActiveAskYour)
-            },
-          ),
+          if !active {
+            @html.p(
+              enterprise_copy(state.locale, YourAccountRemainsActiveAskYour),
+            )
+          } else {
+            @html.nothing
+          },
           @html.p(
             class="secondary",
-            "\{expiry_label(state.locale, trial.expires_unix_ms, state.machine_access.now_unix_ms)} · \{enterprise_copy(state.locale, Requests)} \{consumed}/\{trial.maximum_requests} · \{trial.allowed_models.join(", ")}",
+            "\{expiry_label(state.locale, trial.expires_unix_ms, state.machine_access.now_unix_ms)} · \{enterprise_copy(state.locale, Requests)} \{consumed}/\{if trial.maximum_requests == 0L { copy(state.locale, "Unlimited", "不限") } else { trial.maximum_requests.to_string() }}",
           ),
-          @html.p(message(state.locale, TrialSecret)),
           if active {
             @html.a(
-              class="quiet-button external-action",
+              class="primary-action external-action",
               href="/user/workbench/?trial=1",
               enterprise_copy(state.locale, TryAPromptInTheWorkbench),
+            )
+          } else {
+            @html.button(
+              type_="button",
+              class="primary-action",
+              on_click=command(emit, SelfService(SelectProduct(SharedMaaS))),
+              copy(state.locale, "Request company access", "申请企业访问"),
+            )
+          },
+          if active {
+            @html.details(
+              class="trial-api-settings",
+              [
+                @html.summary(
+                  copy(state.locale, "Connect with an API", "通过 API 接入"),
+                ),
+                @html.p(
+                  enterprise_copy(state.locale, UseTheApprovedModelThroughA),
+                ),
+                @html.p(message(state.locale, TrialSecret)),
+                @html.p(
+                  copy(
+                    state.locale,
+                    "Shared trial access does not require machine approval.",
+                    "共享试用无需等待机器审批。",
+                  ),
+                ),
+                @html.button(
+                  type_="button",
+                  class="quiet-button",
+                  on_click=command(emit, Navigate(AccountAccess)),
+                  if trial.api_key_id is None {
+                    enterprise_copy(state.locale, CreateTrialApiKey)
+                  } else {
+                    enterprise_copy(state.locale, ViewTrialApiKey)
+                  },
+                ),
+                model_connection_value(
+                  state.locale,
+                  "API Base URL",
+                  browser_public_origin() + "/trial/v1",
+                  emit,
+                ),
+                ..trial.allowed_models.map(model => {
+                  @html.div([
+                    model_connection_value(
+                      state.locale,
+                      "Model ID",
+                      model,
+                      emit,
+                    ),
+                    @html.button(
+                      type_="button",
+                      class="quiet-button",
+                      on_click=command(emit, OpenModelConnectionQr(model)),
+                      copy(
+                        state.locale,
+                        "Private API connection QR",
+                        "个人 API 连接二维码",
+                      ),
+                    ),
+                    @controls.advanced(
+                      copy(
+                        state.locale,
+                        "Streaming API example",
+                        "流式 API 调用示例",
+                      ),
+                      [
+                        @html.p(
+                          copy(
+                            state.locale,
+                            "Use your own key. Output up to \{trial.max_output_tokens.unwrap_or(1024)} tokens per request; this shared text trial does not include machine login or media generation.",
+                            "使用自己的 API 密钥，单次输出上限 \{trial.max_output_tokens.unwrap_or(1024)} tokens；此共享文本试用不包含机器登录或图像、视频生成。",
+                          ),
+                        ),
+                        model_connection_example(
+                          state.locale,
+                          "Chat Completions",
+                          model_api_example(
+                            browser_public_origin() + "/trial/v1",
+                            model,
+                            stream=true,
+                            max_tokens=trial.max_output_tokens.unwrap_or(1024),
+                          ),
+                          emit,
+                        ),
+                      ],
+                    ),
+                  ])
+                }),
+              ],
             )
           } else {
             @html.nothing
           },
         ]),
-        @html.button(
-          type_="button",
-          class="primary-action",
-          disabled=!active,
-          on_click=command(emit, Navigate(AccountAccess)),
-          if trial.api_key_id is None {
-            enterprise_copy(state.locale, CreateTrialApiKey)
-          } else {
-            enterprise_copy(state.locale, ViewTrialApiKey)
-          },
-        ),
       ])
     }
     _ => @html.nothing
   }
+}
+
+///|
+fn overview_view(
+  state : EnterpriseState,
+  emit : @rabbita.Emit[EnterpriseMessage]?,
+) -> @rabbita.Html {
+  let pending = state.agreements
+    .filter(value => value.state == ReviewRequired)
+    .length()
+  let open_requests = state.lease_requests
+    .filter(value => value.state == Submitted)
+    .length()
   @html.div(class="page-stack", [
-    trial_panel,
-    delivery_overview(state.deliveries, state.locale, emit),
-    product_choices(state, emit, true),
-    @html.section(class="welcome-panel", [
-      @html.div([
-        @html.h2(enterprise_copy(state.locale, NeedAManagedCapacityException)),
-        @html.p(enterprise_copy(state.locale, UseThisPathWhenTheSelf)),
-      ]),
-      @html.button(
-        type_="button",
-        class="primary-action",
-        on_click=command(emit, Navigate(LeaseRequests)),
-        enterprise_copy(state.locale, RequestManagedCapacity),
-      ),
-    ]),
-    @html.div(class="metric-grid", [
-      @html.div(class="metric", [
-        @html.span(enterprise_copy(state.locale, AgreementsToReview)),
-        @html.strong("\{pending}"),
-        @html.small(enterprise_copy(state.locale, LegalSignerAction)),
-      ]),
-      @html.div(class="metric", [
-        @html.span(enterprise_copy(state.locale, OpenLeaseRequests)),
-        @html.strong("\{open_requests}"),
-        @html.small(enterprise_copy(state.locale, OperatorReviewQueue)),
-      ]),
-      @html.div(class="metric", [
-        @html.span(enterprise_copy(state.locale, ModelsEntitled)),
-        @html.strong(state.model_catalog.length().to_string()),
-        @html.small(enterprise_copy(state.locale, SharedCentralCatalog)),
-      ]),
-      @html.div(class="metric", [
-        @html.span(enterprise_copy(state.locale, CurrentSpend)),
-        @html.strong(state.provisional_spend),
-        @html.small(enterprise_copy(state.locale, ProvisionalCentralLedger)),
-      ]),
-    ]),
+    personal_trial_panel(state, emit),
+    if !state.desktop_clients.is_empty() {
+      application_cards(state, emit)
+    } else {
+      @html.nothing
+    },
+    if !state.deliveries.operations.is_empty() ||
+      state.deliveries.external_model is Some(_) ||
+      state.deliveries.error is Some(_) {
+      delivery_overview(state.deliveries, state.locale, emit)
+    } else {
+      @html.nothing
+    },
+    @html.details(
+      class="delivery-new-service",
+      open=state.desktop_clients.is_empty() &&
+        state.deliveries.operations.is_empty() &&
+        state.deliveries.external_model is None &&
+        state.trial is None,
+      [
+        @html.summary(
+          copy(state.locale, "Get a new service", "开通新服务"),
+        ),
+        product_choices(state, emit, true),
+        @html.button(
+          type_="button",
+          class="quiet-button",
+          on_click=command(emit, Navigate(LeaseRequests)),
+          enterprise_copy(state.locale, RequestManagedCapacity),
+        ),
+      ],
+    ),
+    if pending > 0 || open_requests > 0 {
+      @html.div(class="metric-grid", [
+        @html.div(class="metric", [
+          @html.span(enterprise_copy(state.locale, AgreementsToReview)),
+          @html.strong("\{pending}"),
+        ]),
+        @html.div(class="metric", [
+          @html.span(enterprise_copy(state.locale, OpenLeaseRequests)),
+          @html.strong("\{open_requests}"),
+        ]),
+      ])
+    } else {
+      @html.nothing
+    },
   ])
 }
 
@@ -2144,16 +2292,11 @@ fn api_key_issue_dialog(
       attrs=@html.Attrs::build()
         .role("dialog")
         .aria_modal("true")
-        .aria_labelledby("api-key-issue-title")
-        .aria_describedby("api-key-issue-description"),
+        .aria_labelledby("api-key-issue-title"),
       [
         @html.h2(
           id="api-key-issue-title",
           enterprise_copy(state.locale, CreateApiKey),
-        ),
-        @html.p(
-          id="api-key-issue-description",
-          enterprise_copy(state.locale, TheSecretIsShownOnceTrial),
         ),
         match state.error_message {
           Some(message) =>
@@ -2385,6 +2528,8 @@ fn one_time_secret_dialog(
   let private_model = state.deliveries.external_model.map_or(false, service => {
     value.allowed_models == [service.model_alias]
   })
+  let trial_model = value.allowed_models.length() == 1 &&
+    personal_trial_model(state, value.allowed_models[0])
   @html.div(class="modal-backdrop", [
     @html.section(
       class="confirmation-dialog account-dialog",
@@ -2425,7 +2570,49 @@ fn one_time_secret_dialog(
           Some(key) => saved_api_key_controls(state, key, emit)
           None => @html.nothing
         },
-        if private_model {
+        if trial_model {
+          @html.div([
+            @html.button(
+              type_="button",
+              class="quiet-button",
+              disabled=state.loading,
+              on_click=command(emit, TestPersonalTrialApiKey),
+              copy(state.locale, "Test API connection", "测试 API 连接"),
+            ),
+            @html.p(
+              copy(
+                state.locale,
+                "Checks the model list and sends two short requests (ordinary and streaming), counted in your usage.",
+                "检查模型列表，并发送普通、流式各一次简短问答，计入个人用量。",
+              ),
+            ),
+            if state.loading {
+              @html.p(
+                attrs=@html.Attrs::build().role("status"),
+                copy(state.locale, "Testing API…", "正在测试 API…"),
+              )
+            } else {
+              match (state.success_message, state.error_message) {
+                (_, Some(message)) =>
+                  @html.p(
+                    class="notice is-error",
+                    attrs=@html.Attrs::build().role("alert"),
+                    message,
+                  )
+                (Some(message), _) =>
+                  @html.p(
+                    class="notice",
+                    attrs=@html.Attrs::build().role("status"),
+                    message,
+                  )
+                _ => @html.nothing
+              }
+            },
+          ])
+        } else {
+          @html.nothing
+        },
+        if private_model || trial_model {
           @controls.advanced(
             copy(
               state.locale,
@@ -2438,6 +2625,11 @@ fn one_time_secret_dialog(
                 value.allowed_models[0],
                 value.secret,
                 emit,
+                base_url=connection_base_url(state, value.allowed_models[0]),
+                max_output_tokens=connection_output_budget(
+                  state,
+                  value.allowed_models[0],
+                ),
               ),
             ],
           )
@@ -2447,7 +2639,7 @@ fn one_time_secret_dialog(
         @html.details(class="first-call-guide", [
           @html.summary(enterprise_copy(state.locale, MakeYourFirstCall)),
           @html.p(
-            if private_model {
+            if private_model || trial_model {
               copy(
                 state.locale,
                 "Set API_KEY in your terminal, then run the example.",
@@ -2457,7 +2649,7 @@ fn one_time_secret_dialog(
               message(state.locale, FirstCallSetup)
             },
           ),
-          if !private_model && value.api_base_url is None {
+          if !private_model && !trial_model && value.api_base_url is None {
             @html.p(message(state.locale, MissingApiEntrance))
           } else {
             @html.nothing
@@ -2656,17 +2848,20 @@ fn account_access_view(
             ),
           )
       },
-      @html.div(
-        class="role-list",
-        [
-          for role in membership.roles => {
-            @html.span(
-              class="role-pill",
-              enterprise_role_label(state.locale, role),
-            )
-          }
-        ],
-      ),
+      @html.details(class="account-permissions", [
+        @html.summary(copy(state.locale, "My permissions", "我的权限")),
+        @html.div(
+          class="role-list",
+          [
+            for role in membership.roles => {
+              @html.span(
+                class="role-pill",
+                enterprise_role_label(state.locale, role),
+              )
+            }
+          ],
+        ),
+      ]),
       @html.details(class="account-technical-details", [
         @html.summary(
           copy(
@@ -2721,13 +2916,6 @@ fn account_access_view(
         @html.div(class="section-heading", [
           @html.div([
             @html.h2(copy(state.locale, "Company members", "企业成员")),
-            @html.p(
-              copy(
-                state.locale,
-                "Invite a teammate as a Developer.",
-                "邀请同事以开发者身份加入企业。",
-              ),
-            ),
           ]),
         ]),
         @html.div(class="field", [
@@ -2836,100 +3024,47 @@ fn account_access_view(
           enterprise_copy(state.locale, NoApiKeysExistForThis),
         )
       } else {
-        @html.div(
-          class="api-key-list",
-          [
-            for key in ordered_keys => {
-              let (status, status_class) = api_key_state(
+        @html.div(class="key-collection", [
+          @html.div(
+            class="api-key-list",
+            [
+              ..ordered_keys
+              .filter(key => {
+                api_key_state(
+                  state.locale,
+                  key,
+                  state.machine_access.now_unix_ms,
+                ).1 ==
+                "active"
+              })
+              .map(key => api_key_card(state, key, emit)),
+            ],
+          ),
+          if ordered_keys.any(key => {
+              api_key_state(state.locale, key, state.machine_access.now_unix_ms).1 !=
+              "active"
+            }) {
+            let history = ordered_keys.filter(key => {
+              api_key_state(state.locale, key, state.machine_access.now_unix_ms).1 !=
+              "active"
+            })
+            @controls.advanced(
+              copy(
                 state.locale,
-                key,
-                state.machine_access.now_unix_ms,
-              )
-              @html.article(class="api-key-card", [
-                @html.div(class="api-key-card-heading", [
-                  @html.div([
-                    @html.h3(key.display_name),
-                    @controls.advanced(
-                      enterprise_copy(state.locale, AdvancedSettings),
-                      [copy_detail(state, emit, key.key_id)],
-                    ),
-                  ]),
-                  @html.span(
-                    class="state-pill api-key-state-\{status_class}",
-                    status,
-                  ),
-                ]),
-                saved_api_key_controls(state, key, emit),
-                @html.dl(class="account-facts api-key-facts", [
-                  @html.div([
-                    @html.dt(enterprise_copy(state.locale, Scopes)),
-                    @html.dd(
-                      key.scopes
-                      .map(scope => api_key_scope_label(state.locale, scope))
-                      .join(", "),
-                    ),
-                  ]),
-                  @html.div([
-                    @html.dt(enterprise_copy(state.locale, Models)),
-                    @html.dd(
-                      if key.allowed_models.length() == 0 {
-                        enterprise_copy(state.locale, AllEntitledModels)
-                      } else {
-                        key.allowed_models.join(", ")
-                      },
-                    ),
-                  ]),
-                  @html.div([
-                    @html.dt(enterprise_copy(state.locale, Expires)),
-                    @html.dd(
-                      expiry_label(
-                        state.locale,
-                        key.expires_unix_ms,
-                        state.machine_access.now_unix_ms,
-                      ),
-                    ),
-                  ]),
-                  if key.maximum_requests == 0L {
-                    @html.nothing
-                  } else {
-                    @html.div([
-                      @html.dt(enterprise_copy(state.locale, Requests)),
-                      @html.dd(
-                        "\{key.consumed_requests} / \{key.maximum_requests}",
-                      ),
-                      @html.dd(
-                        if key.maximum_requests <= 0L ||
-                          key.consumed_requests >= key.maximum_requests {
-                          enterprise_copy(state.locale, QuotaExhausted148)
-                        } else if key.consumed_requests >=
-                          key.maximum_requests - key.maximum_requests / 5L {
-                          enterprise_copy(
-                            state.locale,
-                            WarningLessThanRemaining,
-                          )
-                        } else {
-                          enterprise_copy(state.locale, QuotaAvailable)
-                        },
-                      ),
-                      @html.dd([quota_indicator(state.locale, key)]),
-                    ])
-                  },
-                ]),
-                @html.div(class="api-key-actions", [
-                  @html.button(
-                    type_="button",
-                    class="danger-button",
-                    disabled=key.revoked_unix_ms is Some(_) ||
-                      key.expires_unix_ms <= state.machine_access.now_unix_ms ||
-                      state.loading,
-                    on_click=command(emit, BeginRevokeApiKey(key.key_id)),
-                    enterprise_copy(state.locale, Revoke),
-                  ),
-                ]),
-              ])
-            }
-          ],
-        )
+                "Inactive keys (\{history.length()})",
+                "失效密钥（\{history.length()}）",
+              ),
+              [
+                @html.div(
+                  class="api-key-list",
+                  history.map(key => api_key_card(state, key, emit)),
+                ),
+              ],
+            )
+          } else {
+            @html.nothing
+          },
+        ])
       },
     ]),
     api_key_issue_dialog(state, emit),
@@ -3188,14 +3323,51 @@ fn lease_requests_view(
             for_="lease-models",
             enterprise_copy(state.locale, ModelIds),
           ),
-          @html.input(
+          @html.select(
             id="lease-models",
-            value=state.model_ids,
-            maxlength=1000,
-            on_input=text_command(emit, value => ModelsChanged(value)),
+            on_change=text_command(emit, value => ModelsChanged(value)),
+            [
+              @html.option(
+                value="",
+                selected=state.model_ids.trim() == "",
+                copy(state.locale, "Choose a model", "选择模型"),
+              ),
+              ..state.model_catalog.map(model => {
+                @html.option(
+                  value=model.model_id,
+                  selected=state.model_ids == model.model_id,
+                  model.alias_name.unwrap_or(model.model_id),
+                )
+              }),
+              if state.model_ids.trim() != "" &&
+                !state.model_catalog.any(model => {
+                  model.model_id == state.model_ids
+                }) {
+                @html.option(
+                  value=state.model_ids,
+                  selected=true,
+                  state.model_ids,
+                )
+              } else {
+                @html.nothing
+              },
+            ],
           ),
-          @html.small(
-            enterprise_copy(state.locale, CommaSeparatedModelsFromTheShared),
+          @controls.advanced(
+            copy(state.locale, "Request multiple models", "申请多个模型"),
+            [
+              @html.input(
+                value=state.model_ids,
+                maxlength=1000,
+                attrs=@html.Attrs::build().aria_label(
+                  enterprise_copy(state.locale, ModelIds),
+                ),
+                on_input=text_command(emit, value => ModelsChanged(value)),
+              ),
+              @html.small(
+                enterprise_copy(state.locale, CommaSeparatedModelsFromTheShared),
+              ),
+            ],
           ),
         ]),
         @html.div(class="field field-wide", [
@@ -3245,31 +3417,66 @@ fn lease_requests_view(
             for request in state.lease_requests => {
               @html.article(class="record-card", [
                 @html.div(class="record-title", [
-                  @html.h3(request.submission.request_id),
+                  @html.h3(
+                    copy(
+                      state.locale,
+                      "Workspace request",
+                      "工作空间申请",
+                    ),
+                  ),
                   @html.span(
                     class="state-pill",
                     request_state_label(state.locale, request.state),
                   ),
                 ]),
                 @html.p(request.submission.justification),
-                @html.dl(class="record-meta", [
-                  @html.div([
-                    @html.dt(enterprise_copy(state.locale, Project)),
-                    @html.dd(request.submission.project_id),
-                  ]),
-                  @html.div([
-                    @html.dt(enterprise_copy(state.locale, Models)),
-                    @html.dd(request.submission.requested_model_ids.join(", ")),
-                  ]),
-                  @html.div([
-                    @html.dt(enterprise_copy(state.locale, AssignedNode)),
-                    @html.dd(
-                      request.assigned_node_id.unwrap_or(
-                        enterprise_copy(state.locale, NotAssigned),
-                      ),
+                if request.state == Approved {
+                  @html.button(
+                    type_="button",
+                    class="primary-action",
+                    on_click=command(emit, Navigate(DesktopIde)),
+                    copy(state.locale, "Open applications", "进入应用"),
+                  )
+                } else if request.state == Submitted {
+                  @html.p(
+                    attrs=@html.Attrs::build()
+                      .role("status")
+                      .aria_live("polite"),
+                    copy(
+                      state.locale,
+                      "Waiting for approval. Status updates automatically.",
+                      "等待审核，状态将自动更新。",
                     ),
-                  ]),
-                ]),
+                  )
+                } else {
+                  @html.nothing
+                },
+                @controls.advanced(
+                  copy(state.locale, "Request details", "申请详情"),
+                  [
+                    @html.p(request.submission.request_id),
+                    @html.dl(class="record-meta", [
+                      @html.div([
+                        @html.dt(enterprise_copy(state.locale, Project)),
+                        @html.dd(request.submission.project_id),
+                      ]),
+                      @html.div([
+                        @html.dt(enterprise_copy(state.locale, Models)),
+                        @html.dd(
+                          request.submission.requested_model_ids.join(", "),
+                        ),
+                      ]),
+                      @html.div([
+                        @html.dt(enterprise_copy(state.locale, AssignedNode)),
+                        @html.dd(
+                          request.assigned_node_id.unwrap_or(
+                            enterprise_copy(state.locale, NotAssigned),
+                          ),
+                        ),
+                      ]),
+                    ]),
+                  ],
+                ),
               ])
             }
           ],
@@ -3400,101 +3607,109 @@ fn costs_view(
         @html.strong(state.cost_centers.length().to_string()),
       ]),
     ]),
-    @html.section(class="checkout-panel", [
-      @html.div(class="section-heading", [
-        @html.div([
-          @html.p(class="eyebrow", enterprise_copy(state.locale, OnlinePayment)),
-          @html.h3(enterprise_copy(state.locale, PayAFinalizedBillingPeriod)),
-          @html.p(enterprise_copy(state.locale, ReviewTotalBeforePayment)),
+    @html.details(
+      class="checkout-panel",
+      open=state.payment_checkout_quote is Some(_) || checkout_in_progress,
+      [
+        @html.summary(enterprise_copy(state.locale, OnlinePayment)),
+        @html.div(class="section-heading", [
+          @html.div([
+            @html.p(
+              class="eyebrow",
+              enterprise_copy(state.locale, OnlinePayment),
+            ),
+            @html.h3(enterprise_copy(state.locale, PayAFinalizedBillingPeriod)),
+            @html.p(enterprise_copy(state.locale, ReviewTotalBeforePayment)),
+          ]),
+          @controls.icon_button(
+            Refresh,
+            enterprise_copy(state.locale, RefreshPaymentStatus),
+            command(emit, RefreshProviderRequests),
+            busy=state.provider_requests_loading,
+          ),
         ]),
-        @controls.icon_button(
-          Refresh,
-          enterprise_copy(state.locale, RefreshPaymentStatus),
-          command(emit, RefreshProviderRequests),
-          busy=state.provider_requests_loading,
-        ),
-      ]),
-      match state.payment_checkout_quote {
-        Some(quote) =>
-          @html.div(class="checkout-summary", [
-            @html.dl(class="checkout-facts", [
-              @html.div([
-                @html.dt(enterprise_copy(state.locale, CheckoutTotal)),
-                @html.dd(class="checkout-total", quote.display_amount),
+        match state.payment_checkout_quote {
+          Some(quote) =>
+            @html.div(class="checkout-summary", [
+              @html.dl(class="checkout-facts", [
+                @html.div([
+                  @html.dt(enterprise_copy(state.locale, CheckoutTotal)),
+                  @html.dd(class="checkout-total", quote.display_amount),
+                ]),
+                @html.div([
+                  @html.dt(enterprise_copy(state.locale, BillingPeriod)),
+                  @html.dd([copy_detail(state, emit, quote.period_id)]),
+                ]),
+                @html.div([
+                  @html.dt(enterprise_copy(state.locale, AuthoritativeAmount)),
+                  @html.dd(
+                    class="mono",
+                    "\{quote.expected_amount_minor} \{enterprise_copy(state.locale, MinorUnits)}",
+                  ),
+                ]),
+                @html.div([
+                  @html.dt(enterprise_copy(state.locale, CurrencyScale)),
+                  @html.dd(
+                    class="mono",
+                    "\{quote.currency} / \{quote.money_scale}",
+                  ),
+                ]),
+                @html.div([
+                  @html.dt(enterprise_copy(state.locale, LedgerRevision)),
+                  @html.dd(
+                    "\{quote.ledger_entry_count} \{enterprise_copy(state.locale, Entries)} · \{@contractdoc.format_unix_ms_beijing(quote.ledger_revision_unix_ms)}",
+                  ),
+                ]),
               ]),
-              @html.div([
-                @html.dt(enterprise_copy(state.locale, BillingPeriod)),
-                @html.dd([copy_detail(state, emit, quote.period_id)]),
-              ]),
-              @html.div([
-                @html.dt(enterprise_copy(state.locale, AuthoritativeAmount)),
-                @html.dd(
-                  class="mono",
-                  "\{quote.expected_amount_minor} \{enterprise_copy(state.locale, MinorUnits)}",
+              @html.div(class="checkout-action", [
+                @html.button(
+                  type_="button",
+                  class="primary-action",
+                  disabled=!payment_checkout_available(state),
+                  attrs=@html.Attrs::build().aria_describedby(
+                    "checkout-action-help",
+                  ),
+                  on_click=command(emit, SubmitPaymentCheckout),
+                  if state.payment_checkout_loading {
+                    enterprise_copy(state.locale, CreatingSecureCheckout)
+                  } else if checkout_in_progress {
+                    enterprise_copy(state.locale, CheckoutAlreadyInProgress)
+                  } else if payment_checkout_terminal(state) {
+                    match checkout_record {
+                      Some(record) if record.state == Settled =>
+                        enterprise_copy(state.locale, BillingPeriodPaid)
+                      _ => enterprise_copy(state.locale, CheckoutIsNotRenewable)
+                    }
+                  } else if checkout_record
+                    .map(record => {
+                      record.state == Submitted &&
+                      provider_action_expired(
+                        record,
+                        state.machine_access.now_unix_ms,
+                      )
+                    })
+                    .unwrap_or(false) {
+                    enterprise_copy(state.locale, RenewSecureCheckout)
+                  } else {
+                    enterprise_copy(state.locale, CreateSecureCheckout)
+                  },
+                ),
+                @html.small(
+                  id="checkout-action-help",
+                  enterprise_copy(state.locale, CreatingACheckoutDoesNotCharge),
                 ),
               ]),
-              @html.div([
-                @html.dt(enterprise_copy(state.locale, CurrencyScale)),
-                @html.dd(
-                  class="mono",
-                  "\{quote.currency} / \{quote.money_scale}",
-                ),
-              ]),
-              @html.div([
-                @html.dt(enterprise_copy(state.locale, LedgerRevision)),
-                @html.dd(
-                  "\{quote.ledger_entry_count} \{enterprise_copy(state.locale, Entries)} · \{@contractdoc.format_unix_ms_beijing(quote.ledger_revision_unix_ms)}",
-                ),
-              ]),
-            ]),
-            @html.div(class="checkout-action", [
-              @html.button(
-                type_="button",
-                class="primary-action",
-                disabled=!payment_checkout_available(state),
-                attrs=@html.Attrs::build().aria_describedby(
-                  "checkout-action-help",
-                ),
-                on_click=command(emit, SubmitPaymentCheckout),
-                if state.payment_checkout_loading {
-                  enterprise_copy(state.locale, CreatingSecureCheckout)
-                } else if checkout_in_progress {
-                  enterprise_copy(state.locale, CheckoutAlreadyInProgress)
-                } else if payment_checkout_terminal(state) {
-                  match checkout_record {
-                    Some(record) if record.state == Settled =>
-                      enterprise_copy(state.locale, BillingPeriodPaid)
-                    _ => enterprise_copy(state.locale, CheckoutIsNotRenewable)
-                  }
-                } else if checkout_record
-                  .map(record => {
-                    record.state == Submitted &&
-                    provider_action_expired(
-                      record,
-                      state.machine_access.now_unix_ms,
-                    )
-                  })
-                  .unwrap_or(false) {
-                  enterprise_copy(state.locale, RenewSecureCheckout)
-                } else {
-                  enterprise_copy(state.locale, CreateSecureCheckout)
-                },
-              ),
-              @html.small(
-                id="checkout-action-help",
-                enterprise_copy(state.locale, CreatingACheckoutDoesNotCharge),
-              ),
-            ]),
-          ])
-        None =>
-          @html.p(
-            class="empty-state",
-            enterprise_copy(state.locale, NoPositiveFinalizedBillingPeriodIs),
-          )
-      },
-    ]),
-    @html.section(class="provider-history", [
-      @html.h3(enterprise_copy(state.locale, OnlinePaymentActivity)),
+            ])
+          None =>
+            @html.p(
+              class="empty-state",
+              enterprise_copy(state.locale, NoPositiveFinalizedBillingPeriodIs),
+            )
+        },
+      ],
+    ),
+    @html.details(class="provider-history", open=!payment_records.is_empty(), [
+      @html.summary(enterprise_copy(state.locale, OnlinePaymentActivity)),
       if state.provider_requests_loading {
         @html.p(
           class="provider-loading",
@@ -3549,21 +3764,14 @@ fn shared_trial_panel(
   if state.deliveries.options.shared_trials.is_empty() {
     return @html.nothing
   }
-  @html.section(class="welcome-panel", [
+  @html.section(class="welcome-panel shared-trial-panel", [
     @html.div(
       [
         @html.h2(
           copy(state.locale, "Shared trial machines", "共享试用机器"),
         ),
-        @html.p(
-          copy(
-            state.locale,
-            "Shared capacity is not an exclusive lease. The trial has no request-count limit; service availability is shown per machine.",
-            "共享算力不是独占租赁。试用不设请求次数上限；每台机器的服务状态单独显示。",
-          ),
-        ),
         ..state.deliveries.options.shared_trials.map(slot => {
-          @html.div(class="record-card", [
+          @html.div(class="record-card shared-trial-card", [
             @html.h3("\{slot.model_name} · \{slot.node_label}"),
             @html.p(
               if !slot.node_online {
@@ -3575,11 +3783,7 @@ fn shared_trial_panel(
                   "机器在线 · 模型服务尚未响应",
                 )
               } else {
-                copy(
-                  state.locale,
-                  "Service health check passed · inference not yet verified",
-                  "服务健康检查通过 · 推理效果仍待实测",
-                )
+                copy(state.locale, "Health check passed", "健康检查通过")
               },
             ),
             if slot.kind == "Video" &&
@@ -3635,6 +3839,7 @@ fn models_view(
     }
   ]
   @html.div(class="page-stack", [
+    personal_trial_panel(state, emit),
     shared_trial_panel(state, emit),
     if state.deliveries.company_workspace.map_or(false, value => {
         value.status != "NoCompanyMachines"
@@ -4068,7 +4273,7 @@ fn desktop_ide_view(
           @html.div([
             @html.h2(
               if state.desktop_client is None {
-                enterprise_copy(state.locale, ChooseYourWebide)
+                enterprise_copy(state.locale, Webide)
               } else {
                 copy(
                   state.locale,

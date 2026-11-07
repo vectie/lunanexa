@@ -130,9 +130,9 @@ async test "PVC CAS ownership prevents simultaneous delivery writers and release
         fields.get("metadata") is Some(Object(meta)) else {
         fail("writer change must be an atomic metadata CAS")
       }
-      assert_eq(meta.get("resourceVersion"), Some(version.to_json()))
+      assert_eq(meta.get("resourceVersion"), Some(Json(version)))
       meta["annotations"] = annotations
-      meta["resourceVersion"] = (writes.length() + 2).to_string().to_json()
+      meta["resourceVersion"] = Json((writes.length() + 2).to_string())
       writes.push(body.unwrap())
       (200, state["claim"])
     }),

@@ -749,8 +749,8 @@ async test "contract document lifecycle endpoints gate creation and record execu
       "display_name": "Portal key",
       "scopes": ["Inference"],
       "allowed_models": [],
-      "expires_unix_ms": (@async.now() + 86400000L).to_json(),
-      "maximum_requests": 10L.to_json(),
+      "expires_unix_ms": Json(@async.now() + 86400000L),
+      "maximum_requests": Json(10L),
     } : Json).stringify()
   assert_true(decode_portal_api_key(portal_body) is Some(_))
   let portal_key = service.handle(
@@ -1125,7 +1125,7 @@ async test "contract expiry reconciler notifies tiered windows with dedup" {
     )
     .with_contract_document_store(documents)
     .with_notification_store(notifications)
-  fn day_ms(year : Int, month : Int, day : Int) -> Int64 {
+  fn day_ms(year : Int32, month : Int32, day : Int32) -> Int64 {
     @contractdoc.days_from_civil(year, month, day) * 86400000L
   }
   // 24 days remaining: only the 30-day window fires.
@@ -1639,7 +1639,7 @@ async test "contract expiry reconciler auto-closes past the grace period once" {
     .with_access_store(access)
     .with_contract_document_store(documents)
     .with_notification_store(notifications)
-  fn day_ms(year : Int, month : Int, day : Int) -> Int64 {
+  fn day_ms(year : Int32, month : Int32, day : Int32) -> Int64 {
     @contractdoc.days_from_civil(year, month, day) * 86400000L
   }
   let scan_now = day_ms(2026, 8, 12)

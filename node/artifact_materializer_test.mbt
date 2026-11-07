@@ -1,6 +1,6 @@
 ///|
 struct AcceptSignatureVerifier {
-  mut calls : Int
+  mut calls : Int32
 }
 
 ///|

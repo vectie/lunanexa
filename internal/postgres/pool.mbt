@@ -5,7 +5,7 @@ type NativePool
 #borrow(connection_url)
 extern "c" fn native_pool_create(
   connection_url : Bytes,
-  workers : Int,
+  workers : Int32,
 ) -> NativePool = "lunanexa_pg_pool_create"
 
 ///|
@@ -14,29 +14,38 @@ extern "c" fn native_pool_shutdown(pool : NativePool) -> Unit = "lunanexa_pg_poo
 
 ///|
 #borrow(pool)
-extern "c" fn native_pool_worker_count(pool : NativePool) -> Int = "lunanexa_pg_pool_worker_count"
+extern "c" fn native_pool_worker_count(pool : NativePool) -> Int32 = "lunanexa_pg_pool_worker_count"
 
 ///|
 #borrow(pool)
-extern "c" fn native_pool_take_wake_fd(pool : NativePool, index : Int) -> Int = "lunanexa_pg_pool_take_wake_fd"
+extern "c" fn native_pool_take_wake_fd(
+  pool : NativePool,
+  index : Int32,
+) -> Int32 = "lunanexa_pg_pool_take_wake_fd"
 
 ///|
 #borrow(pool, sql, encoded_parameters)
 extern "c" fn native_pool_submit(
   pool : NativePool,
-  index : Int,
+  index : Int32,
   sql : Bytes,
   encoded_parameters : Bytes,
-  parameter_count : Int,
-) -> Int = "lunanexa_pg_pool_submit"
+  parameter_count : Int32,
+) -> Int32 = "lunanexa_pg_pool_submit"
 
 ///|
 #borrow(pool)
-extern "c" fn native_pool_take(pool : NativePool, index : Int) -> NativeResult = "lunanexa_pg_pool_take"
+extern "c" fn native_pool_take(
+  pool : NativePool,
+  index : Int32,
+) -> NativeResult = "lunanexa_pg_pool_take"
 
 ///|
 #borrow(pool)
-extern "c" fn native_pool_is_connected(pool : NativePool, index : Int) -> Bool = "lunanexa_pg_pool_is_connected"
+extern "c" fn native_pool_is_connected(
+  pool : NativePool,
+  index : Int32,
+) -> Bool = "lunanexa_pg_pool_is_connected"
 
 ///|
 /// A pool of worker connections. Each worker runs at most one statement at a
@@ -51,7 +60,7 @@ pub struct Pool {
 /// by their worker on first use, so this does not block on the database.
 pub fn pool_create(
   connection_url : String,
-  workers? : Int = 4,
+  workers~ : Int32 = 4,
 ) -> Pool raise PostgresError {
   let value = connection_url.trim().to_owned()
   if value == "" || value.contains_char('\n') || value.contains_char('\u0000') {
@@ -75,14 +84,14 @@ pub fn Pool::shutdown(self : Pool) -> Unit {
 }
 
 ///|
-pub fn Pool::worker_count(self : Pool) -> Int {
+pub fn Pool::worker_count(self : Pool) -> Int32 {
   native_pool_worker_count(self.handle)
 }
 
 ///|
 /// Transfers ownership of one worker's completion pipe read end. The caller
 /// must take it exactly once and then await it; the pool keeps the write end.
-pub fn Pool::take_wake_fd(self : Pool, index : Int) -> Int {
+pub fn Pool::take_wake_fd(self : Pool, index : Int32) -> Int32 {
   native_pool_take_wake_fd(self.handle, index)
 }
 
@@ -91,7 +100,7 @@ pub fn Pool::take_wake_fd(self : Pool, index : Int) -> Int {
 /// copied, so the caller may release them immediately.
 pub fn Pool::submit(
   self : Pool,
-  index : Int,
+  index : Int32,
   sql : String,
   parameters : Array[String?],
 ) -> Unit raise PostgresError {
@@ -114,7 +123,7 @@ pub fn Pool::submit(
 ///|
 /// Takes the finished statement's result, or `None` when the worker has
 /// nothing waiting. Every `submit` must be followed by one successful `take`.
-pub fn Pool::take(self : Pool, index : Int) -> QueryResult? {
+pub fn Pool::take(self : Pool, index : Int32) -> QueryResult? {
   let handle = native_pool_take(self.handle, index)
   if native_result_present(handle) {
     Some({ handle, })
@@ -128,7 +137,7 @@ pub fn Pool::take(self : Pool, index : Int) -> QueryResult? {
 extern "c" fn native_result_present(result : NativeResult) -> Bool = "lunanexa_pg_result_present"
 
 ///|
-pub fn Pool::is_connected(self : Pool, index : Int) -> Bool {
+pub fn Pool::is_connected(self : Pool, index : Int32) -> Bool {
   native_pool_is_connected(self.handle, index)
 }
 

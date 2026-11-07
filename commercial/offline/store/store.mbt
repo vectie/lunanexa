@@ -108,9 +108,9 @@ fn decode_snapshot(
       raise InvalidInput("invalid v5 snapshot")
     }
     let upgraded = fields.copy()
-    upgraded["schema_version"] = @offline.snapshot_schema_version.to_json()
-    upgraded["generation_plans"] = ({} : Map[String, String]).to_json()
-    @json.from_json(upgraded.to_json()) catch {
+    upgraded["schema_version"] = Json(@offline.snapshot_schema_version)
+    upgraded["generation_plans"] = Json(({} : Map[String, String]))
+    @json.from_json(Json(upgraded)) catch {
       error =>
         raise InvalidInput(
           "invalid v5 offline-commerce snapshot: \{Repr(error)}",
@@ -1078,7 +1078,7 @@ pub async fn OfflineCommerceStore::complete_generation(
     )
   }
   plan_fields["completed_result"] = result.to_json()
-  self.generation_plans[request.request_id] = plan_fields.to_json().stringify()
+  self.generation_plans[request.request_id] = Json(plan_fields).stringify()
   self.orders[order.order_id] = with_artifact_id(
     order,
     artifact.artifact_id,
@@ -2030,7 +2030,7 @@ pub async fn OfflineCommerceStore::consume_transfer_session(
 pub async fn OfflineCommerceStore::expire_transfer_sessions(
   self : OfflineCommerceStore,
   now_unix_ms : Int64,
-) -> Int {
+) -> Int32 {
   self.mutex.acquire()
   defer self.mutex.release()
   let before = self.transfer_sessions.copy()
@@ -2083,7 +2083,7 @@ pub async fn OfflineCommerceStore::transfer_session(
 pub async fn OfflineCommerceStore::claim_generation_requests(
   self : OfflineCommerceStore,
   now_unix_ms : Int64,
-  limit? : Int = 100,
+  limit~ : Int32 = 100,
 ) -> Array[@offline.ArtifactGenerationRequest] {
   if limit < 1 || limit > 1000 || now_unix_ms <= 0L {
     raise @offline.OfflineCommerceError::InvalidInput(
@@ -2135,8 +2135,8 @@ pub async fn OfflineCommerceStore::claim_generation_requests(
 pub async fn OfflineCommerceStore::claim_authority_work(
   self : OfflineCommerceStore,
   now_unix_ms : Int64,
-  limit? : Int = 100,
-  blocked_activation_orders? : Array[String] = [],
+  limit~ : Int32 = 100,
+  blocked_activation_orders~ : Array[String] = [],
 ) -> @offline.OfflineAuthorityWorkBatch {
   if limit < 1 || limit > 1000 || now_unix_ms <= 0L {
     raise @offline.OfflineCommerceError::InvalidInput(

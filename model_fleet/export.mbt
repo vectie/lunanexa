@@ -28,7 +28,7 @@ fn cell(value : String) -> String {
 }
 
 ///|
-fn optional_int(value : Int?) -> String {
+fn optional_int(value : Int32?) -> String {
   match value {
     Some(n) => n.to_string()
     None => ""
@@ -60,7 +60,7 @@ pub fn Report::matrix_csv(self : Report) -> String raise CompatibilityError {
         cell(row.version),
         cell(row.artifact_digest),
         cell(state),
-        cell(row.declared_architectures.to_json().stringify()),
+        cell(Json(row.declared_architectures).stringify()),
         row.declared_minimum_memory_mib.to_string(),
         self.query.memory_reserve_mib.to_string(),
         row.required_with_reserve_mib.to_string(),
@@ -80,7 +80,7 @@ pub fn Report::matrix_csv(self : Report) -> String raise CompatibilityError {
         optional_bool(row.architecture_matches),
         optional_bool(row.memory_matches),
         cell(row.declaration_comparison),
-        cell(row.cautions.to_json().stringify()),
+        cell(Json(row.cautions).stringify()),
       ].join(","),
     )
   }

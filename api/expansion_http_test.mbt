@@ -401,7 +401,7 @@ async test "commercial API exposes tenant-scoped cost ledger vertical slice" {
         "event_id": "usage-one",
         "entry_id": "entry-one",
         "rate": rate.to_json(),
-        "recorded_unix_ms": 62002L.to_json(),
+        "recorded_unix_ms": Json(62002L),
       } : Json).stringify(),
   )
   assert_eq(rated.status, 201)

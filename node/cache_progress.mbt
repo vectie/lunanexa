@@ -1,6 +1,6 @@
 ///|
 struct ArtifactPreparationProgress {
-  mut stage : Int
+  mut stage : Int32
   mut cache_hit : Bool
   total_bytes : Int64
   mut completed_file_bytes : Int64

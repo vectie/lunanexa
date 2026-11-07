@@ -14,7 +14,7 @@ fn valid_currency(currency : String) -> Bool {
 pub fn money(
   minor_units : Int64,
   currency : String,
-  scale : Int,
+  scale : Int32,
 ) -> FixedMoney raise CommercialError {
   if !valid_currency(currency) || scale < 0 || scale > 9 {
     raise InvalidInput(

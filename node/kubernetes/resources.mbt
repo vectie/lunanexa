@@ -5,8 +5,8 @@ pub(all) struct RuntimeSettings {
   node_name : String
   node_id : String
   model_cache_root : String
-  runtime_port : Int
-  run_as_user : Int
+  runtime_port : Int32
+  run_as_user : Int32
   device_class_name : String
   controller_addresses : Array[String]
   /// The extended resource a cluster exposes its GPUs through when it uses the
@@ -72,7 +72,7 @@ fn private_address(value : String) -> Bool {
   if parts.length() != 4 {
     return false
   }
-  let numbers : Array[Int] = []
+  let numbers : Array[Int32] = []
   for part in parts {
     let number = @string.parse_int(part) catch { _ => return false }
     if number < 0 || number > 255 || number.to_string() != part.to_owned() {
@@ -167,22 +167,22 @@ fn metadata(
   name : String,
 ) -> Json {
   {
-    "namespace": settings.namespace_name.to_json(),
-    "name": name.to_json(),
+    "namespace": Json(settings.namespace_name),
+    "name": Json(name),
     "labels": {
       "app.kubernetes.io/managed-by": "lunanexa-node",
-      "lunanexa.io/assignment": assignment.assignment_id.to_json(),
-      "lunanexa.io/runtime": name.to_json(),
+      "lunanexa.io/assignment": Json(assignment.assignment_id),
+      "lunanexa.io/runtime": Json(name),
     },
     "annotations": {
-      "lunanexa.io/generation": assignment.generation.to_string().to_json(),
-      "lunanexa.io/controller-epoch": assignment.controller_epoch
-      .to_string()
-      .to_json(),
-      "lunanexa.io/artifact-digest": assignment.artifact.digest.to_json(),
-      "lunanexa.io/lease-expires-unix-ms": assignment.lease_expires_unix_ms
-      .to_string()
-      .to_json(),
+      "lunanexa.io/generation": Json(assignment.generation.to_string()),
+      "lunanexa.io/controller-epoch": Json(
+        assignment.controller_epoch.to_string(),
+      ),
+      "lunanexa.io/artifact-digest": Json(assignment.artifact.digest),
+      "lunanexa.io/lease-expires-unix-ms": Json(
+        assignment.lease_expires_unix_ms.to_string(),
+      ),
     },
   }
 }
@@ -280,7 +280,7 @@ pub fn render_runtime(
       }
       if resource_metadata is Object(meta) &&
         meta.get("labels") is Some(Object(labels)) {
-        labels["lunanexa.io/reservation"] = owner.reservation_id.to_json()
+        labels["lunanexa.io/reservation"] = Json(owner.reservation_id)
       }
       [
         {
@@ -307,19 +307,21 @@ pub fn render_runtime(
     [
       for i, device in assignment.devices => {
         {
-          "name": ("gpu-" + i.to_string()).to_json(),
+          "name": Json("gpu-" + i.to_string()),
           "exactly": {
-            "deviceClassName": settings.device_class_name.to_json(),
+            "deviceClassName": Json(settings.device_class_name),
             "allocationMode": "ExactCount",
             "count": 1,
             "selectors": [
               {
                 "cel": {
-                  "expression": ("device.driver == 'gpu.nvidia.com' && device.attributes['gpu.nvidia.com'].uuid == '" +
-                  device +
-                  "' && device.capacity['gpu.nvidia.com'].memory.compareTo(quantity('" +
-                  assignment.resources.accelerator_memory_mib.to_string() +
-                  "Mi')) >= 0").to_json(),
+                  "expression": Json(
+                    "device.driver == 'gpu.nvidia.com' && device.attributes['gpu.nvidia.com'].uuid == '" +
+                    device +
+                    "' && device.capacity['gpu.nvidia.com'].memory.compareTo(quantity('" +
+                    assignment.resources.accelerator_memory_mib.to_string() +
+                    "Mi')) >= 0",
+                  ),
                 },
               },
             ],
@@ -335,7 +337,7 @@ pub fn render_runtime(
       "apiVersion": "resource.k8s.io/v1",
       "kind": "ResourceClaimTemplate",
       "metadata": resource_metadata,
-      "spec": { "spec": { "devices": { "requests": requests.to_json() } } },
+      "spec": { "spec": { "devices": { "requests": Json(requests) } } },
     })
   }
   let claims : Array[Json] = if requests.is_empty() {
@@ -346,11 +348,11 @@ pub fn render_runtime(
   let pod_claims : Array[Json] = if requests.is_empty() {
     []
   } else {
-    [{ "name": "accelerators", "resourceClaimTemplateName": name.to_json() }]
+    [{ "name": "accelerators", "resourceClaimTemplateName": Json(name) }]
   }
   let limits : Json = {
-    "cpu": canonical_cpu_quantity(assignment.resources.cpu_millis).to_json(),
-    "memory": canonical_memory_quantity(assignment.resources.memory_mib).to_json(),
+    "cpu": Json(canonical_cpu_quantity(assignment.resources.cpu_millis)),
+    "memory": Json(canonical_memory_quantity(assignment.resources.memory_mib)),
   }
   if device_plugin is Some(resource) &&
     assignment.resources.accelerator_count > 0 {
@@ -358,13 +360,13 @@ pub fn render_runtime(
     // the only thing the scheduler can see. `devices` still decides which
     // physical GPUs the container may open, through NVIDIA_VISIBLE_DEVICES.
     guard limits is Object(fields) else { raise InvalidResource }
-    fields[resource] = assignment.resources.accelerator_count.to_json()
+    fields[resource] = Json(assignment.resources.accelerator_count)
   }
   let volumes : Array[Json] = [
     {
       "name": "model",
       "hostPath": {
-        "path": artifact_path.to_json(),
+        "path": Json(artifact_path),
         "type": if assignment.artifact.uri.has_prefix(
             @contracts.model_store_scheme,
           ) {
@@ -407,9 +409,7 @@ pub fn render_runtime(
     // Registering the GPU buffers that NCcl hands to the HCA needs the locked
     // memory allowance, which is what this capability grants the runtime.
     added_capabilities.push("IPC_LOCK")
-    peer_rules.push({
-      "ipBlock": { "cidr": (group.peer_endpoint + "/32").to_json() },
-    })
+    peer_rules.push({ "ipBlock": { "cidr": Json(group.peer_endpoint + "/32") } })
   }
   let pod : Json = {
     "apiVersion": "v1",
@@ -422,8 +422,9 @@ pub fn render_runtime(
       "hostIPC": false,
       "enableServiceLinks": false,
       "restartPolicy": "Never",
-      "terminationGracePeriodSeconds": (assignment.health.termination_grace_ms /
-      1000).to_json(),
+      "terminationGracePeriodSeconds": Json(
+        assignment.health.termination_grace_ms / 1000,
+      ),
       "affinity": {
         "nodeAffinity": {
           "requiredDuringSchedulingIgnoredDuringExecution": {
@@ -433,7 +434,7 @@ pub fn render_runtime(
                   {
                     "key": "metadata.name",
                     "operator": "In",
-                    "values": [settings.node_name.to_json()],
+                    "values": [Json(settings.node_name)],
                   },
                 ],
               },
@@ -464,52 +465,46 @@ pub fn render_runtime(
       ],
       "securityContext": {
         "runAsNonRoot": true,
-        "runAsUser": settings.run_as_user.to_json(),
-        "runAsGroup": settings.run_as_user.to_json(),
+        "runAsUser": Json(settings.run_as_user),
+        "runAsGroup": Json(settings.run_as_user),
         "seccompProfile": { "type": "RuntimeDefault" },
       },
-      "resourceClaims": pod_claims.to_json(),
+      "resourceClaims": Json(pod_claims),
       "containers": [
         {
           "name": "runtime",
-          "image": (assignment.runtime.name +
-          "@" +
-          assignment.runtime.image_digest).to_json(),
+          "image": Json(
+            assignment.runtime.name + "@" + assignment.runtime.image_digest,
+          ),
           "imagePullPolicy": "IfNotPresent",
           "resources": {
             "requests": limits,
             "limits": limits,
-            "claims": claims.to_json(),
+            "claims": Json(claims),
           },
           "securityContext": {
             "privileged": false,
             "allowPrivilegeEscalation": false,
             "readOnlyRootFilesystem": true,
-            "capabilities": {
-              "drop": ["ALL"],
-              "add": added_capabilities.to_json(),
-            },
+            "capabilities": { "drop": ["ALL"], "add": Json(added_capabilities) },
           },
           "ports": [
-            {
-              "name": "runtime",
-              "containerPort": settings.runtime_port.to_json(),
-            },
+            { "name": "runtime", "containerPort": Json(settings.runtime_port) },
           ],
           "readinessProbe": {
             "httpGet": {
-              "path": assignment.health.readiness_path.to_json(),
-              "port": settings.runtime_port.to_json(),
+              "path": Json(assignment.health.readiness_path),
+              "port": Json(settings.runtime_port),
             },
-            "periodSeconds": (assignment.health.interval_ms / 1000).to_json(),
+            "periodSeconds": Json(assignment.health.interval_ms / 1000),
             "timeoutSeconds": 1,
-            "failureThreshold": assignment.health.failure_threshold.to_json(),
+            "failureThreshold": Json(assignment.health.failure_threshold),
           },
-          "env": runtime_environment(settings, assignment).to_json(),
-          "volumeMounts": mounts.to_json(),
+          "env": Json(runtime_environment(settings, assignment)),
+          "volumeMounts": Json(mounts),
         },
       ],
-      "volumes": volumes.to_json(),
+      "volumes": Json(volumes),
     },
   }
   if paired {
@@ -519,7 +514,7 @@ pub fn render_runtime(
       Object(root) =>
         match root.get("spec") {
           Some(Object(spec)) =>
-            spec["dnsPolicy"] = "ClusterFirstWithHostNet".to_json()
+            spec["dnsPolicy"] = Json("ClusterFirstWithHostNet")
           _ => raise InvalidResource
         }
       _ => raise InvalidResource
@@ -532,8 +527,7 @@ pub fn render_runtime(
     match pod {
       Object(root) =>
         match root.get("spec") {
-          Some(Object(spec)) =>
-            spec["runtimeClassName"] = runtime_class.to_json()
+          Some(Object(spec)) => spec["runtimeClassName"] = Json(runtime_class)
           _ => raise InvalidResource
         }
       _ => raise InvalidResource
@@ -541,7 +535,7 @@ pub fn render_runtime(
   }
   let peers : Array[Json] = [
     for address in settings.controller_addresses => {
-      { "ipBlock": { "cidr": (address + "/32").to_json() } }
+      { "ipBlock": { "cidr": Json(address + "/32") } }
     }
   ]
   let policy_peers : Array[Json] = []
@@ -550,9 +544,7 @@ pub fn render_runtime(
   if settings.controller_namespace is Some(namespace_name) {
     policy_peers.push({
       "namespaceSelector": {
-        "matchLabels": {
-          "kubernetes.io/metadata.name": namespace_name.to_json(),
-        },
+        "matchLabels": { "kubernetes.io/metadata.name": Json(namespace_name) },
       },
     })
   }
@@ -566,8 +558,8 @@ pub fn render_runtime(
   if paired {
     // Rank coordination is the only thing this member is allowed to open.
     egress_rules.push({
-      "to": peer_rules.to_json(),
-      "ports": [{ "protocol": "TCP", "port": settings.runtime_port.to_json() }],
+      "to": Json(peer_rules),
+      "ports": [{ "protocol": "TCP", "port": Json(settings.runtime_port) }],
     })
   }
   let network_policy : Json = {
@@ -575,19 +567,15 @@ pub fn render_runtime(
     "kind": "NetworkPolicy",
     "metadata": resource_metadata,
     "spec": {
-      "podSelector": {
-        "matchLabels": { "lunanexa.io/runtime": name.to_json() },
-      },
+      "podSelector": { "matchLabels": { "lunanexa.io/runtime": Json(name) } },
       "policyTypes": ["Ingress", "Egress"],
       "ingress": [
         {
-          "from": policy_peers.to_json(),
-          "ports": [
-            { "protocol": "TCP", "port": settings.runtime_port.to_json() },
-          ],
+          "from": Json(policy_peers),
+          "ports": [{ "protocol": "TCP", "port": Json(settings.runtime_port) }],
         },
       ],
-      "egress": egress_rules.to_json(),
+      "egress": Json(egress_rules),
     },
   }
   { name, pod, claim_template, network_policy, }

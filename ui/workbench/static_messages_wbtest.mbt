@@ -27,7 +27,6 @@ test "static workbench catalog has complete unique bilingual entries" {
     ThisCapacityLeaseIsAwaitingApproval,
     TheActiveLeaseIsOutsideIts,
     ConnectWithAScopedInferenceToken,
-    LunanexaDeveloperWorkspace,
     YourWorkspaceIsNotReady,
     VerifyIdentity,
     LoadAnOpaqueSubjectThroughTrusted,
@@ -97,5 +96,5 @@ test "static workbench catalog has complete unique bilingual entries" {
     assert_false(seen.contains(pair))
     seen[pair] = true
   }
-  assert_eq(keys.length(), 84)
+  assert_eq(keys.length(), 83)
 }

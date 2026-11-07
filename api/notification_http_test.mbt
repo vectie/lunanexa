@@ -98,7 +98,7 @@ async test "notification HTTP surface isolates tenant inbox and operator alerts"
       "tenant_ref": "tenant-a",
       "title": "Quota policy update",
       "body": "Review your resource limits before tomorrow.",
-      "expires_unix_ms": (now + 60000L).to_json(),
+      "expires_unix_ms": Json(now + 60000L),
     } : Json).stringify()
   let publish_path = "/v1/notifications/operator/announcements"
   assert_eq(
@@ -623,8 +623,7 @@ async test "autonomous pass raises a quarantine alert without an operator page r
   let records = notifications.records_for_operators(now + 3L)
   assert_eq(records[0].event.code, "LeaseSanitizationFailed")
   assert_false(
-    records[0].event.parameters
-    .to_json()
+    Json(records[0].event.parameters)
     .stringify()
     .contains("node-quarantine-alert"),
   )

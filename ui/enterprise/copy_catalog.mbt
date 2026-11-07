@@ -49,17 +49,9 @@ priv enum EnterpriseCopyMessage {
   TryAPromptInTheWorkbench
   CreateTrialApiKey
   ViewTrialApiKey
-  NeedAManagedCapacityException
-  UseThisPathWhenTheSelf
   RequestManagedCapacity
   AgreementsToReview
-  LegalSignerAction
   OpenLeaseRequests
-  OperatorReviewQueue
-  ModelsEntitled
-  SharedCentralCatalog
-  CurrentSpend
-  ProvisionalCentralLedger
   OrganizationAdministrator
   LegalSigner
   LeaseRequester
@@ -76,7 +68,6 @@ priv enum EnterpriseCopyMessage {
   Inference
   QuotaExhausted
   CreateApiKey
-  TheSecretIsShownOnceTrial
   BillingProject
   KeyName
   Scopes
@@ -208,9 +199,7 @@ priv enum EnterpriseCopyMessage {
   YourOperatorNeedsToEnableThe
   TheSelectedPaidEndpointIsUnavailable
   YourAccessIsReadyOpenThe
-  ChooseYourWebide
   ModelSource
-  AuthorizedSharedModels
   SelectedOrderIsUnavailable
   CompleteMasterlease
   Connecting
@@ -455,7 +444,7 @@ fn enterprise_copy(
     UsageCosts => @i18n.copy(locale, "Usage & costs", "用量与成本")
     ModelCatalog =>
       @i18n.copy(locale, "MaaS · Model services", "MaaS · 模型服务")
-    Webide => @i18n.copy(locale, "PaaS · Workspaces", "PaaS · 工作区")
+    Webide => @i18n.copy(locale, "Applications", "应用")
     MyMachine => @i18n.copy(locale, "IaaS · Compute", "IaaS · 算力实例")
     OrdersDocuments =>
       @i18n.copy(locale, "Orders & documents", "订单与材料")
@@ -523,30 +512,12 @@ fn enterprise_copy(
       @i18n.copy(locale, "Create trial API key", "创建体验 API 密钥")
     ViewTrialApiKey =>
       @i18n.copy(locale, "View trial API key", "查看体验 API 密钥")
-    NeedAManagedCapacityException =>
-      @i18n.copy(
-        locale, "Need a different configuration?", "需要其他配置？",
-      )
-    UseThisPathWhenTheSelf =>
-      @i18n.copy(
-        locale, "Send your requirements for an operator to review.", "提交需求，由运维审核。",
-      )
     RequestManagedCapacity =>
       @i18n.copy(locale, "Request managed capacity", "申请受管算力")
     AgreementsToReview =>
       @i18n.copy(locale, "Agreements to review", "待审阅协议")
-    LegalSignerAction =>
-      @i18n.copy(locale, "Legal signer action", "需要法定签署人操作")
     OpenLeaseRequests =>
       @i18n.copy(locale, "Open lease requests", "待处理租用申请")
-    OperatorReviewQueue =>
-      @i18n.copy(locale, "Operator review queue", "运维审核队列")
-    ModelsEntitled => @i18n.copy(locale, "Catalog models", "目录模型")
-    SharedCentralCatalog =>
-      @i18n.copy(locale, "Shared central catalog", "中央共享目录")
-    CurrentSpend => @i18n.copy(locale, "Current spend", "当前支出")
-    ProvisionalCentralLedger =>
-      @i18n.copy(locale, "Provisional central ledger", "中央台账暂计")
     OrganizationAdministrator =>
       @i18n.copy(locale, "Organization administrator", "组织管理员")
     LegalSigner => @i18n.copy(locale, "Legal signer", "法定签署人")
@@ -565,10 +536,6 @@ fn enterprise_copy(
     Inference => @i18n.copy(locale, "Inference", "推理")
     QuotaExhausted => @i18n.copy(locale, "Quota exhausted", "配额已用尽")
     CreateApiKey => @i18n.copy(locale, "Create API key", "创建 API 密钥")
-    TheSecretIsShownOnceTrial =>
-      @i18n.copy(
-        locale, "The secret is shown once.", "密钥仅显示一次。",
-      )
     BillingProject => @i18n.copy(locale, "Billing project", "计费项目")
     KeyName => @i18n.copy(locale, "Key name", "密钥名称")
     Scopes => @i18n.copy(locale, "Scopes", "权限范围")
@@ -865,10 +832,7 @@ fn enterprise_copy(
       @i18n.copy(
         locale, "Your access is ready. Open the selected WebIDE to continue.", "访问权限已就绪。打开所选 WebIDE 继续工作。",
       )
-    ChooseYourWebide => @i18n.copy(locale, "Applications", "应用")
     ModelSource => @i18n.copy(locale, "Model source", "模型来源")
-    AuthorizedSharedModels =>
-      @i18n.copy(locale, "Authorized shared models", "已授权的共享模型")
     SelectedOrderIsUnavailable =>
       @i18n.copy(
         locale, "Selected order is unavailable", "所选订单不可用",

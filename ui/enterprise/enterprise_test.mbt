@@ -11,7 +11,7 @@ test "enterprise portal separates customer requests from operator assignment" {
   assert_true(requests.contains("Business justification"))
   assert_true(requests.contains("<summary>Advanced</summary>"))
   assert_true(requests.contains("Do not enter a password"))
-  assert_true(requests.contains(">PaaS · Workspaces</button>"))
+  assert_true(requests.contains(">Applications</button>"))
   assert_false(desktop.contains("SECURE WEBIDE HANDOFF"))
   assert_true(desktop.contains("Refresh model and access"))
   assert_false(desktop.contains("href=\"/workbench/\""))
@@ -22,7 +22,7 @@ test "enterprise portal separates customer requests from operator assignment" {
   assert_true(models.contains("Usage &amp; costs"))
   assert_true(models.contains("IaaS · Compute"))
   assert_true(models.contains("MaaS · Model services"))
-  assert_true(models.contains("Orders and contracts"))
+  assert_true(models.contains("Orders &amp; contracts"))
   assert_true(models.contains("aria-current=\"page\""))
   assert_true(models.contains("prefers-reduced-motion:reduce"))
 }
@@ -51,7 +51,7 @@ test "company administrator can invite members in UI without sharing a WebIDE" {
   let html = @enterprise.render({ ..state, route: AccountAccess, })
   assert_true(html.contains("Company members"))
   assert_true(html.contains("Create member invitation"))
-  assert_true(html.contains("Invite a teammate as a Developer"))
+  assert_true(html.contains("member-invite-email"))
   let company = state.organizations[0]
   let pending = @enterprise.render({
     ..state,
@@ -354,6 +354,8 @@ test "account route is bilingual and API key issue validation is bounded" {
 test "free trial shows one clear action, limits, and no machine promise" {
   let state = @enterprise.demo_state()
   let trial : @enterprise.TrialEntitlementView = {
+    consumed_requests: Some(7L),
+    max_output_tokens: None,
     trial_id: "trial-alice",
     organization_id: "org-northstar",
     tenant_ref: "tenant-northstar",
@@ -371,6 +373,9 @@ test "free trial shows one clear action, limits, and no machine promise" {
     trial: Some(trial),
   })
   assert_true(overview.contains("Your trial is ready"))
+  assert_true(overview.contains("<details class=\"trial-api-settings\">"))
+  assert_true(overview.contains("class=\"primary-action external-action\""))
+  assert_true(overview.contains("7/100"))
   assert_true(overview.contains("Create trial API key"))
   assert_true(overview.contains("100"))
   assert_true(overview.contains("text.qwen"))
@@ -552,9 +557,6 @@ test "self-service entry separates shared dedicated and exclusive GPU outcomes" 
   let state = @enterprise.demo_state()
   let overview = @enterprise.render({ ..state, route: Overview, })
   assert_true(overview.contains("What do you want to run?"))
-  assert_true(overview.contains("Shared API"))
-  assert_true(overview.contains("Dedicated API"))
-  assert_true(overview.contains("Exclusive GPU machine"))
   assert_false(overview.contains("Start with a quota-bound key"))
   assert_true(overview.contains("Deploy a private model endpoint"))
   assert_true(overview.contains("Rent exclusive GPU capacity"))
@@ -565,9 +567,8 @@ test "self-service entry separates shared dedicated and exclusive GPU outcomes" 
     locale: ChineseSimplified,
   })
   assert_true(chinese.contains("您希望以哪种方式运行？"))
-  assert_true(chinese.contains("共享 API"))
-  assert_true(chinese.contains("专属 API"))
-  assert_true(chinese.contains("独占 GPU 机器"))
+  assert_true(chinese.contains("部署专属模型端点"))
+  assert_true(chinese.contains("租用独占 GPU 算力"))
 }
 
 ///|

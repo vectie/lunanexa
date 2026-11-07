@@ -1,44 +1,40 @@
 ///|
-test "operator journeys put prerequisites before delivery and consumption" {
-  for locale in [@i18n.English, ChineseSimplified] {
-    let html = render({ ..demo_state(), locale, })
-    assert_true(html.contains("href=\"/docs/\""))
-    assert_false(
-      html.contains("<span>" + route_label(locale, Blank) + "</span>"),
-    )
-    for
-      journey in [
-        [
-          OperatorRoute::Nodes,
-          Models,
-          Benchmarks,
-          QualifiedServices,
-          Catalog,
-          Deployments,
-          Requests,
-        ],
-        [
-          Users,
-          Policies,
-          Agreements,
-          OfflineCommerce,
-          ContractDocuments,
-          Leases,
-          CostCenters,
-        ],
-      ] {
-      let mut previous = -1
-      for route in journey {
-        let position = html
-          .find(
-            "<span>" +
-            route_label(locale, route).replace(old="&", new="&amp;") +
-            "</span>",
-          )
-          .unwrap()
-        assert_true(position > previous)
-        previous = position
-      }
+#warnings("-alert_unstable")
+test "operator secondary destinations remain reachable and expand on direct navigation" {
+  let routes : Array[OperatorRoute] = [
+    Overview,
+    Alerts,
+    Nodes,
+    Models,
+    Deployments,
+    Users,
+    Catalog,
+    QualifiedServices,
+    Policies,
+    OfflineCommerce,
+    Agreements,
+    ContractDocuments,
+    Leases,
+    CostCenters,
+    Benchmarks,
+    Requests,
+    Audit,
+  ]
+  for route in routes {
+    let html = @rabbita.render_to_string(() => {
+      @rabbita.Val::constant(navigation(English, route, None))
+    })
+    for destination in routes {
+      assert_true(
+        html.contains(
+          route_label(English, destination).replace(old="&", new="&amp;"),
+        ),
+      )
     }
+    assert_eq(html.split("aria-current=\"page\"").to_array().length(), 2)
+    assert_eq(
+      html.contains(" open"),
+      ![Overview, Alerts, Nodes, Models, Deployments, Users].contains(route),
+    )
   }
 }

@@ -47,7 +47,7 @@ async fn main {
   let result : Json = {
     "apiVersion": "v1",
     "kind": "List",
-    "items": items.to_json(),
+    "items": Json(items),
   }
   println(result.stringify())
 }

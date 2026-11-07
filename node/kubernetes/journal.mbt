@@ -108,7 +108,7 @@ pub fn RuntimeSupervisor::restore(
   commit : JournalCommit,
   snapshot : String?,
   fresh_owner : String,
-  clock? : () -> Int64 = @async.now,
+  clock~ : () -> Int64 = @async.now,
 ) -> RuntimeSupervisor raise {
   let stored_journal : RuntimeJournal = match snapshot {
     Some(value) => @json.from_json(@json.parse(value))
@@ -251,8 +251,8 @@ fn stamp(
     is { "metadata": { "annotations": Object(annotations), .. }, .. } else {
     raise InvalidResource
   }
-  annotations["lunanexa.io/owner"] = owner.to_json()
-  annotations["lunanexa.io/intent"] = intent.to_json()
+  annotations["lunanexa.io/owner"] = Json(owner)
+  annotations["lunanexa.io/intent"] = Json(intent)
   resource
 }
 
@@ -298,7 +298,7 @@ fn validate_owned_resource(
   record : RuntimeRecord,
   resource : ResourceRecord,
   actual : Json,
-  require_uid? : Bool = true,
+  require_uid~ : Bool = true,
 ) -> String raise LifecycleError {
   guard actual
     is {

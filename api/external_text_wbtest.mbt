@@ -295,6 +295,7 @@ async test "only the owning company administrator can start and stop its shared 
     "sha256:" + "a".repeat(64),
   )
   let calls : Array[String] = []
+  let states = ["Running"]
   let service = ApiService::new(
       durable, runtime, "operator-token", "inference-token", "node-token", "0.2.0",
     )
@@ -309,13 +310,22 @@ async test "only the owning company administrator can start and stop its shared 
       "sha256:" + "b".repeat(64),
       "sha256:" + "a".repeat(64),
     )
-    .with_external_text_control(action => {
-      calls.push(action)
-      if action == "stop" {
-        "Stopped"
-      } else {
-        "Running"
-      }
+    .with_deployment_store(
+      @deployment_store.FileDeploymentStore::open(
+        root + "/deployments.json",
+        "fixture-signing-authority",
+      ),
+    )
+    .with_runtime_controls({
+      "fixture-runtime": action => {
+        calls.push(action)
+        if action == "stop" {
+          states[0] = "Stopped"
+        } else if action == "start" {
+          states[0] = "Running"
+        }
+        states[0]
+      },
     })
   let operator = { "Authorization": "Bearer operator-token" }
   for
@@ -358,6 +368,23 @@ async test "only the owning company administrator can start and stop its shared 
       201,
     )
   }
+  let service = service.adopt_model_services_json(
+    Some(
+      (
+        [
+          {
+            "service_id": "company-model",
+            "model_alias": "glm-5.3.flash",
+            "artifact_digest": "sha256:" + "a".repeat(64),
+            "owner": { "tenant_ref": "tenant-a", "organization_id": "org-a" },
+            "node_ids": ["spark-a"],
+            "runtime_kind": "ProcessGroup",
+            "binding_ref": "fixture-runtime",
+          },
+        ] : Json).stringify(),
+    ),
+  )
+  calls.clear()
   let path = "/v1/portal/self/external-model-service"
   let admin = {
     "Authorization": "Bearer inference-token",
@@ -385,5 +412,5 @@ async test "only the owning company administrator can start and stop its shared 
   let started = service.handle(Post, path + ":start", admin, "")
   assert_eq(started.status, 200)
   assert_true(started.body.contains("\"state\":\"Running\""))
-  assert_eq(calls, ["status", "stop", "start"])
+  assert_eq(calls, ["status", "status", "stop", "status", "start"])
 }

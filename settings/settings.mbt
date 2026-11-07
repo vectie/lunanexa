@@ -52,8 +52,8 @@ pub(all) struct ControlTimingSettings {
   bootstrap_token_max_lifetime_ms : Int64
   node_certificate_lifetime_ms : Int64
   node_certificate_renewal_lead_ms : Int64
-  node_reconcile_interval_ms : Int
-  materialization_heartbeat_interval_ms : Int
+  node_reconcile_interval_ms : Int32
+  materialization_heartbeat_interval_ms : Int32
   lease_receipt_stale_after_ms : Int64
   workspace_reservation_max_lifetime_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
@@ -72,16 +72,16 @@ pub extend ControlTimingSettings with FromJson::{from_json}
 
 ///|
 pub(all) struct RequestBudgetSettings {
-  maximum_request_body_bytes : Int
-  response_cache_entries : Int
+  maximum_request_body_bytes : Int32
+  response_cache_entries : Int32
   openai_default_deadline_ms : Int64
   openai_max_deadline_ms : Int64
-  openai_default_output_units : Int
-  openai_max_output_units : Int
-  openai_max_input_units : Int
-  openai_max_accelerator_memory_mib : Int
-  runtime_stream_event_bytes : Int
-  runtime_stream_total_bytes : Int
+  openai_default_output_units : Int32
+  openai_max_output_units : Int32
+  openai_max_input_units : Int32
+  openai_max_accelerator_memory_mib : Int32
+  runtime_stream_event_bytes : Int32
+  runtime_stream_total_bytes : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -98,16 +98,17 @@ pub extend RequestBudgetSettings with FromJson::{from_json}
 
 ///|
 pub(all) struct SchedulerPolicySettings {
-  admission_capacity : Int
-  runtime_concurrency : Int
-  retry_attempts : Int
-  background_capacity_percent : Int
-  normal_capacity_percent : Int
-  warm_model_weight : Int
-  headroom_weight : Int
-  queue_weight : Int
-  reliability_weight : Int
-  utilization_weight : Int
+  admission_capacity : Int32
+  // Zero means no additional execution semaphore beyond durable admission.
+  runtime_concurrency : Int32
+  retry_attempts : Int32
+  background_capacity_percent : Int32
+  normal_capacity_percent : Int32
+  warm_model_weight : Int32
+  headroom_weight : Int32
+  queue_weight : Int32
+  reliability_weight : Int32
+  utilization_weight : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -124,9 +125,9 @@ pub extend SchedulerPolicySettings with FromJson::{from_json}
 
 ///|
 pub(all) struct RetentionSettings {
-  scheduler_decision_entries : Int
-  telemetry_sample_entries : Int
-  benchmark_run_entries : Int
+  scheduler_decision_entries : Int32
+  telemetry_sample_entries : Int32
+  benchmark_run_entries : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -143,8 +144,8 @@ pub extend RetentionSettings with FromJson::{from_json}
 
 ///|
 pub(all) struct NodeRuntimeSettings {
-  container_pid_limit : Int
-  artifact_io_chunk_bytes : Int
+  container_pid_limit : Int32
+  artifact_io_chunk_bytes : Int32
   signature_artifact_maximum_bytes : Int64
 } derive(Debug, Eq, ToJson, FromJson)
 
@@ -162,8 +163,8 @@ pub extend NodeRuntimeSettings with FromJson::{from_json}
 
 ///|
 pub(all) struct TelemetrySafetySettings {
-  maximum_sensor_rows : Int
-  maximum_sensor_row_characters : Int
+  maximum_sensor_rows : Int32
+  maximum_sensor_row_characters : Int32
   maximum_memory_mib : Double
   maximum_accelerator_count : Double
   maximum_temperature_celsius : Double
@@ -212,7 +213,7 @@ pub extend GlobalAdminSettings with FromJson::{from_json}
 pub(all) struct UserRequestPreferences {
   model_alias : String
   deadline_ms : Int64
-  max_output_units : Int
+  max_output_units : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -233,7 +234,7 @@ pub extend UserRequestPreferences with FromJson::{from_json}
 pub(all) struct UserLocalPreferences {
   locale : String
   default_model_alias : String
-  output_display_characters : Int
+  output_display_characters : Int32
   remember_last_model : Bool
 } derive(Debug, Eq, ToJson, FromJson)
 
@@ -253,7 +254,7 @@ pub extend UserLocalPreferences with FromJson::{from_json}
 pub(all) struct EffectiveUserRequest {
   model_alias : String
   deadline_ms : Int64
-  max_output_units : Int
+  max_output_units : Int32
   global_generation : Int64
 } derive(Debug, Eq, ToJson, FromJson)
 
@@ -339,7 +340,7 @@ pub fn default_global_admin_settings() -> GlobalAdminSettings {
     },
     scheduler: {
       admission_capacity: 128,
-      runtime_concurrency: 4,
+      runtime_concurrency: 0,
       retry_attempts: 2,
       background_capacity_percent: 75,
       normal_capacity_percent: 90,
@@ -452,7 +453,7 @@ pub fn validate_global_admin_settings(
   let scheduler = settings.scheduler
   if scheduler.admission_capacity <= 0 ||
     scheduler.admission_capacity > 65536 ||
-    scheduler.runtime_concurrency <= 0 ||
+    scheduler.runtime_concurrency < 0 ||
     scheduler.runtime_concurrency > 4096 ||
     scheduler.retry_attempts <= 0 ||
     scheduler.retry_attempts > 3 ||

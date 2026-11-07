@@ -299,7 +299,7 @@ pub(all) struct EnterpriseModelSummary {
   version : String
   alias_name : String?
   compatible_architectures : Array[String]
-  minimum_memory_mib : Int
+  minimum_memory_mib : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|

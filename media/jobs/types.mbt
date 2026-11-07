@@ -84,7 +84,7 @@ pub(all) struct StoredJob {
   execution_context : ExecutionContext?
   provider_job_id : String?
   state : State
-  progress : Int?
+  progress : Int32?
   created_unix_ms : Int64
   updated_unix_ms : Int64
   deadline_unix_ms : Int64
@@ -163,5 +163,5 @@ pub struct JobStore {
   mut terminations : Array[AcceptedTermination]
   persist : async (Snapshot) -> Unit
   mutex : @async.Mutex
-  maximum_jobs : Int
+  maximum_jobs : Int32
 }

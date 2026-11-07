@@ -282,7 +282,7 @@ async test "operator invitation enables one-time OIDC self-registration" {
         "organization_id": "organization-http-one",
         "tenant_ref": "tenant-http-one",
         "project_id": "project-http-one",
-        "expires_unix_ms": (now + 86400000L).to_json(),
+        "expires_unix_ms": Json(now + 86400000L),
       } : Json).stringify(),
   )
   assert_eq(invitation_reply.status, 201)
@@ -303,8 +303,7 @@ async test "operator invitation enables one-time OIDC self-registration" {
     now + 30000L,
   )
   let registration_body = (
-    { "invitation_secret": issued.secret, "lifetime_ms": 60000L.to_json() } :
-    Json).stringify()
+    { "invitation_secret": issued.secret, "lifetime_ms": Json(60000L) } : Json).stringify()
   assert_eq(
     service.handle_with_transport(
       Post,
@@ -512,6 +511,7 @@ async test "free registration provisions one bounded shared-inference trial" {
     .with_access_store(access)
     .with_notification_store(notices)
     .with_open_registration_trial(86400000L, 100L, ["text.qwen"])
+    .with_private_cloud_workspace_access(true)
   let now = @async.now()
   let response = service.handle_with_transport(
     Post,
@@ -668,8 +668,8 @@ async test "free registration provisions one bounded shared-inference trial" {
       "display_name": "Trial key",
       "scopes": ["ModelList", "Inference"],
       "allowed_models": ["text.qwen"],
-      "expires_unix_ms": trial.expires_unix_ms.to_json(),
-      "maximum_requests": 100L.to_json(),
+      "expires_unix_ms": Json(trial.expires_unix_ms),
+      "maximum_requests": Json(100L),
     } : Json).stringify()
   let key_reply = service.handle(
     Post,
@@ -678,6 +678,10 @@ async test "free registration provisions one bounded shared-inference trial" {
     key_body,
   )
   assert_eq(key_reply.status, 201)
+  assert_eq(
+    accounts.trial_for_account(registered.account.account_id).unwrap().api_key_id,
+    Some("trial-api-key"),
+  )
   assert_true(
     @json.parse(key_reply.body)
     is { "api_base_url": Null, "allowed_models": [String("text.qwen")], .. },
@@ -785,7 +789,7 @@ async test "free registration provisions one bounded shared-inference trial" {
         "organization_id": "enterprise-org",
         "tenant_ref": "enterprise-tenant",
         "project_id": "enterprise-project",
-        "expires_unix_ms": (now + 86400000L).to_json(),
+        "expires_unix_ms": Json(now + 86400000L),
       } : Json).stringify(),
   )
   assert_eq(invitation_reply.status, 201)
@@ -806,10 +810,8 @@ async test "free registration provisions one bounded shared-inference trial" {
       now + 30000L,
     ),
     (
-      {
-        "invitation_secret": invitation.secret,
-        "lifetime_ms": 60000L.to_json(),
-      } : Json).stringify(),
+      { "invitation_secret": invitation.secret, "lifetime_ms": Json(60000L) } :
+      Json).stringify(),
     true,
   )
   assert_eq(upgraded.status, 201)
@@ -1089,4 +1091,35 @@ async test "operator account creation returns only the safe public view" {
     _ => fail("suspending an account did not revoke its personal API key")
   }
   @fs.rmdir(directory, recursive=true)
+}
+
+///|
+test "trial budget projection follows policy in both optional wire encodings" {
+  let plain : Json = { "trial_id": "current", "consumed_requests": 15 }
+  assert_true(
+    trial_budget_projection(plain, 65536, 16384)
+    is {
+      "trial_id": "current",
+      "consumed_requests": 15,
+      "max_input_bytes": 65536,
+      "max_output_tokens": 16384,
+      ..
+    },
+  )
+  let legacy : Json = [{ "trial_id": "legacy" }]
+  assert_true(
+    trial_budget_projection(legacy, 32768, 8192)
+    is [
+      {
+        "trial_id": "legacy",
+        "max_input_bytes": 32768,
+        "max_output_tokens": 8192,
+        ..
+      },
+    ],
+  )
+  let absent : Json = @json.parse("null")
+  assert_eq(trial_budget_projection(absent, 65536, 16384), absent)
+  let empty = Json::array([])
+  assert_eq(trial_budget_projection(empty, 65536, 16384), empty)
 }

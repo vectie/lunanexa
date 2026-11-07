@@ -619,7 +619,7 @@ async test "self-service organizations are session-bound idempotent and multi-or
     Post,
     review_path,
     operator_headers,
-    "{\"expected_legal_name\":\{second.organization.legal_profile.unwrap().legal_name.to_json().stringify()}}",
+    "{\"expected_legal_name\":\{Json(second.organization.legal_profile.unwrap().legal_name).stringify()}}",
   )
   assert_eq(approval.status, 200)
   assert_eq(

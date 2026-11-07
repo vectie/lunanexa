@@ -8,7 +8,7 @@ fn valid_atom(value : String) -> Bool {
 ///|
 fn valid_origin(
   value : String,
-  allow_insecure_public_http? : Bool = false,
+  allow_insecure_public_http~ : Bool = false,
 ) -> Bool {
   let prefix = if value.has_prefix("https://") {
     8
@@ -51,7 +51,7 @@ fn explicit_ipv4_authority(value : String) -> Bool {
 }
 
 ///|
-fn bounded_decimal(value : String, maximum : Int, allow_zero~ : Bool) -> Bool {
+fn bounded_decimal(value : String, maximum : Int32, allow_zero~ : Bool) -> Bool {
   if value.is_empty() ||
     value.length() > 5 ||
     (value.length() > 1 && value.has_prefix("0")) {
@@ -73,10 +73,12 @@ pub fn Bridge::new(
   redeem : async (String) -> Grant,
   authorize : async (Grant) -> Bool,
   provision : async (String, Grant) -> Backend,
-  allow_insecure_public_http? : Bool = false,
-  allow_model_free_workspace? : Bool = false,
-  public_base_path? : String = "",
-  stop? : (async (String) -> Unit)? = None,
+  allow_insecure_public_http~ : Bool = false,
+  allow_model_free_workspace~ : Bool = false,
+  public_base_path~ : String = "",
+  stop~ : (async (String) -> Unit)? = None,
+  authorize_browser~ : (async (Grant, String) -> Bool)? = None,
+  handle_authorized~ : (async (Grant, @http.Request, @http.ServerConnection) -> Bool)? = None,
 ) -> Bridge raise BridgeError {
   let expected_base_path = match config.client_id {
     "desktop-workspace" => "/moondesk"
@@ -87,7 +89,14 @@ pub fn Bridge::new(
   }
   if !valid_atom(config.client_id) ||
     !valid_origin(config.public_origin, allow_insecure_public_http~) ||
-    (public_base_path != "" && public_base_path != expected_base_path) ||
+    (
+      public_base_path != "" &&
+      public_base_path != expected_base_path &&
+      (
+        expected_base_path == "" ||
+        public_base_path != expected_base_path + "/workspace"
+      )
+    ) ||
     config.maximum_sessions < 1 ||
     config.maximum_sessions > 10000 ||
     config.maximum_request_bytes < 1024 ||
@@ -108,6 +117,8 @@ pub fn Bridge::new(
     authorize,
     provision,
     stop,
+    authorize_browser,
+    handle_authorized,
     sessions: {},
     challenges: {},
     authorizations: {},
@@ -137,7 +148,7 @@ pub fn workspace_id(grant : Grant) -> String {
   }
   "webide-" +
   @crypto.bytes_to_hex_string(
-    @crypto.sha256(@utf8.encode(identity.to_json().stringify())),
+    @crypto.sha256(@utf8.encode(Json(identity).stringify())),
   )
 }
 
@@ -157,7 +168,7 @@ pub fn workspace_storage_id(grant : Grant) -> String {
   ]
   "webide-" +
   @crypto.bytes_to_hex_string(
-    @crypto.sha256(@utf8.encode(identity.to_json().stringify())),
+    @crypto.sha256(@utf8.encode(Json(identity).stringify())),
   )
 }
 
@@ -223,7 +234,7 @@ fn Bridge::cookie_name(self : Bridge, challenge : Bool) -> String {
 fn allowed_path(
   verb : @http.RequestMethod,
   path : String,
-  client_id? : String = "comfyui",
+  client_id~ : String = "comfyui",
 ) -> Bool {
   if path.length() > 4096 ||
     !path.has_prefix("/") ||
@@ -281,7 +292,7 @@ fn allowed_path(
         "/", "/ws", "/queue", "/history", "/prompt", "/object_info", "/system_stats",
         "/features", "/extensions", "/embeddings", "/models", "/settings", "/users",
         "/userdata", "/v2/userdata", "/view", "/favicon.ico", "/jobs", "/workflow_templates",
-        "/i18n", "/experiment/models", "/node_replacements", "/assets",
+        "/i18n", "/experiment/models", "/node_replacements", "/assets", "/lunanexa/video-tasks",
       ].contains(route) ||
       [
         "/assets/", "/scripts/", "/extensions/", "/locales/", "/object_info/", "/history/",
@@ -293,6 +304,11 @@ fn allowed_path(
         "/prompt", "/queue", "/interrupt", "/history", "/upload/image", "/upload/mask",
         "/settings", "/free", "/jobs/cancel",
       ].contains(route) ||
+      (match route.split("/").to_array() {
+        ["", "lunanexa", "video-tasks", id, "recover"] =>
+          id.length() == 32 && id.all(c => c is ('0'..<='9' | 'a'..<='f'))
+        _ => false
+      }) ||
       (route.has_prefix("/jobs/") && route.has_suffix("/cancel")) ||
       route.has_prefix("/userdata/") ||
       route.has_prefix("/settings/")

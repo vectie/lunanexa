@@ -40,7 +40,7 @@ priv struct AdoptVerifiedImportIntent {
   version : String
   license_id : String
   compatible_architectures : Array[String]
-  minimum_memory_mib : Int
+  minimum_memory_mib : Int32
 } derive(FromJson)
 
 ///|

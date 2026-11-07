@@ -94,7 +94,7 @@ pub(all) struct OfflineArtifactSummary {
   artifact_id : String
   order_id : String
   kind : @offline.DocumentArtifactKind
-  revision : Int
+  revision : Int32
   media_type : String
   byte_count : Int64
   sha256 : String

@@ -94,7 +94,7 @@ fn runtime_environment(
     { "name": "LUNANEXA_MODEL_PATH", "value": "/var/lib/lunanexa/model/model" },
     {
       "name": "LUNANEXA_ARTIFACT_DIGEST",
-      "value": assignment.artifact.digest.to_json(),
+      "value": Json(assignment.artifact.digest),
     },
   ]
   let image = assignment.runtime.name + "@" + assignment.runtime.image_digest
@@ -106,7 +106,7 @@ fn runtime_environment(
     assignment.devices.length() > 0 {
     result.push({
       "name": "NVIDIA_VISIBLE_DEVICES",
-      "value": assignment.devices.join(",").to_json(),
+      "value": Json(assignment.devices.join(",")),
     })
   }
   // A member of a pair is told where it sits and where its one peer is, on the
@@ -129,7 +129,7 @@ fn runtime_environment(
     ]
     for name_and_value in member_environment {
       let (name, value) = name_and_value
-      result.push({ "name": name.to_json(), "value": value.to_json() })
+      result.push({ "name": Json(name), "value": Json(value) })
     }
   }
   for binding in bindings {
@@ -137,11 +137,11 @@ fn runtime_environment(
       continue
     }
     result.push({
-      "name": binding.environment_name.to_json(),
+      "name": Json(binding.environment_name),
       "valueFrom": {
         "secretKeyRef": {
-          "name": binding.secret_name.to_json(),
-          "key": binding.secret_key.to_json(),
+          "name": Json(binding.secret_name),
+          "key": Json(binding.secret_key),
           "optional": false,
         },
       },

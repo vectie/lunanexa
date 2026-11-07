@@ -77,7 +77,7 @@ fn provider_request_digest(organization_id : String, key : String) -> String {
 async fn ApiService::queue_provider_record(
   self : ApiService,
   record : @commercial_integrations.ExternalRecord,
-  commercial_lock_held? : Bool = false,
+  commercial_lock_held~ : Bool = false,
 ) -> @commercial_integrations.ExternalRecordView {
   if !commercial_lock_held {
     self.commercial_mutex.acquire()
@@ -160,7 +160,7 @@ async fn ApiService::handle_commercial_provider_adapter(
       } noraise {
         value => value
       }
-      json_reply(200, intents.to_json())
+      json_reply(200, Json(intents))
     }
     (Post, "/internal/v1/commercial-provider/dispatch-receipts") => {
       let receipt : @commercial_integrations.ExternalDispatchReceipt? = try

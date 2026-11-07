@@ -1,0 +1,37 @@
+# Optional trial API entry. Render suanli.example.com to the approved public
+# host. Deploy only after the single moongate-event Service passes auth probes.
+# Existing /user and /mana routes are deliberately unchanged. This is not an
+# anonymous trial and does not open event registration.
+# Only advertise controller-supported public APIs. Backend /v1/responses
+# support is not a public controller Responses API.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata: {name: lunanexa-event-model-strip, namespace: lunanexa}
+spec:
+  stripPrefix: {prefixes: [/trial]}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: moongate-event-from-public-edge, namespace: lunanexa}
+spec:
+  podSelector: {matchLabels: {app: moongate-event}}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+          podSelector: {matchLabels: {app.kubernetes.io/name: traefik}}
+      ports: [{protocol: TCP, port: 15722}]
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata: {name: lunanexa-event-model-entry, namespace: lunanexa}
+spec:
+  entryPoints: [websecure]
+  routes:
+    - match: Host(`suanli.example.com`) && ((Method(`GET`) && Path(`/trial/v1/models`)) || (Method(`POST`) && Path(`/trial/v1/chat/completions`)))
+      kind: Rule
+      priority: 100
+      middlewares: [{name: lunanexa-event-model-strip}]
+      services: [{name: moongate-event, port: 15722}]
+  tls:
+    secretName: lunanexa-public-suanli-tls

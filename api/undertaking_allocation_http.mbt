@@ -90,7 +90,7 @@ async fn ApiService::undertaking_idle_capacity(
   self : ApiService,
   node_ids : Array[String],
   now : Int64,
-) -> Int? {
+) -> Int32? {
   guard self.telemetry is Some(telemetry) && self.scheduler is Some(scheduler) else {
     return None
   }
@@ -133,9 +133,9 @@ async fn ApiService::undertaking_idle_capacity(
       }) else {
       return None
     }
-    budget = Int::min(
+    budget = Int32::min(
       budget,
-      Int::min((host.memory_total_mib - 16384L).to_int(), available - 4096),
+      Int32::min((host.memory_total_mib - 16384L).to_int(), available - 4096),
     )
   }
   if budget >= 32768 {
@@ -326,12 +326,10 @@ async fn ApiService::undertaking_allocation_view(
     "order_id": order.order_id,
     "organization_id": order.organization_id,
     "purchaser_subject_ref": order.purchaser_subject_ref,
-    "node_count": order.quote.unwrap().lines[0].quantity.to_json(),
-    "expires_unix_ms": active_term.to_json(),
+    "node_count": Json(order.quote.unwrap().lines[0].quantity),
+    "expires_unix_ms": Json(active_term),
     "status": status,
-    "node_ids": reservation
-    .map_or([], value => value.request.node_ids)
-    .to_json(),
+    "node_ids": Json(reservation.map_or([], value => value.request.node_ids)),
   })
 }
 
@@ -368,7 +366,7 @@ async fn ApiService::handle_undertaking_allocation(
         rows.push(view)
       }
     }
-    return json_reply(200, rows.to_json())
+    return json_reply(200, Json(rows))
   }
   if verb != Post {
     return api_error(
@@ -569,14 +567,14 @@ async fn ApiService::handle_undertaking_allocation(
     return json_reply(202, {
       "order_id": order.order_id,
       "status": "ActivatingAccess",
-      "node_ids": request.node_ids.to_json(),
+      "node_ids": Json(request.node_ids),
     })
   }
   if order.state == FulfillmentPending {
     return json_reply(202, {
       "order_id": order.order_id,
       "status": "ActivatingAccess",
-      "node_ids": request.node_ids.to_json(),
+      "node_ids": Json(request.node_ids),
     })
   }
   guard order.entitlement_ref == Some(lease_id) &&

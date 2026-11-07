@@ -77,7 +77,7 @@ fn money(value : Int64) -> @commercial.FixedMoney {
 ///|
 fn order(
   id : String,
-  policy? : @offline.FulfillmentPolicy = {
+  policy~ : @offline.FulfillmentPolicy = {
     require_executed_agreement: true,
     require_payment: false,
     invoice_timing: InvoiceNotRequired,
@@ -214,7 +214,7 @@ async fn ready_for_upload(
 fn upload_grant(
   order_id : String,
   artifact_id : String,
-  kind? : @offline.DocumentArtifactKind = ExecutedContractScan,
+  kind~ : @offline.DocumentArtifactKind = ExecutedContractScan,
 ) -> @offline.EvidenceUploadGrant {
   {
     grant_id: "grant-\{artifact_id}",

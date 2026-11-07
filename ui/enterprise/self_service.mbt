@@ -76,11 +76,11 @@ pub(all) struct SelfServiceOfferingView {
   kind : SelfServiceProduct
   display_name : String
   gpu_sku : String
-  accelerator_count : Int
-  accelerator_memory_mib : Int
+  accelerator_count : Int32
+  accelerator_memory_mib : Int32
   regions : Array[String]
-  minimum_duration_hours : Int
-  maximum_duration_hours : Int
+  minimum_duration_hours : Int32
+  maximum_duration_hours : Int32
   price_summary : String
   allowed_model_template_refs : Array[String]
   available : Bool
@@ -93,7 +93,7 @@ pub(all) struct SelfServiceQuoteView {
   display_amount : String
   expected_amount_minor : Int64
   currency : String
-  money_scale : Int
+  money_scale : Int32
   valid_until_unix_ms : Int64
   terms_digest : String
 } derive(Debug, Eq)
@@ -106,7 +106,7 @@ pub(all) struct SelfServiceOrderView {
   project_id : String
   gpu_sku : String
   region : String
-  duration_hours : Int
+  duration_hours : Int32
   model_selector : String?
   display_amount : String
   lease_ref : String?
@@ -159,7 +159,7 @@ pub(all) struct SelfServiceState {
   project_id : String
   unix_username : String
   region : String
-  duration_hours : Int
+  duration_hours : Int32
   model_selector : String
   model_template_ref : String
   quote : SelfServiceQuoteView?
@@ -197,7 +197,7 @@ pub(all) enum SelfServiceMessage {
   SelfServiceProjectChanged(String)
   UnixUsernameChanged(String)
   RegionChanged(String)
-  DurationChanged(Int)
+  DurationChanged(Int32)
   ModelSelectorChanged(String)
   ModelTemplateChanged(String)
   RequestQuote
@@ -367,7 +367,17 @@ fn SelfServiceState::update(
     ChooseOrganizationMode(mode) =>
       { ..self, organization_mode: mode, action_error: None, }
     SubjectKindChanged(value) => { ..self, subject_kind: value, }
-    LegalNameChanged(value) => { ..self, legal_name: value, }
+    LegalNameChanged(value) =>
+      {
+        ..self,
+        legal_name: value,
+        display_name: if self.display_name.trim() == "" ||
+          self.display_name == self.legal_name {
+          value
+        } else {
+          self.display_name
+        },
+      }
     CompanyDisplayNameChanged(value) => { ..self, display_name: value, }
     CountryRegionChanged(value) => { ..self, country_region: value, }
     RegisteredAddressChanged(value) => { ..self, registered_address: value, }
@@ -598,15 +608,6 @@ fn product_card(
   title : String,
 ) -> @rabbita.Html {
   @html.article(class="service-choice", [
-    @html.p(class="eyebrow", product_label(state.locale, product)),
-    @html.p(
-      class="service-owner",
-      copy(
-        state.locale,
-        "Owned by the selected company",
-        "归当前选择的企业所有",
-      ),
-    ),
     @html.h3(title),
     @html.button(
       type_="button",
@@ -651,7 +652,6 @@ fn product_choices(
           enterprise_copy(state.locale, RentAGpuWorkspace),
         ),
         @html.article(class="service-choice", [
-          @html.p(class="eyebrow", "WebIDE"),
           @html.h3(
             copy(
               state.locale,
@@ -684,7 +684,7 @@ fn product_choices(
 }
 
 ///|
-fn self_service_step_number(step : SelfServiceStep) -> Int {
+fn self_service_step_number(step : SelfServiceStep) -> Int32 {
   match step {
     ChooseService => 1
     Organization => 2
@@ -782,6 +782,9 @@ fn organization_step(
         Some(value) => value.verification
         None => None
       }
+      let applications_ready = organization_active &&
+        state.self_service.selected_product == Some(SharedMaaS) &&
+        state.desktop_clients.any(client => client.ready)
       @html.section(class="guided-panel", [
         @html.p(class="eyebrow", enterprise_copy(state.locale, Organization338)),
         @html.h2(
@@ -801,11 +804,11 @@ fn organization_step(
         @html.dl(class="selection-summary", [
           @html.div([
             @html.dt(enterprise_copy(state.locale, Organization)),
-            @html.dd([copy_detail(state, emit, membership.organization_id)]),
-          ]),
-          @html.div([
-            @html.dt(enterprise_copy(state.locale, Tenant)),
-            @html.dd([copy_detail(state, emit, membership.tenant_ref)]),
+            @html.dd(
+              selected.map_or(membership.organization_id, value => {
+                value.organization.display_name
+              }),
+            ),
           ]),
         ]),
         if !organization_active {
@@ -890,9 +893,23 @@ fn organization_step(
           } else {
             @html.nothing
           },
+          if applications_ready {
+            @html.button(
+              type_="button",
+              class="primary-button",
+              on_click=command(emit, Navigate(DesktopIde)),
+              copy(state.locale, "Open applications", "进入应用"),
+            )
+          } else {
+            @html.nothing
+          },
           @html.button(
             type_="button",
-            class="primary-button",
+            class=if applications_ready {
+              "quiet-button"
+            } else {
+              "primary-button"
+            },
             disabled=!organization_active,
             on_click=self_service_command(emit, ContinueWithOrganization),
             if organization_active {
@@ -916,6 +933,18 @@ fn organization_step(
       @html.section(class="guided-panel", [
         @html.p(class="eyebrow", enterprise_copy(state.locale, Organization338)),
         @html.h2(enterprise_copy(state.locale, CreateACompanyOrJoinOne)),
+        if state.account is Some(_) && !has_customer_membership(state) {
+          @html.p(
+            attrs=@html.Attrs::build().role("status").aria_live("polite"),
+            copy(
+              state.locale,
+              "Your account is registered. Access approved by an administrator will appear automatically.",
+              "账号已注册，管理员开通的访问权限将在这里自动更新。",
+            ),
+          )
+        } else {
+          @html.nothing
+        },
         @html.div(class="segmented-control", [
           @html.button(
             type_="button",
@@ -999,20 +1028,29 @@ fn organization_step(
                   }),
                 ),
               ]),
-              @html.div(class="field", [
-                @html.label(
-                  for_="company-display-name",
-                  enterprise_copy(state.locale, DisplayName),
+              @controls.advanced(
+                copy(
+                  state.locale,
+                  "Use a different display name",
+                  "使用其他显示名称",
                 ),
-                @html.input(
-                  id="company-display-name",
-                  value=state.self_service.display_name,
-                  maxlength=128,
-                  on_input=self_service_text_command(emit, value => {
-                    CompanyDisplayNameChanged(value)
-                  }),
-                ),
-              ]),
+                [
+                  @html.div(class="field", [
+                    @html.label(
+                      for_="company-display-name",
+                      enterprise_copy(state.locale, DisplayName),
+                    ),
+                    @html.input(
+                      id="company-display-name",
+                      value=state.self_service.display_name,
+                      maxlength=128,
+                      on_input=self_service_text_command(emit, value => {
+                        CompanyDisplayNameChanged(value)
+                      }),
+                    ),
+                  ]),
+                ],
+              ),
               @html.div(class="field", [
                 @html.label(
                   for_="company-country",
@@ -2204,6 +2242,8 @@ fn self_service_view(
   @html.div(class="self-service-page page-stack", [
     if state.self_service.return_to_rental {
       @html.h2(copy(state.locale, "Company setup", "企业设置"))
+    } else if state.self_service.selected_product == Some(SharedMaaS) {
+      @html.h2(copy(state.locale, "Company access", "企业访问"))
     } else {
       self_service_progress(state)
     },

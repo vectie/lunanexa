@@ -9,12 +9,13 @@ fn shell_quote(value : String) -> String {
 fn model_api_example(
   base_url : String,
   model : String,
-  stream? : Bool = false,
+  stream~ : Bool = false,
+  max_tokens~ : Int32 = 1024,
 ) -> String {
   let payload : Json = {
     "model": model,
     "messages": [{ "role": "user", "content": "Hello" }],
-    "max_tokens": 1024,
+    "max_tokens": max_tokens,
     "stream": stream,
   }
   "# Load your saved lnx_ secret into API_KEY privately.\ntest -n \"$API_KEY\" && curl --fail-with-body --silent --show-error " +
@@ -28,7 +29,7 @@ fn model_api_example(
 fn model_discovery_example(base_url : String) -> String {
   "# Load your saved lnx_ secret into API_KEY privately.\ntest -n \"$API_KEY\" && curl --fail-with-body --silent --show-error " +
   shell_quote(base_url.trim_end(chars="/").to_owned() + "/models") +
-  " \\\n+  -H \"Authorization: Bearer $API_KEY\""
+  " \\\n  -H \"Authorization: Bearer $API_KEY\""
 }
 
 ///|
@@ -36,6 +37,14 @@ pub fn api_key_first_call_example(
   state : EnterpriseState,
   value : OneTimeApiKeySecret,
 ) -> String {
+  if value.allowed_models.length() == 1 &&
+    personal_trial_model(state, value.allowed_models[0]) {
+    return model_api_example(
+      connection_base_url(state, value.allowed_models[0]),
+      value.allowed_models[0],
+      max_tokens=connection_output_budget(state, value.allowed_models[0]),
+    )
+  }
   match state.deliveries.external_model {
     Some(service) if value.allowed_models == [service.model_alias] =>
       model_api_example(public_maas_base_url(), service.model_alias)
@@ -149,6 +158,11 @@ pub fn friendly_failure(
     enterprise_copy(locale, ThisAccountLacksPermissionForThis)
   } else if raw.contains("401") {
     enterprise_copy(locale, YourSessionOrCredentialIsInvalid)
+  } else if raw.contains("503") || raw.contains("502") || raw.contains("504") {
+    copy(
+      locale, "The service is temporarily unavailable. Retry shortly; you do not need to sign in again.",
+      "服务暂时不可用，请稍后重试，无需重新登录。",
+    )
   } else if raw.contains("409") {
     enterprise_copy(locale, TheResourceChangedRefreshItsStatus)
   } else if raw.contains("429") {
@@ -177,7 +191,13 @@ pub fn expiry_label(
     enterprise_copy(locale, Expired)
   } else {
     let minutes = (expiry - now + 59999L) / 60000L
-    if minutes >= 60L {
+    if minutes >= 1440L {
+      copy(
+        locale,
+        "\{minutes / 1440L} days remaining",
+        "\{minutes / 1440L} 天后到期",
+      )
+    } else if minutes >= 60L {
       "\{minutes / 60L}" + enterprise_copy(locale, HRemaining)
     } else {
       "\{minutes}" + enterprise_copy(locale, MRemaining)

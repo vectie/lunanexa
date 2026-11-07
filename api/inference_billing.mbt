@@ -1,4 +1,22 @@
 ///|
+async fn ApiService::personal_event_trial_usage(
+  self : ApiService,
+  authority : @access.ApiAuthorization,
+  model : String,
+) -> Bool {
+  guard self.account_store is Some(accounts) else { return false }
+  accounts.snapshot().trials
+  .unwrap_or([])
+  .any(t => {
+    t.event_id is Some(_) &&
+    t.tenant_ref == authority.tenant_ref &&
+    t.organization_id == authority.organization_id &&
+    t.project_id == authority.project_id &&
+    t.allowed_models.contains(model)
+  })
+}
+
+///|
 async fn ApiService::commercial_project_exists(
   self : ApiService,
   organization_id : String,
@@ -43,10 +61,7 @@ async fn ApiService::inference_billing_preflight(
       ),
     )
   }
-  let shared_trial = self.shared_trial_authorized_key(
-    authority,
-    model_selector,
-  )
+  let shared_trial = self.shared_trial_authorized_key(authority, model_selector)
   if shared_trial is Some(offering) &&
     !self.shared_trial_node_online(offering.node_id, now_unix_ms) {
     return Some(
@@ -58,7 +73,9 @@ async fn ApiService::inference_billing_preflight(
   }
   // Dedicated capacity was prepaid by the machine order. It still emits
   // usage evidence below, but does not require or consume a shared-MaaS rate.
-  if dedicated_order is Some(_) || shared_trial is Some(_) {
+  if dedicated_order is Some(_) ||
+    shared_trial is Some(_) ||
+    self.personal_event_trial_usage(authority, model_selector) {
     return None
   }
   guard self.inference_rate_card is Some(rate) else {
@@ -92,7 +109,7 @@ async fn ApiService::record_inference_charge(
   response : @contracts.WorkloadResponse,
   authority : @access.ApiAuthorization,
 ) -> Unit {
-  guard self.management_database is Some(_) else { return }
+  guard self.management_database is Some(database) else { return }
   let now = @async.now()
   let (dedicated_order, binding_error) = self.dedicated_order_binding(
     authority,
@@ -109,9 +126,13 @@ async fn ApiService::record_inference_charge(
   )
   if shared_trial is Some(offering) &&
     response.execution_node_id != Some(offering.node_id) {
-    raise Failure::Failure("shared trial workload was not executed on its trial node")
+    raise Failure::Failure(
+      "shared trial workload was not executed on its trial node",
+    )
   }
-  let rate = if prepaid_dedicated || shared_trial is Some(_) {
+  let rate = if prepaid_dedicated ||
+    shared_trial is Some(_) ||
+    self.personal_event_trial_usage(authority, request.model_selector) {
     None
   } else {
     match self.inference_rate_card {
@@ -151,12 +172,19 @@ async fn ApiService::record_inference_charge(
   let before = self.commercial_store.durable_snapshot()
   errdefer ignore(self.commercial_store.replace_from_durable_snapshot(before))
   ignore(self.commercial_store.ingest_usage(observation))
-  match rate {
+  let entry = match rate {
     Some(value) =>
-      ignore(self.commercial_store.rate_usage(event_id, entry_id, value, ended))
-    None => ()
+      Some(self.commercial_store.rate_usage(event_id, entry_id, value, ended).0)
+    None => None
   }
-  self.persist_commercial_state()
+  // Preserve durable completion without resending unchanged business and
+  // integration histories. The measured A/B/A loop supports the smaller write,
+  // but it does not eliminate controller admission or long-tail latency.
+  database.commit_inference_usage(
+    @commercial.snapshot_schema_version,
+    Json(observation).stringify(),
+    entry.map(value => Json(value).stringify()),
+  )
 }
 
 ///|

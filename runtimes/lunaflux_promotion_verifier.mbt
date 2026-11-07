@@ -214,7 +214,7 @@ fn signed_receipt_authenticates(
 fn unique_signed_receipt_for(
   receipts : ArrayView[LunaFluxSignedEvidenceApproval],
   subject : LunaFluxPromotionAuthoritySubject,
-) -> (LunaFluxSignedEvidenceApproval?, Int) {
+) -> (LunaFluxSignedEvidenceApproval?, Int32) {
   let mut found : LunaFluxSignedEvidenceApproval? = None
   let mut count = 0
   for receipt in receipts {

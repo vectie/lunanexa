@@ -72,7 +72,7 @@ pub(all) suberror LunaFluxPromotionVerifierError {
   InvalidPromotionVerifierRolloutDigest
   InvalidPromotionVerifierKeyId
   InvalidPromotionVerifierSecret
-  InvalidPromotionVerifierAuthorityCount(Int)
+  InvalidPromotionVerifierAuthorityCount(Int32)
   MissingPromotionVerifierAuthority(LunaFluxPromotionAuthoritySubject)
   DuplicatePromotionVerifierAuthority(LunaFluxPromotionAuthoritySubject)
   InvalidPromotionVerifierAuthority(LunaFluxPromotionAuthoritySubject)

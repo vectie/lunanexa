@@ -98,7 +98,7 @@ pub(all) struct ExternalRecord {
   state : ExternalRecordState
   expected_amount_minor : Int64?
   currency : String?
-  money_scale : Int?
+  money_scale : Int32?
   expected_document_hash : String?
   entitlement_transaction_ref : String?
   created_unix_ms : Int64
@@ -158,7 +158,7 @@ pub(all) struct ExternalRecordView {
   state : ExternalRecordState
   expected_amount_minor : Int64?
   currency : String?
-  money_scale : Int?
+  money_scale : Int32?
   expected_document_hash : String?
   entitlement_transaction_ref_sha256 : String?
   action_url : String?
@@ -189,7 +189,7 @@ pub(all) struct ExternalProviderIntent {
   external_ref : String
   expected_amount_minor : Int64?
   currency : String?
-  money_scale : Int?
+  money_scale : Int32?
   expected_document_hash : String?
   created_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
@@ -236,7 +236,7 @@ pub(all) struct IntegrationSnapshot {
   schema_version : String
   organization_id : String
   records : Array[ExternalRecordView]
-  reconciliation_exception_count : Int
+  reconciliation_exception_count : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -259,7 +259,7 @@ pub(all) struct IntegrationDurableSnapshot {
   dispatch_receipts : Array[ExternalDispatchReceipt]?
   /// Retired browser-action receipts retained for audit and replay rejection.
   dispatch_receipt_history : Array[ExternalDispatchReceipt]?
-  reconciliation_exception_counts : Map[String, Int]
+  reconciliation_exception_counts : Map[String, Int32]
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|

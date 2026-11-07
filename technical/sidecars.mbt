@@ -166,7 +166,7 @@ fn valid_configuration_reference(value : String) -> Bool {
   !value.contains("..") &&
   value.all(char => {
     match char {
-      'a'..='z' | 'A'..='Z' | '0'..='9' | '.' | '_' | '-' | '/' | ':' => true
+      'a'..<='z' | 'A'..<='Z' | '0'..<='9' | '.' | '_' | '-' | '/' | ':' => true
       _ => false
     }
   })

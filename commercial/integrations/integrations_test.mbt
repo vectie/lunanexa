@@ -23,7 +23,7 @@ fn payment_callback(
   callback_id : String,
   previous : @integrations.ExternalRecordState,
   next : @integrations.ExternalRecordState,
-  amount_minor? : Int64 = 1250L,
+  amount_minor~ : Int64 = 1250L,
 ) -> @integrations.ExternalCallback {
   {
     callback_id,
@@ -275,7 +275,7 @@ test "provider outbox is minimal dispatch-bound idempotent and durable" {
   let intents = store.pending_provider_intents("dummy-pay", "sandbox")
   assert_eq(intents.length(), 1)
   assert_eq(intents[0].record_id, record.record_id)
-  let intent_json = intents.to_json().stringify()
+  let intent_json = Json(intents).stringify()
   assert_false(intent_json.contains("organization_id"))
   assert_false(intent_json.contains("subject_ref"))
   let receipt : @integrations.ExternalDispatchReceipt = {

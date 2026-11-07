@@ -343,8 +343,9 @@ pub async fn FileWorkspaceDirectory::reserve_workload(
       reservation.reserved_unix_ms > hourly_window_start &&
       reservation.reserved_unix_ms <= now_unix_ms
     })
-    .length()
-  if hourly_count >= limit.max_requests_per_hour {
+    .count()
+  if limit.max_requests_per_hour > 0 &&
+    hourly_count >= limit.max_requests_per_hour {
     raise @workspace.WorkspaceDirectoryError::HourlyRequestLimitExceeded(
       lease_id,
     )
@@ -357,7 +358,7 @@ pub async fn FileWorkspaceDirectory::reserve_workload(
       reservation.state == ReservationHeld &&
       reservation.expires_unix_ms > now_unix_ms
     })
-    .length()
+    .count()
   if concurrent_count >= limit.max_concurrent_requests {
     raise @workspace.WorkspaceDirectoryError::ConcurrentRequestLimitExceeded(
       lease_id,

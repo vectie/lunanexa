@@ -5,7 +5,7 @@ pub struct IntegrationStore {
   mut callbacks : Map[String, ExternalCallback]
   mut dispatch_receipts : Map[String, ExternalDispatchReceipt]
   mut dispatch_receipt_history : Array[ExternalDispatchReceipt]
-  mut reconciliation_exception_counts : Map[String, Int]
+  mut reconciliation_exception_counts : Map[String, Int32]
 }
 
 ///|

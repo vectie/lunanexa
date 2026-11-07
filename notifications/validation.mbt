@@ -1,5 +1,5 @@
 ///|
-fn safe_public_text(value : String, maximum_length : Int) -> Bool {
+fn safe_public_text(value : String, maximum_length : Int32) -> Bool {
   let normalized = value.to_lower()
   value.length() > 0 &&
   value.length() <= maximum_length &&

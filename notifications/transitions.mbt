@@ -120,7 +120,7 @@ pub fn NotificationRecord::assign(
 }
 
 ///|
-fn severity_rank(severity : NotificationSeverity) -> Int {
+fn severity_rank(severity : NotificationSeverity) -> Int32 {
   match severity {
     Information => 0
     Warning => 1
@@ -203,7 +203,7 @@ pub fn alert_event(
 pub fn NotificationDelivery::record_result(
   self : NotificationDelivery,
   result : DeliveryResult,
-  maximum_attempts : Int,
+  maximum_attempts : Int32,
 ) -> NotificationDelivery raise NotificationError {
   if self.delivery_id != result.delivery_id ||
     self.state != Delivering ||

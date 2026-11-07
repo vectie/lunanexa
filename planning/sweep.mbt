@@ -1,14 +1,14 @@
 ///|
 /// An explicit coverage target, not an instruction to execute a benchmark.
 pub(all) struct SweepTarget {
-  tested_concurrency : Int
-  memory_total_mib : Int
-  expected_repeats : Int
+  tested_concurrency : Int32
+  memory_total_mib : Int32
+  expected_repeats : Int32
 } derive(Eq, ToJson, FromJson)
 
 ///|
 pub(all) struct SweepPlan {
-  schema_version : Int
+  schema_version : Int32
   targets : Array[SweepTarget]
 } derive(Eq, ToJson, FromJson)
 
@@ -17,8 +17,8 @@ pub(all) struct SweepPlan {
 pub(all) struct SweepRange {
   metric : String
   unit : String
-  minimum : Int
-  maximum : Int
+  minimum : Int32
+  maximum : Int32
 } derive(Eq, ToJson)
 
 ///|
@@ -27,8 +27,8 @@ pub(all) struct SweepRun {
   source_ref : String
   observation_sha256 : String
   summary : @benchmark.BenchmarkSummary
-  failed_count : Int
-  memory_peak_mib : Int
+  failed_count : Int32
+  memory_peak_mib : Int32
   exact_count_objective_met : Bool
   meets_declared_envelope : Bool
 } derive(Eq, ToJson)
@@ -36,16 +36,16 @@ pub(all) struct SweepRun {
 ///|
 /// Empty runs/ranges mean no observation, never zero latency or zero failures.
 pub(all) struct SweepGroup {
-  tested_concurrency : Int
-  memory_total_mib : Int
-  expected_repeats : Int?
-  observed_repeats : Int
-  missing_repeats : Int?
+  tested_concurrency : Int32
+  memory_total_mib : Int32
+  expected_repeats : Int32?
+  observed_repeats : Int32
+  missing_repeats : Int32?
   coverage : String
-  objective_met_runs : Int
-  envelope_met_runs : Int
-  sample_count : Int
-  failed_count : Int
+  objective_met_runs : Int32
+  envelope_met_runs : Int32
+  sample_count : Int32
+  failed_count : Int32
   ranges : Array[SweepRange]
   runs : Array[SweepRun]
 } derive(Eq, ToJson)
@@ -112,7 +112,7 @@ fn sweep_ranges(runs : Array[SweepRun]) -> Array[SweepRange] {
   if runs.is_empty() {
     return []
   }
-  let fields : Array[(String, String, (SweepRun) -> Int)] = [
+  let fields : Array[(String, String, (SweepRun) -> Int32)] = [
     ("latency_p50_ms", "ms", r => r.summary.latency_p50_ms),
     ("latency_p95_ms", "ms", r => r.summary.latency_p95_ms),
     ("latency_p99_ms", "ms", r => r.summary.latency_p99_ms),
@@ -145,7 +145,7 @@ pub fn explore_sweep(
   let packet = reopen(packet.export_json())
   // Copy targets to avoid sharing the caller's mutable array with the report.
   let plan = import_sweep_plan(ToJson::to_json(plan).stringify())
-  let keys : Array[(Int, Int)] = plan.targets.map(t => {
+  let keys : Array[(Int32, Int32)] = plan.targets.map(t => {
     (t.tested_concurrency, t.memory_total_mib)
   })
   for evidence in packet.input.evidence {

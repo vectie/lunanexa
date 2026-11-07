@@ -2,12 +2,35 @@
 test "global defaults are valid and publish authority" {
   let settings = @settings.default_global_admin_settings()
   @settings.validate_global_admin_settings(settings)
+  assert_eq(settings.scheduler.runtime_concurrency, 0)
   let view = @settings.public_settings_view(settings)
   assert_eq(view.global_generation, 1L)
   assert_true(
     view.authorities.any(item => item.authority == GlobalAdministrator),
   )
   assert_true(view.authorities.any(item => item.authority == LocalClient))
+}
+
+///|
+test "execution concurrency cap is optional and only explicit positive limits apply" {
+  let defaults = @settings.default_global_admin_settings()
+  for concurrency in [0, 4, 32, 128] {
+    @settings.validate_global_admin_settings({
+      ..defaults,
+      scheduler: { ..defaults.scheduler, runtime_concurrency: concurrency, },
+    })
+  }
+  try
+    @settings.validate_global_admin_settings({
+      ..defaults,
+      scheduler: { ..defaults.scheduler, runtime_concurrency: -1, },
+    })
+  catch {
+    InvalidGlobalSetting(section) => assert_eq(section, "scheduler")
+    _ => fail("unexpected settings error")
+  } noraise {
+    _ => fail("negative concurrency accepted")
+  }
 }
 
 ///|

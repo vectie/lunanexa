@@ -5,7 +5,7 @@ async fn exercise_media_api(
   secret : String,
   order : @machinecommerce.MachineOrder,
   now : Int64,
-  private_cloud? : Bool = false,
+  private_cloud~ : Bool = false,
 ) -> Unit {
   let root = if private_cloud { root + "/private-media" } else { root }
   if private_cloud {

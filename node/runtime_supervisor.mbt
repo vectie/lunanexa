@@ -39,7 +39,7 @@ pub struct OciRuntimeSupervisor {
   engine : String
   network : String
   engine_endpoint : String
-  pid_limit : Int
+  pid_limit : Int32
 }
 
 ///|
@@ -70,7 +70,7 @@ pub fn OciRuntimeSupervisor::new(
   engine : String,
   network : String,
   engine_endpoint : String,
-  pid_limit? : Int = 512,
+  pid_limit~ : Int32 = 512,
 ) -> OciRuntimeSupervisor raise {
   if engine != "/usr/bin/podman" &&
     engine != "/usr/bin/docker" &&
@@ -193,7 +193,7 @@ fn runtime_run_arguments(
   name : String,
   image_ref : String,
   network : String,
-  pid_limit : Int,
+  pid_limit : Int32,
 ) -> Array[String] {
   let memory_bytes = assignment.resources.memory_mib.to_int64() * 1024L * 1024L
   // A managed revision is a directory of files rather than one blob, so the

@@ -131,19 +131,23 @@ fn WorkspaceHost::resources(
     "model-proxy.json": ToJson::to_json(proxy).stringify(),
   }
   if grant.client_id == "moontown" && secret_data is Object(fields) {
-    fields["moontown-miniapp-session-token"] = @crypto.bytes_to_hex_string(
-      @crypto.sha256(
-        @utf8.encode("moontown-miniapp-session.v1|" + grant.api_secret),
+    fields["moontown-miniapp-session-token"] = Json(
+      @crypto.bytes_to_hex_string(
+        @crypto.sha256(
+          @utf8.encode("moontown-miniapp-session.v1|" + grant.api_secret),
+        ),
       ),
-    ).to_json()
+    )
   }
   if (grant.client_id == "desktop-workspace" || grant.client_id == "moontown") &&
     secret_data is Object(fields) {
-    fields["moongate-control-token"] = @crypto.bytes_to_hex_string(
-      @crypto.sha256(
-        @utf8.encode("moon-gateway-control.v1|" + grant.api_secret),
+    fields["moongate-control-token"] = Json(
+      @crypto.bytes_to_hex_string(
+        @crypto.sha256(
+          @utf8.encode("moon-gateway-control.v1|" + grant.api_secret),
+        ),
       ),
-    ).to_json()
+    )
   }
   if grant.client_id == "desktop-workspace" && secret_data is Object(fields) {
     let instance_id = @crypto.bytes_to_hex_string(
@@ -160,7 +164,7 @@ fn WorkspaceHost::resources(
       "workspace_id": name,
       "workspace_root": "/workspace",
     }
-    fields["moondesk-control.json"] = control.stringify().to_json()
+    fields["moondesk-control.json"] = Json(control.stringify())
   }
   let secret : Json = {
     "apiVersion": "v1",

@@ -59,7 +59,7 @@ fn usage_group_key(
     Some(value) => (value.currency, value.scale.to_string())
     None => ("", "")
   }
-  [group_id, meter, unit, currency, scale].to_json().stringify()
+  Json([group_id, meter, unit, currency, scale]).stringify()
 }
 
 ///|

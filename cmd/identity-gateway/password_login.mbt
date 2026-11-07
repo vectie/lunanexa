@@ -471,12 +471,13 @@ async fn handle_password_login(
       "Vary": "Cookie",
     },
     cookies=[
-      browser_cookie(
-        config.cookie_name_for_host(audience, host),
-        cookie_reference,
-        (session.expires_unix_ms - now) / 1000L,
-        secure=config.browser_secure(),
-      ),
-    ],
+        browser_cookie(
+          config.cookie_name_for_host(audience, host),
+          cookie_reference,
+          (session.expires_unix_ms - now) / 1000L,
+          secure=config.browser_secure(),
+        ),
+      ] +
+      legacy_port_cookie_cleanup(config, audience),
   )
 }

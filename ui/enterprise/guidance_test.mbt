@@ -57,7 +57,7 @@ test "friendly failures preserve recovery and never technical secrets" {
   }
   assert_true(
     @enterprise.friendly_failure(English, "Issue", "TrialApiKeyRejected").contains(
-      "cannot be reissued",
+      "View, copy or test your active key",
     ),
   )
   assert_true(

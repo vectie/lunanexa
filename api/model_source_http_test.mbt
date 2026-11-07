@@ -84,7 +84,7 @@ async test "verified S3 import is atomically adopted as gated registry candidate
         connection.send_response(200, "OK", extra_headers={
           "Content-Type": "application/json; charset=utf-8",
         })
-        connection.write_string([operation].to_json().stringify())
+        connection.write_string(Json([operation]).stringify())
         connection.end_response()
       })
     }

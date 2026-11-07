@@ -147,7 +147,7 @@ pub fn helper_authorization_from_transport_lease(
   action : LeaseAgentAction,
   now_unix_ms : Int64,
 ) -> String? {
-  let mut action_index : Int? = None
+  let mut action_index : Int32? = None
   for index, candidate in helper_actions_for_lease(lease) {
     if candidate == action {
       action_index = Some(index)

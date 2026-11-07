@@ -112,7 +112,7 @@ async test "contract packets persist drafts and audit no raw values" {
   assert_eq(reopened.packet(packet.packet_id), Some(updated))
   let snapshot = reopened.snapshot()
   assert_eq(snapshot.events.length(), 2)
-  let audit_json = snapshot.events.to_json().stringify()
+  let audit_json = Json(snapshot.events).stringify()
   assert_false(audit_json.contains("测试单位"))
   assert_false(audit_json.contains("13800000000"))
   assert_true(audit_json.contains("reservation.organization_name"))

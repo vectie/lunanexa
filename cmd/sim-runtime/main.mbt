@@ -7,7 +7,7 @@ fn required_environment(name : String) -> String raise {
 }
 
 ///|
-async fn simulation_mode(path : String) -> (String, Int) {
+async fn simulation_mode(path : String) -> (String, Int32) {
   if !@fs.exists(path) {
     return ("ready", 0)
   }

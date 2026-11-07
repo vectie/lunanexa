@@ -639,7 +639,7 @@ async fn ApiService::handle_machine_commerce(
         }
         response.push({ offering, availability, })
       }
-      return json_reply(200, response.to_json())
+      return json_reply(200, Json(response))
     }
     (Post, "/v1/portal/self/machine-quotes") => {
       if !@portal.role_allows(view.membership.roles, LeaseRequester) {
@@ -840,7 +840,7 @@ async fn ApiService::handle_machine_commerce(
           order.organization_id == view.membership.organization_id &&
           order.tenant_ref == view.membership.tenant_ref
         })
-      return json_reply(200, orders.to_json())
+      return json_reply(200, Json(orders))
     }
     (Get, _) => {
       guard machine_order_access_path(path) is Some((order_id, "access")) &&

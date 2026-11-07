@@ -1,5 +1,5 @@
 ///|
-fn parse_port(value : String) -> Int raise {
+fn parse_port(value : String) -> Int32 raise {
   let port = @string.parse_int(value) catch {
     _ => raise Failure("loopback proxy port is not a number: \{value}")
   }

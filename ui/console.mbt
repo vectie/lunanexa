@@ -1,11 +1,11 @@
 ///|
 pub(all) struct OverviewMetrics {
-  active_nodes : Int
-  total_nodes : Int
-  active_models : Int
-  queue_depth : Int
-  alerts : Int
-  recent_changes : Int
+  active_nodes : Int32
+  total_nodes : Int32
+  active_models : Int32
+  queue_depth : Int32
+  alerts : Int32
+  recent_changes : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -27,21 +27,21 @@ pub(all) struct NodeRow {
   architecture : String
   usage_pool : String
   accelerators : Array[@contracts.AcceleratorInventory]
-  total_memory_mib : Int
-  free_memory_mib : Int
-  used_memory_mib : Int
+  total_memory_mib : Int32
+  free_memory_mib : Int32
+  used_memory_mib : Int32
   /// Whether the memory figures came from a measurement. False means the total
   /// falls back to the declared inventory and must not be presented as memory.
   memory_measured : Bool
   /// Negative means no fresh node-level sensor reading; never render as zero.
-  utilization_per_mille : Int
-  cpu_per_mille : Int
+  utilization_per_mille : Int32
+  cpu_per_mille : Int32
   /// False when the node reported no host CPU sample, so an absent rate is not
   /// rendered as an idle 0%.
   cpu_measured : Bool
-  temperature_celsius : Int
+  temperature_celsius : Int32
   power_watts : Double
-  workloads : Int
+  workloads : Int32
   lease_holder : String
   active_assignment : String
   last_seen : String
@@ -155,8 +155,8 @@ pub extend ModelSourceCatalogRow with FromJson::{from_json}
 pub(all) struct ModelSourceCatalogPage {
   models : Array[ModelSourceCatalogRow]
   total_count : Int64
-  page_number : Int
-  page_size : Int
+  page_number : Int32
+  page_size : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -200,8 +200,8 @@ pub(all) struct ModelImportRow {
   model_id : String
   revision : String
   state : ModelImportState
-  files_total : Int
-  files_completed : Int
+  files_total : Int32
+  files_completed : Int32
   bytes_total : Int64
   bytes_completed : Int64
   manifest_digest : String
@@ -230,7 +230,7 @@ pub extend ModelImportRow with FromJson::{from_json}
 /// A directory an operator already populated inside the managed model store.
 pub(all) struct ModelLocalDirectoryRow {
   directory : String
-  files : Int
+  files : Int32
   bytes : Int64
   registered : Bool
 } derive(Debug, Eq, ToJson, FromJson)
@@ -685,7 +685,7 @@ pub fn empty_template_draft() -> TemplateDraft {
 /// upper limit, so the control and the rule cannot drift apart.
 priv enum TemplateFieldKind {
   FreeText
-  Count(Int)
+  Count(Int32)
   ByteCount(Int64)
 }
 
@@ -727,7 +727,7 @@ fn template_field_spec(
   kind : TemplateFieldKind,
   help_en : String,
   help_zh : String,
-  optional? : Bool = false,
+  optional~ : Bool = false,
 ) -> TemplateFieldSpec {
   {
     field,
@@ -1119,7 +1119,7 @@ pub fn template_field_value(
 ///|
 /// One `Int` field of a template as the operator typed it. Only the server's
 /// own bound decides: the console never rounds or clamps a submitted number.
-pub fn template_int_field(value : String, maximum~ : Int) -> Int? {
+pub fn template_int_field(value : String, maximum~ : Int32) -> Int32? {
   let parsed = @string.parse_int(value.trim()) catch { _ => return None }
   if parsed < 1 || parsed > maximum {
     None
@@ -1146,8 +1146,8 @@ pub fn template_int64_field(value : String, maximum~ : Int64) -> Int64? {
 /// repeated entry, or an identifier the planner would reject is not.
 pub fn template_identifier_list(
   value : String,
-  maximum~ : Int,
-  identifier_length? : Int = 256,
+  maximum~ : Int32,
+  identifier_length~ : Int32 = 256,
 ) -> Array[String]? {
   if value.trim() == "" {
     return Some([])
@@ -1381,6 +1381,9 @@ pub fn known_runtimes(state : ConsoleState) -> Array[@contracts.RuntimeSpec] {
 
 ///|
 pub(all) struct DeploymentRow {
+  model_digest : String
+  node_id : String
+  resource_owner : String
   assignment_id : String
   deployment_id : String
   desired : @contracts.DeploymentState
@@ -1402,10 +1405,10 @@ pub extend DeploymentRow with FromJson::{from_json}
 
 ///|
 pub(all) struct RequestMetrics {
-  count : Int
-  p95_ms : Int
-  throughput_per_second : Int
-  errors : Int
+  count : Int32
+  p95_ms : Int32
+  throughput_per_second : Int32
+  errors : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -1443,7 +1446,7 @@ pub extend RequestDetail with FromJson::{from_json}
 
 ///|
 pub(all) struct StreamEventView {
-  sequence : Int
+  sequence : Int32
   kind : String
   text : String
   receipt : String
@@ -1454,8 +1457,8 @@ pub extend StreamEventView with Eq::{not_equal, equal}
 
 ///|
 pub(all) struct PolicySummary {
-  quota_count : Int
-  data_class_count : Int
+  quota_count : Int32
+  data_class_count : Int32
   default_retention : @contracts.RetentionPolicy
   allowed_runtimes : Array[String]
 } derive(Debug, Eq, ToJson, FromJson)
@@ -1525,7 +1528,7 @@ pub(all) struct NotificationDeliveryRow {
   notification_id : String
   channel : @notifications.NotificationChannel
   state : @notifications.DeliveryState
-  attempt_count : Int
+  attempt_count : Int32
   updated_unix_ms : Int64
   last_error_code : String
 } derive(Debug, Eq, ToJson, FromJson)
@@ -1549,7 +1552,7 @@ pub(all) struct UserAccessRow {
   email : String
   state : @workspace.WorkspaceUserState
   last_active : String
-  grant_count : Int
+  grant_count : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -1679,7 +1682,7 @@ pub(all) struct AccessPackageDraft {
   email : String
   organization_id : String
   tenant_ref : String
-  lifetime_days : Int
+  lifetime_days : Int32
   identity_verified : Bool
 } derive(Eq)
 
@@ -1803,7 +1806,7 @@ pub(all) struct CostCenterRow {
   organization_id : String
   display_name : String
   parent_cost_center_id : String
-  project_count : Int
+  project_count : Int32
   provisional_spend : String
   budget_posture : String
 } derive(Debug, Eq, ToJson, FromJson)
@@ -1904,7 +1907,7 @@ pub(all) enum DestructiveAction {
   RevokeEnterpriseMembership(String)
   EndComputeLease(String)
   TerminateExclusiveNodeLease(String, Int64)
-  RedriveNotificationDelivery(String, Int, Int64)
+  RedriveNotificationDelivery(String, Int32, Int64)
   ActivateAccount(String)
   SuspendAccount(String)
   RevokeAccount(String)
@@ -2000,6 +2003,22 @@ pub fn AlertsWindow::storage_value(self : AlertsWindow) -> String {
 }
 
 ///|
+pub(all) struct AccessOrganizationOption {
+  organization_id : String
+  display_name : String
+  tenant_ref : String
+} derive(Eq, FromJson, ToJson)
+
+///|
+pub extend AccessOrganizationOption with Eq::{equal, not_equal}
+
+///|
+pub extend AccessOrganizationOption with FromJson::{from_json}
+
+///|
+pub extend AccessOrganizationOption with ToJson::{to_json}
+
+///|
 pub fn parse_alerts_window(value : String) -> AlertsWindow {
   match value {
     "today" => Today
@@ -2026,6 +2045,7 @@ pub fn AlertsWindow::label(
 pub(all) struct ConsoleState {
   locale : @i18n.Locale
   route : OperatorRoute
+  navigation_open : Bool
   overview : OverviewMetrics
   nodes : Array[NodeRow]
   storage_nodes : Array[StorageNodeRow]
@@ -2044,11 +2064,15 @@ pub(all) struct ConsoleState {
   notification_deliveries : Array[NotificationDeliveryRow]
   accounts : Array[AccountView]
   trial_summary : TrialSummary?
+  event_trial : EventTrialPanel
+  model_pool : ModelPoolPanel
   announcement_draft : AnnouncementDraft
   authenticated_account : AccountView?
   account_sessions : Array[BrowserSessionView]
   account_invite : AccountInviteDraft
   access_package_draft : AccessPackageDraft
+  registered_access_account : String
+  access_organizations : Array[AccessOrganizationOption]
   access_packages : Array[AccessPackageView]
   access_package_context : (String, String)?
   users : Array[UserAccessRow]
@@ -2097,10 +2121,16 @@ pub extend ConsoleState with Eq::{not_equal, equal}
 
 ///|
 pub(all) enum ConsoleMessage {
+  ModelPoolSelect(String)
+  ModelPoolSpeculativeSelect(String)
+  ModelPoolTuningSelect(String, String)
+  ModelPoolAction(String)
+  EventTrial(EventTrialMessage)
   CapacityPlanner(@capacity_planner.Message)
   ResourceDelivery(ResourceDeliveryMessage)
   LocaleChanged(@i18n.Locale)
   Navigate(OperatorRoute)
+  ToggleNavigation
   OpenAccessStep(String, String, OperatorRoute)
   ClearAccessContext
   AlertsWindowChanged(AlertsWindow)
@@ -2184,7 +2214,7 @@ pub(all) enum ConsoleMessage {
   AssignAlertToSelf(String, Int64)
   SilenceAlert(String, Int64)
   ResolveAlert(String, Int64)
-  BeginRedriveNotificationDelivery(String, Int, Int64)
+  BeginRedriveNotificationDelivery(String, Int32, Int64)
   AccountInviteIdChanged(String)
   AccountInviteSubjectRefChanged(String)
   AccountInviteIssuerChanged(String)
@@ -2199,15 +2229,17 @@ pub(all) enum ConsoleMessage {
   AnnouncementTitleChanged(String)
   AnnouncementBodyChanged(String)
   AnnouncementExpiryChanged(String)
-  AnnouncementLifetimeChosen(Int)
+  AnnouncementLifetimeChosen(Int32)
   SubmitAnnouncement
   AccessPackageIssuerChanged(String)
+  RegisteredAccessAccountChanged(String)
+  SubmitRegisteredAccess
   AccessPackageSubjectChanged(String)
   AccessPackageDisplayNameChanged(String)
   AccessPackageEmailChanged(String)
   AccessPackageOrganizationChanged(String)
   AccessPackageTenantChanged(String)
-  AccessPackageLifetimeChanged(Int)
+  AccessPackageLifetimeChanged(Int32)
   ToggleAccessPackageIdentityVerified
   SubmitAccessPackage
   EnableAccessPackage(String)
@@ -2240,6 +2272,7 @@ pub fn default_state() -> ConsoleState {
   {
     locale: @i18n.default_locale(),
     route: Overview,
+    navigation_open: false,
     overview: {
       active_nodes: 0,
       total_nodes: 0,
@@ -2270,6 +2303,8 @@ pub fn default_state() -> ConsoleState {
     notification_deliveries: [],
     accounts: [],
     trial_summary: None,
+    event_trial: empty_event_trial_panel(),
+    model_pool: empty_model_pool_panel(),
     announcement_draft: empty_announcement_draft(),
     authenticated_account: None,
     account_sessions: [],
@@ -2293,6 +2328,8 @@ pub fn default_state() -> ConsoleState {
       lifetime_days: 30,
       identity_verified: false,
     },
+    registered_access_account: "",
+    access_organizations: [],
     access_packages: [],
     users: [],
     pending_organizations: [],
@@ -2725,6 +2762,9 @@ pub fn demo_state() -> ConsoleState {
         desired: Ready,
         observed: Ready,
         placement_reason: "warm model · 80 GiB free · policy compatible",
+        model_digest: "",
+        node_id: "",
+        resource_owner: "",
       },
       {
         assignment_id: "assignment-vision-review-r1",
@@ -2732,6 +2772,9 @@ pub fn demo_state() -> ConsoleState {
         desired: Ready,
         observed: Degraded,
         placement_reason: "vision runtime · tenant lease · retrying health probe",
+        model_digest: "",
+        node_id: "",
+        resource_owner: "",
       },
     ],
     catalog_templates: templates,
@@ -2794,6 +2837,8 @@ pub fn demo_state() -> ConsoleState {
     notifications: [],
     notification_deliveries: [],
     trial_summary: None,
+    event_trial: empty_event_trial_panel(),
+    model_pool: empty_model_pool_panel(),
     announcement_draft: empty_announcement_draft(),
     accounts: [
       {
@@ -2863,6 +2908,14 @@ pub fn demo_state() -> ConsoleState {
       lifetime_days: 30,
       identity_verified: true,
     },
+    registered_access_account: "",
+    access_organizations: [
+      {
+        organization_id: "org-northstar",
+        display_name: "Northstar Research",
+        tenant_ref: "tenant-northstar",
+      },
+    ],
     access_packages: [
       {
         package_id: "access-account-alice",
@@ -3335,38 +3388,52 @@ fn navigation(
       localized(locale, "Primary", "主导航"),
     ),
     [
-      @html.p(class="nav-group-label", localized(locale, "Monitor", "监控")),
       nav_link(locale, Overview, current, emit),
       nav_link(locale, Alerts, current, emit),
-      @html.p(
-        class="nav-group-label",
-        localized(locale, "Supply", "资源供给"),
-      ),
       nav_link(locale, Nodes, current, emit),
       nav_link(locale, Models, current, emit),
-      nav_link(locale, Benchmarks, current, emit),
-      nav_link(locale, QualifiedServices, current, emit),
-      nav_link(locale, Catalog, current, emit),
       nav_link(locale, Deployments, current, emit),
-      nav_link(locale, Requests, current, emit),
-      @html.p(
-        class="nav-group-label",
-        localized(locale, "Customers", "客户服务"),
-      ),
       nav_link(locale, Users, current, emit),
-      nav_link(locale, Policies, current, emit),
-      nav_link(locale, Agreements, current, emit),
-      nav_link(locale, OfflineCommerce, current, emit),
-      nav_link(locale, ContractDocuments, current, emit),
-      nav_link(locale, Leases, current, emit),
-      nav_link(locale, CostCenters, current, emit),
-      @html.p(class="nav-group-label", localized(locale, "Evidence", "证据")),
-      nav_link(locale, Audit, current, emit),
+      console_nav_group(
+        locale,
+        localized(locale, "Service configuration", "服务配置"),
+        [Catalog, QualifiedServices, Policies],
+        current,
+        emit,
+      ),
+      console_nav_group(
+        locale,
+        localized(locale, "Orders & billing", "订单与结算"),
+        [OfflineCommerce, Agreements, ContractDocuments, Leases, CostCenters],
+        current,
+        emit,
+      ),
+      console_nav_group(
+        locale,
+        localized(locale, "Diagnostics & audit", "诊断与审计"),
+        [Benchmarks, Requests, Audit],
+        current,
+        emit,
+      ),
       @html.a(class="nav-link", href="/docs/", [
         @html.span(localized(locale, "Documentation", "使用文档")),
       ]),
     ],
   )
+}
+
+///|
+fn console_nav_group(
+  locale : @i18n.Locale,
+  label : String,
+  routes : Array[OperatorRoute],
+  current : OperatorRoute,
+  emit : @rabbita.Emit[ConsoleMessage]?,
+) -> @rabbita.Html {
+  @html.details(class="navigation-group", open=routes.contains(current), [
+    @html.summary(label),
+    @html.div([ for route in routes => nav_link(locale, route, current, emit) ]),
+  ])
 }
 
 ///|
@@ -3400,9 +3467,8 @@ fn stat(
   tone : String,
 ) -> @rabbita.Html {
   @html.div(class="stat stat-\{tone}", [
-    @html.dt(label),
+    @html.dt(title=detail, label),
     @html.dd(value),
-    @html.span(class="stat-detail", detail),
   ])
 }
 
@@ -3516,34 +3582,40 @@ fn overview_view(
               },
             ),
           ]),
-          @html.p(
-            class="health-copy",
-            if state.overview.total_nodes == 0 {
-              localized(
-                state.locale,
-                "Connect the controller and enroll a node to establish live cluster posture.",
-                "连接控制器并注册节点，以建立实时集群状态。",
-              )
-            } else if state.overview.active_nodes < state.overview.total_nodes {
-              localized(
-                state.locale,
-                "Some nodes are not active; inspect node heartbeat and maintenance status.",
-                "部分节点未处于活跃状态，请检查心跳与维护状态。",
-              )
-            } else if state.overview.alerts == 0 {
-              localized(
-                state.locale,
-                "Node heartbeat and reported alerts only; this does not verify model inference or service availability.",
-                "此状态仅代表节点心跳和已上报告警，不代表模型推理与业务服务已验收。",
-              )
-            } else {
-              localized(
-                state.locale,
-                "\{state.overview.alerts} alert signals require operator review before the next change window.",
-                "下一个变更窗口前，需要运维人员检查 \{state.overview.alerts} 个告警信号。",
-              )
-            },
-          ),
+          if state.overview.total_nodes == 0 ||
+            state.overview.active_nodes < state.overview.total_nodes ||
+            state.overview.alerts > 0 {
+            @html.p(
+              class="health-copy",
+              if state.overview.total_nodes == 0 {
+                localized(
+                  state.locale,
+                  "Connect the controller and enroll a node to establish live cluster posture.",
+                  "连接控制器并注册节点，以建立实时集群状态。",
+                )
+              } else if state.overview.active_nodes < state.overview.total_nodes {
+                localized(
+                  state.locale,
+                  "Some nodes are not active; inspect node heartbeat and maintenance status.",
+                  "部分节点未处于活跃状态，请检查心跳与维护状态。",
+                )
+              } else if state.overview.alerts == 0 {
+                localized(
+                  state.locale,
+                  "Node heartbeat and reported alerts only; this does not verify model inference or service availability.",
+                  "此状态仅代表节点心跳和已上报告警，不代表模型推理与业务服务已验收。",
+                )
+              } else {
+                localized(
+                  state.locale,
+                  "\{state.overview.alerts} alert signals require operator review before the next change window.",
+                  "下一个变更窗口前，需要运维人员检查 \{state.overview.alerts} 个告警信号。",
+                )
+              },
+            )
+          } else {
+            @html.nothing
+          },
         ],
       ),
       @html.aside(class="activity-panel", [
@@ -3559,13 +3631,10 @@ fn overview_view(
             state.overview.recent_changes.to_string()
           },
         ),
-        @html.p(
-          class="activity-label",
-          localized(
-            state.locale,
-            "Loaded audit records (up to 20); open Audit for history.",
-            "已加载审计记录（最多 20 条）；完整记录请打开审计页。",
-          ),
+        @html.button(
+          type_="button",
+          on_click=command(emit, Navigate(Audit)),
+          localized(state.locale, "Audit", "审计"),
         ),
       ]),
     ]),
@@ -3635,24 +3704,12 @@ fn overview_view(
       attrs=@html.Attrs::build().aria_labelledby("deployment-readiness-title"),
       [
         @html.div(class="readiness-copy", [
-          @html.p(
-            class="eyebrow",
-            localized(state.locale, "Deployment launchpad", "部署启动台"),
-          ),
           @html.h2(
             id="deployment-readiness-title",
             localized(
               state.locale,
               "Choose a service template",
               "选择服务模板",
-            ),
-          ),
-          @html.p(
-            class="section-copy",
-            localized(
-              state.locale,
-              "Choose a template, then review the deployment plan.",
-              "选择模板后查看部署计划。",
             ),
           ),
           @html.button(
@@ -3666,104 +3723,110 @@ fn overview_view(
             ),
           ),
         ]),
-        @html.ul(class="readiness-list", [
-          readiness_item(
-            state.locale,
-            state.production_readiness.ready &&
-            state.production_readiness.blocker_codes.length() == 0 &&
-            state.production_readiness.error is None &&
-            !state.production_readiness.loading,
-            localized(
-              state.locale,
-              "Platform-wide production acceptance (separate from catalog access)",
-              "平台整体生产验收（不限制浏览目录）",
-            ),
-            if state.production_readiness.loading {
-              localized(
+        @controls.advanced(
+          localized(state.locale, "Deployment checks", "部署检查"),
+          [
+            @html.ul(class="readiness-list", [
+              readiness_item(
                 state.locale,
-                "Loading controller readiness…",
-                "正在加载控制器就绪状态…",
-              )
-            } else {
-              match state.production_readiness.error {
-                Some(_) =>
+                state.production_readiness.ready &&
+                state.production_readiness.blocker_codes.length() == 0 &&
+                state.production_readiness.error is None &&
+                !state.production_readiness.loading,
+                localized(
+                  state.locale,
+                  "Platform-wide production acceptance (separate from catalog access)",
+                  "平台整体生产验收（不限制浏览目录）",
+                ),
+                if state.production_readiness.loading {
                   localized(
                     state.locale,
-                    "Readiness check unavailable",
-                    "就绪检查不可用",
+                    "Loading controller readiness…",
+                    "正在加载控制器就绪状态…",
                   )
-                None if state.production_readiness.blocker_codes.length() > 0 =>
-                  state.production_readiness.blocker_codes
-                  .map(code => readiness_blocker_label(state.locale, code))
-                  .join(" · ")
-                None if state.production_readiness.ready =>
-                  localized(
-                    state.locale,
-                    "All central blockers cleared",
-                    "所有中央阻塞项均已清除",
-                  )
-                None =>
-                  localized(
-                    state.locale,
-                    "Production acceptance not yet confirmed",
-                    "尚未确认生产验收通过",
-                  )
-              }
-            },
-          ),
-          readiness_item(
-            state.locale,
-            state.overview.total_nodes == 4,
-            localized(
-              state.locale,
-              "Four DGX nodes enrolled",
-              "已注册四台 DGX 节点",
-            ),
-            localized(
-              state.locale,
-              "\{state.overview.total_nodes} of 4 reporting telemetry",
-              "4 台中有 \{state.overview.total_nodes} 台上报遥测",
-            ),
-          ),
-          readiness_item(
-            state.locale,
-            state.overview.active_nodes == 4 && state.overview.alerts == 0,
-            localized(state.locale, "Fleet healthy", "机群健康"),
-            localized(
-              state.locale,
-              "\{state.overview.active_nodes} active · \{state.overview.alerts} alerts",
-              "\{state.overview.active_nodes} 台活跃 · \{state.overview.alerts} 个告警",
-            ),
-          ),
-          readiness_item(
-            state.locale,
-            state.overview.active_models > 0,
-            localized(
-              state.locale,
-              "Approved model available",
-              "已有批准模型",
-            ),
-            localized(
-              state.locale,
-              "\{state.overview.active_models} approved models",
-              "\{state.overview.active_models} 个已批准模型",
-            ),
-          ),
-          readiness_item(
-            state.locale,
-            state.catalog_templates.length() > 0,
-            localized(
-              state.locale,
-              "Service template approved",
-              "服务模板已批准",
-            ),
-            localized(
-              state.locale,
-              "\{state.catalog_templates.length()} immutable templates",
-              "\{state.catalog_templates.length()} 个不可变模板",
-            ),
-          ),
-        ]),
+                } else {
+                  match state.production_readiness.error {
+                    Some(_) =>
+                      localized(
+                        state.locale,
+                        "Readiness check unavailable",
+                        "就绪检查不可用",
+                      )
+                    None if state.production_readiness.blocker_codes.length() >
+                      0 =>
+                      state.production_readiness.blocker_codes
+                      .map(code => readiness_blocker_label(state.locale, code))
+                      .join(" · ")
+                    None if state.production_readiness.ready =>
+                      localized(
+                        state.locale,
+                        "All central blockers cleared",
+                        "所有中央阻塞项均已清除",
+                      )
+                    None =>
+                      localized(
+                        state.locale,
+                        "Production acceptance not yet confirmed",
+                        "尚未确认生产验收通过",
+                      )
+                  }
+                },
+              ),
+              readiness_item(
+                state.locale,
+                state.overview.total_nodes == 4,
+                localized(
+                  state.locale,
+                  "Four DGX nodes enrolled",
+                  "已注册四台 DGX 节点",
+                ),
+                localized(
+                  state.locale,
+                  "\{state.overview.total_nodes} of 4 reporting telemetry",
+                  "4 台中有 \{state.overview.total_nodes} 台上报遥测",
+                ),
+              ),
+              readiness_item(
+                state.locale,
+                state.overview.active_nodes == 4 && state.overview.alerts == 0,
+                localized(state.locale, "Fleet healthy", "机群健康"),
+                localized(
+                  state.locale,
+                  "\{state.overview.active_nodes} active · \{state.overview.alerts} alerts",
+                  "\{state.overview.active_nodes} 台活跃 · \{state.overview.alerts} 个告警",
+                ),
+              ),
+              readiness_item(
+                state.locale,
+                state.overview.active_models > 0,
+                localized(
+                  state.locale,
+                  "Approved model available",
+                  "已有批准模型",
+                ),
+                localized(
+                  state.locale,
+                  "\{state.overview.active_models} approved models",
+                  "\{state.overview.active_models} 个已批准模型",
+                ),
+              ),
+              readiness_item(
+                state.locale,
+                state.catalog_templates.length() > 0,
+                localized(
+                  state.locale,
+                  "Service template approved",
+                  "服务模板已批准",
+                ),
+                localized(
+                  state.locale,
+                  "\{state.catalog_templates.length()} immutable templates",
+                  "\{state.catalog_templates.length()} 个不可变模板",
+                ),
+              ),
+            ]),
+          ],
+        ),
       ],
     ),
   ])
@@ -4442,8 +4505,16 @@ fn users_view(
         ),
       ),
     ]),
-    trial_summary_view(state),
-    @html.section(class="panel", [
+    registered_access_form(state, emit),
+    registered_access_records(state, emit),
+    @html.details(class="trial-administration", [
+      @html.summary(
+        localized(state.locale, "Trials and events", "试用与活动管理"),
+      ),
+      trial_summary_view(state),
+      event_trial_panel(state, emit),
+    ]),
+    @html.section(id="company-review", class="panel", [
       @html.div(class="section-heading", [
         @html.div([
           @html.h3(
@@ -4646,10 +4717,17 @@ fn users_view(
           ),
         )
     },
-    @html.section(
-      class="access-package-panel",
+    @html.details(
+      class="access-package-panel manual-access",
       attrs=@html.Attrs::build().aria_labelledby("access-package-title"),
       [
+        @html.summary(
+          localized(
+            state.locale,
+            "New person / manual identity verification",
+            "新人员／人工核验身份",
+          ),
+        ),
         @html.div(class="access-package-intro", [
           @html.h3(
             id="access-package-title",
@@ -4933,29 +5011,6 @@ fn users_view(
             on_click=command(emit, SubmitAccessPackage),
             localized(state.locale, "Prepare access", "准备访问"),
           ),
-        ]),
-        @html.div(class="access-package-list", [
-          if state.access_packages.length() == 0 {
-            @html.p(
-              class="empty-state compact",
-              localized(
-                state.locale,
-                "No WebIDE access packages yet.",
-                "尚无 WebIDE 访问软件包。",
-              ),
-            )
-          } else {
-            @html.fragment(
-              [
-                for item in state.access_packages if Some(
-                  (item.account_id, item.organization_id),
-                ) !=
-                state.access_package_context => {
-                  access_package_card(state, item, emit)
-                }
-              ],
-            )
-          },
         ]),
       ],
     ),
@@ -6283,7 +6338,7 @@ fn cluster_topology(state : ConsoleState) -> @rabbita.Html {
 }
 
 ///|
-fn memory_gib(mib : Int) -> String {
+fn memory_gib(mib : Int32) -> String {
   let tenths = (mib.to_int64() * 10L + 512L) / 1024L
   "\{tenths / 10L}.\{tenths % 10L} GiB"
 }
@@ -6625,7 +6680,7 @@ fn model_import_transport_label(
 }
 
 ///|
-fn model_import_progress(import_ : ModelImportRow) -> Int {
+fn model_import_progress(import_ : ModelImportRow) -> Int32 {
   if import_.bytes_total <= 0L {
     0
   } else {
@@ -7323,7 +7378,7 @@ fn models_view(
       @html.div([
         @html.h2(
           id="models-title",
-          localized(state.locale, "Model registry", "模型注册表"),
+          localized(state.locale, "Registered models", "已登记模型"),
         ),
       ]),
       @html.span(
@@ -7335,378 +7390,326 @@ fn models_view(
         ),
       ),
     ]),
-    @html.div(class="operation-panel model-onboarding-panel", [
-      @html.div(class="operation-heading", [
-        @html.div([
-          @html.p(
-            class="eyebrow",
-            localized(state.locale, "ModelScope catalog", "魔搭模型库"),
+    @html.details(
+      class="operation-panel model-onboarding-panel",
+      open=state.models.is_empty() ||
+        !state.model_source_results.is_empty() ||
+        !detached_imports.is_empty() ||
+        state.model_adoption_draft.import_id != "",
+      [
+        @html.summary(localized(state.locale, "Import model", "导入模型")),
+        @html.div(class="model-source-search", [
+          @html.label(
+            for_="model-source-query",
+            localized(state.locale, "Search ModelScope", "搜索魔搭模型"),
           ),
-          @html.h3(
-            localized(
+          @html.input(
+            id="model-source-query",
+            input_type=Text,
+            maxlength=180,
+            value=state.model_source_query,
+            placeholder=localized(
               state.locale,
-              "Find and import a model",
-              "查找并导入模型",
+              "Keywords or owner/repository",
+              "关键词或组织名/模型名",
             ),
+            on_input=text_command(emit, value => ModelSourceQueryChanged(value)),
+          ),
+          @html.button(
+            type_="button",
+            class="primary-button",
+            disabled=!state.operator_authenticated ||
+              state.model_source_query.trim() == "" ||
+              state.loading,
+            on_click=command(emit, SearchModelSource),
+            localized(state.locale, "Search", "搜索"),
           ),
         ]),
-      ]),
-      @html.ol(class="deployment-steps model-onboarding-steps", [
-        @html.li([
-          @html.span("1"),
-          @html.strong(
-            localized(state.locale, "Search catalog", "搜索模型库"),
+        @controls.advanced(
+          localized(
+            state.locale,
+            "Advanced: register a stored model",
+            "高级：登记已有模型",
+          ),
+          [model_local_registration_form(state, emit)],
+        ),
+        @html.div(class="operation-actions", [
+          @controls.icon_button(
+            Refresh,
+            localized(state.locale, "Refresh downloads", "刷新下载任务"),
+            command(emit, RefreshModelImports),
+            disabled=!state.operator_authenticated,
+            busy=state.loading,
           ),
         ]),
-        @html.li([
-          @html.span("2"),
-          @html.strong(
-            localized(state.locale, "Download & checksum", "下载并校验"),
-          ),
-        ]),
-        @html.li([
-          @html.span("3"),
-          @html.strong(
-            localized(
-              state.locale,
-              "License & verification",
-              "许可与制品验证",
-            ),
-          ),
-        ]),
-        @html.li([
-          @html.span("4"),
-          @html.strong(
-            localized(
-              state.locale,
-              "Approve for users",
-              "批准供用户使用",
-            ),
-          ),
-        ]),
-      ]),
-      @html.div(class="model-source-search", [
-        @html.label(
-          for_="model-source-query",
-          localized(state.locale, "Search ModelScope", "搜索魔搭模型"),
-        ),
-        @html.input(
-          id="model-source-query",
-          input_type=Text,
-          maxlength=120,
-          value=state.model_source_query,
-          on_input=text_command(emit, value => ModelSourceQueryChanged(value)),
-        ),
-        @html.button(
-          type_="button",
-          class="primary-button",
-          disabled=!state.operator_authenticated ||
-            state.model_source_query.trim() == "" ||
-            state.loading,
-          on_click=command(emit, SearchModelSource),
-          localized(state.locale, "Search", "搜索"),
-        ),
-      ]),
-      @controls.advanced(
-        localized(
-          state.locale,
-          "Advanced: register a stored model",
-          "高级：登记已有模型",
-        ),
-        [model_local_registration_form(state, emit)],
-      ),
-      @html.div(class="operation-actions", [
-        @html.span(
-          class="secondary",
-          if state.operator_authenticated {
-            localized(
-              state.locale,
-              "Downloads are durable; checksum verification is not signature approval.",
-              "下载任务可持久恢复；校验和验证不等于签名批准。",
-            )
-          } else {
-            localized(
-              state.locale,
-              "Sign in with operator authority to browse and import models.",
-              "请使用运维权限登录后浏览并导入模型。",
-            )
-          },
-        ),
-        @controls.icon_button(
-          Refresh,
-          localized(state.locale, "Refresh downloads", "刷新下载任务"),
-          command(emit, RefreshModelImports),
-          disabled=!state.operator_authenticated,
-          busy=state.loading,
-        ),
-      ]),
-      if state.model_source_results.length() == 0 {
-        @html.div(class="model-source-hint", [
-          @html.strong(
-            localized(
-              state.locale,
-              "Search by model or organization",
-              "按模型或组织搜索",
-            ),
-          ),
-          @html.span(
-            localized(
-              state.locale,
-              "Try MiniCPM, Qwen, embedding, or OpenBMB.",
-              "可尝试 MiniCPM、Qwen、embedding 或 OpenBMB。",
-            ),
-          ),
-        ])
-      } else {
-        @html.div(
-          class="model-source-results",
-          [
-            for candidate in state.model_source_results => {
-              let import_ = model_import_for(state.model_imports, candidate.id)
-              @html.article(class="model-source-card", [
-                @html.div(class="model-source-card-heading", [
-                  @html.div([
-                    @html.strong(candidate.display_name),
-                    @html.span(class="mono secondary", candidate.id),
+        if state.model_source_results.length() == 0 {
+          @html.nothing
+        } else {
+          @html.div(
+            class="model-source-results",
+            [
+              for candidate in state.model_source_results => {
+                let import_ = model_import_for(
+                  state.model_imports,
+                  candidate.id,
+                )
+                @html.article(class="model-source-card", [
+                  @html.div(class="model-source-card-heading", [
+                    @html.div([
+                      @html.strong(candidate.display_name),
+                      @html.span(class="mono secondary", candidate.id),
+                    ]),
+                    @html.span(
+                      class="status status-neutral",
+                      if candidate.license == "" {
+                        localized(
+                          state.locale,
+                          "License unspecified",
+                          "未声明许可证",
+                        )
+                      } else {
+                        candidate.license
+                      },
+                    ),
                   ]),
-                  @html.span(
-                    class="status status-neutral",
-                    if candidate.license == "" {
+                  @html.p(
+                    class="section-copy",
+                    if candidate.description == "" {
                       localized(
                         state.locale,
-                        "License unspecified",
-                        "未声明许可证",
+                        "No catalog description.",
+                        "模型库未提供简介。",
                       )
                     } else {
-                      candidate.license
+                      candidate.description
                     },
                   ),
-                ]),
-                @html.p(
-                  class="section-copy",
-                  if candidate.description == "" {
-                    localized(
-                      state.locale,
-                      "No catalog description.",
-                      "模型库未提供简介。",
-                    )
-                  } else {
-                    candidate.description
-                  },
-                ),
-                @html.div(class="model-source-facts", [
-                  @html.span(model_source_size(candidate.file_size)),
-                  @html.span("\{candidate.params / 1000000L}M params"),
-                  @html.span("↓ \{candidate.downloads}"),
-                  @html.span(candidate.tasks.join(", ")),
-                ]),
-                match import_ {
-                  Some(value) =>
-                    @html.div(class="model-import-status", [
-                      @html.div([
-                        @html.strong(
-                          model_import_label(state.locale, value.state),
-                        ),
-                        @html.span(
-                          class="secondary mono",
-                          "\{model_import_progress(value)}% · \{value.files_completed}/\{value.files_total}",
-                        ),
-                      ]),
-                      @html.div(class="model-import-track", [
-                        @html.span(
-                          class="model-import-fill",
-                          style=["width: \{model_import_progress(value)}%"],
-                          "",
-                        ),
-                      ]),
-                      if value.state == Downloading || value.state == Queued {
-                        @html.button(
-                          type_="button",
-                          class="secondary-button danger-button",
-                          disabled=value.cancel_requested || state.loading,
-                          on_click=command(
-                            emit,
-                            CancelModelImport(value.import_id),
+                  @html.div(class="model-source-facts", [
+                    @html.span(model_source_size(candidate.file_size)),
+                    @html.span("\{candidate.params / 1000000L}M params"),
+                    @html.span("↓ \{candidate.downloads}"),
+                    @html.span(candidate.tasks.join(", ")),
+                  ]),
+                  match import_ {
+                    Some(value) =>
+                      @html.div(class="model-import-status", [
+                        @html.div([
+                          @html.strong(
+                            model_import_label(state.locale, value.state),
                           ),
-                          if value.cancel_requested {
-                            localized(
-                              state.locale,
-                              "Cancelling…",
-                              "正在取消…",
-                            )
-                          } else {
-                            localized(state.locale, "Cancel", "取消")
-                          },
-                        )
-                      } else if value.state == Verified {
-                        verified_import_gate(state, value, emit)
-                      } else {
-                        @html.div(class="model-import-recovery", [
-                          @html.span(class="danger-copy", value.error_code),
-                          @html.button(
-                            type_="button",
-                            class="secondary-button",
-                            disabled=state.loading,
-                            on_click=command(
-                              emit,
-                              RetryModelImport(value.import_id),
-                            ),
-                            localized(state.locale, "Retry", "重试"),
-                          ),
-                        ])
-                      },
-                    ])
-                  None =>
-                    @html.button(
-                      type_="button",
-                      class="primary-button",
-                      disabled=candidate.private ||
-                        candidate.gated ||
-                        state.loading,
-                      on_click=command(emit, DownloadModelSource(candidate.id)),
-                      localized(state.locale, "Download", "下载"),
-                    )
-                },
-              ])
-            }
-          ],
-        )
-      },
-      if detached_imports.length() == 0 {
-        @html.nothing
-      } else {
-        @html.section(
-          class="detached-imports",
-          attrs=@html.Attrs::build().aria_labelledby("recent-imports-title"),
-          [
-            @html.div(class="detached-imports-heading", [
-              @html.h4(
-                id="recent-imports-title",
-                localized(
-                  state.locale,
-                  "Imports awaiting a next action",
-                  "等待后续操作的导入",
-                ),
-              ),
-              @html.span(
-                class="secondary",
-                localized(
-                  state.locale,
-                  "Visible after refresh or sign-in without repeating a catalog search.",
-                  "刷新或重新登录后无需再次搜索模型库即可查看。",
-                ),
-              ),
-            ]),
-            @html.div(
-              class="detached-import-list",
-              [
-                for import_ in detached_imports => {
-                  @html.article(class="detached-import-row", [
-                    @html.div(class="model-source-card-heading", [
-                      @html.div([
-                        @html.strong(import_.model_id),
-                        @html.span(
-                          class="mono secondary",
-                          "\{import_.revision} · \{import_.import_id}",
-                        ),
-                      ]),
-                      @html.span(
-                        class="status status-neutral",
-                        model_import_label(state.locale, import_.state),
-                      ),
-                    ]),
-                    @html.div(class="model-source-facts", [
-                      @html.span(model_source_size(import_.bytes_total)),
-                      @html.span(
-                        if import_.license == "" {
-                          localized(
-                            state.locale,
-                            "License unspecified",
-                            "未声明许可证",
-                          )
-                        } else {
-                          import_.license
-                        },
-                      ),
-                      @html.span(
-                        model_import_transport_label(state.locale, import_),
-                      ),
-                    ]),
-                    @html.div(class="model-import-status", [
-                      @html.div([
-                        @html.strong(
-                          localized(
-                            state.locale,
-                            "Import progress",
-                            "导入进度",
-                          ),
-                        ),
-                        @html.span(
-                          class="secondary mono",
-                          "\{model_import_progress(import_)}% · \{import_.files_completed}/\{import_.files_total}",
-                        ),
-                      ]),
-                      @html.div(class="model-import-track", [
-                        @html.span(
-                          class="model-import-fill",
-                          style=["width: \{model_import_progress(import_)}%"],
-                          "",
-                        ),
-                      ]),
-                      if import_.state == Downloading ||
-                        import_.state == Queued ||
-                        import_.state == Verifying {
-                        @html.button(
-                          type_="button",
-                          class="secondary-button danger-button",
-                          disabled=import_.cancel_requested || state.loading,
-                          on_click=command(
-                            emit,
-                            CancelModelImport(import_.import_id),
-                          ),
-                          if import_.cancel_requested {
-                            localized(
-                              state.locale,
-                              "Cancelling…",
-                              "正在取消…",
-                            )
-                          } else {
-                            localized(state.locale, "Cancel", "取消")
-                          },
-                        )
-                      } else if import_.state == Verified {
-                        verified_import_gate(state, import_, emit)
-                      } else {
-                        @html.div(class="model-import-recovery", [
                           @html.span(
-                            class="danger-copy",
-                            if import_.error_code == "" {
-                              model_import_label(state.locale, import_.state)
-                            } else {
-                              import_.error_code
-                            },
+                            class="secondary mono",
+                            "\{model_import_progress(value)}% · \{model_source_size(value.bytes_completed)} / \{model_source_size(value.bytes_total)} · \{value.files_completed}/\{value.files_total}",
                           ),
+                        ]),
+                        @html.div(class="model-import-track", [
+                          @html.span(
+                            class="model-import-fill",
+                            style=["width: \{model_import_progress(value)}%"],
+                            "",
+                          ),
+                        ]),
+                        if value.state == Downloading || value.state == Queued {
                           @html.button(
                             type_="button",
-                            class="secondary-button",
-                            disabled=state.loading,
+                            class="secondary-button danger-button",
+                            disabled=value.cancel_requested || state.loading,
                             on_click=command(
                               emit,
-                              RetryModelImport(import_.import_id),
+                              CancelModelImport(value.import_id),
                             ),
-                            localized(state.locale, "Retry", "重试"),
+                            if value.cancel_requested {
+                              localized(
+                                state.locale,
+                                "Cancelling…",
+                                "正在取消…",
+                              )
+                            } else {
+                              localized(state.locale, "Cancel", "取消")
+                            },
+                          )
+                        } else if value.state == Verifying {
+                          @html.span(
+                            class="secondary",
+                            localized(
+                              state.locale,
+                              "Verifying file integrity…",
+                              "正在校验文件完整性…",
+                            ),
+                          )
+                        } else if value.state == Verified {
+                          verified_import_gate(state, value, emit)
+                        } else {
+                          @html.div(class="model-import-recovery", [
+                            @html.span(class="danger-copy", value.error_code),
+                            @html.button(
+                              type_="button",
+                              class="secondary-button",
+                              disabled=state.loading,
+                              on_click=command(
+                                emit,
+                                RetryModelImport(value.import_id),
+                              ),
+                              localized(state.locale, "Retry", "重试"),
+                            ),
+                          ])
+                        },
+                      ])
+                    None =>
+                      @html.button(
+                        type_="button",
+                        class="primary-button",
+                        disabled=candidate.private ||
+                          candidate.gated ||
+                          state.loading,
+                        on_click=command(
+                          emit,
+                          DownloadModelSource(candidate.id),
+                        ),
+                        localized(state.locale, "Download", "下载"),
+                      )
+                  },
+                ])
+              }
+            ],
+          )
+        },
+        if detached_imports.length() == 0 {
+          @html.nothing
+        } else {
+          @html.section(
+            class="detached-imports",
+            attrs=@html.Attrs::build().aria_labelledby("recent-imports-title"),
+            [
+              @html.div(class="detached-imports-heading", [
+                @html.h4(
+                  id="recent-imports-title",
+                  localized(
+                    state.locale,
+                    "Imports awaiting a next action",
+                    "等待后续操作的导入",
+                  ),
+                ),
+                @html.span(
+                  class="secondary",
+                  localized(
+                    state.locale,
+                    "Visible after refresh or sign-in without repeating a catalog search.",
+                    "刷新或重新登录后无需再次搜索模型库即可查看。",
+                  ),
+                ),
+              ]),
+              @html.div(
+                class="detached-import-list",
+                [
+                  for import_ in detached_imports => {
+                    @html.article(class="detached-import-row", [
+                      @html.div(class="model-source-card-heading", [
+                        @html.div([
+                          @html.strong(import_.model_id),
+                          @html.span(
+                            class="mono secondary",
+                            "\{import_.revision} · \{import_.import_id}",
                           ),
-                        ])
-                      },
-                    ]),
-                  ])
-                }
-              ],
-            ),
-          ],
-        )
-      },
-    ]),
+                        ]),
+                        @html.span(
+                          class="status status-neutral",
+                          model_import_label(state.locale, import_.state),
+                        ),
+                      ]),
+                      @html.div(class="model-source-facts", [
+                        @html.span(model_source_size(import_.bytes_total)),
+                        @html.span(
+                          if import_.license == "" {
+                            localized(
+                              state.locale,
+                              "License unspecified",
+                              "未声明许可证",
+                            )
+                          } else {
+                            import_.license
+                          },
+                        ),
+                        @html.span(
+                          model_import_transport_label(state.locale, import_),
+                        ),
+                      ]),
+                      @html.div(class="model-import-status", [
+                        @html.div([
+                          @html.strong(
+                            localized(
+                              state.locale,
+                              "Import progress",
+                              "导入进度",
+                            ),
+                          ),
+                          @html.span(
+                            class="secondary mono",
+                            "\{model_import_progress(import_)}% · \{model_source_size(import_.bytes_completed)} / \{model_source_size(import_.bytes_total)} · \{import_.files_completed}/\{import_.files_total}",
+                          ),
+                        ]),
+                        @html.div(class="model-import-track", [
+                          @html.span(
+                            class="model-import-fill",
+                            style=["width: \{model_import_progress(import_)}%"],
+                            "",
+                          ),
+                        ]),
+                        if import_.state == Downloading ||
+                          import_.state == Queued ||
+                          import_.state == Verifying {
+                          @html.button(
+                            type_="button",
+                            class="secondary-button danger-button",
+                            disabled=import_.cancel_requested || state.loading,
+                            on_click=command(
+                              emit,
+                              CancelModelImport(import_.import_id),
+                            ),
+                            if import_.cancel_requested {
+                              localized(
+                                state.locale,
+                                "Cancelling…",
+                                "正在取消…",
+                              )
+                            } else {
+                              localized(state.locale, "Cancel", "取消")
+                            },
+                          )
+                        } else if import_.state == Verified {
+                          verified_import_gate(state, import_, emit)
+                        } else {
+                          @html.div(class="model-import-recovery", [
+                            @html.span(
+                              class="danger-copy",
+                              if import_.error_code == "" {
+                                model_import_label(state.locale, import_.state)
+                              } else {
+                                import_.error_code
+                              },
+                            ),
+                            @html.button(
+                              type_="button",
+                              class="secondary-button",
+                              disabled=state.loading,
+                              on_click=command(
+                                emit,
+                                RetryModelImport(import_.import_id),
+                              ),
+                              localized(state.locale, "Retry", "重试"),
+                            ),
+                          ])
+                        },
+                      ]),
+                    ])
+                  }
+                ],
+              ),
+            ],
+          )
+        },
+      ],
+    ),
     if state.models.length() == 0 {
       @html.div(class="empty-state empty-state-action", [
         @html.strong(
@@ -7719,44 +7722,13 @@ fn models_view(
         @html.p(
           localized(
             state.locale,
-            "Search ModelScope above and start a download. Licensed, verified and explicitly approved models can appear in the user catalog; evaluation is optional evidence.",
-            "请在上方搜索魔搭并开始下载。接受许可、验证制品并明确批准后，模型即可进入用户目录；评测是可选证据。",
+            "Open Import model to search ModelScope or register an existing model.",
+            "展开「导入模型」，搜索魔搭或登记已有模型。",
           ),
         ),
       ])
     } else {
-      @html.div(class="table-scroll", [
-        @html.table(class="resource-table", [
-          @html.caption(
-            class="sr-only",
-            localized(
-              state.locale,
-              "Registered model artifacts",
-              "已注册模型制品",
-            ),
-          ),
-          @html.thead(
-            @html.tr([
-              @html.th(scope=Col, localized(state.locale, "Model", "模型")),
-              @html.th(
-                scope=Col,
-                localized(state.locale, "Lifecycle", "生命周期"),
-              ),
-              @html.th(scope=Col, localized(state.locale, "Evidence", "证据")),
-              @html.th(
-                scope=Col,
-                localized(state.locale, "Compatibility", "兼容性"),
-              ),
-              @html.th(
-                scope=Col,
-                localized(state.locale, "Serving alias", "服务模型别名"),
-              ),
-              @html.th(scope=Col, localized(state.locale, "Action", "操作")),
-            ]),
-          ),
-          @html.tbody(model_artifact_rows(state, emit, registered_models)),
-        ]),
-      ])
+      model_family_groups(state, emit)
     },
   ])
 }
@@ -7765,6 +7737,46 @@ fn models_view(
 /// Registry table body: one heading naming the model, then one row per
 /// registered artifact of that model. Heading a model's artifacts keeps the
 /// table readable when one model carries several qualification profiles.
+
+///|
+fn model_registry_group(
+  state : ConsoleState,
+  emit : @rabbita.Emit[ConsoleMessage]?,
+  label : String,
+  models : Array[ModelRow],
+  expanded : Bool,
+) -> @rabbita.Html {
+  if models.is_empty() {
+    return @html.nothing
+  }
+  let registered_models = group_models_by_model_id(models)
+  @html.details(class="model-registry-group", open=expanded, [
+    @html.summary(label + " (" + registered_models.length().to_string() + ")"),
+    @html.div(class="table-scroll", [
+      @html.table(class="resource-table", [
+        @html.caption(
+          class="sr-only",
+          localized(
+            state.locale,
+            "Registered model artifacts",
+            "已注册模型制品",
+          ),
+        ),
+        @html.thead(
+          @html.tr([
+            @html.th(scope=Col, localized(state.locale, "Variant", "变体")),
+            @html.th(scope=Col, localized(state.locale, "Status", "状态")),
+            @html.th(scope=Col, localized(state.locale, "Details", "详情")),
+            @html.th(scope=Col, localized(state.locale, "Action", "操作")),
+          ]),
+        ),
+        @html.tbody(model_artifact_rows(state, emit, registered_models)),
+      ]),
+    ]),
+  ])
+}
+
+///|
 fn model_artifact_rows(
   state : ConsoleState,
   emit : @rabbita.Emit[ConsoleMessage]?,
@@ -7773,23 +7785,25 @@ fn model_artifact_rows(
   let body : Array[@rabbita.Html] = []
   for group in groups {
     let (model_id, artifacts) = group
-    body.push(
-      @html.tr(class="models-group-heading", [
-        @html.th(scope=RowGroup, colspan=6, [
-          @html.strong(model_id),
-          @html.span(
-            class="secondary",
-            localized(
-              state.locale,
-              "\{artifacts.length()} registered artifacts",
-              "\{artifacts.length()} 个已注册制品",
+    if artifacts.length() > 1 {
+      body.push(
+        @html.tr(class="models-group-heading", [
+          @html.th(scope=RowGroup, colspan=4, [
+            @html.strong(model_id),
+            @html.span(
+              class="secondary",
+              localized(
+                state.locale,
+                "\{artifacts.length()} registered artifacts",
+                "\{artifacts.length()} 个已注册制品",
+              ),
             ),
-          ),
+          ]),
         ]),
-      ]),
-    )
+      )
+    }
     for model in artifacts {
-      for row in model_item(state, model, emit) {
+      for row in model_item(state, model, emit, artifacts.length() == 1) {
         body.push(row)
       }
     }
@@ -7802,34 +7816,51 @@ fn model_item(
   state : ConsoleState,
   model : ModelRow,
   emit : @rabbita.Emit[ConsoleMessage]?,
+  show_model : Bool,
 ) -> Array[@rabbita.Html] {
   let locale = state.locale
   let rows : Array[@rabbita.Html] = [
     @html.tr([
       @html.td([
-        @html.strong(model.model_id),
-        @html.span(class="mono secondary", model.version),
+        @html.strong(
+          class="mono",
+          if show_model {
+            model.model_id
+          } else {
+            model.version
+          },
+        ),
       ]),
       @html.td(model_state_badge(locale, model.state)),
       @html.td([
-        @html.span(
-          localized(
-            locale,
-            "License · \{license_evidence_label(locale, model.license_status)}",
-            "许可证 · \{license_evidence_label(locale, model.license_status)}",
+        @html.details([
+          @html.summary(localized(locale, "Details", "详情")),
+          @html.p(class="mono", model.version),
+          @html.p(
+            localized(
+              locale,
+              "API model name: \{model.alias_name}",
+              "API 模型名：\{model.alias_name}",
+            ),
           ),
-        ),
-        @html.span(
-          class="secondary",
-          localized(
-            locale,
-            "Optional evaluation · \{evaluation_evidence_label(locale, model.evaluation_status)}",
-            "可选评测 · \{evaluation_evidence_label(locale, model.evaluation_status)}",
+          @html.span(
+            localized(
+              locale,
+              "License · \{license_evidence_label(locale, model.license_status)}",
+              "许可证 · \{license_evidence_label(locale, model.license_status)}",
+            ),
           ),
-        ),
+          @html.span(
+            class="secondary",
+            localized(
+              locale,
+              "Optional evaluation · \{evaluation_evidence_label(locale, model.evaluation_status)}",
+              "可选评测 · \{evaluation_evidence_label(locale, model.evaluation_status)}",
+            ),
+          ),
+          @html.p(model.compatibility),
+        ]),
       ]),
-      @html.td(model.compatibility),
-      @html.td(class="mono", model.alias_name),
       @html.td(model_candidate_actions(state, model, emit)),
     ]),
   ]
@@ -7855,51 +7886,78 @@ fn model_candidate_actions(
 ) -> @rabbita.Html {
   let locale = state.locale
   let offered = state.operator_authenticated && !state.loading
-  @html.div(class="row-actions model-candidate-actions", [
-    @html.button(
-      type_="button",
-      class="secondary-button",
-      disabled=!offered,
-      on_click=command(
-        emit,
-        BeginLicenseAcceptance(model.model_id, model.version),
-      ),
+  let primary = if model.state == Revoked || model.state == Deprecated {
+    -1
+  } else if model.license_status.to_lower() != "accepted" {
+    0
+  } else if model.state == Candidate {
+    1
+  } else if model.state == Verified || model.state == Evaluated {
+    2
+  } else if model.alias_name == "—" {
+    3
+  } else {
+    -1
+  }
+  let actions = [
+    (
       localized(locale, "Accept licence…", "接受许可证…"),
+      BeginLicenseAcceptance(model.model_id, model.version),
     ),
-    @html.button(
-      type_="button",
-      class="secondary-button",
-      disabled=!offered,
-      on_click=command(emit, VerifyModelArtifact(model.model_id, model.version)),
+    (
       localized(locale, "Verify artifact", "验证制品"),
+      VerifyModelArtifact(model.model_id, model.version),
     ),
-    @html.button(
-      type_="button",
-      class="secondary-button",
-      disabled=!offered,
-      on_click=command(emit, ApproveModelVersion(model.model_id, model.version)),
+    (
       localized(locale, "Approve", "批准"),
+      ApproveModelVersion(model.model_id, model.version),
     ),
+    (
+      localized(locale, "Promote alias…", "提升别名…"),
+      BeginAliasPromotion(model.model_id, model.version),
+    ),
+  ]
+  let buttons = actions.mapi((index, action) => {
     @html.button(
       type_="button",
-      class="secondary-button",
+      class=if index == primary { "primary-button" } else { "secondary-button" },
       disabled=!offered,
-      on_click=command(emit, BeginAliasPromotion(model.model_id, model.version)),
-      localized(locale, "Promote alias…", "提升别名…"),
-    ),
-    if model.alias_name == "—" {
-      @html.span(
-        class="secondary",
-        localized(locale, "No alias", "无模型别名"),
-      )
+      on_click=command(emit, action.1),
+      action.0,
+    )
+  })
+  @html.div(class="row-actions model-candidate-actions", [
+    if primary >= 0 {
+      buttons[primary]
     } else {
-      @html.button(
-        type_="button",
-        class="danger-secondary",
-        on_click=command(emit, BeginRollback(model.alias_name)),
-        localized(locale, "Roll back…", "回滚…"),
-      )
+      @html.nothing
     },
+    @html.details(class="model-more-actions", [
+      @html.summary(localized(locale, "More", "更多")),
+      @html.div(
+        class="row-actions",
+        [
+          ..buttons.mapi((index, button) => {
+            if index != primary {
+              button
+            } else {
+              @html.nothing
+            }
+          }),
+          if model.alias_name != "—" {
+            @html.button(
+              type_="button",
+              class="danger-secondary",
+              disabled=!offered,
+              on_click=command(emit, BeginRollback(model.alias_name)),
+              localized(locale, "Roll back…", "回滚…"),
+            )
+          } else {
+            @html.nothing
+          },
+        ],
+      ),
+    ]),
   ])
 }
 
@@ -7922,7 +7980,7 @@ fn model_license_form_row(
     )
   let evidence_missing = draft.evidence_ref.trim() == ""
   @html.tr(class="model-onboarding-form-row", [
-    @html.td(colspan=6, [
+    @html.td(colspan=4, [
       @html.form(
         class="model-onboarding-form",
         on_submit=command(emit, SubmitModelLicense),
@@ -8060,7 +8118,7 @@ fn model_alias_form_row(
       maximum_length=128,
     )
   @html.tr(class="model-onboarding-form-row", [
-    @html.td(colspan=6, [
+    @html.td(colspan=4, [
       @html.form(
         class="model-onboarding-form",
         on_submit=command(emit, SubmitAliasPromotion),
@@ -8376,8 +8434,9 @@ fn template_field_group(
       draft.capture_for_evaluation &&
       value.trim() == ""
     )
+  let show_help = invalid || (!spec.optional && value.trim() == "")
   let attrs = @html.Attrs::build()
-    .aria_describedby("\{id}-help")
+    .aria_describedby(if show_help { "\{id}-help" } else { "" })
     .aria_invalid(if invalid { "true" } else { "false" })
   let on_input = text_command(emit, text => {
     TemplateTextChanged(spec.field, text)
@@ -8397,11 +8456,15 @@ fn template_field_group(
       attrs~,
       on_input~,
     ),
-    @html.p(
-      id="\{id}-help",
-      class=if invalid { "field-help field-error" } else { "field-help" },
-      localized(state.locale, spec.help_en, spec.help_zh),
-    ),
+    if show_help {
+      @html.p(
+        id="\{id}-help",
+        class=if invalid { "field-help field-error" } else { "field-help" },
+        localized(state.locale, spec.help_en, spec.help_zh),
+      )
+    } else {
+      @html.nothing
+    },
   ])
 }
 
@@ -8570,7 +8633,27 @@ fn template_registration_form(
         )
       _ => ()
     }
-    sections.push(@html.fieldset(class="template-registration-section", body))
+    if section == TemplateIdentity {
+      sections.push(@html.fieldset(class="template-registration-section", body))
+    } else {
+      let needs_input = template_field_specs().any(spec => {
+        spec.section == section &&
+        (
+          !template_field_acceptable(draft, spec) ||
+          (
+            spec.field == TemplateConsentReceipt &&
+            draft.capture_for_evaluation &&
+            template_field_value(draft, spec.field).trim() == ""
+          )
+        )
+      })
+      sections.push(
+        @html.details(class="template-settings", open=needs_input || !valid, [
+          @html.summary(template_section_legend(locale, section)),
+          @html.fieldset(class="template-registration-section", body),
+        ]),
+      )
+    }
   }
   // The pickers come first because both halves of the template are already in
   // state: a model row carries the artifact the registry attested, and the
@@ -8680,7 +8763,8 @@ fn catalog_view(
     )
   }
   let service_name_present = state.quick_deployment_id.trim() != ""
-  let service_name_valid = quick_service_name_valid(state.quick_deployment_id)
+  let service_name_valid = !service_name_present ||
+    quick_service_name_valid(state.quick_deployment_id)
   @html.section(attrs=@html.Attrs::build().aria_labelledby("catalog-title"), [
     @html.div(class="section-heading", [
       @html.div([
@@ -8710,35 +8794,56 @@ fn catalog_view(
           ),
         ]),
       ]),
-      @html.ol(class="deployment-steps", [
-        @html.li([
-          @html.span("1"),
-          @html.strong(
-            localized(
-              state.locale,
-              "Select approved template",
-              "选择已批准模板",
+      @html.details(class="deployment-process", [
+        @html.summary(
+          localized(
+            state.locale,
+            "What happens after deployment",
+            "部署流程",
+          ),
+        ),
+        @html.ol(class="deployment-steps", [
+          @html.li([
+            @html.span("1"),
+            @html.strong(
+              localized(
+                state.locale,
+                "Select approved template",
+                "选择已批准模板",
+              ),
             ),
-          ),
-        ]),
-        @html.li([
-          @html.span("2"),
-          @html.strong(
-            localized(state.locale, "Name the service", "命名服务"),
-          ),
-        ]),
-        @html.li([
-          @html.span("3"),
-          @html.strong(
-            localized(state.locale, "Preflight and deploy", "预检并部署"),
-          ),
+          ]),
+          @html.li([
+            @html.span("2"),
+            @html.strong(
+              localized(state.locale, "Name the service", "命名服务"),
+            ),
+          ]),
+          @html.li([
+            @html.span("3"),
+            @html.strong(
+              localized(state.locale, "Preflight and deploy", "预检并部署"),
+            ),
+          ]),
         ]),
       ]),
+      @html.p(
+        class="secondary",
+        localized(
+          state.locale,
+          "Placement: \{state.quick_topology.label(state.locale)}. Preflight selects eligible machines before starting the service.",
+          "部署方式：\{state.quick_topology.label(state.locale)}。系统预检后选择符合条件的机器并启动服务。",
+        ),
+      ),
       @html.div(class="operation-form", [
         @html.div(class="field-group", [
           @html.label(
             for_="quick-deployment-id",
-            localized(state.locale, "Service name", "服务名称"),
+            localized(
+              state.locale,
+              "Service name (optional)",
+              "服务名称（可选）",
+            ),
           ),
           @html.input(
             input_type=Text,
@@ -8751,7 +8856,11 @@ fn catalog_view(
             } else {
               @html.Attrs::build().aria_invalid("false")
             },
-            placeholder="text-service",
+            placeholder=localized(
+              state.locale,
+              "Generated automatically when empty",
+              "留空自动生成",
+            ),
             value=state.quick_deployment_id,
             on_input=text_command(emit, value => QuickDeploymentIdChanged(value)),
           ),
@@ -9084,88 +9193,45 @@ fn deployments_view(
         @html.div([
           @html.h2(
             id="deployments-title",
-            localized(state.locale, "Deployments", "部署"),
+            localized(state.locale, "Model services", "模型服务"),
           ),
         ]),
         @html.span(
           class="resource-count",
           localized(
             state.locale,
-            "\{state.deployments.length()} assignments",
-            "\{state.deployments.length()} 项分配",
+            "\{state.deployments.length()} services",
+            "\{state.deployments.length()} 项服务",
           ),
+        ),
+        @html.button(
+          type_="button",
+          class="primary-button",
+          on_click=command(emit, Navigate(Catalog)),
+          localized(state.locale, "Deploy model", "部署模型"),
         ),
       ]),
       if state.deployments.length() == 0 {
         @html.nothing
       } else {
-        deployment_placement_graph(state)
+        @controls.advanced(
+          localized(state.locale, "Placement details", "调度详情"),
+          [deployment_placement_graph(state)],
+        )
       },
       if state.deployments.length() == 0 {
         @html.div(class="empty-state empty-state-action", [
           @html.strong(
-            localized(
-              state.locale,
-              "No deployments are currently assigned",
-              "当前没有已分配的部署",
-            ),
-          ),
-          @html.p(
-            localized(
-              state.locale,
-              "Choose an approved model-service template. Preflight will select exactly one eligible machine.",
-              "请选择已批准的模型服务模板。预检将只选择一台符合条件的机器。",
-            ),
-          ),
-          @html.button(
-            type_="button",
-            class="primary-button",
-            on_click=command(emit, Navigate(Catalog)),
-            localized(
-              state.locale,
-              "Open one-click deployment",
-              "打开一键部署",
-            ),
+            localized(state.locale, "No model services", "暂无模型服务"),
           ),
         ])
       } else {
-        @html.div(class="table-scroll", [
-          @html.table(class="resource-table", [
-            @html.caption(
-              class="sr-only",
-              localized(state.locale, "Model deployments", "模型部署"),
-            ),
-            @html.thead(
-              @html.tr([
-                @html.th(
-                  scope=Col,
-                  localized(state.locale, "Deployment", "部署"),
-                ),
-                @html.th(
-                  scope=Col,
-                  localized(state.locale, "Desired", "期望状态"),
-                ),
-                @html.th(
-                  scope=Col,
-                  localized(state.locale, "Observed", "实际状态"),
-                ),
-                @html.th(
-                  scope=Col,
-                  localized(state.locale, "Placement rationale", "调度依据"),
-                ),
-                @html.th(scope=Col, localized(state.locale, "Action", "操作")),
-              ]),
-            ),
-            @html.tbody(
-              [
-                for deployment in state.deployments => {
-                  deployment_item(state.locale, deployment, emit)
-                }
-              ],
-            ),
-          ]),
-        ])
+        deployment_family_groups(state, emit)
       },
+      @controls.advanced(
+        localized(state.locale, "Runtime settings", "运行设置"),
+        [model_pool_panel(state, emit)],
+      ),
     ],
   )
 }
@@ -9179,17 +9245,52 @@ fn deployment_item(
   @html.tr([
     @html.td([
       @html.strong(deployment.deployment_id),
-      @html.span(class="mono secondary", deployment.assignment_id),
+      @html.details([
+        @html.summary(localized(locale, "Details", "详情")),
+        @html.p(class="mono", deployment.assignment_id),
+        @html.p(deployment.placement_reason),
+        @html.p(localized(locale, "Desired state", "期望状态")),
+        deployment_state_badge(locale, deployment.desired),
+        if deployment.resource_owner != "" {
+          @html.p(deployment.resource_owner)
+        } else {
+          @html.nothing
+        },
+      ]),
     ]),
-    @html.td(deployment_state_badge(locale, deployment.desired)),
     @html.td(deployment_state_badge(locale, deployment.observed)),
-    @html.td(deployment.placement_reason),
+    @html.td([
+      @html.strong(deployment.node_id),
+      @html.span(
+        class="secondary",
+        if deployment.resource_owner != "" {
+          localized(locale, "Company reservation", "公司预留")
+        } else {
+          localized(locale, "Platform managed", "平台受管")
+        },
+      ),
+    ]),
     @html.td(
       @html.button(
         type_="button",
         class="danger-secondary",
-        on_click=command(emit, BeginStopDeployment(deployment.assignment_id)),
-        localized(locale, "Stop…", "停止…"),
+        on_click=command(
+          emit,
+          if deployment.assignment_id.has_prefix("service:") &&
+            deployment.observed == Stopped {
+            ModelPoolAction(
+              "service-start/" + deployment.assignment_id[8:].to_owned(),
+            )
+          } else {
+            BeginStopDeployment(deployment.assignment_id)
+          },
+        ),
+        if deployment.assignment_id.has_prefix("service:") &&
+          deployment.observed == Stopped {
+          localized(locale, "Start", "启动")
+        } else {
+          localized(locale, "Stop…", "停止…")
+        },
       ),
     ),
   ])
@@ -9499,7 +9600,7 @@ pub fn filter_alerts(
 
 ///|
 /// Open alerts in a set that the operator is looking at.
-pub fn open_alert_count(rows : Array[NotificationRow]) -> Int {
+pub fn open_alert_count(rows : Array[NotificationRow]) -> Int32 {
   rows.count_if(row => row.lifecycle != Resolved)
 }
 
@@ -9717,7 +9818,13 @@ fn alerts_view(
         ),
       ),
     ]),
-    alert_impact_graph(state),
+    if visible.is_empty() {
+      @html.nothing
+    } else {
+      @controls.advanced(localized(state.locale, "Impact map", "影响图"), [
+        alert_impact_graph({ ..state, notifications: visible, }),
+      ])
+    },
     announcement_form(state, emit),
     if visible.length() == 0 {
       @html.p(
@@ -10883,12 +10990,32 @@ fn agreements_view(
             for_="portal-node-id",
             localized(state.locale, "Assigned node", "分配节点"),
           ),
-          @html.input(
+          @html.select(
             id="portal-node-id",
-            value=state.portal_node_id,
-            maxlength=128,
-            placeholder="dgx-spark-01",
-            on_input=text_command(emit, value => PortalNodeChanged(value)),
+            on_change=text_command(emit, value => PortalNodeChanged(value)),
+            [
+              @html.option(
+                value="",
+                selected=state.portal_node_id == "",
+                localized(
+                  state.locale,
+                  "Choose an enrolled machine",
+                  "选择已纳管机器",
+                ),
+              ),
+              ..[
+                for node in state.nodes => {
+                  @html.option(
+                    value=node.node_id,
+                    selected=state.portal_node_id == node.node_id,
+                    disabled=node.state != Active ||
+                      node.lease_holder != "" ||
+                      node.active_assignment != "",
+                    "\{node.node_id} · \{node.architecture} · \{node.free_memory_mib} MiB",
+                  )
+                }
+              ],
+            ],
           ),
         ]),
       ]),
@@ -10950,7 +11077,12 @@ fn agreements_view(
                             type_="button",
                             class="action-button primary",
                             disabled=state.loading ||
-                              state.portal_node_id.trim() == "",
+                              !state.nodes.any(node => {
+                                node.node_id == state.portal_node_id &&
+                                node.state == Active &&
+                                node.lease_holder == "" &&
+                                node.active_assignment == ""
+                              }),
                             on_click=command(
                               emit,
                               ApproveEnterpriseLease(
@@ -11130,7 +11262,19 @@ fn audit_view(state : ConsoleState) -> @rabbita.Html {
     if state.audit.length() == 0 {
       @html.nothing
     } else {
-      audit_decision_graph(state)
+      @controls.advanced(
+        localized(
+          state.locale,
+          "Decision paths · latest 20",
+          "决策链路 · 最近 20 条",
+        ),
+        [
+          audit_decision_graph({
+            ..state,
+            audit: state.audit[(state.audit.length() - 20).max(0):].to_owned(),
+          }),
+        ],
+      )
     },
     if state.audit.length() == 0 {
       @html.p(
@@ -11260,10 +11404,17 @@ fn confirmation_copy(
         locale, "Draining prevents new assignments and moves eligible subsequent work.",
         "排空会阻止新的分配，并将后续符合条件的工作迁移出去。",
       )
-    StopDeployment(_) =>
-      localized(
-        locale, "Stopping ends the selected deployment assignment.", "停止操作会结束所选部署分配。",
-      )
+    StopDeployment(id) =>
+      if id.has_prefix("service:") {
+        localized(
+          locale, "Stopping interrupts inference for this service. Model and user files are retained.",
+          "停止会中断此服务的推理，模型文件和用户文件保留。",
+        )
+      } else {
+        localized(
+          locale, "Stopping ends the selected deployment assignment.", "停止操作会结束所选部署分配。",
+        )
+      }
     RollbackAlias(_) =>
       localized(
         locale, "Rolling back changes the model version selected by this alias.",
@@ -11728,6 +11879,12 @@ fn console_styles() -> String {
     #|.resource-table th { height: 2.4rem; background: var(--surface-subtle); color: var(--muted); font-size: .66rem; font-weight: 760; letter-spacing: .07em; text-transform: uppercase; }
     #|.resource-table tbody tr:last-child td { border-bottom: 0; }
     #|.resource-table tbody tr:hover { background: var(--surface-hover); }
+    #|.model-service-table { table-layout: fixed; }
+    #|.model-service-table th:nth-child(1) { width: 42%; }
+    #|.model-service-table th:nth-child(2) { width: 12%; }
+    #|.model-service-table th:nth-child(3) { width: 34%; }
+    #|.model-service-table th:nth-child(4) { width: 12%; }
+    #|.model-service-table td { overflow-wrap: anywhere; }
     #|.resource-table td > span, .resource-table td > strong { display: block; }
     #|.row-actions { white-space: nowrap; }
     #|.row-actions button { min-width: 5rem; margin-right: .35rem; }
@@ -11761,6 +11918,10 @@ fn console_styles() -> String {
     #|.access-package-submit { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: .55rem; margin-top: .85rem; }
     #|.verification-toggle.selected { border-color: var(--success); background: var(--success-soft); color: var(--success); }
     #|.access-package-list { display: grid; gap: .75rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+    #|.model-pool-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: .75rem; margin: 1rem 0; }
+    #|.model-pool-grid h3, .model-pool-grid h4 { overflow-wrap: anywhere; margin-top: 0; }
+    #|.model-pool-grid p { margin: .4rem 0; font-variant-numeric: tabular-nums; }
+    #|.model-benchmark-panel { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--line); }
     #|.access-package-card { padding: .9rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface); }
     #|.access-package-card-heading, .access-package-next { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
     #|.access-package-card-heading > div > span { display: block; }
@@ -12208,43 +12369,55 @@ fn console_view(
       class="skip-link",
       localized(state.locale, "Skip to content", "跳转到主要内容"),
     ),
-    @html.aside(class="sidebar", [
-      @html.div(
-        class="brand",
-        attrs=@html.Attrs::build().aria_label(
-          localized(
-            state.locale,
-            "能源谷“创未来”生态街区 Cluster Operations",
-            "能源谷“创未来”生态街区 集群运维",
+    @html.aside(
+      class=if state.navigation_open { "sidebar is-open" } else { "sidebar" },
+      [
+        @html.div(
+          class="brand",
+          attrs=@html.Attrs::build().aria_label(
+            localized(
+              state.locale,
+              "能源谷“创未来”生态街区 Cluster Operations",
+              "能源谷“创未来”生态街区 集群运维",
+            ),
           ),
+          [
+            @html.span(
+              class="brand-mark",
+              style=[
+                "overflow: hidden", "flex-shrink: 0", "width: 3.5rem", "height: 3.5rem",
+              ],
+              [
+                @html.img(src="/mana/assets/platform-logo-light.png", alt="", style=[
+                  "display: block", "width: 100%", "height: 100%", "object-fit: contain",
+                  "transform: scale(1.22)", "transform-origin: center",
+                ]),
+              ],
+            ),
+            @html.div(class="brand-copy", [
+              @html.span(
+                class="brand-name",
+                "能源谷“创未来”生态街区",
+              ),
+              @html.span(
+                class="brand-product",
+                localized(state.locale, "Cluster operations", "集群运维"),
+              ),
+            ]),
+          ],
         ),
-        [
-          @html.span(
-            class="brand-mark",
-            style=[
-              "overflow: hidden", "flex-shrink: 0", "width: 3.5rem", "height: 3.5rem",
-            ],
-            [
-              @html.img(src="/mana/assets/platform-logo-light.png", alt="", style=[
-                "display: block", "width: 100%", "height: 100%", "object-fit: contain",
-                "transform: scale(1.22)", "transform-origin: center",
-              ]),
-            ],
+        @html.button(
+          type_="button",
+          class="secondary-button mobile-nav-toggle",
+          attrs=@html.Attrs::build().aria_expanded(
+            state.navigation_open.to_string(),
           ),
-          @html.div(class="brand-copy", [
-            @html.span(
-              class="brand-name",
-              "能源谷“创未来”生态街区",
-            ),
-            @html.span(
-              class="brand-product",
-              localized(state.locale, "Cluster operations", "集群运维"),
-            ),
-          ]),
-        ],
-      ),
-      navigation(state.locale, state.route, emit),
-    ]),
+          on_click=command(emit, ToggleNavigation),
+          localized(state.locale, "Menu", "菜单"),
+        ),
+        navigation(state.locale, state.route, emit),
+      ],
+    ),
     @html.div(class="workspace", [
       @html.header(class="workspace-topbar", [
         @html.div(class="page-heading", [
@@ -12405,9 +12578,9 @@ pub(all) enum PageReadState {
 pub fn interactive_view(
   state : ConsoleState,
   emit : @rabbita.Emit[ConsoleMessage],
-  alerts_window? : AlertsWindow = AllAlerts,
-  now_unix_ms? : Int64 = 0L,
-  page_read_state? : PageReadState = Ready,
+  alerts_window~ : AlertsWindow = AllAlerts,
+  now_unix_ms~ : Int64 = 0L,
+  page_read_state~ : PageReadState = Ready,
 ) -> @rabbita.Html {
   console_view(state, Some(emit), alerts_window, now_unix_ms, page_read_state)
 }

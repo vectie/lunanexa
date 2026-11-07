@@ -80,7 +80,7 @@ fn execution_context_compatible(
 pub async fn JobStore::restore(
   saved : Snapshot,
   persist : async (Snapshot) -> Unit,
-  maximum_jobs? : Int = 10000,
+  maximum_jobs~ : Int32 = 10000,
 ) -> JobStore {
   if saved.schema_version != schema_version ||
     maximum_jobs < 1 ||
@@ -98,9 +98,9 @@ pub async fn JobStore::restore(
   // record during reconciliation. JSON tuple encoding avoids delimiter aliases.
   let incarnations : Map[String, Bool] = Map([])
   for value in terminations {
-    let identity = ([value.node_id, value.evidence.instance_id] : Array[String])
-      .to_json()
-      .stringify()
+    let identity = Json(
+      ([value.node_id, value.evidence.instance_id] : Array[String]),
+    ).stringify()
     if incarnations.contains(identity) {
       raise InvalidSnapshot
     }
@@ -252,8 +252,8 @@ pub async fn JobStore::reserve(
   now : Int64,
   deadline : Int64,
   retain_until : Int64,
-  maximum_active? : Int = 1,
-  maximum_per_hour? : Int = 100,
+  maximum_active~ : Int32 = 1,
+  maximum_per_hour~ : Int32 = 100,
   execution_context? : ExecutionContext,
 ) -> (StoredJob, Bool) {
   if !owner_valid(owner) ||
@@ -484,7 +484,7 @@ pub async fn JobStore::observe(
   id : String,
   owner : Owner,
   state : State,
-  progress : Int?,
+  progress : Int32?,
   now : Int64,
 ) -> StoredJob {
   if ![Queued, Running, Completed, Failed].contains(state) ||

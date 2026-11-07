@@ -73,7 +73,7 @@ async fn ApiService::handle_storage_nodes(
   }
   guard @env.get_env_var("LUNANEXA_STORAGE_MONITOR_PATH") is Some(path) &&
     path != "" else {
-    return json_reply(200, ([] : Array[Json]).to_json())
+    return json_reply(200, Json(([] : Array[Json])))
   }
   let node_id = @env.get_env_var("LUNANEXA_STORAGE_NODE_ID").unwrap_or(
     "management-storage",
@@ -84,12 +84,12 @@ async fn ApiService::handle_storage_nodes(
       {
         "node_id": node_id,
         "state": "healthy",
-        "total_bytes": capacity.total_bytes.to_json(),
-        "used_bytes": (capacity.total_bytes - capacity.free_bytes).to_json(),
-        "available_bytes": capacity.available_bytes.to_json(),
-        "total_inodes": capacity.total_inodes.to_json(),
-        "available_inodes": capacity.available_inodes.to_json(),
-        "sampled_at_ms": sampled_at_ms.to_json(),
+        "total_bytes": Json(capacity.total_bytes),
+        "used_bytes": Json(capacity.total_bytes - capacity.free_bytes),
+        "available_bytes": Json(capacity.available_bytes),
+        "total_inodes": Json(capacity.total_inodes),
+        "available_inodes": Json(capacity.available_inodes),
+        "sampled_at_ms": Json(sampled_at_ms),
       }
     None =>
       {
@@ -100,8 +100,8 @@ async fn ApiService::handle_storage_nodes(
         "available_bytes": Json::null(),
         "total_inodes": Json::null(),
         "available_inodes": Json::null(),
-        "sampled_at_ms": sampled_at_ms.to_json(),
+        "sampled_at_ms": Json(sampled_at_ms),
       }
   }
-  json_reply(200, [row].to_json())
+  json_reply(200, Json([row]))
 }

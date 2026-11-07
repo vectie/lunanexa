@@ -6,8 +6,8 @@ pub(all) struct RecordedMetadata {
   source_ref : String
   workload_ref : String
   output_unit : String
-  memory_total_mib : Int
-  memory_peak_mib : Int
+  memory_total_mib : Int32
+  memory_peak_mib : Int32
 } derive(Eq, ToJson, FromJson)
 
 ///|

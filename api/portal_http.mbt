@@ -88,7 +88,7 @@ priv struct PortalApiKeyIntent {
   scopes : Array[@access.ApiKeyScope]
   allowed_models : Array[String]
   expires_unix_ms : Int64
-  lifetime_days : Int?
+  lifetime_days : Int32?
   maximum_requests : Int64
 } derive(FromJson)
 
@@ -452,26 +452,31 @@ async fn ApiService::handle_enterprise_portal(
       )
       json_reply(
         200,
-        access
-        .views_for_subject(view.membership.tenant_ref, subject_ref)
-        .map(key => {
-          if (private_access &&
-            self.private_model_key_scope(
-              view.membership.tenant_ref,
-              key.allowed_models,
-            )) ||
-            (key.maximum_requests == 0L &&
-            self.shared_trial_text_key_scope(
-              view.membership.organization_id,
-              view.membership.tenant_ref,
-              key.allowed_models,
-            )) {
-            { ..key, maximum_requests: 0L, }
-          } else {
-            key
-          }
-        })
-        .to_json(),
+        Json(
+          access
+          .views_for_subject(view.membership.tenant_ref, subject_ref)
+          .map(key => {
+            if (
+                private_access &&
+                self.private_model_key_scope(
+                  view.membership.tenant_ref,
+                  key.allowed_models,
+                )
+              ) ||
+              (
+                key.maximum_requests == 0L &&
+                self.shared_trial_text_key_scope(
+                  view.membership.organization_id,
+                  view.membership.tenant_ref,
+                  key.allowed_models,
+                )
+              ) {
+              { ..key, maximum_requests: 0L, }
+            } else {
+              key
+            }
+          }),
+        ),
       )
     }
     (Post, "/v1/portal/self/api-keys") => {
@@ -528,11 +533,27 @@ async fn ApiService::handle_enterprise_portal(
         view.membership.tenant_ref,
         intent.allowed_models,
       )
-      let unlimited_requests = (private_access &&
-        self.private_model_key_scope(
-          view.membership.tenant_ref,
-          intent.allowed_models,
-        )) || shared_trial_access
+      let trial = match self.account_store {
+        Some(accounts) => accounts.active_trial_for_subject(subject_ref, now)
+        None => None
+      }
+      let unlimited_personal_trial = trial.map_or(false, value => {
+        value.maximum_requests == 0L &&
+        value.tenant_ref == view.membership.tenant_ref &&
+        value.organization_id == view.membership.organization_id &&
+        value.project_id == intent.project_id &&
+        intent.allowed_models.length() > 0 &&
+        intent.allowed_models.all(model => value.allowed_models.contains(model))
+      })
+      let unlimited_requests = (
+          private_access &&
+          self.private_model_key_scope(
+            view.membership.tenant_ref,
+            intent.allowed_models,
+          )
+        ) ||
+        shared_trial_access ||
+        unlimited_personal_trial
       if shared_trial_access && intent.maximum_requests != 0L {
         return api_error(
           400, "SharedTrialQuotaInvalid", "shared trial API keys must use the organization trial policy",
@@ -545,7 +566,8 @@ async fn ApiService::handle_enterprise_portal(
           false,
         )
       }
-      let contract_active = private_access || shared_trial_access ||
+      let contract_active = private_access ||
+        shared_trial_access ||
         (match self.contract_document_store {
           Some(contract_store) =>
             self.has_effective_rental_authority(
@@ -557,10 +579,6 @@ async fn ApiService::handle_enterprise_portal(
             )
           None => false
         })
-      let trial = match self.account_store {
-        Some(accounts) => accounts.active_trial_for_subject(subject_ref, now)
-        None => None
-      }
       let requested_expires = match (intent.lifetime_days, trial) {
         (Some(_), Some(value)) if !contract_active &&
           value.tenant_ref == view.membership.tenant_ref &&
@@ -576,8 +594,12 @@ async fn ApiService::handle_enterprise_portal(
           value.project_id == intent.project_id &&
           value.api_key_id is None &&
           requested_expires <= value.expires_unix_ms &&
-          intent.maximum_requests > 0L &&
-          intent.maximum_requests <= value.maximum_requests &&
+          (if value.maximum_requests == 0L {
+            intent.maximum_requests == 0L
+          } else {
+            intent.maximum_requests > 0L &&
+            intent.maximum_requests <= value.maximum_requests
+          }) &&
           intent.scopes.all(scope => scope == ModelList || scope == Inference) &&
           intent.allowed_models.length() > 0 &&
           intent.allowed_models.all(model => {
@@ -719,7 +741,7 @@ async fn ApiService::handle_enterprise_portal(
       json_reply(201, {
         "credential": issued.public_view().credential.to_json(),
         "secret": issued.secret,
-        "allowed_models": issued.credential.allowed_models.to_json(),
+        "allowed_models": Json(issued.credential.allowed_models),
         "api_base_url": match self.client_launch_config {
           Some(config) => Json::string(config.public_api_base_url)
           None => Json::null()
@@ -791,7 +813,7 @@ async fn ApiService::handle_enterprise_portal(
       }
       json_reply(200, {
         "key_id": revoked.key_id,
-        "revoked_unix_ms": revoked.revoked_unix_ms.to_json(),
+        "revoked_unix_ms": Json(revoked.revoked_unix_ms),
       })
     }
     (Get, "/v1/portal/self") => {
@@ -910,7 +932,7 @@ async fn ApiService::handle_enterprise_portal(
       guard self.registry is Some(registry) else {
         return json_reply(
           200,
-          ([] : Array[@portal.EnterpriseModelSummary]).to_json(),
+          Json(([] : Array[@portal.EnterpriseModelSummary])),
         )
       }
       let snapshot = registry.snapshot()
@@ -931,7 +953,7 @@ async fn ApiService::handle_enterprise_portal(
           }
         }
       ]
-      json_reply(200, models.to_json())
+      json_reply(200, Json(models))
     }
     (Post, "/v1/portal/signature-requests") => {
       guard decode_signature_request(body) is Some(request) else {

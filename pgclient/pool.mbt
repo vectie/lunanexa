@@ -26,7 +26,7 @@ pub struct PgPool {
   driver : @postgres.Pool
   wakes : Array[@raw_fd.RawFd]
   leases : Array[@async.Mutex]
-  mut next_worker : Int
+  mut next_worker : Int32
   mut closed : Bool
 }
 
@@ -36,14 +36,14 @@ pub struct PgPool {
 /// and session-scoped state such as `pg_try_advisory_lock` require.
 pub struct PgConnection {
   pool : PgPool
-  index : Int
+  index : Int32
   mut released : Bool
 }
 
 ///|
 /// Opens a pool of `workers` connections. Connections are established lazily
 /// by their worker on first use, so this only starts threads and pipes.
-pub async fn PgPool::connect(url : String, workers? : Int = 4) -> PgPool {
+pub async fn PgPool::connect(url : String, workers~ : Int32 = 4) -> PgPool {
   let driver = @postgres.pool_create(url, workers~) catch {
     InvalidParameter(message) => raise InvalidArgument(message)
     ConnectionFailed(message) => raise ConnectionUnavailable(message)
@@ -69,7 +69,7 @@ pub async fn PgPool::connect(url : String, workers? : Int = 4) -> PgPool {
 }
 
 ///|
-pub fn PgPool::worker_count(self : PgPool) -> Int {
+pub fn PgPool::worker_count(self : PgPool) -> Int32 {
   self.wakes.length()
 }
 
@@ -82,7 +82,7 @@ pub fn PgPool::close(self : PgPool) -> Unit {
 }
 
 ///|
-fn PgPool::claim(self : PgPool) -> Int raise PgError {
+fn PgPool::claim(self : PgPool) -> Int32 raise PgError {
   if self.closed {
     raise Closed
   }
@@ -101,11 +101,11 @@ fn PgPool::claim(self : PgPool) -> Int raise PgError {
 pub async fn PgPool::execute(
   self : PgPool,
   sql : String,
-  parameters? : Array[String?] = [],
+  parameters~ : Array[String?] = [],
 ) -> PgResult {
   let count = self.wakes.length()
   let start = self.claim()
-  let mut chosen : Int? = None
+  let mut chosen : Int32? = None
   for attempt in 0..<count {
     let index = (start + attempt) % count
     if self.leases[index].try_acquire() {
@@ -133,7 +133,7 @@ pub async fn PgPool::execute(
 pub async fn PgPool::acquire(self : PgPool) -> PgConnection {
   let count = self.wakes.length()
   let start = self.claim()
-  let mut chosen : Int? = None
+  let mut chosen : Int32? = None
   for attempt in 0..<count {
     let index = (start + attempt) % count
     if self.leases[index].try_acquire() {
@@ -158,7 +158,7 @@ pub async fn PgPool::acquire(self : PgPool) -> PgConnection {
 /// the caller guarantees by holding that worker's lease.
 async fn PgPool::run_on(
   self : PgPool,
-  index : Int,
+  index : Int32,
   sql : String,
   parameters : Array[String?],
 ) -> PgResult {
@@ -190,7 +190,7 @@ async fn PgPool::run_on(
 pub async fn PgConnection::execute(
   self : PgConnection,
   sql : String,
-  parameters? : Array[String?] = [],
+  parameters~ : Array[String?] = [],
 ) -> PgResult {
   if self.released {
     raise Closed
@@ -258,7 +258,7 @@ pub async fn PgPool::with_connection(
 ///|
 /// True when the named worker still holds a live connection. Readiness checks
 /// use this to tell "the database is reachable" from "the pool is up".
-pub fn PgPool::is_connected(self : PgPool, index : Int) -> Bool {
+pub fn PgPool::is_connected(self : PgPool, index : Int32) -> Bool {
   if index < 0 || index >= self.wakes.length() {
     false
   } else {

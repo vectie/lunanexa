@@ -16,7 +16,7 @@ pub fn Provider::new(
   origin : String,
   profile : Profile,
   bearer? : String,
-  timeout_ms? : Int = 30000,
+  timeout_ms~ : Int32 = 30000,
 ) -> Provider raise ProviderError {
   let offset = if origin.has_prefix("https://") {
     8
@@ -49,7 +49,7 @@ pub fn Provider::new(
 }
 
 ///|
-async fn limited(reader : &@io.Reader, limit : Int) -> Bytes {
+async fn limited(reader : &@io.Reader, limit : Int32) -> Bytes {
   let output = Buffer()
   let mut size = 0
   while reader.read_some(max_len=8192) is Some(bytes) {
@@ -81,8 +81,8 @@ async fn Provider::request(
   path : String,
   body : String?,
   binary? : Bytes,
-  content_type? : String = "application/x-www-form-urlencoded",
-) -> (Int, Json) {
+  content_type~ : String = "application/x-www-form-urlencoded",
+) -> (Int32, Json) {
   @async.with_timeout(self.timeout_ms, () => {
     let client = @http.Client(self.origin)
     defer client.close()

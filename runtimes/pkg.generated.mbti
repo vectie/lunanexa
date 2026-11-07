@@ -489,8 +489,10 @@ pub struct OpenAiTextRuntime {
   text_chat_completions : Bool
   served_model_name : String?
   disable_thinking : Bool
+  prefix_cache_isolation : Bool
 }
 pub fn OpenAiTextRuntime::artifact_digest(Self) -> String
+pub fn OpenAiTextRuntime::has_node_endpoint(Self, String) -> Bool
 pub fn OpenAiTextRuntime::image_digest(Self) -> String
 pub async fn OpenAiTextRuntime::invoke(Self, @contracts.WorkloadEnvelope) -> RuntimeInvocationResult
 pub async fn OpenAiTextRuntime::invoke_at(Self, @contracts.WorkloadEnvelope, String) -> RuntimeInvocationResult
@@ -504,6 +506,7 @@ pub fn OpenAiTextRuntime::uses_direct_node_routing(Self) -> Bool
 pub fn OpenAiTextRuntime::with_lunaflux_streaming_responses(Self) -> Self
 pub fn OpenAiTextRuntime::with_node_endpoints(Self, Array[NodeRuntimeEndpoint]) -> Self raise RemoteRuntimeError
 pub fn OpenAiTextRuntime::with_node_endpoints_json(Self, String) -> Self raise
+pub fn OpenAiTextRuntime::with_prefix_cache_isolation(Self) -> Self
 pub fn OpenAiTextRuntime::with_response_budgets(Self, Int, Int) -> Self raise RemoteRuntimeError
 pub fn OpenAiTextRuntime::with_served_model_name(Self, String) -> Self
 pub fn OpenAiTextRuntime::with_text_chat_completions(Self) -> Self

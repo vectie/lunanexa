@@ -13,9 +13,11 @@ import {
   "vectie/lunanexa/commercial/integrations",
   "vectie/lunanexa/commercial/offline",
   "vectie/lunanexa/contracts",
+  "vectie/lunanexa/controller/model_pool",
   "vectie/lunanexa/controller/reservation_host",
   "vectie/lunanexa/database",
   "vectie/lunanexa/deployment/delivery",
+  "vectie/lunanexa/event_trial",
   "vectie/lunanexa/machinecommerce",
   "vectie/lunanexa/media/jobs",
   "vectie/lunanexa/media/provider",
@@ -73,6 +75,10 @@ pub struct ApiService {
   open_trial_allowed_models : Array[String]
   wifi_trial_maximum_requests : Int64
   wifi_trial_allowed_models : Array[String]
+  event_trial_router : @event_trial.Router
+  event_text_routes : Array[ExternalTextRoute]
+  model_pool : @model_pool.Pool?
+  model_benchmark : ModelBenchmark?
   access_store : @access.AccessStore?
   allow_legacy_unbound_access : Bool
   private_cloud_workspace_access : Bool
@@ -121,7 +127,7 @@ pub struct ApiService {
   shared_trial_offerings : Array[SharedTrialOffering]
   external_media_providers : Array[ExternalMediaProvider]
   client_model_policies : Map[String, Array[String]]
-  external_text_control : (async (String) -> String)?
+  runtime_controls : Map[String, async (String) -> String]
   operator_token : String
   retire_bootstrap_operator_token : Bool
   operator_tokens : Map[String, String]
@@ -158,9 +164,10 @@ pub struct ApiService {
   reservation_host : @reservation_host.ReservationHost?
   gpu_container_offering : GpuContainerOffering?
   reservation_node_names : Map[String, String]
-  execution_slots : @semaphore.Semaphore
+  execution_slots : @semaphore.Semaphore?
 }
 pub async fn ApiService::activate_machine_order_settled_payment(Self, String, @machinecommerce.MachinePaymentSettlement, Int64) -> (@machinecommerce.MachineOrder, @machinecommerce.IdempotencyResult)
+pub async fn ApiService::adopt_model_services_json(Self, String?) -> Self
 pub async fn ApiService::handle(Self, ApiMethod, String, Map[String, String], String) -> HttpReply
 pub fn ApiService::has_external_text_route(Self) -> Bool
 pub async fn ApiService::internal_component_ready(Self) -> Bool
@@ -174,14 +181,18 @@ pub async fn ApiService::reconcile_expired_exclusive_leases(Self) -> Unit
 pub async fn ApiService::reconcile_expiring_contracts(Self, Int64, Int64) -> Unit
 pub async fn ApiService::reconcile_machine_commerce(Self) -> Unit
 pub async fn ApiService::reconcile_media_jobs(Self) -> (Int, Int)
+pub async fn ApiService::reconcile_model_pool(Self) -> Unit
+pub async fn ApiService::reconcile_model_services(Self) -> Unit
 pub async fn ApiService::reconcile_notifications(Self, Int64) -> @notifications.NotificationReconciliationSummary
 pub async fn ApiService::reconcile_offline_commerce(Self, Int64) -> Unit
 pub async fn ApiService::reconcile_resource_reservations(Self) -> Unit
+pub async fn ApiService::reconcile_trial_api_keys(Self, Int64) -> (Int, Int, Int)
 pub async fn ApiService::record_component_event(Self, String, Int64, @observability.OperationalSeverity, String, String, String, String, String, Int, Int64) -> Unit
 pub async fn ApiService::record_external_export_proof(Self, @observability.ExternalExportProof, Int64) -> @observability.OperationalEvent
 pub async fn ApiService::run_contract_expiry_reconciler_forever(Self, Int, Int64) -> Unit
 pub async fn ApiService::run_exclusive_lease_expiry_reconciler_forever(Self, Int) -> Unit
 pub async fn ApiService::run_machine_commerce_reconciler_forever(Self, Int) -> Unit
+pub async fn ApiService::run_model_benchmark_forever(Self) -> Unit
 pub async fn ApiService::run_notification_reconciler_forever(Self, Int) -> Unit noraise
 pub async fn ApiService::serve(Self, String) -> Unit
 pub async fn ApiService::serve_identity_on(Self, @http.Server) -> Unit
@@ -206,12 +217,12 @@ pub fn ApiService::with_credential_issuer_adapter_token(Self, String) -> Self ra
 pub fn ApiService::with_delivery_store(Self, @delivery.DeliveryStore, gateway_observation_token? : String) -> Self
 pub fn ApiService::with_deployment_store(Self, @vectie/lunanexa/deployment/store.FileDeploymentStore, available_secret_refs? : Array[String]) -> Self
 pub fn ApiService::with_entitlement_authority_callback_token(Self, String) -> Self
+pub fn ApiService::with_event_text_pool(Self, EventTextPool, String) -> Self raise
 pub fn ApiService::with_exclusive_lease_store(Self, @vectie/lunanexa/nodelease/store.FileExclusiveLeaseStore) -> Self
 pub fn ApiService::with_exclusive_lease_unit_price(Self, @commercial.FixedMoney) -> Self raise
 pub fn ApiService::with_external_export_proof_token(Self, String) -> Self
 pub fn ApiService::with_external_media_providers(Self, Array[ExternalMediaProvider]) -> Self raise
 pub fn ApiService::with_external_observability_collector_configured(Self, Bool) -> Self
-pub fn ApiService::with_external_text_control(Self, async (String) -> String) -> Self
 pub fn ApiService::with_external_text_route(Self, String, String, String, String, String, String, String, String, credential? : String, native_revision? : String, text_chat_completions? : Bool) -> Self raise
 pub fn ApiService::with_global_admin_settings(Self, @settings.GlobalAdminSettings) -> Self raise
 pub fn ApiService::with_gpu_container_offering(Self, GpuContainerOffering) -> Self raise
@@ -223,6 +234,8 @@ pub fn ApiService::with_machine_commerce_store(Self, @vectie/lunanexa/machinecom
 pub fn ApiService::with_machine_helper_adapter_evidence(Self, @nodelease.MachineHelperAdapterReadinessEvidence) -> Self raise Failure
 pub fn ApiService::with_media_jobs(Self, @jobs.JobStore, Array[MediaBinding]) -> Self raise
 pub fn ApiService::with_media_templates(Self, @jobs.JobStore, Array[MediaTemplateBinding]) -> Self raise
+pub async fn ApiService::with_model_benchmark_json(Self, String?) -> Self
+pub async fn ApiService::with_model_pool_json(Self, String?) -> Self
 pub fn ApiService::with_model_source_adapter(Self, String, String) -> Self raise Failure
 pub fn ApiService::with_notification_delivery_adapter_configured(Self, Bool) -> Self
 pub fn ApiService::with_notification_store(Self, @vectie/lunanexa/notifications/store.NotificationStore) -> Self
@@ -245,6 +258,7 @@ pub fn ApiService::with_reservation_host_json(Self, String?) -> Self raise
 pub fn ApiService::with_retired_bootstrap_operator_token(Self, Bool) -> Self
 pub fn ApiService::with_role_tokens(Self, String, String) -> Self
 pub fn ApiService::with_runtime_concurrency(Self, Int) -> Self raise
+pub fn ApiService::with_runtime_controls(Self, Map[String, async (String) -> String]) -> Self
 pub fn ApiService::with_services(@vectie/lunanexa/store.FileStore, @registry.FileRegistry, @node.FileEnrollmentService, @runtimes.OpenAiTextRuntime, String, String, String, String) -> Self
 pub fn ApiService::with_shared_trial_offerings(Self, Array[SharedTrialOffering]) -> Self raise
 pub fn ApiService::with_shared_trial_text_route(Self, String, String, String, String, String, String, String, String, String) -> Self raise
@@ -264,6 +278,22 @@ pub fn CancellationReceipt::from_json(Json, @json.JsonPath) -> Self raise @json.
 pub fn CancellationReceipt::not_equal(Self, Self) -> Bool
 pub fn CancellationReceipt::to_json(Self) -> Json
 pub fn CancellationReceipt::to_repr(Self) -> @debug.Repr
+
+pub(all) struct EventTextPool {
+  model_alias : String
+  served_model : String
+  runtime_version : String
+  image_digest : String
+  artifact_digest : String
+  replicas : Array[EventTextReplica]
+} derive(@json.FromJson)
+pub fn EventTextPool::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+
+pub(all) struct EventTextReplica {
+  node_id : String
+  origin : String
+} derive(@json.FromJson)
+pub fn EventTextReplica::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
 
 pub(all) struct ExternalMediaProvider {
   provider_id : String
@@ -354,6 +384,15 @@ pub(all) struct MediaTemplateBinding {
   runtime_route : @contracts.RuntimeRoutePolicy?
 } derive(@json.FromJson)
 pub fn MediaTemplateBinding::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+
+type ModelBenchmark
+
+type ModelBenchmarkConfig derive(@json.FromJson)
+pub fn ModelBenchmarkConfig::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+
+type ModelBenchmarkReport derive(ToJson, @json.FromJson)
+pub fn ModelBenchmarkReport::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn ModelBenchmarkReport::to_json(Self) -> Json
 
 pub(all) struct OfflineArtifactView {
   artifact_id : String

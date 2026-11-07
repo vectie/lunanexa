@@ -1,6 +1,6 @@
 ///|
-/// A separately operated, explicitly registered text backend. This is not a
-/// managed deployment: readiness is measured against the live model endpoint.
+/// Provider-neutral inference routing. Deployment ownership and lifecycle live
+/// in the service ledger; readiness is measured against the live model endpoint.
 struct ExternalTextRoute {
   model_alias : String
   tenant_ref : String
@@ -21,14 +21,6 @@ fn external_text_control_path(path : String) -> Bool {
 ///|
 pub fn ApiService::has_external_text_route(self : ApiService) -> Bool {
   self.external_text_route is Some(_)
-}
-
-///|
-pub fn ApiService::with_external_text_control(
-  self : ApiService,
-  control : async (String) -> String,
-) -> ApiService {
-  { ..self, external_text_control: Some(control), }
 }
 
 ///|
@@ -61,7 +53,19 @@ async fn ApiService::handle_external_text_control(
     )
   }
   let can_manage = view.membership.roles.contains(OrganizationAdministrator)
-  guard self.external_text_control is Some(control) else {
+  let instance = match self.deployment_store {
+    Some(store) =>
+      store
+      .services()
+      .iter()
+      .find_first(s => {
+        s.model_alias == route.model_alias &&
+        s.owner.tenant_ref == view.membership.tenant_ref &&
+        s.owner.organization_id == view.membership.organization_id
+      })
+    None => None
+  }
+  guard instance is Some(instance) else {
     let (ready, context_window_tokens) = self.external_text_observation()
     return if verb == Get && path == "/v1/portal/self/external-model-service" {
       json_reply(200, {
@@ -103,15 +107,27 @@ async fn ApiService::handle_external_text_control(
   }
   let state = try
     @async.with_timeout(150000, () => {
-      control(
-        if verb == Get {
-          "status"
-        } else if path.has_suffix(":start") {
-          "start"
-        } else {
-          "stop"
-        },
-      )
+      let action = if verb == Get {
+        "status"
+      } else if path.has_suffix(":start") {
+        "start"
+      } else {
+        "stop"
+      }
+      if action == "status" {
+        self.observe_service_binding(
+          instance.runtime_kind,
+          instance.binding_ref,
+        )
+      } else {
+        match
+          self.apply_model_service_action(instance.service_id, action).observed {
+          Running => "Running"
+          Stopped => "Stopped"
+          Partial => "Partial"
+          Unknown => "Unknown"
+        }
+      }
     })
   catch {
     _ =>

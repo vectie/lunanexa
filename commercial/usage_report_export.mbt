@@ -122,11 +122,11 @@ fn UsageReport::usage_report_json(self : UsageReport) -> Json {
   })
   let result : Json = {
     "schema_version": "lunanexa.usage-report.v1",
-    "source_schema_version": snapshot_schema_version.to_json(),
+    "source_schema_version": Json(snapshot_schema_version),
     "window_policy": "intersecting records in full; no proration",
     "query": self.query.to_json(),
-    "rows": rows.to_json(),
-    "groups": groups.to_json(),
+    "rows": Json(rows),
+    "groups": Json(groups),
   }
   result
 }

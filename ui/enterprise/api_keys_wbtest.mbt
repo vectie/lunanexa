@@ -37,6 +37,7 @@ test "private model key form and unlimited key card omit quota controls" {
         state: "Running",
         can_stop: true,
         ready: true,
+        service_id: "fixture-model-service",
         context_window_tokens: Some(850000),
       }),
     },
@@ -67,18 +68,20 @@ test "private model key form and unlimited key card omit quota controls" {
       ..shared.deliveries,
       options: {
         ..shared.deliveries.options,
-        shared_trials: [{
-          node_id: "trial-node-text",
-          node_label: "Shared Spark 2",
-          model_alias: "text.qwen",
-          model_name: "Qwen 27B",
-          kind: "Text",
-          node_online: true,
-          service_responding: false,
-          public_url: "https://example.test/user/",
-          shared: true,
-          request_limit: "none",
-        }],
+        shared_trials: [
+          {
+            node_id: "trial-node-text",
+            node_label: "Shared Spark 2",
+            model_alias: "text.qwen",
+            model_name: "Qwen 27B",
+            kind: "Text",
+            node_online: true,
+            service_responding: false,
+            public_url: "https://example.test/user/",
+            shared: true,
+            request_limit: "none",
+          },
+        ],
       },
     },
   }.update(OpenSharedTrialApiKey("text.qwen"))
@@ -133,6 +136,8 @@ test "key creation error is visible inside its dialog" {
 test "company overview omits an unrelated expired personal trial" {
   let base = demo_state()
   let trial : TrialEntitlementView = {
+    consumed_requests: None,
+    max_output_tokens: None,
     trial_id: "old-trial",
     organization_id: "old-trial-org",
     tenant_ref: "old-trial-tenant",

@@ -1,5 +1,5 @@
 ///|
-async fn invoke(args : Array[String]) -> (Int, String, String) {
+async fn invoke(args : Array[String]) -> (Int32, String, String) {
   let executable = @env.get_env_var("MODEL_INTAKE_EXE").unwrap_or("")
   if executable == "" {
     fail("Set MODEL_INTAKE_EXE to the built native model-intake executable")

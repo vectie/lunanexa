@@ -270,7 +270,7 @@ pub(all) struct NotificationDelivery {
   notification_id : String
   channel : NotificationChannel
   state : DeliveryState
-  attempt_count : Int
+  attempt_count : Int32
   next_attempt_unix_ms : Int64?
   provider_receipt : String?
   last_error_code : String?
@@ -292,7 +292,7 @@ pub extend NotificationDelivery with FromJson::{from_json}
 ///|
 pub(all) struct DeliveryResult {
   delivery_id : String
-  expected_attempt_count : Int
+  expected_attempt_count : Int32
   delivered : Bool
   retryable : Bool
   provider_receipt : String?
@@ -456,7 +456,7 @@ pub(all) struct NotificationWorkerHealth {
   last_attempt_unix_ms : Int64?
   last_success_unix_ms : Int64?
   last_failure_unix_ms : Int64?
-  consecutive_failures : Int
+  consecutive_failures : Int32
   last_error_code : String?
 } derive(Debug, Eq, ToJson, FromJson)
 
@@ -476,7 +476,7 @@ pub extend NotificationWorkerHealth with FromJson::{from_json}
 /// Generation-fenced operator request to redrive one dead-letter delivery.
 pub(all) struct NotificationDeliveryRedriveAction {
   delivery_id : String
-  expected_attempt_count : Int
+  expected_attempt_count : Int32
   expected_updated_unix_ms : Int64
   actor_ref : String
   now_unix_ms : Int64
@@ -500,7 +500,7 @@ pub(all) struct NotificationDeliveryRedriveReceipt {
   receipt_id : String
   delivery_id : String
   actor_ref : String
-  previous_attempt_count : Int
+  previous_attempt_count : Int32
   accepted_unix_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
 
@@ -545,9 +545,9 @@ pub(all) struct NotificationDeliveryReadiness {
   version : String
   state : NotificationDeliveryReadinessState
   adapter_configured : Bool
-  pending_count : Int
-  delivering_count : Int
-  dead_letter_count : Int
+  pending_count : Int32
+  delivering_count : Int32
+  dead_letter_count : Int32
   capacity_exhausted : Bool
   worker_health : NotificationWorkerHealth
   supported_channels : Array[NotificationChannel]
@@ -621,11 +621,11 @@ pub extend NotificationAdapterReceipt with FromJson::{from_json}
 /// Result of one bounded autonomous notification reconciliation pass.
 pub(all) struct NotificationReconciliationSummary {
   reconciled_unix_ms : Int64
-  subject_count : Int
-  operator_alert_count : Int
-  expired_silence_count : Int
-  pending_delivery_count : Int
-  dead_letter_count : Int
+  subject_count : Int32
+  operator_alert_count : Int32
+  expired_silence_count : Int32
+  pending_delivery_count : Int32
+  dead_letter_count : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -642,11 +642,11 @@ pub extend NotificationReconciliationSummary with FromJson::{from_json}
 
 ///|
 pub(all) struct NotificationDeliveryRunSummary {
-  attempted : Int
-  delivered : Int
-  retry_scheduled : Int
-  dead_lettered : Int
-  skipped : Int
+  attempted : Int32
+  delivered : Int32
+  retry_scheduled : Int32
+  dead_lettered : Int32
+  skipped : Int32
   readiness : NotificationDeliveryReadiness
 } derive(Debug, Eq, ToJson, FromJson)
 

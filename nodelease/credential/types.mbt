@@ -39,7 +39,7 @@ pub(all) struct CredentialHandoffIssueIntent {
   lease_id : String
   expected_generation : Int64
   host_alias : String
-  ssh_port : Int
+  ssh_port : Int32
   host_key_fingerprint : String
   issuer_redirect_url : String
 } derive(Debug, Eq, ToJson, FromJson)
@@ -64,7 +64,7 @@ pub(all) struct CredentialIssuerRequestIntent {
   lease_id : String
   expected_generation : Int64
   host_alias : String
-  ssh_port : Int
+  ssh_port : Int32
   host_key_fingerprint : String
 } derive(Debug, Eq, ToJson, FromJson)
 
@@ -88,7 +88,7 @@ pub(all) struct CredentialIssuerRequest {
   expected_generation : Int64
   username : String
   host_alias : String
-  ssh_port : Int
+  ssh_port : Int32
   host_key_fingerprint : String
   created_unix_ms : Int64
   expires_unix_ms : Int64
@@ -140,7 +140,7 @@ pub(all) struct CredentialHandoffRecord {
   generation : Int64
   username : String
   host_alias : String
-  ssh_port : Int
+  ssh_port : Int32
   host_key_fingerprint : String
   issuer_redirect_url : String
   created_unix_ms : Int64
@@ -168,7 +168,7 @@ pub(all) struct CustomerCredentialHandoffView {
   generation : Int64
   username : String
   host_alias : String
-  ssh_port : Int
+  ssh_port : Int32
   host_key_fingerprint : String
   connection_command : String
   valid_until_unix_ms : Int64
@@ -196,7 +196,7 @@ pub(all) struct CredentialHandoffRedemption {
   generation : Int64
   issuer_redirect_url : String
   host_alias : String
-  ssh_port : Int
+  ssh_port : Int32
   host_key_fingerprint : String
   connection_command : String
   valid_until_unix_ms : Int64

@@ -37,9 +37,9 @@ async test "text Chat transport preserves conversation budget usage JSON and SSE
         })
         connection.write_string(
           if streaming {
-            "data: {\"choices\":[{\"delta\":{\"content\":\"323\"}}]}\n\ndata: {\"choices\":[],\"usage\":{\"prompt_tokens\":9,\"completion_tokens\":2}}\n\ndata: [DONE]\n\n"
+            "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"Compute product.\"}}]}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"323\"}}]}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"length\"}],\"usage\":{\"prompt_tokens\":9,\"completion_tokens\":2}}\n\ndata: [DONE]\n\n"
           } else {
-            "{\"choices\":[{\"message\":{\"content\":\"323\"}}],\"usage\":{\"prompt_tokens\":9,\"completion_tokens\":2}}"
+            "{\"choices\":[{\"message\":{\"content\":\"323\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":9,\"completion_tokens\":2}}"
           },
         )
         connection.end_response()
@@ -68,12 +68,15 @@ async test "text Chat transport preserves conversation budget usage JSON and SSE
       },
     }
     let result = runtime.invoke(request)
-    assert_eq(result.output, { "output_text": "323" })
+    assert_eq(result.output, { "output_text": "323", "finish_reason": "stop" })
     assert_eq((result.input_units, result.output_units), (9, 2))
     let chunks = []
     let result = runtime.invoke_stream(request, chunk => chunks.push(chunk))
-    assert_eq(result.output, { "output_text": "323" })
-    assert_eq(chunks, [{ "text_delta": "323" }])
+    assert_eq(result.output, { "output_text": "323", "finish_reason": "length" })
+    assert_eq(chunks, [
+      { "reasoning_delta": "Compute product." },
+      { "text_delta": "323" },
+    ])
     assert_eq((result.input_units, result.output_units), (9, 2))
     let unsupported : Array[Json] = [
       { "messages": [{ "role": "tool", "content": "x", "tool_call_id": "a" }] },

@@ -141,7 +141,7 @@ pub(all) struct LunaFluxServingContract {
   drain_contract_digest : String
   invocation_contract_digest : String
   listener_origin : String
-  listener_port : Int
+  listener_port : Int32
   invocation_path : String
   health_path : String
   readiness_path : String
@@ -255,7 +255,7 @@ pub(all) enum LunaFluxPromotionBlocker {
   ReusedApprovalClaimReceipt
   PromotionAuthorityMismatch(LunaFluxPromotionAuthoritySubject)
   PromotionVerifierClosed
-  InvalidSignedPromotionReceiptCount(Int)
+  InvalidSignedPromotionReceiptCount(Int32)
   MissingSignedPromotionReceipt(LunaFluxPromotionAuthoritySubject)
   DuplicateSignedPromotionReceipt(LunaFluxPromotionAuthoritySubject)
   InvalidSignedPromotionReceipt(LunaFluxPromotionAuthoritySubject)
@@ -322,7 +322,7 @@ fn expected_subject_digest(
 }
 
 ///|
-fn valid_listener_origin(origin : String, port : Int) -> Bool {
+fn valid_listener_origin(origin : String, port : Int32) -> Bool {
   guard origin.has_prefix("https://") else { return false }
   let authority = origin["https://".length():]
   let port_suffix = ":\{port}"

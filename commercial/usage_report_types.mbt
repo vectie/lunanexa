@@ -65,11 +65,11 @@ pub(all) struct UsageReportGroup {
   unit : String
   quantity : Int64
   amount : FixedMoney?
-  row_count : Int
-  ledger_entry_count : Int
-  unpriced_usage_count : Int
-  missing_observation_count : Int
-  crossing_window_count : Int
+  row_count : Int32
+  ledger_entry_count : Int32
+  unpriced_usage_count : Int32
+  missing_observation_count : Int32
+  crossing_window_count : Int32
 } derive(Debug, Eq, ToJson)
 
 ///|

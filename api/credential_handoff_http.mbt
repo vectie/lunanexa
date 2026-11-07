@@ -131,7 +131,7 @@ async fn ApiService::handle_credential_handoff(
       (Get, "/internal/v1/credential-issuer/requests") =>
         return json_reply(
           200,
-          credentials.pending_issuer_requests(@async.now()).to_json(),
+          Json(credentials.pending_issuer_requests(@async.now())),
         )
       (Post, "/internal/v1/credential-issuer/dispatch-receipts") => {
         let receipt : @credential.CredentialIssuerDispatchReceipt? = try

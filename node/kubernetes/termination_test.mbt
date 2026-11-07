@@ -7,7 +7,7 @@ test "termination requires an explicit exit of the original container" {
     "containerStatuses": [
       {
         "name": "runtime",
-        "imageID": identity().image_ref.to_json(),
+        "imageID": Json(identity().image_ref),
         "containerID": "containerd://original",
         "ready": false,
         "state": {

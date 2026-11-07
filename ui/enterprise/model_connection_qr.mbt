@@ -13,6 +13,7 @@ fn model_connection_import_json(
   base_url : String,
   model : String,
   secret : String,
+  max_output_tokens~ : Int32 = 16384,
 ) -> Json {
   {
     "version": "openai.connection.v1",
@@ -20,7 +21,7 @@ fn model_connection_import_json(
     "base_url": base_url,
     "api_key": secret,
     "model": model,
-    "max_output_tokens": 16384,
+    "max_output_tokens": max_output_tokens,
   }
 }
 
@@ -37,12 +38,15 @@ fn model_connection_qr(
   model : String,
   secret : String,
   _emit : @rabbita.Emit[EnterpriseMessage]?,
+  base_url~ : String = public_maas_base_url(),
+  max_output_tokens~ : Int32 = 16384,
 ) -> @rabbita.Html {
   guard valid_connection_secret(secret) else { return @html.nothing }
   let payload = model_connection_import_json(
-    public_maas_base_url(),
+    base_url,
     model,
     secret,
+    max_output_tokens~,
   ).stringify()
   guard payload.length() <= 1000 && payload.all(c => c <= '\u{7f}') else {
     return @html.p(
@@ -161,8 +165,61 @@ fn model_connection_qr_dialog(
         } else {
           @html.nothing
         },
-        model_connection_qr(state.locale, value.model, value.secret, emit),
+        @html.p(
+          copy(
+            state.locale,
+            "Contains your API key. Scan only into a client you trust; this is not a public registration code.",
+            "包含你的 API 密钥，仅扫描导入可信客户端；这不是公开报名码。",
+          ),
+        ),
+        model_connection_value(
+          state.locale,
+          "API Base URL",
+          connection_base_url(state, value.model),
+          emit,
+        ),
+        model_connection_value(state.locale, "Model ID", value.model, emit),
+        model_connection_qr(
+          state.locale,
+          value.model,
+          value.secret,
+          emit,
+          base_url=connection_base_url(state, value.model),
+          max_output_tokens=connection_output_budget(state, value.model),
+        ),
       ],
     ),
   ])
+}
+
+///|
+fn personal_trial_model(state : EnterpriseState, model : String) -> Bool {
+  state.trial.map_or(false, trial => {
+    trial.revoked_unix_ms is None &&
+    trial.starts_unix_ms <= state.machine_access.now_unix_ms &&
+    trial.expires_unix_ms > state.machine_access.now_unix_ms &&
+    trial.allowed_models.contains(model) &&
+    state.membership.map_or(false, membership => {
+      membership.organization_id == trial.organization_id &&
+      membership.tenant_ref == trial.tenant_ref
+    })
+  })
+}
+
+///|
+fn connection_base_url(state : EnterpriseState, model : String) -> String {
+  if personal_trial_model(state, model) {
+    browser_public_origin() + "/trial/v1"
+  } else {
+    public_maas_base_url()
+  }
+}
+
+///|
+fn connection_output_budget(state : EnterpriseState, model : String) -> Int32 {
+  if personal_trial_model(state, model) {
+    state.trial.map_or(1024, trial => trial.max_output_tokens.unwrap_or(1024))
+  } else {
+    16384
+  }
 }

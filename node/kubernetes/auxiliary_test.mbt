@@ -19,7 +19,7 @@ async test "auxiliary resource creation and deletion are namespace and UID scope
           201,
           {
             "metadata": {
-              "name": plan.name.to_json(),
+              "name": Json(plan.name),
               "namespace": "runtime",
               "uid": "aux-uid",
             },

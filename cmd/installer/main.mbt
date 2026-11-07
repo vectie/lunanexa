@@ -20,7 +20,7 @@ fn cors_headers(origin : String) -> @http.Headers {
 ///|
 async fn json_response(
   connection : @http.ServerConnection,
-  status : Int,
+  status : Int32,
   reason : String,
   origin : String,
   payload : Json,

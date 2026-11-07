@@ -200,7 +200,7 @@ async fn ApiService::handle_customer_machine_access(
       for lease in subject_leases {
         views.push(self.customer_machine_view(lease, now))
       }
-      return json_reply(200, views.to_json())
+      return json_reply(200, Json(views))
     }
     (Post, _) => {
       guard customer_machine_termination_lease_id(path) is Some(lease_id) else {

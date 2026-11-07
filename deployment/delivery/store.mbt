@@ -163,7 +163,7 @@ fn DeliveryStore::index(
   self : DeliveryStore,
   operation_id : String,
   generation : Int64,
-) -> Int raise DeliveryError {
+) -> Int32 raise DeliveryError {
   for index, operation in self.operations {
     if operation.operation_id == operation_id {
       if operation.generation != generation {
@@ -260,7 +260,7 @@ pub async fn DeliveryStore::operations(
   self.mutex.acquire()
   defer self.mutex.release()
   // JSON copy prevents callers mutating the stored node array outside a commit.
-  @json.from_json(self.operations.to_json())
+  @json.from_json(Json(self.operations))
 }
 
 ///|

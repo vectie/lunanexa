@@ -250,7 +250,7 @@ pub struct FixtureTransport {
 pub fn FixtureTransport::new(
   response : @contracts.WorkloadResponse,
   capabilities : Array[CapabilityDescriptor],
-  healthy? : Bool = true,
+  healthy~ : Bool = true,
 ) -> FixtureTransport {
   { response, capabilities, cancelled_workload: None, healthy_value: healthy, }
 }
@@ -402,7 +402,7 @@ fn endpoint(config : ClientConfig, path : String) -> String {
 }
 
 ///|
-fn transport_error(status : Int) -> ClientError {
+fn transport_error(status : Int32) -> ClientError {
   if status >= 500 {
     ClientError(
       code=ProviderUnavailable,

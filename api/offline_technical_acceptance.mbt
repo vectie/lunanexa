@@ -90,7 +90,7 @@ async fn ApiService::technical_workspace_bound(
   expires : Int64,
   now : Int64,
   allow_active : Bool,
-  kind? : @offline.EntitlementKind = WorkspaceLease,
+  kind~ : @offline.EntitlementKind = WorkspaceLease,
 ) -> Bool {
   guard self.workspace_directory is Some(directory) else { return false }
   let s = directory.snapshot(now)

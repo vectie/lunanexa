@@ -1,13 +1,13 @@
 ///|
 /// The proxy is protocol blind: it cannot size a buffer from the request it
 /// forwards, so every direction copies in fixed chunks.
-let relay_chunk_bytes : Int = 65536
+let relay_chunk_bytes : Int32 = 65536
 
 ///|
-extern "C" fn shutdown_write(fd : Int) -> Int = "lunanexa_shutdown_write"
+extern "C" fn shutdown_write(fd : Int32) -> Int32 = "lunanexa_shutdown_write"
 
 ///|
-extern "C" fn shutdown_both(fd : Int) -> Int = "lunanexa_shutdown_both"
+extern "C" fn shutdown_both(fd : Int32) -> Int32 = "lunanexa_shutdown_both"
 
 ///|
 /// Relays one direction of a connection until the source reaches end of file.
@@ -50,7 +50,7 @@ async fn relay(client : @socket.Tcp, target : @socket.Tcp) -> Unit {
 async fn serve_connection(
   client : @socket.Tcp,
   target_host : String,
-  target_port : Int,
+  target_port : Int32,
 ) -> Unit {
   let target = @socket.Tcp::connect_to_host(target_host, port=target_port) catch {
     err => {
@@ -73,7 +73,7 @@ async fn serve_connection(
 async fn serve_forever(
   server : @socket.TcpServer,
   target_host : String,
-  target_port : Int,
+  target_port : Int32,
 ) -> Unit {
   server.run_forever((client, _peer) => {
     serve_connection(client, target_host, target_port)

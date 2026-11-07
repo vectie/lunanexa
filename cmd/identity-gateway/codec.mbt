@@ -21,7 +21,7 @@ fn base64url(bytes : BytesView) -> String {
 }
 
 ///|
-fn hex_digit(value : Int) -> Char {
+fn hex_digit(value : Int32) -> Char {
   if value < 10 {
     (value + '0').unsafe_to_char()
   } else {
@@ -52,7 +52,7 @@ fn form_encode(value : String) -> String {
 }
 
 ///|
-fn hex_value(value : UInt16) -> Int? {
+fn hex_value(value : UInt16) -> Int32? {
   if value >= '0' && value <= '9' {
     Some(value.to_int() - '0')
   } else if value >= 'A' && value <= 'F' {
@@ -160,7 +160,7 @@ fn cookie_value(headers : @http.Headers, name : String) -> String? {
 }
 
 ///|
-fn secure_random(length : Int) -> Bytes raise {
+fn secure_random(length : Int32) -> Bytes raise {
   guard length > 0 && length <= 256 else {
     raise Failure("secure random request length is invalid")
   }
@@ -199,6 +199,6 @@ fn decode_cookie_reference(value : String, secret : String) -> String? {
 }
 
 ///|
-fn random_token(bytes : Int) -> String raise {
+fn random_token(bytes : Int32) -> String raise {
   base64url(secure_random(bytes).exact_view())
 }

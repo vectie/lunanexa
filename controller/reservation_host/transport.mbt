@@ -1,5 +1,5 @@
 ///|
-async fn bounded(reader : &@io.Reader, limit : Int) -> Bytes {
+async fn bounded(reader : &@io.Reader, limit : Int32) -> Bytes {
   let result = Buffer()
   let mut size = 0
   while reader.read_some(max_len=8192) is Some(bytes) {

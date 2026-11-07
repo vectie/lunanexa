@@ -408,6 +408,7 @@ test "shared external GLM stop belongs to company administrator in MaaS" {
     state: "Running",
     can_stop: true,
     ready: true,
+    service_id: "fixture-model-service",
     context_window_tokens: Some(65536),
   }
   let panel = {
@@ -416,17 +417,17 @@ test "shared external GLM stop belongs to company administrator in MaaS" {
     external_model: Some(shared),
   }
   let owner = @enterprise.render({ ..state, route: Models, deliveries: panel, })
-  assert_true(owner.contains("Stop GLM service"))
-  assert_true(owner.contains("Running on the Spark pair"))
+  assert_true(owner.contains("Stop service"))
+  assert_true(owner.contains("Running"))
   assert_true(owner.contains("/user/v1"))
   assert_true(owner.contains("Public API (OpenAI compatible)"))
-  assert_true(owner.contains("Authorization: Bearer &lt;API_KEY&gt;"))
+  assert_true(owner.contains("Copy model name"))
   assert_true(owner.contains("Context: 64K"))
   assert_true(owner.contains("Copy API endpoint"))
   let confirm = panel.update(RequestStopExternal)
   assert_true(
     @enterprise.render({ ..state, route: Models, deliveries: confirm, }).contains(
-      "Confirm stop GLM",
+      "Confirm stop",
     ),
   )
   assert_false(confirm.update(CancelStop).external_stop_confirmation)
@@ -438,7 +439,7 @@ test "shared external GLM stop belongs to company administrator in MaaS" {
       external_model: Some({ ..shared, can_stop: false, }),
     },
   })
-  assert_false(colleague.contains("Stop GLM service"))
+  assert_false(colleague.contains("Stop service"))
   let stopped_colleague = @enterprise.render({
     ..state,
     route: Models,
@@ -447,7 +448,7 @@ test "shared external GLM stop belongs to company administrator in MaaS" {
       external_model: Some({ ..shared, state: "Stopped", can_stop: false, }),
     },
   })
-  assert_false(stopped_colleague.contains("Start GLM service"))
+  assert_false(stopped_colleague.contains("Start service"))
   let stopped = @enterprise.render({
     ..state,
     route: Models,
@@ -457,12 +458,12 @@ test "shared external GLM stop belongs to company administrator in MaaS" {
     },
   })
   assert_true(stopped.contains("Stopped; model files retained"))
-  assert_false(stopped.contains("Stop GLM service"))
-  assert_true(stopped.contains("Start GLM service"))
+  assert_false(stopped.contains("Stop service"))
+  assert_true(stopped.contains("Start service"))
   let start_confirm = panel.update(RequestStartExternal)
   assert_true(
     @enterprise.render({ ..state, route: Models, deliveries: start_confirm, }).contains(
-      "Confirm start GLM",
+      "Confirm start",
     ),
   )
   assert_false(start_confirm.update(CancelStop).external_start_confirmation)

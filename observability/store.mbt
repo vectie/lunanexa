@@ -7,12 +7,12 @@ enum ObservabilityPersistence {
 ///|
 pub struct ObservabilityStore {
   persistence : ObservabilityPersistence
-  event_history_limit : Int
+  event_history_limit : Int32
   emit_json_lines : Bool
   mut events : Array[OperationalEvent]
   mut counters : Map[String, OperationalCounter]
   mut last_external_export_unix_ms : Int64?
-  mut appended_since_prune : Int
+  mut appended_since_prune : Int32
   mutex : @async.Mutex
 }
 
@@ -40,7 +40,7 @@ fn decode_snapshot(payload : String) -> ObservabilitySnapshot raise {
 }
 
 ///|
-fn safe_identifier(value : String, maximum? : Int = 256) -> Bool {
+fn safe_identifier(value : String, maximum~ : Int32 = 256) -> Bool {
   let normalized = value.to_lower()
   @contracts.valid_identifier(value, maximum_length=maximum) &&
   ![
@@ -83,7 +83,7 @@ pub fn validate_event(
 }
 
 ///|
-fn status_class(status : Int) -> String {
+fn status_class(status : Int32) -> String {
   if status >= 500 {
     "5xx"
   } else if status >= 400 {
@@ -202,7 +202,7 @@ async fn write_snapshot(
 ///|
 fn ObservabilityStore::empty(
   persistence : ObservabilityPersistence,
-  event_history_limit : Int,
+  event_history_limit : Int32,
   emit_json_lines : Bool,
 ) -> ObservabilityStore raise ObservabilityError {
   if event_history_limit <= 0 || event_history_limit > 1000000 {
@@ -300,8 +300,8 @@ fn ObservabilityStore::restore(
 ///|
 pub async fn ObservabilityStore::open(
   path : String,
-  event_history_limit? : Int = 10000,
-  emit_json_lines? : Bool = false,
+  event_history_limit~ : Int32 = 10000,
+  emit_json_lines~ : Bool = false,
 ) -> ObservabilityStore {
   if path.trim() == "" {
     raise InvalidSnapshot("observability path is empty")
@@ -374,8 +374,8 @@ async fn ObservabilityStore::load_event_window(
 /// preserved across the upgrade rather than dropped.
 pub async fn ObservabilityStore::open_postgres(
   database : @database.PostgresDatabase,
-  event_history_limit? : Int = 10000,
-  emit_json_lines? : Bool = false,
+  event_history_limit~ : Int32 = 10000,
+  emit_json_lines~ : Bool = false,
 ) -> ObservabilityStore {
   let store = ObservabilityStore::empty(
     ObservabilityPostgres(database),
@@ -586,7 +586,7 @@ pub async fn ObservabilityStore::record_component_event(
   correlation_id : String,
   target_type : String,
   outcome : String,
-  status_code : Int,
+  status_code : Int32,
   duration_ms : Int64,
 ) -> Unit {
   self.record({
@@ -622,7 +622,7 @@ pub async fn ObservabilityStore::snapshot(
 /// every Prometheus request.
 pub async fn ObservabilityStore::metrics_snapshot(
   self : ObservabilityStore,
-) -> (Array[OperationalCounter], Int) {
+) -> (Array[OperationalCounter], Int32) {
   self.mutex.acquire()
   let counters = sorted_counters(self.counters)
   let event_count = self.events.length()
@@ -636,7 +636,7 @@ pub async fn ObservabilityStore::recent_count(
   event_code : String,
   target_type : String,
   since_unix_ms : Int64,
-) -> Int {
+) -> Int32 {
   if !safe_identifier(event_code, maximum=96) ||
     !safe_target_type(target_type) ||
     since_unix_ms <= 0L {
@@ -662,7 +662,7 @@ pub async fn ObservabilityStore::recent_outcome_count(
   target_type : String,
   outcome : String,
   since_unix_ms : Int64,
-) -> Int {
+) -> Int32 {
   if !safe_identifier(event_code, maximum=96) ||
     !safe_target_type(target_type) ||
     !safe_identifier(outcome, maximum=64) ||
@@ -802,9 +802,9 @@ pub async fn ObservabilityStore::prometheus_latency_fragment(
 ///|
 pub async fn ObservabilityStore::readiness(
   self : ObservabilityStore,
-  external_collector_configured? : Bool = false,
-  now_unix_ms? : Int64 = 0L,
-  external_export_freshness_ms? : Int64 = 300000L,
+  external_collector_configured~ : Bool = false,
+  now_unix_ms~ : Int64 = 0L,
+  external_export_freshness_ms~ : Int64 = 300000L,
 ) -> ObservabilityReadiness {
   let now = if now_unix_ms > 0L { now_unix_ms } else { @async.now() }
   self.mutex.acquire()

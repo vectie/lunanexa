@@ -143,8 +143,8 @@ pub fn UsagePriceReport::json_text(
     "delta_policy": "candidate minus recorded charge; adjustments remain separate",
     "query": self.query.to_json(),
     "scenario": self.scenario.to_json(),
-    "rows": rows.to_json(),
-    "groups": groups.to_json(),
+    "rows": Json(rows),
+    "groups": Json(groups),
   }
   usage_price_output(result.stringify(indent=2))
 }

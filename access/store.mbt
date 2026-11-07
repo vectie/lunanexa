@@ -45,7 +45,7 @@ fn constant_time_equal(left : String, right : String) -> Bool {
 }
 
 ///|
-fn valid_text(value : String, maximum : Int) -> Bool {
+fn valid_text(value : String, maximum : Int32) -> Bool {
   value.length() > 0 &&
   value.length() <= maximum &&
   value.all(character => {
@@ -311,7 +311,7 @@ pub async fn AccessStore::revoke_subject(
   self : AccessStore,
   subject_ref : String,
   now_unix_ms : Int64,
-) -> Int {
+) -> Int32 {
   if !@contracts.valid_identifier(subject_ref) || now_unix_ms <= 0L {
     raise InvalidInput("invalid API-key subject revocation")
   }
@@ -351,7 +351,7 @@ pub async fn AccessStore::authorize(
   now_unix_ms : Int64,
   consume : Bool,
   reserve_quota? : async (Int64) -> Bool,
-  unlimited_requests? : Bool = false,
+  unlimited_requests~ : Bool = false,
 ) -> ApiAuthorization {
   if secret.length() != 68 || !secret.has_prefix("lnx_") {
     raise Unauthorized

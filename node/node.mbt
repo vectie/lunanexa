@@ -144,7 +144,7 @@ pub fn EnrollmentService::enroll(
   node_auth_secret : String,
   public_key_ref : String,
   now_unix_ms : Int64,
-  certificate_lifetime_ms? : Int64 = 3600000L,
+  certificate_lifetime_ms~ : Int64 = 3600000L,
 ) -> NodeCertificate raise NodeError {
   if certificate_lifetime_ms <= 0L || certificate_lifetime_ms > 86400000L {
     raise InvalidCertificateLifetime
@@ -237,8 +237,8 @@ pub fn EnrollmentService::renew(
   public_key_ref : String,
   current_serial : Int64,
   now_unix_ms : Int64,
-  certificate_lifetime_ms? : Int64 = 3600000L,
-  renewal_grace_ms? : Int64 = 86400000L,
+  certificate_lifetime_ms~ : Int64 = 3600000L,
+  renewal_grace_ms~ : Int64 = 86400000L,
 ) -> NodeCertificate raise NodeError {
   if certificate_lifetime_ms <= 0L ||
     certificate_lifetime_ms > 86400000L ||
@@ -287,7 +287,7 @@ pub fn EnrollmentService::rotate(
   node_id : String,
   public_key_ref : String,
   now_unix_ms : Int64,
-  certificate_lifetime_ms? : Int64 = 3600000L,
+  certificate_lifetime_ms~ : Int64 = 3600000L,
 ) -> NodeCertificate raise NodeError {
   if certificate_lifetime_ms <= 0L || certificate_lifetime_ms > 86400000L {
     raise InvalidCertificateLifetime
@@ -472,7 +472,7 @@ pub fn NodeAgent::state(self : NodeAgent) -> @contracts.NodeState {
 }
 
 ///|
-pub fn NodeAgent::assignment_count(self : NodeAgent) -> Int {
+pub fn NodeAgent::assignment_count(self : NodeAgent) -> Int32 {
   self.assignments.length()
 }
 

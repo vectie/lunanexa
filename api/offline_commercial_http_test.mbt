@@ -163,7 +163,7 @@ async test "offline commerce self route derives tenant and isolates purchasers" 
         "require_identity_verification": true,
         "require_internal_approval": true,
       },
-      "expires_unix_ms": (now + 3600000L).to_json(),
+      "expires_unix_ms": Json(now + 3600000L),
       "tenant_ref": "tenant-attacker",
       "organization_id": "org-attacker",
       "purchaser_subject_ref": "subject-attacker",
@@ -204,7 +204,7 @@ async test "offline commerce self route derives tenant and isolates purchasers" 
         "selected_service_code": "exclusive-dgx",
         "selected_sla_code": "standard",
         "requested_undertaking_term": "year",
-        "expires_unix_ms": (now + 396L * 86400000L).to_json(),
+        "expires_unix_ms": Json(now + 396L * 86400000L),
       } : Json).stringify(),
   )
   assert_eq(yearly.status, 201)
@@ -220,7 +220,7 @@ async test "offline commerce self route derives tenant and isolates purchasers" 
         "selected_service_code": "exclusive-dgx",
         "selected_sla_code": "standard",
         "requested_undertaking_term": "year",
-        "expires_unix_ms": (now + 397L * 86400000L).to_json(),
+        "expires_unix_ms": Json(now + 397L * 86400000L),
       } : Json).stringify(),
   )
   assert_eq(excessive.status, 400)
@@ -236,7 +236,7 @@ async test "offline commerce self route derives tenant and isolates purchasers" 
         "selected_service_code": "exclusive-dgx",
         "selected_sla_code": "standard",
         "requested_undertaking_term": "hour",
-        "expires_unix_ms": (now + 3600000L).to_json(),
+        "expires_unix_ms": Json(now + 3600000L),
       } : Json).stringify(),
   )
   assert_eq(unknown_tier.status, 400)
@@ -298,7 +298,7 @@ async test "offline self policy is server-owned and expiry is bounded" {
           "require_identity_verification": false,
           "require_internal_approval": false,
         },
-        "expires_unix_ms": expiry.to_json(),
+        "expires_unix_ms": Json(expiry),
       } : Json).stringify()
   }
   let accepted = service.handle(
@@ -418,13 +418,13 @@ async test "offline operator route rejects customers and exposes no artifact byt
         "grant_id": "missing-grant",
         "expected_object_ref": "object://offline-uploads/missing",
         "media_type": "application/pdf",
-        "byte_count": 100L.to_json(),
+        "byte_count": Json(100L),
         "sha256": "sha256:" + "a".repeat(64),
         "scan_passed": true,
         "active_content_detected": false,
         "scanner_receipt": "scanner-receipt",
         "verified": true,
-        "completed_unix_ms": now.to_json(),
+        "completed_unix_ms": Json(now),
       } : Json).stringify(),
   )
   assert_eq(machine_callback.status, 404)
@@ -984,7 +984,7 @@ async test "offline readiness stays pending and purchaser cancellation is fenced
         "project_id": "project-a",
         "selected_service_code": "exclusive-dgx",
         "selected_sla_code": "standard",
-        "expires_unix_ms": (now + 3600000L).to_json(),
+        "expires_unix_ms": Json(now + 3600000L),
       } : Json).stringify(),
   )
   assert_eq(created.status, 201)
@@ -995,8 +995,8 @@ async test "offline readiness stays pending and purchaser cancellation is fenced
     (
       {
         "order_id": "order-self-cancel",
-        "expected_generation": 2L.to_json(),
-        "now_unix_ms": now.to_json(),
+        "expected_generation": Json(2L),
+        "now_unix_ms": Json(now),
       } : Json).stringify(),
   )
   assert_eq(stale.status, 409)
@@ -1007,8 +1007,8 @@ async test "offline readiness stays pending and purchaser cancellation is fenced
     (
       {
         "order_id": "order-self-cancel",
-        "expected_generation": 1L.to_json(),
-        "now_unix_ms": now.to_json(),
+        "expected_generation": Json(1L),
+        "now_unix_ms": Json(now),
       } : Json).stringify(),
   )
   assert_eq(cancelled.status, 200)

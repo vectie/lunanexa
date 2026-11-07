@@ -1,0 +1,36 @@
+--- a/pdf_text/recover_metadata.mbt
++++ b/pdf_text/recover_metadata.mbt
+@@ -179,7 +179,7 @@
+       101, 110, 100, 111, 98, 106,
+     ])
+     if endobj < 0 {
+-      raise @pdfcore.PdfError::ParseEndObjectExpected
++      raise ParseEndObjectExpected
+     }
+     let cursor = @pdfcore.byte_cursor_of_view(data[start:endobj + 6])
+     let tokens = @syntax.pdf_cursor_lex_tokens(cursor) catch {
+@@ -203,7 +203,7 @@
+     @reader.pdf_cursor_consume_ascii(
+       tail,
+       [115, 116, 114, 101, 97, 109],
+-      @pdfcore.PdfError::ParseStreamExpected,
++      ParseStreamExpected,
+     )
+     // The PDF stream keyword is followed by LF or CRLF (some producers use CR).
+     if tail.peek_byte() == 13 {
+@@ -217,13 +217,13 @@
+     @reader.pdf_cursor_consume_ascii(
+       tail,
+       [101, 110, 100, 115, 116, 114, 101, 97, 109],
+-      @pdfcore.PdfError::ParseEndStreamExpected,
++      ParseEndStreamExpected,
+     )
+     @syntax.pdf_cursor_drop_whitespace(tail)
+     @reader.pdf_cursor_consume_ascii(
+       tail,
+       [101, 110, 100, 111, 98, 106],
+-      @pdfcore.PdfError::ParseEndObjectExpected,
++      ParseEndObjectExpected,
+     )
+     return (parsed, tail.absolute_position())
+   }

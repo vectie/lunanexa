@@ -541,7 +541,7 @@ async test "actual canonical payload bytes cannot bypass declared or lease input
     headers,
     over_lease.to_json().stringify(),
   )
-  assert_eq(over_lease_reply.status, 403)
+  assert_eq(over_lease_reply.status, 400)
   assert_true(over_lease_reply.body.contains("active workspace lease"))
   @fs.rmdir(temp, recursive=true)
 }

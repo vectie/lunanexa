@@ -2,7 +2,7 @@
 priv struct RunResult {
   outcome : String
   ok : Bool
-  exit_code : Int
+  exit_code : Int32
   lines : Array[String]
 } derive(FromJson)
 

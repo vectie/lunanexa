@@ -1,9 +1,9 @@
 ///|
 pub(all) struct AdmissionLimits {
-  max_running : Int
-  max_queued : Int
-  max_tenant_running : Int
-  max_tenant_queued : Int
+  max_running : Int32
+  max_queued : Int32
+  max_tenant_running : Int32
+  max_tenant_queued : Int32
   max_payload_bytes : Int64
 } derive(Debug, Eq, ToJson, FromJson)
 
@@ -21,10 +21,10 @@ pub extend AdmissionLimits with FromJson::{from_json}
 
 ///|
 pub(all) struct AdmissionSnapshot {
-  running : Int
-  queued : Int
-  tenant_running : Int
-  tenant_queued : Int
+  running : Int32
+  queued : Int32
+  tenant_running : Int32
+  tenant_queued : Int32
   payload_bytes : Int64
   deadline_unix_ms : Int64
   now_unix_ms : Int64
@@ -71,7 +71,7 @@ pub extend AdmissionRejection with FromJson::{from_json}
 ///|
 pub(all) enum BackpressureDecision {
   StartImmediately
-  Queue(position~ : Int)
+  Queue(position~ : Int32)
   Reject(reason~ : AdmissionRejection, retryable~ : Bool)
 } derive(Debug, Eq, ToJson, FromJson)
 

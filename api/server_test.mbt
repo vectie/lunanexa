@@ -962,7 +962,7 @@ async fn configure_schedulable_model(registry : @registry.FileRegistry) -> Unit 
 ///|
 fn schedulable_heartbeat(
   state : @contracts.NodeState,
-  node_id? : String = "node-a",
+  node_id~ : String = "node-a",
 ) -> @contracts.NodeHeartbeat {
   {
     node_id,

@@ -21,7 +21,7 @@ pub let source_manifest_schema_version : String = "lunanexa.modelsource.verified
 pub let cx7_pair_topology_profile : String = "cx7-pair-v1"
 
 ///|
-pub let cx7_pair_member_count : Int = 2
+pub let cx7_pair_member_count : Int32 = 2
 
 ///|
 /// The inventory label through which a node names its CX7 peer. A pair is
@@ -187,10 +187,10 @@ pub(all) struct ResourceCeiling {
   /// Northbound admission safety ceiling measured as UTF-8 bytes of the
   /// canonical `payload` JSON. Runtime-reported provider units remain separate
   /// usage evidence and cannot weaken this byte ceiling.
-  max_input_units : Int
-  max_output_units : Int
+  max_input_units : Int32
+  max_output_units : Int32
   max_runtime_ms : Int64
-  max_accelerator_memory_mib : Int
+  max_accelerator_memory_mib : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -329,8 +329,8 @@ pub extend PublicError with FromJson::{from_json}
 
 ///|
 pub(all) struct Usage {
-  input_units : Int
-  output_units : Int
+  input_units : Int32
+  output_units : Int32
   accelerator_ms : Int64
   queue_ms : Int64
 } derive(Debug, Eq, ToJson, FromJson)
@@ -420,7 +420,7 @@ pub extend StreamEventKind with FromJson::{from_json}
 ///|
 pub(all) struct WorkloadStreamEvent {
   workload_id : String
-  sequence : Int
+  sequence : Int32
   kind : StreamEventKind
   output : Json?
   response : WorkloadResponse?
@@ -557,7 +557,7 @@ pub(all) struct ModelRecord {
   license_id : String
   provenance : String
   compatible_architectures : Array[String]
-  minimum_memory_mib : Int
+  minimum_memory_mib : Int32
   state : ModelState
 } derive(Debug, Eq, ToJson, FromJson)
 
@@ -575,10 +575,10 @@ pub extend ModelRecord with FromJson::{from_json}
 
 ///|
 pub(all) struct ResourceLimits {
-  accelerator_count : Int
-  accelerator_memory_mib : Int
-  cpu_millis : Int
-  memory_mib : Int
+  accelerator_count : Int32
+  accelerator_memory_mib : Int32
+  cpu_millis : Int32
+  memory_mib : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -615,9 +615,9 @@ pub extend NetworkPolicy with FromJson::{from_json}
 ///|
 pub(all) struct HealthPolicy {
   readiness_path : String
-  interval_ms : Int
-  failure_threshold : Int
-  termination_grace_ms : Int
+  interval_ms : Int32
+  failure_threshold : Int32
+  termination_grace_ms : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -640,9 +640,9 @@ pub(all) struct AssignmentGroup {
   group_id : String
   /// 0 is the head: the member that serves traffic and exports the peer's
   /// model store when the pair shares one copy of the weights.
-  rank : Int
+  rank : Int32
   /// The number of members in the group. Only two is admitted.
-  world_size : Int
+  world_size : Int32
   /// The peer's address on the private fabric, for rank coordination.
   peer_endpoint : String
 } derive(Debug, Eq, ToJson, FromJson)
@@ -717,8 +717,8 @@ pub extend DesiredAssignment with FromJson::{from_json}
 pub(all) struct AcceleratorInventory {
   device_id : String
   architecture : String
-  memory_total_mib : Int
-  memory_free_mib : Int
+  memory_total_mib : Int32
+  memory_free_mib : Int32
   healthy : Bool
 } derive(Debug, Eq, ToJson, FromJson)
 
@@ -902,8 +902,8 @@ pub extend RegistryReadContract with FromJson::{from_json}
 pub(all) struct SchedulerReadContract {
   quotas : Array[Json]
   active : Array[Json]
-  queued_count : Int?
-  running_count : Int?
+  queued_count : Int32?
+  running_count : Int32?
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -922,9 +922,9 @@ pub extend SchedulerReadContract with FromJson::{from_json}
 pub(all) struct BenchmarkReadSummary {
   run_id : String
   profile : String
-  latency_p95_ms : Int
-  throughput_units_per_second : Int
-  failure_per_mille : Int
+  latency_p95_ms : Int32
+  throughput_units_per_second : Int32
+  failure_per_mille : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|

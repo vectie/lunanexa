@@ -8,16 +8,16 @@ pub(all) struct HostConfig {
   storage_class : String
   /// Explicit deployment profile; legacy/local volumes default to RWO.
   storage_access_mode : String?
-  storage_gib : Int
-  cpu_millis : Int
-  memory_mib : Int
+  storage_gib : Int32
+  cpu_millis : Int32
+  memory_mib : Int32
   controller_origin : String
   model_gateway_origin : String
   /// Expected public catalog URL; private model traffic still uses the above.
   public_api_base_url : String?
   trusted_ca_config_map : String?
-  controller_port : Int
-  model_gateway_port : Int
+  controller_port : Int32
+  model_gateway_port : Int32
   kubernetes_origin : String
   kubernetes_ca_file : String
   kubernetes_token_file : String
@@ -70,7 +70,7 @@ pub struct WorkspaceHost {
   observation_token : String
   locks : Map[String, @async.Mutex]
   kubernetes_override : (async (@http.RequestMethod, String, Json?) -> (
-    Int,
+    Int32,
     Json,
   ))?
 }
@@ -140,8 +140,8 @@ fn origin(value : String) -> Bool {
 ///|
 pub fn WorkspaceHost::new(
   config : HostConfig,
-  require_exclusive? : Bool = false,
-  observation_token? : String = "",
+  require_exclusive~ : Bool = false,
+  observation_token~ : String = "",
 ) -> WorkspaceHost raise HostError {
   if require_exclusive && observation_token == "" {
     raise InvalidConfiguration

@@ -43,6 +43,8 @@ pub struct PostgresDatabase {
 }
 pub async fn PostgresDatabase::append_operational_event(Self, String, Int64, String) -> Unit
 pub fn PostgresDatabase::close(Self) -> Unit
+pub async fn PostgresDatabase::commit_control_workload(Self, Int64, String, String, String) -> Unit
+pub async fn PostgresDatabase::commit_inference_usage(Self, String, String, String?) -> Unit
 pub async fn PostgresDatabase::controller_leadership_is_current(Self, String, Int64) -> Bool
 pub async fn PostgresDatabase::load_recent_operational_events(Self, Int) -> Array[String]
 pub async fn PostgresDatabase::load_snapshot(Self, String, String) -> String?

@@ -32,7 +32,7 @@ priv struct NotificationPreferenceRequest {
 
 ///|
 priv struct NotificationRedriveRequest {
-  expected_attempt_count : Int
+  expected_attempt_count : Int32
   expected_updated_unix_ms : Int64
 } derive(FromJson)
 
@@ -777,7 +777,7 @@ pub async fn ApiService::reconcile_notifications(
 /// no user has a page open.
 pub async fn ApiService::run_notification_reconciler_forever(
   self : ApiService,
-  interval_ms : Int,
+  interval_ms : Int32,
 ) -> Unit noraise {
   if interval_ms < 1000 || interval_ms > 300000 {
     return
@@ -1108,7 +1108,7 @@ async fn ApiService::handle_notifications(
         405, "MethodNotAllowed", "notification delivery listing requires GET", false,
       )
     }
-    return json_reply(200, store.snapshot().deliveries.to_json())
+    return json_reply(200, Json(store.snapshot().deliveries))
   }
   if path == "/v1/notifications/operator" {
     if !self.operator_authorized(headers) {
@@ -1123,7 +1123,7 @@ async fn ApiService::handle_notifications(
     }
     self.refresh_node_health_notifications(now)
     self.refresh_delivery_health_notifications(now)
-    return json_reply(200, store.records_for_operators(now).to_json())
+    return json_reply(200, Json(store.records_for_operators(now)))
   }
   if path == "/v1/notifications/self" {
     guard self.notification_subject_context(headers, allow_asserted_subject)
@@ -1142,7 +1142,7 @@ async fn ApiService::handle_notifications(
     )
     return json_reply(
       200,
-      store.records_for_subject(tenant_ref, subject_ref, now).to_json(),
+      Json(store.records_for_subject(tenant_ref, subject_ref, now)),
     )
   }
   if path == "/v1/notifications/self/preferences" {
@@ -1156,10 +1156,11 @@ async fn ApiService::handle_notifications(
       Get =>
         return json_reply(
           200,
-          store
-          .preferences_for_subject(tenant_ref, subject_ref)
-          .map(@notifications.preference_view)
-          .to_json(),
+          Json(
+            store
+            .preferences_for_subject(tenant_ref, subject_ref)
+            .map(@notifications.preference_view),
+          ),
         )
       Put => {
         guard decode_notification_preference(body) is Some(request) else {

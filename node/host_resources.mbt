@@ -1,6 +1,6 @@
 ///|
 pub(all) struct HostResources {
-  cpu_count : Int
+  cpu_count : Int32
   memory_total_mib : Int64
 } derive(Debug, Eq, ToJson, FromJson)
 
@@ -26,7 +26,7 @@ pub fn parse_linux_host_resources(
   guard cpuinfo.length() <= 4194304 && meminfo.length() <= 65536 else {
     raise TelemetryCollectorError::MalformedSample("host inventory size")
   }
-  let processors : Map[Int, Bool] = Map([])
+  let processors : Map[Int32, Bool] = Map([])
   for line in cpuinfo.split("\n") {
     if line.find(":") is Some(separator) &&
       line[:separator].trim() == "processor" {
@@ -186,7 +186,7 @@ pub(all) struct HostUtilization {
   /// `None` when the kernel does not expose `MemAvailable`. Callers must omit
   /// the metric rather than substitute a number.
   memory_available_mib : Int64?
-  cpu_utilization_per_mille : Int
+  cpu_utilization_per_mille : Int32
 } derive(Debug, Eq, ToJson, FromJson)
 
 ///|
@@ -240,7 +240,7 @@ pub fn parse_linux_cpu_times(stat : String) -> (Int64, Int64) raise {
 pub fn parse_linux_cpu_utilization_per_mille(
   first : (Int64, Int64),
   second : (Int64, Int64),
-) -> Int raise {
+) -> Int32 raise {
   let total_delta = second.0 - first.0
   let idle_delta = second.1 - first.1
   guard total_delta > 0L && idle_delta >= 0L && idle_delta <= total_delta else {

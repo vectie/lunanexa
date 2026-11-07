@@ -223,7 +223,7 @@ priv struct SelfUploadIntent {
   order_id : String
   artifact_id : String
   kind : @offline.DocumentArtifactKind
-  revision : Int
+  revision : Int32
   allowed_media_types : Array[String]
   maximum_byte_count : Int64
   expires_unix_ms : Int64
@@ -296,7 +296,7 @@ pub(all) struct OfflineArtifactView {
   artifact_id : String
   order_id : String
   kind : @offline.DocumentArtifactKind
-  revision : Int
+  revision : Int32
   locale : String
   media_type : String
   byte_count : Int64
@@ -1148,10 +1148,7 @@ async fn ApiService::handle_offline_commerce(
         false,
       )
     }
-    return json_reply(
-      200,
-      store.claim_generation_requests(@async.now()).to_json(),
-    )
+    return json_reply(200, Json(store.claim_generation_requests(@async.now())))
   }
   if path == "/v1/offline-commerce/operator/entitlement-work/pending" {
     guard self.entitlement_authority_callback_token is Some(token) else {
@@ -1590,10 +1587,11 @@ async fn ApiService::handle_offline_commerce(
       self.refresh_offline_commerce_notifications(@async.now())
       json_reply(
         200,
-        store
-        .orders_for_organization(view.membership.organization_id)
-        .filter(order => order.purchaser_subject_ref == subject_ref)
-        .to_json(),
+        Json(
+          store
+          .orders_for_organization(view.membership.organization_id)
+          .filter(order => order.purchaser_subject_ref == subject_ref),
+        ),
       )
     }
     (Post, "/v1/offline-commerce/self/orders") => {

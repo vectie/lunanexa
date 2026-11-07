@@ -30,7 +30,7 @@ let observation_test_secret : String = "guide-observation-test-secret-at-least-3
 ///|
 async fn send_json(
   connection : @http.ServerConnection,
-  status : Int,
+  status : Int32,
   reason : String,
   body : String,
 ) -> Unit {
@@ -205,7 +205,7 @@ async test "probe emits aggregate typed observability without private response d
     assert_eq(events[0].event_code, "GuideDiagnosticsProbeCompleted")
     assert_eq(events[0].target_type, "guide")
     assert_eq(events[0].outcome, "healthy")
-    assert_false(events.to_json().stringify().contains("private-body-secret"))
+    assert_false(Json(events).stringify().contains("private-body-secret"))
     @fs.rmdir(directory, recursive=true)
   }
 }

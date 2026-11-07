@@ -66,7 +66,7 @@ async test "bundled quote template recalculates real numeric inputs and totals" 
   let second = @worker.customize_xlsx_template(bytes, replacements)
   assert_eq(first.bytes, second.bytes)
   let cells = @xlsx.inspect(@opc.open(first.bytes))
-  let by_ref : Map[Int, @xlsx.InspectedCell] = Map([])
+  let by_ref : Map[Int32, @xlsx.InspectedCell] = Map([])
   for cell in cells {
     if cell.column == 2 {
       by_ref[cell.row] = cell
