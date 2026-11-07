@@ -12,6 +12,8 @@ pub struct AccountStore {
   mut sessions : Map[String, BrowserSession]
   mut invitations : Map[String, AccountInvitation]
   mut trials : Map[String, TrialEntitlement]
+  // Activity is approximate telemetry; authorization always checks live state.
+  mut activity_checkpoint_ms : Int64?
   mutex : @async.Mutex
 }
 
@@ -38,7 +40,7 @@ fn constant_time_equal(left : String, right : String) -> Bool {
 }
 
 ///|
-fn valid_text(value : String, maximum : Int) -> Bool {
+fn valid_text(value : String, maximum : Int32) -> Bool {
   value.trim() != "" &&
   value.length() <= maximum &&
   value.all(character => {
@@ -173,7 +175,7 @@ let completed_session_retention_ms : Int64 = 2592000000L
 /// How many sessions one account may hold at once. Reaching it evicts the least
 /// recently used session; it never refuses a sign-in that just presented the
 /// account's own credential.
-const MaximumActiveSessionsPerAccount : Int = 8
+const MaximumActiveSessionsPerAccount : Int32 = 8
 
 ///|
 fn AccountStore::prune_completed_sessions_unlocked(
@@ -332,6 +334,7 @@ pub async fn AccountStore::open(
     sessions: Map([]),
     invitations: Map([]),
     trials: Map([]),
+    activity_checkpoint_ms: None,
     mutex: Mutex(),
   }
   if @fs.exists(path) {
@@ -362,6 +365,7 @@ pub async fn AccountStore::open_postgres(
     sessions: Map([]),
     invitations: Map([]),
     trials: Map([]),
+    activity_checkpoint_ms: None,
     mutex: Mutex(),
   }
   match database.load_snapshot("accounts", snapshot_schema_version) {
@@ -1036,7 +1040,7 @@ fn AccountStore::session_material(
   self : AccountStore,
   account_id : String,
   now_unix_ms : Int64,
-  ordinal : Int,
+  ordinal : Int32,
 ) -> String {
   @crypto.bytes_to_hex_string(
     @crypto.hmac(
@@ -1159,10 +1163,6 @@ pub async fn AccountStore::authorize(
   let secret_digest = digest(secret)
   self.mutex.acquire()
   defer self.mutex.release()
-  let previous = self.sessions.copy()
-  errdefer {
-    self.sessions = previous
-  }
   guard self.sessions
     .values()
     .find_first(value => constant_time_equal(value.secret_sha256, secret_digest))
@@ -1182,8 +1182,20 @@ pub async fn AccountStore::authorize(
     raise Unauthorized
   }
   let touched = { ..session, last_used_unix_ms: now_unix_ms, }
+  let previous_checkpoint = self.activity_checkpoint_ms
+  errdefer {
+    self.sessions[session.session_id] = session
+    self.activity_checkpoint_ms = previous_checkpoint
+  }
   self.sessions[session.session_id] = touched
-  self.persist()
+  // One global checkpoint coalesces a burst across different users as well as
+  // repeated reads by one user. Security mutations retain immediate persistence.
+  if previous_checkpoint
+    .map(time => now_unix_ms < time || now_unix_ms - time >= 30000L)
+    .unwrap_or(true) {
+    self.persist()
+    self.activity_checkpoint_ms = Some(now_unix_ms)
+  }
   { session_id: session.session_id, account: account_view(account), }
 }
 
@@ -1229,7 +1241,7 @@ pub async fn AccountStore::revoke_all_sessions(
   self : AccountStore,
   account_id : String,
   now_unix_ms : Int64,
-) -> Int {
+) -> Int32 {
   self.mutex.acquire()
   defer self.mutex.release()
   let previous = self.sessions.copy()
