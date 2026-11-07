@@ -115,3 +115,11 @@ The action really starts the units, but this run failed after about 41 seconds
 because the 1M KV allocation lacked about 0.32 GiB. The operator projection now
 requires actual endpoint readiness, rather than equating active processes with
 ready inference. No successful startup duration is claimed from that failed run.
+
+On 2026-11-08 the user authorized 512K. Both existing units changed only their
+context argument, then the live Start action reached endpoint readiness in about
+42 seconds. Model metadata declares 524,288 tokens; small JSON and SSE requests
+pass. The service is left running with its original files, credentials, precision,
+eight execution lanes and company allocation. No host audio-service restart or
+model-specific platform control path was required; see the startup report for
+the measured shared KV capacity and acceptance limits.

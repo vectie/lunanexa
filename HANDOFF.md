@@ -605,3 +605,40 @@ Final private screenshot: `/tmp/native-glm-20261107/evidence/mana-final.png`.
 Implementation commit `3035ed4` is pushed to both GitHub and Vectie main. The
 audio-service confirmation remains unanswered; do not call GLM inference ready
 or report a successful startup duration from this run.
+
+## User-authorized GLM 512K — 2026-11-08
+
+The user chose 512K instead of restarting host audio services. This supersedes
+the previous no-context-reduction constraint and pending audio confirmation.
+Do not restart/remove WirePlumber or other desktop services on that basis.
+Both Ubuntu 24.04 hosts have GNOME 46, PipeWire and WirePlumber installed;
+WirePlumber's vendor unit is wanted by PipeWire/PipeWire Pulse. It is host desktop
+infrastructure, not a GLM/LunaNexa dependency. Its original installer was not
+inferred from these package observations.
+
+Only `--context 1048576` was changed to `--context 524288` in the two existing
+TensorFold user units, while both were stopped and GPUs idle. An exact reverse
+replacement matches both original unit files; all other settings, precision,
+reasoning, output allowance, reserve, credentials and model paths are unchanged.
+Private backups and bounded acceptance evidence are under
+`/home/HwHiAiUser/glm-512k-20261108` on the manager. Native automation is private
+`.mbtx`; do not commit host unit snapshots, credentials, logs or production state.
+
+The live authenticated `/mana/` Start button was used. The service became healthy
+and model discovery succeeded **41,788 ms after the head's systemd Started event**
+(1.5-second readiness sampling). JSON arithmetic returned a correct result in
+324 ms; SSE returned READY and a normal DONE marker in 234 ms. The page became
+Ready without manual refresh. This is service-start plus small-request acceptance,
+not a reboot/cold-filesystem or full-512K-prompt quality benchmark.
+
+Both model aliases and the tokenizer declare 524,288 tokens. The runtime reports
+eight execution lanes and 528,384 shared KV tokens (1,032 existing 512-token
+pages). Eight lanes do not mean eight simultaneous full-context histories. The
+live allocation ConfigMap now reflects these observed values; its stale 1M KV
+byte estimate was removed, with the old metadata retained privately. No controller
+restart, new image, model-specific backend path, key, grant or audio-service
+mutation was needed. GLM is left running; Qwen/MiniMax remain running.
+
+No native source changed, so the previous strict native check and 1,956-test gate
+were not repeated for this configuration/documentation change. Actual runtime,
+JSON/SSE, effective unit arguments and the official portal are the acceptance.
