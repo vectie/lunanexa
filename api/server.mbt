@@ -5594,6 +5594,31 @@ pub async fn ApiService::serve_on(
   server.run_forever(allow_failure=true) <| ((request, reader, connection) => {
     let headers = application_headers(request.headers)
     let allow_asserted_subject = loopback_client(connection.client_addr())
+    // A fresh authority read must not queue behind durable operational metrics.
+    // Send its checked result first, then retain the ordinary observation in
+    // this request task. Mutations keep their existing audit-before-reply path.
+    if request.meth == Get && request.path == "/v1/auth/self" {
+      let started = @async.now()
+      let reply = self.handle_accounts(
+        Get,
+        request.path,
+        headers,
+        "",
+        allow_asserted_subject,
+      )
+      send_listener_reply(connection, reply)
+      self.record_operational_request(
+        Get,
+        request.path,
+        headers,
+        reply,
+        started,
+        allow_asserted_subject,
+      ) catch {
+        _ => eprintln("identity_profile_observation_failed")
+      }
+      return
+    }
     if self.serve_artifact(request, connection) {
       return
     }

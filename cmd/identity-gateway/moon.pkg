@@ -1,5 +1,5 @@
 import {
-  "vectie/lunanexa/internal/postgres",
+  "vectie/lunanexa/pgclient",
   "moonbitlang/async",
   "moonbitlang/async/http",
   "moonbitlang/async/io",

@@ -1,14 +1,14 @@
 ///|
 priv struct GatewaySessionStore {
-  connection : @postgres.Connection
-  mutex : @async.Mutex
+  connection : @pgclient.PgPool
 }
 
 ///|
-fn GatewaySessionStore::open(
+async fn GatewaySessionStore::open(
   database_url : String,
-) -> GatewaySessionStore raise {
-  let connection = @postgres.connect(database_url)
+) -> GatewaySessionStore {
+  let connection = @pgclient.PgPool::connect(database_url, workers=4)
+  errdefer connection.close()
   let create_table_sql =
     #|CREATE TABLE IF NOT EXISTS lunanexa.identity_gateway_sessions (
     #|  session_id text PRIMARY KEY,
@@ -23,7 +23,7 @@ fn GatewaySessionStore::open(
     #|CREATE INDEX IF NOT EXISTS identity_gateway_sessions_expiry_idx
     #|ON lunanexa.identity_gateway_sessions (expires_unix_ms)
   ignore(connection.execute(create_index_sql))
-  { connection, mutex: Mutex(), }
+  { connection, }
 }
 
 ///|
@@ -33,8 +33,6 @@ fn GatewaySessionStore::close(self : GatewaySessionStore) -> Unit {
 
 ///|
 async fn GatewaySessionStore::ping(self : GatewaySessionStore) -> Bool {
-  self.mutex.acquire()
-  defer self.mutex.release()
   let healthy = try {
     let result = self.connection.execute("SELECT 1")
     result.row_count() == 1 && result.value(0, 0) == Some("1")
@@ -50,8 +48,6 @@ async fn GatewaySessionStore::create(
   value : GatewayCookie,
 ) -> String {
   let id = random_token(32)
-  self.mutex.acquire()
-  defer self.mutex.release()
   let insert_sql =
     #|INSERT INTO lunanexa.identity_gateway_sessions
     #|  (session_id, audience, browser_host, expires_unix_ms, payload)
@@ -79,8 +75,6 @@ async fn GatewaySessionStore::load(
   self : GatewaySessionStore,
   id : String,
 ) -> GatewayCookie? {
-  self.mutex.acquire()
-  defer self.mutex.release()
   let result = {
     let select_sql =
       #|SELECT payload::text
@@ -105,12 +99,11 @@ async fn GatewaySessionStore::replace(
   id : String,
   value : GatewayCookie,
 ) -> Unit {
-  self.mutex.acquire()
-  defer self.mutex.release()
   let update_sql =
     #|UPDATE lunanexa.identity_gateway_sessions
     #|SET audience = $2, browser_host = $3, expires_unix_ms = $4::bigint,
-    #|    payload = $5::jsonb
+    #|    payload = jsonb_set($5::jsonb, '{last_used_unix_ms}',
+    #|      to_jsonb(GREATEST((payload->>'last_used_unix_ms')::bigint, $6::bigint)::text))
     #|WHERE session_id = $1
   let updated = self.connection.execute(update_sql, parameters=[
     Some(id),
@@ -118,6 +111,7 @@ async fn GatewaySessionStore::replace(
     Some(value.host),
     Some(value.expires_unix_ms.to_string()),
     Some(value.to_json().stringify()),
+    Some(value.last_used_unix_ms.to_string()),
   ])
   guard updated.affected_rows() == 1L else {
     raise Failure("identity-gateway session disappeared")
@@ -129,8 +123,6 @@ async fn GatewaySessionStore::delete(
   self : GatewaySessionStore,
   id : String,
 ) -> Bool {
-  self.mutex.acquire()
-  defer self.mutex.release()
   let deleted = {
     let result = self.connection.execute(
       "DELETE FROM lunanexa.identity_gateway_sessions WHERE session_id = $1",
