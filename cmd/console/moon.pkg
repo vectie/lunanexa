@@ -1,6 +1,8 @@
 import {
+  "vectie/lunanexa/operator_read",
   "vectie/lunanexa/event_trial",
   "vectie/lunanexa/ui/browser_transport",
+  "vectie/lunanexa/ui/browser_interactions",
   "vectie/lunanexa/contracts",
   "vectie/lunanexa/commercial",
   "vectie/lunanexa/commercial/offline",

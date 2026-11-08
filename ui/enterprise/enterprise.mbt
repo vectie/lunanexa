@@ -3770,17 +3770,26 @@ fn costs_view(
     } else {
       @html.section(class="data-table-panel", [
         @html.h3(enterprise_copy(state.locale, CostCenters)),
-        @html.table([
-          @html.thead([
-            @html.tr([
-              @html.th(enterprise_copy(state.locale, CostCenter)),
-              @html.th(enterprise_copy(state.locale, Projects)),
-              @html.th(enterprise_copy(state.locale, Spend)),
-              @html.th(enterprise_copy(state.locale, Status)),
+        @html.div(
+          class="table-scroll",
+          attrs=@html.Attrs::build()
+            .tabindex(0)
+            .role("region")
+            .aria_label(enterprise_copy(state.locale, CostCenters)),
+          [
+            @html.table([
+              @html.thead([
+                @html.tr([
+                  @html.th(enterprise_copy(state.locale, CostCenter)),
+                  @html.th(enterprise_copy(state.locale, Projects)),
+                  @html.th(enterprise_copy(state.locale, Spend)),
+                  @html.th(enterprise_copy(state.locale, Status)),
+                ]),
+              ]),
+              @html.tbody(rows),
             ]),
-          ]),
-          @html.tbody(rows),
-        ]),
+          ],
+        ),
       ])
     },
   ])

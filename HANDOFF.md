@@ -798,3 +798,73 @@ enterprise `ec7df985f19ea25e20ea86044bd5d500b8586917ff46aee8f9213375a3e245ce`.
 No controller, node agent or GPU runtime rollout was required. Login-dependent
 interactive acceptance remains pending; the user has not yet replied to the
 current sign-in request. Do not repeatedly request passwords or reset accounts.
+
+## Portal remaining implementation — 2026-11-08
+
+The remaining implementation rows in `docs/PORTAL_SIMPLIFICATION.md` are closed:
+six operator lists now read server windows of at most 25 records, with minimal
+personnel choices kept separately. Model/catalog search and empty publishing,
+company ownership labels, service handoff references, app refresh and mobile
+cards, keyboard table scrolling and shared dialog interactions are implemented.
+Contract revision and multi-organization behavior reuse the existing authority
+and native HTTP regressions; no second set of resource/permission rules was added.
+
+Pagination pitfalls:
+
+- Read-only POSTs must bypass mutation/reconciliation fences while retaining
+  route-specific operator/audit authorization. Exclude them from operator
+  mutation-audit writes, or reading audit pages immediately invalidates cursors.
+- Audit traffic is append-only: pin the highest sequence during traversal so
+  new inference requests cannot keep returning the operator to page one.
+- Keep choice metadata separate from the visible account page. Replacing the
+  entire personnel chooser with the current 25 accounts loses off-page users.
+- No selected person intentionally returns no access milestones. Do not use
+  that empty array to infer an empty platform or auto-open authorization forms.
+- Requests are generation/query/person/session-bound; a stale response or an
+  abort from an earlier search must not clear or replace the current result.
+- Stores still scan in-memory snapshots; do not claim indexed database cursors.
+  The savings are bounded projection, serialization, network transfer and DOM.
+
+Dialog mechanics live in JS-only `ui/browser_interactions`, shared by both
+portals. Cancel IDs are explicit; Escape/backdrop never activate confirmation.
+Modal focus is trapped, nonmodal panels leave background navigation usable,
+and closing restores the triggering control. Tables remain native HTML.
+
+Automation pitfall: MoonBit `String::replace` replaces only the first occurrence.
+Use `replace_all` for intentional repeated source edits, then verify the complete
+match count. Linux native controller compilation can spend 10–15 minutes in
+`cc1`; keep optimization flags and avoid overlapping native suites.
+
+Production build baseline is the identity-checkpoint/profile-response controller
+under `coffee-auth-queue-20261107/profile-final-control`, SHA-256
+`7bef5632a0cabb04ed42020e9a5651bf3a2c2f105b416bcd823141671027b463`.
+Do not rebuild from the older `native-glm-20261107/control` binary/source alone.
+The reviewed source preserves both identity fixes; the account source differs
+from that production baseline only in formatting. Release preparation is under
+`/home/HwHiAiUser/portal-finish-20261108` and portal assets under
+`/home/HwHiAiUser/portal-finish-shipped-ui-20261108`. Snapshots remain private on the
+host. No production identities, orders, permissions, keys or GPU runtime settings
+were changed for this acceptance.
+
+Current browser limitation: the official `/user/` tab can be inventoried but
+both documented tab-binding APIs return `browser.user is unavailable`. This is
+not evidence of an expired account. Do not ask for repeated sign-ins or use a
+demo as a replacement; preserve the separate production visual/interaction gate.
+
+Release completed: strict native and JS checks pass, full native 1,970/1,970,
+related JS 444/444, final native UI 189/189. Controller and both portals rolled
+out successfully. All six list endpoints and their available next cursors pass
+live read checks; selected-company-person access is scoped correctly. Original
+business identity references remain present, service owner/node/runtime bindings
+and states agree with the private baseline, and all five GPU workload deployment
+UIDs/specifications remain unchanged. Audit-only checks must use the audit-token
+reference, not a static operator token; browser platform-operator sessions retain
+their existing role implication. No authentication policy was widened.
+
+Current controller SHA-256:
+`98725a6c27d9f26762a9c21e643120de1ef496f5e873587fa229d293f068e1f7`.
+Public JS hashes: console
+`f0823d9977470c7ef59cdc8e3ad0d646b88fc59726227a002e2432c18b636fc3`,
+enterprise `52aa7e7413f878f06d2e293b3c5372bb19d6c80cfa3fff3a7ee541f8a0f5e23f`.
+All three supported public sites return HTTP 200. Official browser interaction
+and production business/failure drills remain distinct, unclaimed gates.

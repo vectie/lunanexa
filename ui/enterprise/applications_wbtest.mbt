@@ -19,7 +19,7 @@ test "application launcher shows authorized applications without unavailable pla
   let busy = @rabbita.render_to_string(() => {
     @rabbita.Val::constant(application_cards({ ..state, loading: true, }, None))
   })
-  assert_eq(busy.split(" disabled").to_array().length(), 2)
+  assert_eq(busy.split(" disabled").to_array().length(), 3)
 }
 
 ///|
@@ -168,5 +168,5 @@ test "a shared ComfyUI outage never launches a reserved GPU delivery" {
     @rabbita.Val::constant(application_cards(state, None))
   })
   assert_false(cards.contains("Open ComfyUI"))
-  assert_true(cards.contains("Configure ComfyUI"))
+  assert_true(cards.contains("View access requirements"))
 }

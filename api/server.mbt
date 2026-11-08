@@ -3608,6 +3608,11 @@ async fn ApiService::dispatch_with_transport(
   if path == "/v1/storage-nodes" {
     return self.handle_storage_nodes(verb, headers)
   }
+  // POST carries private search terms in the body. These are reads, including
+  // during reconciliation; do not run them through the mutation fence.
+  if operator_read_path(path) {
+    return self.handle_operator_reads(verb, path, headers, body)
+  }
   if verb != Get && !self.store.current_epoch_is_durable() {
     return api_error(
       409, "StaleControllerEpoch", "controller was fenced by a newer durable epoch",
@@ -5587,6 +5592,7 @@ async fn ApiService::handle_with_transport(
   // may revoke or alter its own session. Legacy static tokens keep their
   // existing route-specific audit behavior.
   let human_operator = if verb != Get &&
+    !operator_read_path(path) &&
     bearer_secret(headers)
     .map(value => value.has_prefix("lnxs_"))
     .unwrap_or(false) {

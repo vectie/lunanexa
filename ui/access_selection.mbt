@@ -2,7 +2,7 @@
 pub fn registered_access_ready(state : ConsoleState) -> Bool {
   state.operator_authenticated &&
   !state.loading &&
-  state.accounts.any(account => {
+  account_choices(state).any(account => {
     account.account_id == state.registered_access_account &&
     account.state == Active &&
     account.roles.contains(EnterpriseUser)
@@ -19,8 +19,7 @@ fn registered_access_form(
 ) -> @rabbita.Html {
   @html.details(
     class="access-package-panel ln-advanced",
-    open=state.registered_access_account != "" ||
-      state.access_packages.is_empty(),
+    open=state.registered_access_account != "",
     [
       @html.summary(
         localized(
@@ -48,7 +47,7 @@ fn registered_access_form(
                 localized(state.locale, "Choose a person", "选择人员"),
               ),
               ..[
-                for account in state.accounts if account.state == Active &&
+                for account in account_choices(state) if account.state == Active &&
                 account.roles.contains(EnterpriseUser) => {
                   @html.option(
                     value=account.account_id,
@@ -169,7 +168,7 @@ fn registered_access_records(
   for item in state.access_packages {
     people[item.account_id] = "\{item.display_name} · \{item.email}"
   }
-  for account in state.accounts {
+  for account in account_choices(state) {
     people[account.account_id] = "\{account.display_name} · \{account.email}"
   }
   let records = paged_rows(

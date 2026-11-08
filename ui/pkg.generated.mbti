@@ -18,6 +18,8 @@ import {
 }
 
 // Values
+pub fn account_choices(ConsoleState) -> Array[AccountChoice]
+
 pub fn account_roles_after_toggle(Array[UiAccountRole], UiAccountRole) -> Array[UiAccountRole]
 
 pub fn alert_day_label(Int64) -> String
@@ -222,6 +224,18 @@ pub fn AccessPackageView::from_json(Json, @json.JsonPath) -> Self raise @json.Js
 pub fn AccessPackageView::not_equal(Self, Self) -> Bool
 pub fn AccessPackageView::to_json(Self) -> Json
 pub fn AccessPackageView::to_repr(Self) -> @debug.Repr
+
+pub(all) struct AccountChoice {
+  account_id : String
+  subject_ref : String
+  display_name : String
+  email : String
+  roles : Array[UiAccountRole]
+  state : UiAccountState
+} derive(Eq, @json.FromJson)
+pub fn AccountChoice::equal(Self, Self) -> Bool
+pub fn AccountChoice::from_json(Json, @json.JsonPath) -> Self raise @json.JsonDecodeError
+pub fn AccountChoice::not_equal(Self, Self) -> Bool
 
 pub(all) struct AccountInviteDraft {
   account_id : String
@@ -484,11 +498,14 @@ pub fn ConsoleMessage::equal(Self, Self) -> Bool
 pub fn ConsoleMessage::not_equal(Self, Self) -> Bool
 
 pub(all) struct ConsoleState {
+  remote_list_pages : Map[OperatorList, RemoteListPage]
+  account_choices : Array[AccountChoice]?
   locale : @i18n.Locale
   route : OperatorRoute
   navigation_open : Bool
   overview : OverviewMetrics
   nodes : Array[NodeRow]
+  node_ownership : Map[String, String]
   storage_nodes : Array[StorageNodeRow]
   models : Array[ModelRow]
   deployments : Array[DeploymentRow]
@@ -1031,11 +1048,14 @@ pub(all) enum OperatorList {
   AccessRecords
   AuditEvents
   RequestReceipts
+  ModelRegistry
+  ServiceCatalog
 } derive(Eq, Hash)
 pub fn OperatorList::equal(Self, Self) -> Bool
 pub fn OperatorList::hash(Self) -> Int
 pub fn OperatorList::hash_combine(Self, Hasher) -> Unit
 pub fn OperatorList::not_equal(Self, Self) -> Bool
+pub fn OperatorList::read_key(Self) -> String
 
 pub(all) enum OperatorRoute {
   Overview
@@ -1159,6 +1179,19 @@ pub fn QuickTopology::not_equal(Self, Self) -> Bool
 pub fn QuickTopology::storage_value(Self) -> String
 pub fn QuickTopology::to_repr(Self) -> @debug.Repr
 pub fn QuickTopology::topology_profile(Self) -> String?
+
+pub(all) struct RemoteListPage {
+  total : Int
+  page : Int
+  cursor : String
+  previous_cursor : String
+  next_cursor : String
+  generation : Int64
+  loading : Bool
+  failed : Bool
+} derive(Eq)
+pub fn RemoteListPage::equal(Self, Self) -> Bool
+pub fn RemoteListPage::not_equal(Self, Self) -> Bool
 
 pub(all) struct RequestDetail {
   timestamp_unix_ms : Int64

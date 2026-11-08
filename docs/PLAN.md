@@ -1,5 +1,17 @@
 # LunaNexa phased implementation plan
 
+## Portal simplification completion — 2026-11-08
+
+The implementation checklist in [the portal ledger](PORTAL_SIMPLIFICATION.md)
+covers both portals: progressive disclosure, six server-paged operator lists,
+model/catalog search, exception references and recovery actions, shared dialog
+keyboard handling, scrollable tables, and organization-scoped onboarding.
+Native HTTP fixtures exercise registration, review, invitation and multi-company
+isolation without creating production business records. Deployment, external
+asset matching and production-browser acceptance are recorded separately in the
+ledger; inaccessible browser tooling must not be represented as a successful
+visual or UI-to-UI acceptance.
+
 ## Unified model-service migration — 2026-11-07
 
 [Unified model services](UNIFIED_MODEL_SERVICES.md) is implemented and published:
@@ -8,8 +20,9 @@ adapters and both portal projections. Existing GPU specifications/identities,
 keys, aliases, files and records are preserved. Native conflict/restart/privacy
 fixtures and authenticated management-page acceptance pass. Company-member
 browser acceptance remains pending a member session; live GLM inference was not
-tested because its pre-existing stopped state was preserved. The full strict
-native gate remains blocked by existing deprecated-JSON warnings. See HANDOFF.md
+tested in that migration run because its pre-existing stopped state was preserved.
+The deprecated-JSON gate described in that run has since been cleared; the
+2026-11-08 full native suite passes. See HANDOFF.md
 for evidence and limitations; UI labels alone are not acceptance.
 
 ## Global product simplification — 2026-11-04

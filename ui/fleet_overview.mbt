@@ -85,6 +85,20 @@ fn fleet_node_posture(
       ),
     )
   }
+  if state.node_ownership.get(node.node_id) is Some(owner) {
+    if owner.has_prefix("Conflicting") {
+      return (
+        "blocked",
+        localized(locale, "Allocation conflict", "分配冲突"),
+        owner,
+      )
+    }
+    return (
+      "reserved",
+      localized(locale, "Company allocation", "企业预留"),
+      owner,
+    )
+  }
   if node.accelerators.is_empty() {
     return (
       "unknown",
@@ -188,12 +202,20 @@ fn fleet_node_card(
           class="secondary",
           architecture_label(state.locale, node.architecture) +
           " · " +
-          (match node.usage_pool {
-            "trial" => localized(state.locale, "Trial pool", "试用池")
-            "enterprise-dedicated" =>
-              localized(state.locale, "Enterprise pool", "企业专属池")
-            _ =>
-              localized(state.locale, "Pool unclassified", "资源池未分类")
+          state.node_ownership
+          .get(node.node_id)
+          .unwrap_or_else(() => {
+            match node.usage_pool {
+              "trial" => localized(state.locale, "Trial pool", "试用池")
+              "enterprise-dedicated" =>
+                localized(state.locale, "Enterprise pool", "企业专属池")
+              _ =>
+                localized(
+                  state.locale,
+                  "Pool unclassified",
+                  "资源池未分类",
+                )
+            }
           }),
         ),
       ]),
@@ -221,6 +243,15 @@ fn fleet_node_card(
       localized(state.locale, "Node details", "节点详情"),
       [
         @html.p(class="fleet-node-explanation", explanation),
+        if state.node_ownership.contains(node.node_id) {
+          @html.p(
+            class="secondary",
+            localized(state.locale, "Registered pool: ", "登记资源池：") +
+            node.usage_pool,
+          )
+        } else {
+          @html.nothing
+        },
         if node.accelerators.is_empty() {
           @html.p(
             class="fleet-device-note",

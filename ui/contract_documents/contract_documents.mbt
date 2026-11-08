@@ -2288,6 +2288,7 @@ fn operator_confirmation(
           @html.button(
             type_="button",
             class="quiet-button",
+            id="contract-confirmation-dismiss",
             on_click=command(emit, DismissConfirmation),
             copy(state.locale, "Go back", "返回检查"),
           ),
@@ -2375,6 +2376,7 @@ fn confirmation(
                   @html.button(
                     type_="button",
                     class="quiet-button",
+                    id="contract-confirmation-dismiss",
                     on_click=command(emit, DismissConfirmation),
                     copy(state.locale, "Go back", "返回检查"),
                   ),

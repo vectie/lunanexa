@@ -28,9 +28,21 @@ fn application_cards(
 ) -> @rabbita.Html {
   @html.section(class="application-launcher", [
     @html.style_tag(
-      ".application-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1rem}.application-card{display:flex;flex-direction:column;align-items:flex-start;gap:1rem;min-width:0;padding:1.4rem;border:1px solid var(--line);border-radius:1rem;background:var(--panel)}.application-card.is-selected{border-color:var(--mint)}.application-card img{display:block;width:64px;height:64px;object-fit:contain;border-radius:15px}.application-card h3{margin:0;font-size:1.15rem}.application-card p{margin:0;color:var(--muted);font-size:.9rem}.application-card button{min-height:44px;margin-top:auto;width:100%}.application-settings>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;gap:.5rem}.application-settings>summary:focus-visible{outline:2px solid var(--mint);outline-offset:3px}.application-settings[open]>summary{margin-bottom:1rem}.application-settings-content{display:grid;gap:1rem}.delivery-new-service{margin-top:1rem}.delivery-new-service>summary,.record-main details>summary{min-height:44px;padding:.7rem 0;cursor:pointer}.delivery-new-service>summary:focus-visible,.record-main details>summary:focus-visible{outline:2px solid var(--mint);outline-offset:2px}@media(max-width:1250px){.application-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:540px){.application-grid{grid-template-columns:minmax(0,1fr)}}",
+      ".application-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1rem}.application-card{display:flex;flex-direction:column;align-items:flex-start;gap:1rem;min-width:0;padding:1.4rem;border:1px solid var(--line);border-radius:1rem;background:var(--panel)}.application-card.is-selected{border-color:var(--mint)}.application-card img{display:block;width:64px;height:64px;object-fit:contain;border-radius:15px}.application-card h3{margin:0;font-size:1.15rem}.application-card p{margin:0;color:var(--muted);font-size:.9rem}.application-card button{min-height:44px;margin-top:auto;width:100%}.application-settings>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;gap:.5rem}.application-settings>summary:focus-visible{outline:2px solid var(--mint);outline-offset:3px}.application-settings[open]>summary{margin-bottom:1rem}.application-settings-content{display:grid;gap:1rem}.delivery-new-service{margin-top:1rem}.delivery-new-service>summary,.record-main details>summary{min-height:44px;padding:.7rem 0;cursor:pointer}.delivery-new-service>summary:focus-visible,.record-main details>summary:focus-visible{outline:2px solid var(--mint);outline-offset:2px}@media(max-width:1250px){.application-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:540px){.application-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem}.application-card{padding:1rem;gap:.75rem}.application-card img{width:48px;height:48px}.application-card h3{font-size:1rem;overflow-wrap:anywhere}.application-card button{padding:.6rem .4rem;white-space:normal}}@media(max-width:340px){.application-grid{grid-template-columns:minmax(0,1fr)}}",
     ),
-    @html.h2(copy(state.locale, "My applications", "我的应用")),
+    @html.div(class="section-heading", [
+      @html.h2(copy(state.locale, "My applications", "我的应用")),
+      @controls.icon_button(
+        Refresh,
+        copy(
+          state.locale,
+          "Refresh application access",
+          "刷新应用访问状态",
+        ),
+        command(emit, RefreshDesktopStatus),
+        busy=state.loading,
+      ),
+    ]),
     if application_choices(state).is_empty() {
       @html.p(
         copy(
@@ -151,7 +163,11 @@ fn application_cards(
                 } else if client is None {
                   copy(state.locale, "Unavailable", "暂未开放")
                 } else {
-                  copy(state.locale, "Configure \{name}", "配置 \{name}")
+                  copy(
+                    state.locale,
+                    "View access requirements",
+                    "查看开通条件",
+                  )
                 },
               ),
             ],

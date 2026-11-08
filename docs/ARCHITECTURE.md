@@ -1,5 +1,22 @@
 # LunaNexa architecture
 
+## Bounded operator projections
+
+Operator lists use the shared `operator_read` wire envelope and controller-owned
+read projections. Filtering and the 25-row window precede expensive access-record
+projection and JSON transfer. The browser keeps only the visible table window,
+separate minimal personnel choices, and per-list cursor/search generations.
+Parallel initial reads replace the previous account/workspace/access/audit full
+snapshot downloads. Search is debounced; superseded search requests are aborted.
+
+The underlying stores still expose in-memory snapshots: filtering/counting is
+linear in source records, not an indexed database seek. There is no server-held
+pagination session or additional polling. The ownership projection adds one cheap
+ledger read to the existing core refresh without adapter health calls. Native
+HTTP fixtures cover page bounds, cursor binding, append-stable audit traversal,
+authority separation and reconciliation-only reads. These are distinct from
+authenticated production-browser acceptance.
+
 ## Unified model-service authority (2026-11-07)
 
 The active migration is specified in [unified model services](UNIFIED_MODEL_SERVICES.md).

@@ -2016,9 +2016,9 @@ test "page-scoped reads map routes to groups and load each group once" {
     "/v1/model-sources/modelscope/imports",
   ])
   assert_eq(console_read_group_paths(AccessReads, ""), [
-    "/v1/accounts", "/v1/accounts/trial-summary", "/v1/accounts/event-trials", "/v1/onboarding/access-packages",
-    "/v1/workspace", "/v1/exclusive-node-leases",
+    "/v1/accounts/trial-summary", "/v1/accounts/event-trials", "/v1/exclusive-node-leases",
   ])
+  assert_eq(console_read_group_paths(AuditReads, ""), [])
   assert_eq(console_read_group_paths(DeploymentReads, ""), [
     "/v1/assignments", "/v1/service-deployments",
   ])
@@ -2096,6 +2096,7 @@ test "a merged page-scoped read touches only its own group" {
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   let model = deferred_read_test_model(Audit)
   let payload : AuditReadPayload = {
+    pages: [],
     rows: [
       {
         actor: "operator-a",
@@ -2495,6 +2496,8 @@ test "the access group replaces only the account and workspace rows" {
   let (opened, _) = update_live(model, Console(Navigate(Users)), emit)
   assert_true(opened.console_read_groups.contains(AccessReads))
   let payload : AccessReadPayload = {
+    pages: [],
+    people: None,
     access_organizations: [],
     event_trials: Some([]),
     pending_organizations: [],

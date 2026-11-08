@@ -1,16 +1,16 @@
 ///|
 extern "js" fn exercise_dialog_dismissal(install : () -> Unit) -> String =
   #| (install) => {
-  #|   const saved = [globalThis.document, globalThis.MutationObserver, globalThis.__lunanexaEnterpriseDialogFocus];
+  #|   const saved = [globalThis.document, globalThis.MutationObserver, globalThis.__lunanexaDialogInteractions];
   #|   const handlers = {}, results = [];
   #|   let observe, shown = true, closed = 0, restored = 0;
   #|   const trigger = {isConnected:true, focus(){ restored++; }};
   #|   const backdrop = {};
   #|   const cancel = {disabled:false, tabIndex:0, getClientRects:()=>[{}], focus(){}, click(){ closed++; shown=false; observe(); }};
   #|   const inside = {};
-  #|   const dialog = {querySelector:selector=>selector.includes('#api-key-connection-dismiss')?cancel:null, querySelectorAll:()=>[cancel], closest:()=>backdrop, contains:e=>e===inside || e===cancel};
+  #|   const dialog = {getAttribute:()=> 'true', querySelector:selector=>selector.includes('#api-key-connection-dismiss')?cancel:null, querySelectorAll:()=>[cancel], closest:()=>backdrop, contains:e=>e===inside || e===cancel};
   #|   try {
-  #|     globalThis.__lunanexaEnterpriseDialogFocus = false;
+  #|     globalThis.__lunanexaDialogInteractions = false;
   #|     globalThis.document = {documentElement:{}, activeElement:trigger, querySelectorAll:()=>shown?[dialog]:[], addEventListener:(name,fn)=>{handlers[name]=fn;}};
   #|     globalThis.MutationObserver = class {constructor(fn){observe=fn;} observe(){}};
   #|     install();
@@ -24,7 +24,7 @@ extern "js" fn exercise_dialog_dismissal(install : () -> Unit) -> String =
   #|     results.push(closed===2);
   #|     return JSON.stringify(results);
   #|   } finally {
-  #|     [globalThis.document, globalThis.MutationObserver, globalThis.__lunanexaEnterpriseDialogFocus] = saved;
+  #|     [globalThis.document, globalThis.MutationObserver, globalThis.__lunanexaDialogInteractions] = saved;
   #|   }
   #| }
 

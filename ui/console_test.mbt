@@ -193,6 +193,9 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
     registered_access_account: "",
     access_record_account: "",
     list_pages: Map([]),
+    node_ownership: Map([]),
+    remote_list_pages: Map([]),
+    account_choices: None,
     access_organizations: [],
     access_packages: [],
     pending_organizations: [],
@@ -1723,7 +1726,11 @@ test "management routes render explicit empty states" {
     compute_leases: [],
     confirmation: None,
   })
-  assert_true(users_html.contains("No user identities are available"))
+  assert_true(
+    users_html.contains(
+      "No workspace profiles. Open access for a registered person above.",
+    ),
+  )
   assert_true(users_html.contains("No access grants are available"))
   assert_true(
     leases_html.contains("No workspace leases. Open access from Users."),

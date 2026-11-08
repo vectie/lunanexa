@@ -102,6 +102,9 @@ fn model_family_groups(
         }
         @html.details(
           class="model-family",
+          open=state.list_pages
+            .get(ModelRegistry)
+            .map_or(false, page => page.query.trim() != ""),
           [
             @html.summary([
               @html.strong(
@@ -114,7 +117,15 @@ fn model_family_groups(
               @html.span(class="resource-count", " (\{count})"),
             ]),
             ..generations.map(group => {
-              model_registry_group(state, emit, group.0, group.1, false)
+              model_registry_group(
+                state,
+                emit,
+                group.0,
+                group.1,
+                state.list_pages
+                .get(ModelRegistry)
+                .map_or(false, page => page.query.trim() != ""),
+              )
             }),
           ],
         )

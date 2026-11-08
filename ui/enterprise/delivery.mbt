@@ -1085,6 +1085,21 @@ fn delivery_panel_view(
               model_connection_guides(locale, service, emit),
             ]),
             @html.div(class="record-actions", [
+              if service.state == "Partial" || service.state == "Unavailable" {
+                @html.button(
+                  type_="button",
+                  class="quiet-button",
+                  on_click=command(
+                    emit,
+                    CopyDetail(
+                      "Service: \{service.service_id}\nModel: \{service.model_alias}\nState: \{service.state}",
+                    ),
+                  ),
+                  copy(locale, "Copy service reference", "复制服务信息"),
+                )
+              } else {
+                @html.nothing
+              },
               @html.button(
                 type_="button",
                 class="quiet-button",

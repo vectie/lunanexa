@@ -88,25 +88,31 @@ fn deployment_family_groups(
             ..generations.map(g => {
               @html.details(class="model-registry-group", open=true, [
                 @html.summary(g.0 + " (" + g.1.length().to_string() + ")"),
-                @html.div(class="table-scroll", [
-                  @html.table(class="resource-table model-service-table", [
-                    @html.thead(
-                      @html.tr([
-                        @html.th(localized(state.locale, "Service", "服务")),
-                        @html.th(localized(state.locale, "Status", "状态")),
-                        @html.th(localized(state.locale, "Resource", "资源")),
-                        @html.th(localized(state.locale, "Action", "操作")),
-                      ]),
-                    ),
-                    @html.tbody(
-                      [
-                        ..g.1.map(row => {
-                          deployment_item(state.locale, row, emit)
-                        }),
-                      ],
-                    ),
-                  ]),
-                ]),
+                @html.div(
+                  class="table-scroll",
+                  attrs=table_scroll_attrs(state.locale),
+                  [
+                    @html.table(class="resource-table model-service-table", [
+                      @html.thead(
+                        @html.tr([
+                          @html.th(localized(state.locale, "Service", "服务")),
+                          @html.th(localized(state.locale, "Status", "状态")),
+                          @html.th(
+                            localized(state.locale, "Resource", "资源"),
+                          ),
+                          @html.th(localized(state.locale, "Action", "操作")),
+                        ]),
+                      ),
+                      @html.tbody(
+                        [
+                          ..g.1.map(row => {
+                            deployment_item(state.locale, row, emit)
+                          }),
+                        ],
+                      ),
+                    ]),
+                  ],
+                ),
               ])
             }),
           ],

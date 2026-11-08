@@ -1848,6 +1848,7 @@ fn commerce_confirmation(
             @html.button(
               type_="button",
               class="quiet-button",
+              id="commerce-confirmation-dismiss",
               on_click=command(emit, DismissConfirmation),
               copy(state.locale, "Go back", "返回"),
             ),

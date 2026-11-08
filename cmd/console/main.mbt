@@ -716,13 +716,12 @@ fn console_read_group_paths(
     AlertsReads =>
       ["/v1/notifications/operator", "/v1/notifications/operator/deliveries"]
     ModelsReads => ["/v1/model-sources/modelscope/imports"]
-    AuditReads => ["/v1/audit"]
+    AuditReads => []
     /// Accounts, sessions, access packages, and the workspace directory are
     /// read by `Users` and `Leases` and by nothing else.
     AccessReads =>
       [
-        "/v1/accounts", "/v1/accounts/trial-summary", "/v1/accounts/event-trials",
-        "/v1/onboarding/access-packages", "/v1/workspace", "/v1/exclusive-node-leases",
+        "/v1/accounts/trial-summary", "/v1/accounts/event-trials", "/v1/exclusive-node-leases",
       ]
     /// Desired assignments and service deployments are read by `Deployments`
     /// and `Catalog` and by nothing else. Assignments are the only source of
@@ -1139,18 +1138,6 @@ fn alias_name(
 }
 
 ///|
-fn workspace_user_id(
-  users : Array[@workspace.WorkspaceUser],
-  subject_ref : String,
-) -> String {
-  users
-  .iter()
-  .find_first(user => user.subject_ref == subject_ref)
-  .map(user => user.user_id)
-  .unwrap_or(subject_ref)
-}
-
-///|
 fn workspace_resource(limits : @workspace.WorkspaceLimits) -> String {
   if limits.capabilities.length() == 0 {
     return "No inference capabilities"
@@ -1402,6 +1389,7 @@ async fn load_console(
   // both are read by `load_console_group_reads` when the operator opens a route
   // that needs them, so the first paint only waits on the core read set above.
   let nodes = build_node_rows(heartbeats, telemetry, None, locale)
+  let node_ownership = load_node_ownership(endpoint, token)
   let models : Array[@ui.ModelRow] = [
     for model in registry.models => {
       {
@@ -1445,6 +1433,7 @@ async fn load_console(
       recent_changes: -1,
     },
     nodes,
+    node_ownership,
     storage_nodes,
     models,
     // Owned by the deployment read group.
@@ -1518,6 +1507,8 @@ async fn load_console(
     registered_access_account: "",
     access_record_account: "",
     list_pages: Map([]),
+    remote_list_pages: Map([]),
+    account_choices: None,
     access_organizations: [],
     access_packages: [],
     users: [],
@@ -1654,7 +1645,13 @@ fn deferred_read_command(
         locale,
         group,
         load_console_group_reads(
-          endpoint, token, audit_token, organization, locale, group,
+          endpoint,
+          token,
+          audit_token,
+          organization,
+          locale,
+          group,
+          state=model.console,
         ),
       )
     catch {
@@ -1668,6 +1665,7 @@ fn deferred_read_command(
 ///|
 /// Everything the audit read group contributes to the typed state.
 priv struct AuditReadPayload {
+  pages : Array[OperatorPageRead]
   rows : Array[@ui.AuditRow]
   request_details : Array[@ui.RequestDetail]
   request_count : Int32
@@ -1697,6 +1695,8 @@ priv struct ModelImportReadPayload {
 /// access packages, and the workspace directory are read by the `Users` and
 /// `Leases` pages and by nothing else.
 priv struct AccessReadPayload {
+  pages : Array[OperatorPageRead]
+  people : Array[@ui.AccountChoice]?
   access_organizations : Array[@ui.AccessOrganizationOption]
   accounts : Array[@ui.AccountView]
   pending_organizations : Array[@ui.PendingOrganizationRow]
@@ -1761,12 +1761,15 @@ async fn load_console_group_reads(
   commercial_organization : String,
   locale : @i18n.Locale,
   group : ConsoleReadGroup,
+  state~ : @ui.ConsoleState = @ui.default_state(),
 ) -> ConsoleGroupRead {
   match group {
     AlertsReads => GroupAlerts(load_console_alerts_reads(endpoint, token))
     ModelsReads => GroupModels(load_console_models_reads(endpoint, token))
-    AuditReads => GroupAudit(load_console_audit_reads(endpoint, audit_token))
-    AccessReads => GroupAccess(load_console_access_reads(endpoint, token))
+    AuditReads =>
+      GroupAudit(load_console_audit_reads(endpoint, audit_token, state))
+    AccessReads =>
+      GroupAccess(load_console_access_reads(endpoint, token, state))
     DeploymentReads =>
       GroupDeployment(load_console_deployment_reads(endpoint, token))
     ContractReads =>
@@ -1861,16 +1864,27 @@ async fn load_console_alerts_reads(
 async fn load_console_access_reads(
   endpoint : String,
   token : String,
+  state : @ui.ConsoleState,
 ) -> AccessReadPayload {
-  let workspace : @workspace.WorkspaceDirectorySnapshot = @json.from_json(
-    parse_console_json(request("GET", endpoint, "/v1/workspace", token)),
+  let context : OperatorAccessContext = @json.from_json(
+    parse_console_json(
+      request("POST", endpoint, "/v1/operator/access-context", token, body="{}"),
+    ),
   )
-  let accounts : Array[@ui.AccountView] = @json.from_json(
-    parse_console_json(request("GET", endpoint, "/v1/accounts", token)),
-  )
+  let pages = load_operator_pages(endpoint, token, state, [
+    Accounts,
+    WorkspaceProfiles,
+    AccessGrants,
+    AccessRecords,
+  ])
   let organizations : Array[@commercial.Organization] = @json.from_json(
     parse_console_json(
       request("GET", endpoint, "/v1/commercial/organizations/pending", token),
+    ),
+  )
+  let access_organizations : Array[@ui.AccessOrganizationOption] = @json.from_json(
+    parse_console_json(
+      request("GET", endpoint, "/v1/onboarding/access-packages/options", token),
     ),
   )
   let trial_summary : @ui.TrialSummary? = Some(
@@ -1880,19 +1894,8 @@ async fn load_console_access_reads(
       ),
     ),
   ) catch {
-    // Supplemental statistics are unavailable, never zero, on older controllers.
     _ => None
   }
-  let access_packages : Array[@ui.AccessPackageView] = @json.from_json(
-    parse_console_json(
-      request("GET", endpoint, "/v1/onboarding/access-packages", token),
-    ),
-  )
-  let access_organizations : Array[@ui.AccessOrganizationOption] = @json.from_json(
-    parse_console_json(
-      request("GET", endpoint, "/v1/onboarding/access-packages/options", token),
-    ),
-  )
   let event_trials : Array[@event_trial.View]? = Some(
     @json.from_json(
       parse_console_json(
@@ -1909,85 +1912,51 @@ async fn load_console_access_reads(
   )
   let pending_organizations : Array[@ui.PendingOrganizationRow] = []
   for organization in organizations {
-    match organization.legal_profile {
-      Some(profile) =>
-        pending_organizations.push({
-          organization_id: organization.organization_id,
-          display_name: organization.display_name,
-          legal_name: profile.legal_name,
-          country_code: profile.country_code,
-          registration_number: profile.registration_number.unwrap_or(""),
-          registered_address: profile.registered_address,
-          contact_email: profile.billing_contact.email,
-        })
-      None => ()
+    if organization.legal_profile is Some(profile) {
+      pending_organizations.push({
+        organization_id: organization.organization_id,
+        display_name: organization.display_name,
+        legal_name: profile.legal_name,
+        country_code: profile.country_code,
+        registration_number: profile.registration_number.unwrap_or(""),
+        registered_address: profile.registered_address,
+        contact_email: profile.billing_contact.email,
+      })
     }
   }
   {
-    accounts,
+    pages,
+    people: Some(context.people),
+    accounts: [],
+    users: [],
+    access_grants: [],
+    access_packages: [],
     pending_organizations,
     trial_summary,
     event_trials,
-    access_packages,
     access_organizations,
-    users: [
-      for user in workspace.users => {
-        {
-          user_id: user.user_id,
-          display_name: user.display_name,
-          email: user.email,
-          state: user.state,
-          last_active: user.last_active_unix_ms
-          .map(timestamp => format_unix_ms(timestamp, "Unavailable"))
-          .unwrap_or("Never"),
-          grant_count: workspace.access_grants.count_if(grant => {
-            grant.user_id == user.user_id
-          }),
-        }
-      }
-    ],
-    access_grants: [
-      for grant in workspace.access_grants => {
-        {
-          grant_id: grant.grant_id,
-          user_id: grant.user_id,
-          role: grant.access,
-          scope: grant.tenant_ref,
-          expires_at: format_unix_ms(grant.expires_unix_ms, "Unavailable"),
-          state: grant.state,
-        }
-      }
-    ],
-    compute_leases: [
-      for lease in workspace.leases => {
-        {
-          lease_id: lease.lease_id,
-          user_id: workspace_user_id(workspace.users, lease.subject_ref),
-          subject_ref: lease.subject_ref,
-          workspace: lease.tenant_ref,
-          resource: workspace_resource(lease.limits),
-          started_at: format_unix_ms(lease.starts_unix_ms, "Unavailable"),
-          expires_at: format_unix_ms(lease.expires_unix_ms, "Unavailable"),
-          state: lease.state,
-        }
-      }
-    ],
-    exclusive_node_leases: [
-      for lease in exclusive_leases => {
-        {
-          lease_id: lease.intent.lease_id,
-          node_id: lease.intent.node_id,
-          subject_ref: lease.intent.subject_ref,
-          unix_username: lease.intent.unix_username,
-          expires_at: format_unix_ms(
-            lease.intent.expires_unix_ms,
-            "Unavailable",
-          ),
-          state: "\{Repr(lease.state)}",
-          generation: lease.generation,
-        }
-      }
-    ],
+    compute_leases: context.leases.map(lease => {
+      lease_id: lease.lease_id,
+      user_id: context.workspace_people
+      .iter()
+      .find_first(user => user.subject_ref == lease.subject_ref)
+      .map_or(lease.subject_ref, user => user.user_id),
+      subject_ref: lease.subject_ref,
+      workspace: lease.tenant_ref,
+      resource: workspace_resource(lease.limits),
+      started_at: format_unix_ms(lease.starts_unix_ms, "Unavailable"),
+      expires_at: format_unix_ms(lease.expires_unix_ms, "Unavailable"),
+      state: lease.state,
+    }),
+    exclusive_node_leases: exclusive_leases.map(lease => {
+      lease_id: lease.intent.lease_id,
+      node_id: lease.intent.node_id,
+      subject_ref: lease.intent.subject_ref,
+      unix_username: lease.intent.unix_username,
+      expires_at: format_unix_ms(lease.intent.expires_unix_ms, "Unavailable"),
+      state: "\{Repr(lease.state)}",
+      generation: lease.generation,
+    }),
   }
 }
 
@@ -2068,40 +2037,20 @@ async fn load_console_deployment_reads(
 async fn load_console_audit_reads(
   endpoint : String,
   audit_token : String,
+  state : @ui.ConsoleState,
 ) -> AuditReadPayload {
-  let audit : Array[@contracts.AuditEvent] = @json.from_json(
-    parse_console_json(request("GET", endpoint, "/v1/audit", audit_token)),
-  )
-  let request_details : Array[@ui.RequestDetail] = []
-  for event in audit {
-    if event.action.has_prefix("workload.") {
-      request_details.push({
-        timestamp_unix_ms: event.timestamp_unix_ms,
-        action: event.action,
-        model_selector: event.target,
-        result: event.result,
-        receipt: event.correlation_receipt,
-      })
-    }
-  }
+  let pages = load_operator_pages(endpoint, audit_token, state, [
+    AuditEvents,
+    RequestReceipts,
+  ])
+  let counts = pages[0].value.summary
   {
-    rows: [
-      for event in audit => {
-        {
-          actor: event.actor,
-          decision: event.action,
-          evidence: event.target,
-          result: event.result,
-          receipt: event.correlation_receipt,
-        }
-      }
-    ],
-    request_details,
-    request_count: audit.count_if(event => event.action.has_prefix("workload.")),
-    request_errors: audit.count_if(event => {
-      event.action == "workload.fail" || event.result != "accepted"
-    }),
-    recent_changes: audit.length().min(20),
+    pages,
+    rows: [],
+    request_details: [],
+    request_count: counts.get("requests").unwrap_or(0),
+    request_errors: counts.get("errors").unwrap_or(0),
+    recent_changes: counts.get("changes").unwrap_or(0),
   }
 }
 
@@ -2570,11 +2519,19 @@ fn merge_console_group_read(
         },
       }
     GroupModels(payload) => { ..current, model_imports: payload.imports, }
-    GroupAudit(payload) =>
-      {
+    GroupAudit(payload) => {
+      let next = {
         ..current,
-        audit: payload.rows,
-        request_details: payload.request_details,
+        audit: if payload.pages.is_empty() {
+          payload.rows
+        } else {
+          current.audit
+        },
+        request_details: if payload.pages.is_empty() {
+          payload.request_details
+        } else {
+          current.request_details
+        },
         requests: {
           ..current.requests,
           count: payload.request_count,
@@ -2585,20 +2542,45 @@ fn merge_console_group_read(
           recent_changes: payload.recent_changes,
         },
       }
-    GroupAccess(payload) =>
-      {
+      payload.pages.fold(init=next, (state, page) => {
+        merge_operator_page(state, page)
+      })
+    }
+    GroupAccess(payload) => {
+      let next = {
         ..current,
-        accounts: payload.accounts,
+        account_choices: payload.people,
+        accounts: if payload.pages.is_empty() {
+          payload.accounts
+        } else {
+          current.accounts
+        },
         pending_organizations: payload.pending_organizations,
         trial_summary: payload.trial_summary,
         event_trial: { ..current.event_trial, events: payload.event_trials, },
-        access_packages: payload.access_packages,
+        access_packages: if payload.pages.is_empty() {
+          payload.access_packages
+        } else {
+          current.access_packages
+        },
         access_organizations: payload.access_organizations,
-        users: payload.users,
-        access_grants: payload.access_grants,
+        users: if payload.pages.is_empty() {
+          payload.users
+        } else {
+          current.users
+        },
+        access_grants: if payload.pages.is_empty() {
+          payload.access_grants
+        } else {
+          current.access_grants
+        },
         compute_leases: payload.compute_leases,
         exclusive_node_leases: payload.exclusive_node_leases,
       }
+      payload.pages.fold(init=next, (state, page) => {
+        merge_operator_page(state, page)
+      })
+    }
     GroupDeployment(payload) =>
       {
         ..current,
@@ -2658,6 +2640,8 @@ fn merge_console_group_read(
 
 ///|
 priv enum LoadOutcome {
+  OperatorPageLoaded(String, OperatorPageRead)
+  OperatorPageFailed(String, @ui.OperatorList, Int64, Bool)
   RecordedBenchmarksLoaded(
     String,
     String,
@@ -2873,6 +2857,8 @@ fn merge_loaded_console(
     registered_access_account: current.registered_access_account,
     access_record_account: current.access_record_account,
     list_pages: current.list_pages,
+    remote_list_pages: current.remote_list_pages,
+    account_choices: current.account_choices,
     access_organizations: current.access_organizations,
     users: current.users,
     pending_organizations: current.pending_organizations,
@@ -4913,37 +4899,51 @@ fn update_live(
     Console(ListQueryChanged(kind, query)) => {
       let pages = model.console.list_pages.copy()
       pages[kind] = { query, page: 0, }
-      (
+      schedule_operator_page(
         { ..model, console: { ..model.console, list_pages: pages, }, },
-        @rabbita.none,
+        kind,
+        "",
+        250,
+        emit,
       )
     }
     Console(ListPageChanged(kind, page)) => {
       let pages = model.console.list_pages.copy()
       let current = pages.get(kind).unwrap_or({ query: "", page: 0, })
       pages[kind] = { ..current, page: page.max(0), }
-      (
+      let remote = model.console.remote_list_pages.get(kind)
+      let cursor = remote.map_or("", value => {
+        if page < value.page {
+          value.previous_cursor
+        } else if page > value.page {
+          value.next_cursor
+        } else {
+          value.cursor
+        }
+      })
+      schedule_operator_page(
         { ..model, console: { ..model.console, list_pages: pages, }, },
-        @rabbita.none,
+        kind,
+        cursor,
+        0,
+        emit,
       )
     }
     Console(AccessRecordAccountChanged(value)) => {
       let pages = model.console.list_pages.copy()
       pages.remove(@ui.OperatorList::AccessRecords)
-      (
-        {
-          ..model,
-          console: {
-            ..model.console,
-            access_record_account: value,
-            list_pages: pages,
-          },
+      let next = {
+        ..model,
+        console: {
+          ..model.console,
+          access_record_account: value,
+          list_pages: pages,
         },
-        @rabbita.none,
-      )
+      }
+      schedule_operator_page(next, AccessRecords, "", 0, emit)
     }
     Console(RegisteredAccessAccountChanged(value)) => {
-      let selected = model.console.accounts
+      let selected = @ui.account_choices(model.console)
         .iter()
         .find_first(account => account.account_id == value)
       let memberships = model.console.access_packages.filter(item => {
@@ -5810,6 +5810,47 @@ fn update_live(
       } else {
         (model, cluster_poll_delay_command(generation, emit))
       }
+    Outcome(OperatorPageLoaded(token, read)) => {
+      let expected = if read.kind == AuditEvents || read.kind == RequestReceipts {
+        model.audit_credential
+      } else {
+        model.credential
+      }
+      if token != expected || !model.console.operator_authenticated {
+        (model, @rabbita.none)
+      } else {
+        (
+          { ..model, console: merge_operator_page(model.console, read), },
+          @rabbita.none,
+        )
+      }
+    }
+    Outcome(OperatorPageFailed(token, kind, generation, unauthorized)) => {
+      let expected = if kind == AuditEvents || kind == RequestReceipts {
+        model.audit_credential
+      } else {
+        model.credential
+      }
+      if token != expected ||
+        !model.console.operator_authenticated ||
+        model.console.remote_list_pages
+        .get(kind)
+        .map_or(0L, page => page.generation) !=
+        generation {
+        (model, @rabbita.none)
+      } else if unauthorized {
+        (console_session_lost(model), @rabbita.none)
+      } else {
+        let pages = model.console.remote_list_pages.copy()
+        if pages.get(kind) is Some(page) {
+          pages[kind] = { ..page, loading: false, failed: true, }
+        }
+        (
+          { ..model, console: { ..model.console, remote_list_pages: pages, }, },
+          @rabbita.none,
+        )
+      }
+    }
     Outcome(DeferredReadLoaded(dispatched_locale, group, read)) => {
       let groups = model.console_read_groups.copy()
       if !groups.contains(group) {
@@ -10617,6 +10658,7 @@ fn login_view(
 
 ///|
 fn main {
+  @browser_interactions.install_dialog_interactions()
   let locale = @i18n.parse_locale(stored_locale_preference())
   // "*" declares the deployment open for every origin that can reach it;
   // otherwise one of the declared exact origins must match the page.

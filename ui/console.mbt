@@ -2043,11 +2043,14 @@ pub fn AlertsWindow::label(
 
 ///|
 pub(all) struct ConsoleState {
+  remote_list_pages : Map[OperatorList, RemoteListPage]
+  account_choices : Array[AccountChoice]?
   locale : @i18n.Locale
   route : OperatorRoute
   navigation_open : Bool
   overview : OverviewMetrics
   nodes : Array[NodeRow]
+  node_ownership : Map[String, String]
   storage_nodes : Array[StorageNodeRow]
   models : Array[ModelRow]
   deployments : Array[DeploymentRow]
@@ -2337,6 +2340,9 @@ pub fn default_state() -> ConsoleState {
     registered_access_account: "",
     access_record_account: "",
     list_pages: Map([]),
+    node_ownership: Map([]),
+    remote_list_pages: Map([]),
+    account_choices: None,
     access_organizations: [],
     access_packages: [],
     users: [],
@@ -2919,6 +2925,9 @@ pub fn demo_state() -> ConsoleState {
     registered_access_account: "",
     access_record_account: "",
     list_pages: Map([]),
+    node_ownership: Map([]),
+    remote_list_pages: Map([]),
+    account_choices: None,
     access_organizations: [
       {
         organization_id: "org-northstar",
@@ -4495,7 +4504,7 @@ fn access_existing_authority(
       tenants.push(lease.workspace)
     }
   }
-  let account = state.accounts
+  let account = account_choices(state)
     .iter()
     .find_first(value => value.account_id == account_id)
   let known = match (account, tenants.length()) {
@@ -4553,8 +4562,8 @@ fn users_view(
         class="resource-count",
         localized(
           state.locale,
-          "\{state.users.length()} users · \{state.access_grants.length()} grants",
-          "\{state.users.length()} 位用户 · \{state.access_grants.length()} 项授权",
+          "\{profiles.total} users · \{grants.total} grants",
+          "\{profiles.total} 位用户 · \{grants.total} 项授权",
         ),
       ),
     ]),
@@ -4680,74 +4689,78 @@ fn users_view(
                   ),
                 )
               } else {
-                @html.div(class="table-scroll", [
-                  @html.table(class="resource-table", [
-                    @html.caption(
-                      class="sr-only",
-                      localized(
-                        state.locale,
-                        "Browser sessions",
-                        "浏览器会话",
+                @html.div(
+                  class="table-scroll",
+                  attrs=table_scroll_attrs(state.locale),
+                  [
+                    @html.table(class="resource-table", [
+                      @html.caption(
+                        class="sr-only",
+                        localized(
+                          state.locale,
+                          "Browser sessions",
+                          "浏览器会话",
+                        ),
                       ),
-                    ),
-                    @html.thead(
-                      @html.tr([
-                        @html.th(
-                          scope=Col,
-                          localized(state.locale, "Session", "会话"),
-                        ),
-                        @html.th(
-                          scope=Col,
-                          localized(state.locale, "Last used", "最近使用"),
-                        ),
-                        @html.th(
-                          scope=Col,
-                          localized(state.locale, "Expires", "到期"),
-                        ),
-                        @html.th(
-                          scope=Col,
-                          localized(state.locale, "State", "状态"),
-                        ),
-                      ]),
-                    ),
-                    @html.tbody(
-                      [
-                        for session in state.account_sessions => {
-                          @html.tr([
-                            @html.td(class="mono", session.session_id),
-                            @html.td(
-                              @contractdoc.format_unix_ms_beijing(
-                                session.last_used_unix_ms,
+                      @html.thead(
+                        @html.tr([
+                          @html.th(
+                            scope=Col,
+                            localized(state.locale, "Session", "会话"),
+                          ),
+                          @html.th(
+                            scope=Col,
+                            localized(state.locale, "Last used", "最近使用"),
+                          ),
+                          @html.th(
+                            scope=Col,
+                            localized(state.locale, "Expires", "到期"),
+                          ),
+                          @html.th(
+                            scope=Col,
+                            localized(state.locale, "State", "状态"),
+                          ),
+                        ]),
+                      ),
+                      @html.tbody(
+                        [
+                          for session in state.account_sessions => {
+                            @html.tr([
+                              @html.td(class="mono", session.session_id),
+                              @html.td(
+                                @contractdoc.format_unix_ms_beijing(
+                                  session.last_used_unix_ms,
+                                ),
                               ),
-                            ),
-                            @html.td(
-                              @contractdoc.format_unix_ms_beijing(
-                                session.expires_unix_ms,
+                              @html.td(
+                                @contractdoc.format_unix_ms_beijing(
+                                  session.expires_unix_ms,
+                                ),
                               ),
-                            ),
-                            @html.td(
-                              if session.revoked_unix_ms is Some(_) {
-                                status_badge(
-                                  localized(
-                                    state.locale,
-                                    "Revoked",
-                                    "已撤销",
-                                  ),
-                                  "muted",
-                                )
-                              } else {
-                                status_badge(
-                                  localized(state.locale, "Active", "有效"),
-                                  "ok",
-                                )
-                              },
-                            ),
-                          ])
-                        }
-                      ],
-                    ),
-                  ]),
-                ])
+                              @html.td(
+                                if session.revoked_unix_ms is Some(_) {
+                                  status_badge(
+                                    localized(
+                                      state.locale,
+                                      "Revoked",
+                                      "已撤销",
+                                    ),
+                                    "muted",
+                                  )
+                                } else {
+                                  status_badge(
+                                    localized(state.locale, "Active", "有效"),
+                                    "ok",
+                                  )
+                                },
+                              ),
+                            ])
+                          }
+                        ],
+                      ),
+                    ]),
+                  ],
+                )
               },
             ]),
           ],
@@ -5228,8 +5241,8 @@ fn users_view(
         class="resource-count",
         localized(
           state.locale,
-          "\{state.accounts.length()} accounts",
-          "\{state.accounts.length()} 个账户",
+          "\{accounts.total} accounts",
+          "\{accounts.total} 个账户",
         ),
       ),
     ]),
@@ -5368,109 +5381,125 @@ fn users_view(
           class="empty-state",
           localized(
             state.locale,
-            "No user identities are available. Use Policies → Invite user to create the first typed workspace record.",
-            "暂无用户身份。请使用“策略 → 邀请用户”创建第一条类型化工作区记录。",
+            "No workspace profiles. Open access for a registered person above.",
+            "暂无工作区档案，请先在上方为已注册人员开通访问。",
           ),
         )
       } else {
-        @html.div(class="table-scroll", [
-          @html.table(class="resource-table", [
-            @html.caption(
-              class="sr-only",
-              localized(state.locale, "Cluster users", "集群用户"),
-            ),
-            @html.thead(
-              @html.tr([
-                @html.th(scope=Col, localized(state.locale, "User", "用户")),
-                @html.th(scope=Col, localized(state.locale, "Status", "状态")),
-                @html.th(
-                  scope=Col,
-                  localized(state.locale, "Last active", "最近活动"),
-                ),
-                @html.th(scope=Col, localized(state.locale, "Grants", "授权")),
-                @html.th(
-                  scope=Col,
-                  localized(state.locale, "Actions", "操作"),
-                ),
-              ]),
-            ),
-            @html.tbody(
-              [
-                for user in profiles.rows => {
-                  @html.tr([
-                    @html.td([
-                      @html.strong(user.display_name),
-                      @html.span(class="secondary", user.email),
-                      @html.span(class="mono secondary", user.user_id),
-                    ]),
-                    @html.td(user_state_badge(state.locale, user.state)),
-                    @html.td(
-                      generated_time_label(state.locale, user.last_active),
-                    ),
-                    @html.td(user.grant_count.to_string()),
-                    @html.td(class="row-actions", [
-                      if user.state == UserInvited ||
-                        user.state == UserSuspended {
-                        @html.button(
-                          type_="button",
-                          disabled=state.loading,
-                          title=localized(
-                            state.locale,
-                            "Activate user \{user.user_id}",
-                            "激活用户 \{user.user_id}",
-                          ),
-                          on_click=command(emit, ActivateUser(user.user_id)),
-                          localized(state.locale, "Activate", "激活"),
-                        )
-                      } else {
-                        @html.nothing
-                      },
-                      if user.state == UserActive {
-                        @html.button(
-                          type_="button",
-                          class="danger-secondary",
-                          disabled=state.loading,
-                          title=localized(
-                            state.locale,
-                            "Suspend user \{user.user_id}",
-                            "暂停用户 \{user.user_id}",
-                          ),
-                          on_click=command(emit, BeginSuspendUser(user.user_id)),
-                          localized(state.locale, "Suspend…", "暂停…"),
-                        )
-                      } else {
-                        @html.nothing
-                      },
-                      if user.state != UserRevoked {
-                        @html.button(
-                          type_="button",
-                          class="danger-secondary",
-                          disabled=state.loading,
-                          title=localized(
-                            state.locale,
-                            "Revoke user \{user.user_id}",
-                            "撤销用户 \{user.user_id}",
-                          ),
-                          on_click=command(emit, BeginRevokeUser(user.user_id)),
-                          localized(state.locale, "Revoke…", "撤销…"),
-                        )
-                      } else {
-                        @html.span(
-                          class="secondary",
-                          localized(
-                            state.locale,
-                            "No actions",
-                            "无可用操作",
-                          ),
-                        )
-                      },
-                    ]),
-                  ])
-                }
-              ],
-            ),
-          ]),
-        ])
+        @html.div(
+          class="table-scroll",
+          attrs=table_scroll_attrs(state.locale),
+          [
+            @html.table(class="resource-table", [
+              @html.caption(
+                class="sr-only",
+                localized(state.locale, "Cluster users", "集群用户"),
+              ),
+              @html.thead(
+                @html.tr([
+                  @html.th(scope=Col, localized(state.locale, "User", "用户")),
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "Status", "状态"),
+                  ),
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "Last active", "最近活动"),
+                  ),
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "Grants", "授权"),
+                  ),
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "Actions", "操作"),
+                  ),
+                ]),
+              ),
+              @html.tbody(
+                [
+                  for user in profiles.rows => {
+                    @html.tr([
+                      @html.td([
+                        @html.strong(user.display_name),
+                        @html.span(class="secondary", user.email),
+                        @html.span(class="mono secondary", user.user_id),
+                      ]),
+                      @html.td(user_state_badge(state.locale, user.state)),
+                      @html.td(
+                        generated_time_label(state.locale, user.last_active),
+                      ),
+                      @html.td(user.grant_count.to_string()),
+                      @html.td(class="row-actions", [
+                        if user.state == UserInvited ||
+                          user.state == UserSuspended {
+                          @html.button(
+                            type_="button",
+                            disabled=state.loading,
+                            title=localized(
+                              state.locale,
+                              "Activate user \{user.user_id}",
+                              "激活用户 \{user.user_id}",
+                            ),
+                            on_click=command(emit, ActivateUser(user.user_id)),
+                            localized(state.locale, "Activate", "激活"),
+                          )
+                        } else {
+                          @html.nothing
+                        },
+                        if user.state == UserActive {
+                          @html.button(
+                            type_="button",
+                            class="danger-secondary",
+                            disabled=state.loading,
+                            title=localized(
+                              state.locale,
+                              "Suspend user \{user.user_id}",
+                              "暂停用户 \{user.user_id}",
+                            ),
+                            on_click=command(
+                              emit,
+                              BeginSuspendUser(user.user_id),
+                            ),
+                            localized(state.locale, "Suspend…", "暂停…"),
+                          )
+                        } else {
+                          @html.nothing
+                        },
+                        if user.state != UserRevoked {
+                          @html.button(
+                            type_="button",
+                            class="danger-secondary",
+                            disabled=state.loading,
+                            title=localized(
+                              state.locale,
+                              "Revoke user \{user.user_id}",
+                              "撤销用户 \{user.user_id}",
+                            ),
+                            on_click=command(
+                              emit,
+                              BeginRevokeUser(user.user_id),
+                            ),
+                            localized(state.locale, "Revoke…", "撤销…"),
+                          )
+                        } else {
+                          @html.span(
+                            class="secondary",
+                            localized(
+                              state.locale,
+                              "No actions",
+                              "无可用操作",
+                            ),
+                          )
+                        },
+                      ]),
+                    ])
+                  }
+                ],
+              ),
+            ]),
+          ],
+        )
       },
     ]),
     @html.details(class="ln-advanced", [
@@ -5486,73 +5515,83 @@ fn users_view(
           ),
         )
       } else {
-        @html.div(class="table-scroll", [
-          @html.table(class="resource-table", [
-            @html.caption(
-              class="sr-only",
-              localized(
-                state.locale,
-                "Scoped access grants",
-                "限定范围的访问授权",
+        @html.div(
+          class="table-scroll",
+          attrs=table_scroll_attrs(state.locale),
+          [
+            @html.table(class="resource-table", [
+              @html.caption(
+                class="sr-only",
+                localized(
+                  state.locale,
+                  "Scoped access grants",
+                  "限定范围的访问授权",
+                ),
               ),
-            ),
-            @html.thead(
-              @html.tr([
-                @html.th(
-                  scope=Col,
-                  localized(state.locale, "Principal", "主体"),
-                ),
-                @html.th(
-                  scope=Col,
-                  localized(state.locale, "Role / scope", "角色 / 范围"),
-                ),
-                @html.th(scope=Col, localized(state.locale, "Status", "状态")),
-                @html.th(
-                  scope=Col,
-                  localized(state.locale, "Expires", "到期时间"),
-                ),
-                @html.th(scope=Col, localized(state.locale, "Action", "操作")),
-              ]),
-            ),
-            @html.tbody(
-              [
-                for grant in grants.rows => {
-                  @html.tr([
-                    @html.td([
-                      @html.strong(grant.user_id),
-                      @html.span(class="mono secondary", grant.grant_id),
-                    ]),
-                    @html.td([
-                      @html.strong(access_label(state.locale, grant.role)),
-                      @html.span(class="secondary", grant.scope),
-                    ]),
-                    @html.td(grant_state_badge(state.locale, grant.state)),
-                    @html.td(
-                      generated_time_label(state.locale, grant.expires_at),
-                    ),
-                    @html.td(
-                      @html.button(
-                        type_="button",
-                        class="danger-secondary",
-                        disabled=grant.state != GrantActive,
-                        title=localized(
-                          state.locale,
-                          "Revoke grant \{grant.grant_id}",
-                          "撤销授权 \{grant.grant_id}",
-                        ),
-                        on_click=command(
-                          emit,
-                          BeginRevokeAccessGrant(grant.grant_id),
-                        ),
-                        localized(state.locale, "Revoke…", "撤销…"),
+              @html.thead(
+                @html.tr([
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "Principal", "主体"),
+                  ),
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "Role / scope", "角色 / 范围"),
+                  ),
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "Status", "状态"),
+                  ),
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "Expires", "到期时间"),
+                  ),
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "Action", "操作"),
+                  ),
+                ]),
+              ),
+              @html.tbody(
+                [
+                  for grant in grants.rows => {
+                    @html.tr([
+                      @html.td([
+                        @html.strong(grant.user_id),
+                        @html.span(class="mono secondary", grant.grant_id),
+                      ]),
+                      @html.td([
+                        @html.strong(access_label(state.locale, grant.role)),
+                        @html.span(class="secondary", grant.scope),
+                      ]),
+                      @html.td(grant_state_badge(state.locale, grant.state)),
+                      @html.td(
+                        generated_time_label(state.locale, grant.expires_at),
                       ),
-                    ),
-                  ])
-                }
-              ],
-            ),
-          ]),
-        ])
+                      @html.td(
+                        @html.button(
+                          type_="button",
+                          class="danger-secondary",
+                          disabled=grant.state != GrantActive,
+                          title=localized(
+                            state.locale,
+                            "Revoke grant \{grant.grant_id}",
+                            "撤销授权 \{grant.grant_id}",
+                          ),
+                          on_click=command(
+                            emit,
+                            BeginRevokeAccessGrant(grant.grant_id),
+                          ),
+                          localized(state.locale, "Revoke…", "撤销…"),
+                        ),
+                      ),
+                    ])
+                  }
+                ],
+              ),
+            ]),
+          ],
+        )
       },
     ]),
   ])
@@ -5621,7 +5660,7 @@ fn leases_view(
         ),
       )
     } else {
-      @html.div(class="table-scroll", [
+      @html.div(class="table-scroll", attrs=table_scroll_attrs(state.locale), [
         @html.table(class="resource-table", [
           @html.caption(
             class="sr-only",
@@ -5757,7 +5796,7 @@ fn leases_view(
         ),
       )
     } else {
-      @html.div(class="table-scroll", [
+      @html.div(class="table-scroll", attrs=table_scroll_attrs(state.locale), [
         @html.table(class="resource-table", [
           @html.caption(
             class="sr-only",
@@ -5921,7 +5960,14 @@ fn nodes_view(
       @html.div(
         class="node-list",
         [
-          for node in state.nodes => node_item(state.locale, node, emit)
+          for node in state.nodes => {
+            node_item(
+              state.locale,
+              node,
+              emit,
+              owner=state.node_ownership.get(node.node_id),
+            )
+          }
         ],
       )
     },
@@ -6418,8 +6464,11 @@ fn node_item(
   locale : @i18n.Locale,
   node : NodeRow,
   emit : @rabbita.Emit[ConsoleMessage]?,
+  owner~ : String? = None,
 ) -> @rabbita.Html {
-  let lease_holder = if node.lease_holder == "" {
+  let lease_holder = if owner is Some(value) {
+    value
+  } else if node.lease_holder == "" {
     localized(locale, "Unassigned", "未分配")
   } else {
     node.lease_holder
@@ -6492,7 +6541,7 @@ fn node_item(
         @html.strong(gpu_text),
       ]),
       @html.div(class="node-summary-cell node-lease-summary", [
-        @html.span(localized(locale, "Exclusive lease", "独占租约")),
+        @html.span(localized(locale, "Resource ownership", "资源归属")),
         @html.strong(lease_holder),
       ]),
       @html.span(
@@ -7433,6 +7482,9 @@ fn models_view(
   state : ConsoleState,
   emit : @rabbita.Emit[ConsoleMessage]?,
 ) -> @rabbita.Html {
+  let page = paged_rows(state, ModelRegistry, state.models, model => {
+    "\{model.model_id} \{model.version} \{model.alias_name} \{model.compatibility}"
+  })
   let detached_imports = state.model_imports.filter(import_ => {
     registered_model_for_import(state.models, import_) is None &&
     !state.model_source_results.any(candidate => {
@@ -7780,6 +7832,7 @@ fn models_view(
         },
       ],
     ),
+    list_controls(state, ModelRegistry, page, emit),
     if state.models.length() == 0 {
       @html.div(class="empty-state empty-state-action", [
         @html.strong(
@@ -7798,7 +7851,7 @@ fn models_view(
         ),
       ])
     } else {
-      model_family_groups(state, emit)
+      model_family_groups({ ..state, models: page.rows, }, emit)
     },
   ])
 }
@@ -7822,7 +7875,7 @@ fn model_registry_group(
   let registered_models = group_models_by_model_id(models)
   @html.details(class="model-registry-group", open=expanded, [
     @html.summary(label + " (" + registered_models.length().to_string() + ")"),
-    @html.div(class="table-scroll", [
+    @html.div(class="table-scroll", attrs=table_scroll_attrs(state.locale), [
       @html.table(class="resource-table", [
         @html.caption(
           class="sr-only",
@@ -8815,6 +8868,9 @@ fn catalog_view(
   state : ConsoleState,
   emit : @rabbita.Emit[ConsoleMessage]?,
 ) -> @rabbita.Html {
+  let templates = paged_rows(state, ServiceCatalog, state.catalog_templates, template => {
+    "\{template.display_name} \{template.template_id} \{template.version} \{template.model_selector}"
+  })
   let template_options : Array[@rabbita.Html] = [
     @html.option(
       value="",
@@ -9053,17 +9109,18 @@ fn catalog_view(
         ),
       ]),
     ]),
+    list_controls(state, ServiceCatalog, templates, emit),
     if state.catalog_templates.length() == 0 {
       @html.p(
         class="empty-state",
         localized(
           state.locale,
-          "No approved model-service templates are registered.",
-          "尚未注册已批准的模型服务模板。",
+          "No deployable templates. Publish a service template below.",
+          "暂无可部署模板，请在下方发布服务模板。",
         ),
       )
     } else {
-      @html.div(class="table-scroll", [
+      @html.div(class="table-scroll", attrs=table_scroll_attrs(state.locale), [
         @html.table(class="resource-table", [
           @html.caption(
             class="sr-only",
@@ -9089,7 +9146,7 @@ fn catalog_view(
           ),
           @html.tbody(
             [
-              for template in state.catalog_templates => {
+              for template in templates.rows => {
                 @html.tr([
                   @html.td([
                     @html.strong(template.display_name),
@@ -9135,13 +9192,19 @@ fn catalog_view(
         ]),
       ])
     },
-    @controls.advanced(
-      localized(
-        state.locale,
-        "Advanced: register a catalog template",
-        "高级：注册目录模板",
-      ),
-      [template_registration_form(state, emit)],
+    @html.details(
+      class="ln-advanced",
+      open=state.catalog_templates.is_empty(),
+      [
+        @html.summary(
+          localized(
+            state.locale,
+            "Publish service template",
+            "发布服务模板",
+          ),
+        ),
+        template_registration_form(state, emit),
+      ],
     ),
     @html.div(class="section-heading", [
       @html.div([
@@ -9166,7 +9229,7 @@ fn catalog_view(
         ),
       )
     } else {
-      @html.div(class="table-scroll", [
+      @html.div(class="table-scroll", attrs=table_scroll_attrs(state.locale), [
         @html.table(class="resource-table", [
           @html.caption(
             class="sr-only",
@@ -9408,7 +9471,7 @@ fn requests_view(
         ),
       )
     } else {
-      @html.div(class="table-scroll", [
+      @html.div(class="table-scroll", attrs=table_scroll_attrs(state.locale), [
         @html.table(class="resource-table", [
           @html.caption(
             class="sr-only",
@@ -9916,7 +9979,7 @@ fn alerts_view(
         ),
       )
     } else {
-      @html.div(class="table-scroll", [
+      @html.div(class="table-scroll", attrs=table_scroll_attrs(state.locale), [
         @html.table(class="resource-table", [
           @html.caption(
             class="sr-only",
@@ -9964,102 +10027,109 @@ fn alerts_view(
             ),
           )
         } else {
-          @html.div(class="table-scroll", [
-            @html.table(class="resource-table", [
-              @html.caption(
-                class="sr-only",
-                localized(
-                  state.locale,
-                  "Outbound notification delivery records",
-                  "出站通知投递记录",
+          @html.div(
+            class="table-scroll",
+            attrs=table_scroll_attrs(state.locale),
+            [
+              @html.table(class="resource-table", [
+                @html.caption(
+                  class="sr-only",
+                  localized(
+                    state.locale,
+                    "Outbound notification delivery records",
+                    "出站通知投递记录",
+                  ),
                 ),
-              ),
-              @html.thead(
-                @html.tr([
-                  @html.th(
-                    scope=Col,
-                    localized(state.locale, "Delivery", "投递"),
-                  ),
-                  @html.th(
-                    scope=Col,
-                    localized(state.locale, "Channel", "渠道"),
-                  ),
-                  @html.th(
-                    scope=Col,
-                    localized(state.locale, "State", "状态"),
-                  ),
-                  @html.th(
-                    scope=Col,
-                    localized(state.locale, "Attempts", "尝试次数"),
-                  ),
-                  @html.th(
-                    scope=Col,
-                    localized(state.locale, "Last error", "最近错误"),
-                  ),
-                  @html.th(
-                    scope=Col,
-                    localized(state.locale, "Actions", "操作"),
-                  ),
-                ]),
-              ),
-              @html.tbody(
-                [
-                  for row in state.notification_deliveries => {
-                    @html.tr([
-                      @html.td([
-                        @html.strong(class="mono", row.delivery_id),
-                        @html.span(class="mono secondary", row.notification_id),
-                      ]),
-                      @html.td(
-                        notification_channel_label(state.locale, row.channel),
-                      ),
-                      @html.td(
-                        status_badge(
-                          notification_delivery_state_label(
-                            state.locale,
-                            row.state,
+                @html.thead(
+                  @html.tr([
+                    @html.th(
+                      scope=Col,
+                      localized(state.locale, "Delivery", "投递"),
+                    ),
+                    @html.th(
+                      scope=Col,
+                      localized(state.locale, "Channel", "渠道"),
+                    ),
+                    @html.th(
+                      scope=Col,
+                      localized(state.locale, "State", "状态"),
+                    ),
+                    @html.th(
+                      scope=Col,
+                      localized(state.locale, "Attempts", "尝试次数"),
+                    ),
+                    @html.th(
+                      scope=Col,
+                      localized(state.locale, "Last error", "最近错误"),
+                    ),
+                    @html.th(
+                      scope=Col,
+                      localized(state.locale, "Actions", "操作"),
+                    ),
+                  ]),
+                ),
+                @html.tbody(
+                  [
+                    for row in state.notification_deliveries => {
+                      @html.tr([
+                        @html.td([
+                          @html.strong(class="mono", row.delivery_id),
+                          @html.span(
+                            class="mono secondary",
+                            row.notification_id,
                           ),
+                        ]),
+                        @html.td(
+                          notification_channel_label(state.locale, row.channel),
+                        ),
+                        @html.td(
+                          status_badge(
+                            notification_delivery_state_label(
+                              state.locale,
+                              row.state,
+                            ),
+                            if row.state == DeadLetter {
+                              "danger"
+                            } else if row.state == Delivered {
+                              "ok"
+                            } else {
+                              "warning"
+                            },
+                          ),
+                        ),
+                        @html.td(row.attempt_count.to_string()),
+                        @html.td(
+                          class="mono secondary",
+                          notification_delivery_error_label(
+                            state.locale,
+                            row.last_error_code,
+                          ),
+                        ),
+                        @html.td(
                           if row.state == DeadLetter {
-                            "danger"
-                          } else if row.state == Delivered {
-                            "ok"
+                            @html.button(
+                              type_="button",
+                              on_click=command(
+                                emit,
+                                BeginRedriveNotificationDelivery(
+                                  row.delivery_id,
+                                  row.attempt_count,
+                                  row.updated_unix_ms,
+                                ),
+                              ),
+                              localized(state.locale, "Redrive", "重新投递"),
+                            )
                           } else {
-                            "warning"
+                            @html.span(class="secondary", "—")
                           },
                         ),
-                      ),
-                      @html.td(row.attempt_count.to_string()),
-                      @html.td(
-                        class="mono secondary",
-                        notification_delivery_error_label(
-                          state.locale,
-                          row.last_error_code,
-                        ),
-                      ),
-                      @html.td(
-                        if row.state == DeadLetter {
-                          @html.button(
-                            type_="button",
-                            on_click=command(
-                              emit,
-                              BeginRedriveNotificationDelivery(
-                                row.delivery_id,
-                                row.attempt_count,
-                                row.updated_unix_ms,
-                              ),
-                            ),
-                            localized(state.locale, "Redrive", "重新投递"),
-                          )
-                        } else {
-                          @html.span(class="secondary", "—")
-                        },
-                      ),
-                    ])
-                  }
-                ],
-              ),
-            ]),
-          ])
+                      ])
+                    }
+                  ],
+                ),
+              ]),
+            ],
+          )
         },
       ],
     ),
@@ -10510,8 +10580,8 @@ fn policies_view(
                     selected=state.operation_name == "issue-enrollment-token",
                     localized(
                       state.locale,
-                      "Issue enrollment token",
-                      "签发注册令牌",
+                      "Issue node enrollment token",
+                      "签发节点注册令牌",
                     ),
                   ),
                   @html.option(
@@ -10542,8 +10612,8 @@ fn policies_view(
                     selected=state.operation_name == "plan-deployment",
                     localized(
                       state.locale,
-                      "Preflight deployment intent",
-                      "预检部署意图",
+                      "Check deployment placement",
+                      "检查部署放置",
                     ),
                   ),
                   @html.option(
@@ -10584,8 +10654,8 @@ fn policies_view(
                     selected=state.operation_name == "promote-alias",
                     localized(
                       state.locale,
-                      "Promote alias",
-                      "提升模型别名",
+                      "Activate model alias",
+                      "启用模型别名",
                     ),
                   ),
                   @html.option(
@@ -10878,76 +10948,86 @@ fn cost_centers_view(state : ConsoleState) -> @rabbita.Html {
           ),
         )
       } else {
-        @html.div(class="table-scroll", [
-          @html.table(class="resource-table", [
-            @html.caption(
-              class="sr-only",
-              localized(
-                state.locale,
-                "Cost center financial posture",
-                "成本中心财务状态",
+        @html.div(
+          class="table-scroll",
+          attrs=table_scroll_attrs(state.locale),
+          [
+            @html.table(class="resource-table", [
+              @html.caption(
+                class="sr-only",
+                localized(
+                  state.locale,
+                  "Cost center financial posture",
+                  "成本中心财务状态",
+                ),
               ),
-            ),
-            @html.thead(
-              @html.tr([
-                @html.th(
-                  scope=Col,
-                  localized(state.locale, "Cost center", "成本中心"),
-                ),
-                @html.th(
-                  scope=Col,
-                  localized(state.locale, "Organization", "组织"),
-                ),
-                @html.th(scope=Col, localized(state.locale, "Parent", "上级")),
-                @html.th(
-                  scope=Col,
-                  localized(state.locale, "Projects", "项目"),
-                ),
-                @html.th(
-                  scope=Col,
-                  localized(state.locale, "Provisional spend", "暂计支出"),
-                ),
-                @html.th(
-                  scope=Col,
-                  localized(state.locale, "Budget posture", "预算状态"),
-                ),
-              ]),
-            ),
-            @html.tbody(
-              [
-                for center in state.cost_centers => {
-                  @html.tr([
-                    @html.td([
-                      @html.strong(center.display_name),
-                      @html.span(class="mono secondary", center.cost_center_id),
-                    ]),
-                    @html.td(class="mono", center.organization_id),
-                    @html.td(
-                      class="mono secondary",
-                      if center.parent_cost_center_id.trim() == "" {
-                        "—"
-                      } else {
-                        center.parent_cost_center_id
-                      },
-                    ),
-                    @html.td(center.project_count.to_string()),
-                    @html.td(class="mono", center.provisional_spend),
-                    @html.td(
-                      status_badge(
-                        center.budget_posture,
-                        if center.budget_posture.contains("Within") {
-                          "ok"
+              @html.thead(
+                @html.tr([
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "Cost center", "成本中心"),
+                  ),
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "Organization", "组织"),
+                  ),
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "Parent", "上级"),
+                  ),
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "Projects", "项目"),
+                  ),
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "Provisional spend", "暂计支出"),
+                  ),
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "Budget posture", "预算状态"),
+                  ),
+                ]),
+              ),
+              @html.tbody(
+                [
+                  for center in state.cost_centers => {
+                    @html.tr([
+                      @html.td([
+                        @html.strong(center.display_name),
+                        @html.span(
+                          class="mono secondary",
+                          center.cost_center_id,
+                        ),
+                      ]),
+                      @html.td(class="mono", center.organization_id),
+                      @html.td(
+                        class="mono secondary",
+                        if center.parent_cost_center_id.trim() == "" {
+                          "—"
                         } else {
-                          "warning"
+                          center.parent_cost_center_id
                         },
                       ),
-                    ),
-                  ])
-                }
-              ],
-            ),
-          ]),
-        ])
+                      @html.td(center.project_count.to_string()),
+                      @html.td(class="mono", center.provisional_spend),
+                      @html.td(
+                        status_badge(
+                          center.budget_posture,
+                          if center.budget_posture.contains("Within") {
+                            "ok"
+                          } else {
+                            "warning"
+                          },
+                        ),
+                      ),
+                    ])
+                  }
+                ],
+              ),
+            ]),
+          ],
+        )
       },
     ],
   )
@@ -11000,68 +11080,78 @@ fn agreements_view(
           ),
         )
       } else {
-        @html.div(class="table-scroll", [
-          @html.table(class="resource-table", [
-            @html.caption(
-              class="sr-only",
-              localized(
-                state.locale,
-                "Digital agreement evidence",
-                "数字协议证据",
+        @html.div(
+          class="table-scroll",
+          attrs=table_scroll_attrs(state.locale),
+          [
+            @html.table(class="resource-table", [
+              @html.caption(
+                class="sr-only",
+                localized(
+                  state.locale,
+                  "Digital agreement evidence",
+                  "数字协议证据",
+                ),
               ),
-            ),
-            @html.thead(
-              @html.tr([
-                @html.th(
-                  scope=Col,
-                  localized(state.locale, "Agreement", "协议"),
-                ),
-                @html.th(scope=Col, localized(state.locale, "Type", "类型")),
-                @html.th(
-                  scope=Col,
-                  localized(state.locale, "Template", "模板"),
-                ),
-                @html.th(
-                  scope=Col,
-                  localized(state.locale, "Organization", "组织"),
-                ),
-                @html.th(scope=Col, localized(state.locale, "State", "状态")),
-                @html.th(
-                  scope=Col,
-                  localized(state.locale, "Evidence receipt", "证据回执"),
-                ),
-              ]),
-            ),
-            @html.tbody(
-              [
-                for agreement in state.agreements => {
-                  @html.tr([
-                    @html.td(class="mono", agreement.agreement_id),
-                    @html.td(
-                      agreement_type_label(
-                        state.locale,
-                        agreement.agreement_type,
+              @html.thead(
+                @html.tr([
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "Agreement", "协议"),
+                  ),
+                  @html.th(scope=Col, localized(state.locale, "Type", "类型")),
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "Template", "模板"),
+                  ),
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "Organization", "组织"),
+                  ),
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "State", "状态"),
+                  ),
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "Evidence receipt", "证据回执"),
+                  ),
+                ]),
+              ),
+              @html.tbody(
+                [
+                  for agreement in state.agreements => {
+                    @html.tr([
+                      @html.td(class="mono", agreement.agreement_id),
+                      @html.td(
+                        agreement_type_label(
+                          state.locale,
+                          agreement.agreement_type,
+                        ),
                       ),
-                    ),
-                    @html.td(class="mono", agreement.template_version),
-                    @html.td(class="mono", agreement.organization_id),
-                    @html.td(
-                      status_badge(
-                        agreement_state_label(state.locale, agreement.state),
-                        if agreement.state == "Executed" {
-                          "ok"
-                        } else {
-                          "pending"
-                        },
+                      @html.td(class="mono", agreement.template_version),
+                      @html.td(class="mono", agreement.organization_id),
+                      @html.td(
+                        status_badge(
+                          agreement_state_label(state.locale, agreement.state),
+                          if agreement.state == "Executed" {
+                            "ok"
+                          } else {
+                            "pending"
+                          },
+                        ),
                       ),
-                    ),
-                    @html.td(class="mono secondary", agreement.evidence_receipt),
-                  ])
-                }
-              ],
-            ),
-          ]),
-        ])
+                      @html.td(
+                        class="mono secondary",
+                        agreement.evidence_receipt,
+                      ),
+                    ])
+                  }
+                ],
+              ),
+            ]),
+          ],
+        )
       },
       @html.div(class="section-heading enterprise-request-heading", [
         @html.div([
@@ -11125,96 +11215,103 @@ fn agreements_view(
           ),
         )
       } else {
-        @html.div(class="table-scroll", [
-          @html.table(class="resource-table", [
-            @html.thead(
-              @html.tr([
-                @html.th(localized(state.locale, "Request", "申请")),
-                @html.th(localized(state.locale, "Organization", "组织")),
-                @html.th(
-                  localized(state.locale, "Project / user", "项目 / 用户"),
-                ),
-                @html.th(localized(state.locale, "Models", "模型")),
-                @html.th(localized(state.locale, "State", "状态")),
-                @html.th(localized(state.locale, "Decision", "决策")),
-              ]),
-            ),
-            @html.tbody(
-              [
-                for request in state.enterprise_lease_requests => {
-                  @html.tr([
-                    @html.td(class="mono", request.request_id),
-                    @html.td([
-                      @html.strong(request.organization_id),
-                      @html.span(class="mono secondary", request.subject_ref),
-                    ]),
-                    @html.td([
-                      @html.strong(request.project_id),
-                      @html.span(class="mono secondary", request.unix_username),
-                    ]),
-                    @html.td(request.requested_models),
-                    @html.td(
-                      status_badge(
-                        enterprise_request_state_label(
-                          state.locale,
-                          request.state,
-                        ),
-                        if request.state == "Submitted" {
-                          "pending"
-                        } else {
-                          "ok"
-                        },
-                      ),
-                    ),
-                    @html.td(
-                      if request.state == "Submitted" {
-                        @html.div(class="table-actions", [
-                          @html.button(
-                            type_="button",
-                            class="action-button primary",
-                            disabled=state.loading ||
-                              !state.nodes.any(node => {
-                                node.node_id == state.portal_node_id &&
-                                node.state == Active &&
-                                node.lease_holder == "" &&
-                                node.active_assignment == ""
-                              }),
-                            on_click=command(
-                              emit,
-                              ApproveEnterpriseLease(
-                                request.request_id,
-                                request.generation,
-                              ),
-                            ),
-                            localized(state.locale, "Approve", "批准"),
-                          ),
-                          @html.button(
-                            type_="button",
-                            class="action-button",
-                            disabled=state.loading,
-                            on_click=command(
-                              emit,
-                              RejectEnterpriseLease(
-                                request.request_id,
-                                request.generation,
-                              ),
-                            ),
-                            localized(state.locale, "Reject", "拒绝"),
-                          ),
-                        ])
-                      } else {
+        @html.div(
+          class="table-scroll",
+          attrs=table_scroll_attrs(state.locale),
+          [
+            @html.table(class="resource-table", [
+              @html.thead(
+                @html.tr([
+                  @html.th(localized(state.locale, "Request", "申请")),
+                  @html.th(localized(state.locale, "Organization", "组织")),
+                  @html.th(
+                    localized(state.locale, "Project / user", "项目 / 用户"),
+                  ),
+                  @html.th(localized(state.locale, "Models", "模型")),
+                  @html.th(localized(state.locale, "State", "状态")),
+                  @html.th(localized(state.locale, "Decision", "决策")),
+                ]),
+              ),
+              @html.tbody(
+                [
+                  for request in state.enterprise_lease_requests => {
+                    @html.tr([
+                      @html.td(class="mono", request.request_id),
+                      @html.td([
+                        @html.strong(request.organization_id),
+                        @html.span(class="mono secondary", request.subject_ref),
+                      ]),
+                      @html.td([
+                        @html.strong(request.project_id),
                         @html.span(
                           class="mono secondary",
-                          request.assigned_node_id,
-                        )
-                      },
-                    ),
-                  ])
-                }
-              ],
-            ),
-          ]),
-        ])
+                          request.unix_username,
+                        ),
+                      ]),
+                      @html.td(request.requested_models),
+                      @html.td(
+                        status_badge(
+                          enterprise_request_state_label(
+                            state.locale,
+                            request.state,
+                          ),
+                          if request.state == "Submitted" {
+                            "pending"
+                          } else {
+                            "ok"
+                          },
+                        ),
+                      ),
+                      @html.td(
+                        if request.state == "Submitted" {
+                          @html.div(class="table-actions", [
+                            @html.button(
+                              type_="button",
+                              class="action-button primary",
+                              disabled=state.loading ||
+                                !state.nodes.any(node => {
+                                  node.node_id == state.portal_node_id &&
+                                  node.state == Active &&
+                                  node.lease_holder == "" &&
+                                  node.active_assignment == ""
+                                }),
+                              on_click=command(
+                                emit,
+                                ApproveEnterpriseLease(
+                                  request.request_id,
+                                  request.generation,
+                                ),
+                              ),
+                              localized(state.locale, "Approve", "批准"),
+                            ),
+                            @html.button(
+                              type_="button",
+                              class="action-button",
+                              disabled=state.loading,
+                              on_click=command(
+                                emit,
+                                RejectEnterpriseLease(
+                                  request.request_id,
+                                  request.generation,
+                                ),
+                              ),
+                              localized(state.locale, "Reject", "拒绝"),
+                            ),
+                          ])
+                        } else {
+                          @html.span(
+                            class="mono secondary",
+                            request.assigned_node_id,
+                          )
+                        },
+                      ),
+                    ])
+                  }
+                ],
+              ),
+            ]),
+          ],
+        )
       },
     ],
   )
@@ -11267,75 +11364,82 @@ fn qualified_services_view(state : ConsoleState) -> @rabbita.Html {
           ),
         )
       } else {
-        @html.div(class="table-scroll", [
-          @html.table(class="resource-table", [
-            @html.caption(
-              class="sr-only",
-              localized(
-                state.locale,
-                "Qualified service adapter posture",
-                "资质服务适配器状态",
+        @html.div(
+          class="table-scroll",
+          attrs=table_scroll_attrs(state.locale),
+          [
+            @html.table(class="resource-table", [
+              @html.caption(
+                class="sr-only",
+                localized(
+                  state.locale,
+                  "Qualified service adapter posture",
+                  "资质服务适配器状态",
+                ),
               ),
-            ),
-            @html.thead(
-              @html.tr([
-                @html.th(
-                  scope=Col,
-                  localized(state.locale, "Provider", "供应商"),
-                ),
-                @html.th(
-                  scope=Col,
-                  localized(state.locale, "Capability", "能力"),
-                ),
-                @html.th(
-                  scope=Col,
-                  localized(state.locale, "Environment", "环境"),
-                ),
-                @html.th(scope=Col, localized(state.locale, "State", "状态")),
-                @html.th(
-                  scope=Col,
-                  localized(state.locale, "Evidence policy", "证据策略"),
-                ),
-                @html.th(
-                  scope=Col,
-                  localized(state.locale, "Production", "生产"),
-                ),
-              ]),
-            ),
-            @html.tbody(
-              [
-                for service in state.qualified_services => {
-                  @html.tr([
-                    @html.td(@html.strong(service.provider)),
-                    @html.td(service.capability),
-                    @html.td(status_badge(service.environment, "warning")),
-                    @html.td(status_badge(service.state, "ok")),
-                    @html.td(
-                      @controls.advanced(
-                        localized(state.locale, "Details", "详情"),
-                        [@html.p(service.evidence_policy)],
+              @html.thead(
+                @html.tr([
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "Provider", "供应商"),
+                  ),
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "Capability", "能力"),
+                  ),
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "Environment", "环境"),
+                  ),
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "State", "状态"),
+                  ),
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "Evidence policy", "证据策略"),
+                  ),
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "Production", "生产"),
+                  ),
+                ]),
+              ),
+              @html.tbody(
+                [
+                  for service in state.qualified_services => {
+                    @html.tr([
+                      @html.td(@html.strong(service.provider)),
+                      @html.td(service.capability),
+                      @html.td(status_badge(service.environment, "warning")),
+                      @html.td(status_badge(service.state, "ok")),
+                      @html.td(
+                        @controls.advanced(
+                          localized(state.locale, "Details", "详情"),
+                          [@html.p(service.evidence_policy)],
+                        ),
                       ),
-                    ),
-                    @html.td(
-                      status_badge(
-                        if service.production_ready {
-                          localized(state.locale, "Ready", "就绪")
-                        } else {
-                          localized(state.locale, "Not ready", "未就绪")
-                        },
-                        if service.production_ready {
-                          "ok"
-                        } else {
-                          "danger"
-                        },
+                      @html.td(
+                        status_badge(
+                          if service.production_ready {
+                            localized(state.locale, "Ready", "就绪")
+                          } else {
+                            localized(state.locale, "Not ready", "未就绪")
+                          },
+                          if service.production_ready {
+                            "ok"
+                          } else {
+                            "danger"
+                          },
+                        ),
                       ),
-                    ),
-                  ])
-                }
-              ],
-            ),
-          ]),
-        ])
+                    ])
+                  }
+                ],
+              ),
+            ]),
+          ],
+        )
       },
     ],
   )
@@ -11361,8 +11465,8 @@ fn audit_view(
         class="resource-count",
         localized(
           state.locale,
-          "\{state.audit.length()} events",
-          "\{state.audit.length()} 个事件",
+          "\{events.total} events",
+          "\{events.total} 个事件",
         ),
       ),
     ]),
@@ -11394,7 +11498,7 @@ fn audit_view(
         ),
       )
     } else {
-      @html.div(class="table-scroll", [
+      @html.div(class="table-scroll", attrs=table_scroll_attrs(state.locale), [
         @html.table(class="resource-table", [
           @html.caption(
             class="sr-only",
@@ -11609,6 +11713,7 @@ fn confirmation_view(
           @html.div(class="confirmation-actions", [
             @html.button(
               type_="button",
+              id="operator-confirmation-dismiss",
               on_click=command(emit, DismissConfirmation),
               localized(locale, "Cancel", "取消"),
             ),

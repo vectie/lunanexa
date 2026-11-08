@@ -1,5 +1,35 @@
 # LunaNexa product contract
 
+## Operator list reads
+
+`POST /v1/operator/list-page` accepts the `operator_read.PageQuery` envelope:
+`list`, `query`, `account_id`, `cursor`. The supported lists are `accounts`,
+`workspace-profiles`, `access-grants`, `access-records`, `audit-events` and
+`request-receipts`. Replies contain at most 25 existing public read projections,
+the filtered total, zero-based page, previous/next cursors and summary counts.
+Search is in the body rather than a URL. It is limited to 256 characters;
+cursors are opaque positions, not credentials. Every request rechecks the same
+operator or audit-reader authority as its snapshot predecessor.
+
+Access records are filtered by the selected account before contract/model
+readiness is projected. No selected account returns no access records. Personnel
+choices come separately from `POST /v1/operator/access-context`: identity labels,
+roles/state and workspace lease references, without identity receipts, grants or
+per-company readiness histories. Accounts outside the current page remain
+selectable. Existing snapshot endpoints stay compatible.
+
+Audit traversals pin their highest sequence so incoming traffic does not reset
+pagination. Other lists detect changed filtered identities with `409 ListChanged`;
+the client reloads page one while retaining its search. Responses for an older
+search, person or session cannot replace the current page. These POST endpoints
+are reads during reconciliation and do not create operator mutation-audit events.
+Ordinary request monitoring remains enabled.
+
+`POST /v1/operator/node-ownership` projects the existing service ledger without
+runtime probes. Fixed company claims remain visible when a service is stopped.
+The UI shows actual ownership separately from the node's registered pool label;
+this display never allocates a node or grants access.
+
 ## Unified model services
 
 GLM, Qwen and other model families use the same deployment resource authority.
