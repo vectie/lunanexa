@@ -2072,6 +2072,7 @@ pub(all) struct ConsoleState {
   account_invite : AccountInviteDraft
   access_package_draft : AccessPackageDraft
   registered_access_account : String
+  access_record_account : String
   access_organizations : Array[AccessOrganizationOption]
   access_packages : Array[AccessPackageView]
   access_package_context : (String, String)?
@@ -2233,6 +2234,7 @@ pub(all) enum ConsoleMessage {
   SubmitAnnouncement
   AccessPackageIssuerChanged(String)
   RegisteredAccessAccountChanged(String)
+  AccessRecordAccountChanged(String)
   SubmitRegisteredAccess
   AccessPackageSubjectChanged(String)
   AccessPackageDisplayNameChanged(String)
@@ -2329,6 +2331,7 @@ pub fn default_state() -> ConsoleState {
       identity_verified: false,
     },
     registered_access_account: "",
+    access_record_account: "",
     access_organizations: [],
     access_packages: [],
     users: [],
@@ -2909,6 +2912,7 @@ pub fn demo_state() -> ConsoleState {
       identity_verified: true,
     },
     registered_access_account: "",
+    access_record_account: "",
     access_organizations: [
       {
         organization_id: "org-northstar",
@@ -4219,11 +4223,20 @@ fn access_package_card(
         @html.span(class="secondary", item.email),
         @html.span(
           class="secondary",
-          "\{item.organization_id} · \{item.tenant_ref}",
+          state.access_organizations
+          .iter()
+          .find_first(org => org.organization_id == item.organization_id)
+          .map_or(item.organization_id, org => org.display_name),
         ),
       ]),
       status_badge(
-        item.state,
+        if item.ready {
+          localized(state.locale, "Ready", "可使用")
+        } else if item.can_enable {
+          localized(state.locale, "Ready to enable", "待开通")
+        } else {
+          localized(state.locale, "Needs attention", "待处理")
+        },
         if item.ready {
           "ok"
         } else if item.can_enable {
@@ -4266,7 +4279,25 @@ fn access_package_card(
       ),
     ]),
     @html.div(class="access-package-next", [
-      if item.can_enable {
+      if !item.account_ready {
+        @html.span(
+          class="secondary",
+          localized(
+            state.locale,
+            "This person needs an active registered account.",
+            "该人员需先注册并激活账户。",
+          ),
+        )
+      } else if !item.membership_ready {
+        @html.span(
+          class="secondary",
+          localized(
+            state.locale,
+            "Review the company and open this person's membership first.",
+            "请先审核企业并开通该人员的成员权限。",
+          ),
+        )
+      } else if item.can_enable {
         @html.button(
           type_="button",
           class="primary-button",
@@ -4342,10 +4373,16 @@ fn access_package_card(
         @html.dl([
           @html.dt("Package"),
           @html.dd(class="mono", item.package_id),
+          @html.dt(localized(state.locale, "State", "状态")),
+          @html.dd(item.state),
           @html.dt("Account / subject"),
           @html.dd(class="mono", "\{item.account_id} / \{item.subject_ref}"),
           @html.dt("Membership"),
           @html.dd(class="mono", item.membership_id),
+          @html.dt(
+            localized(state.locale, "Organization / tenant", "组织 / 租户"),
+          ),
+          @html.dd(class="mono", "\{item.organization_id} / \{item.tenant_ref}"),
           @html.dt("Workspace user / grant / lease"),
           @html.dd(class="mono", "\{user_id} / \{grant_id} / \{lease_id}"),
           @html.dt(
@@ -4505,7 +4542,6 @@ fn users_view(
         ),
       ),
     ]),
-    registered_access_form(state, emit),
     registered_access_records(state, emit),
     @html.details(class="trial-administration", [
       @html.summary(
@@ -4522,14 +4558,6 @@ fn users_view(
               state.locale,
               "Company registrations awaiting review",
               "待审核企业注册",
-            ),
-          ),
-          @html.p(
-            class="section-copy",
-            localized(
-              state.locale,
-              "Approval activates the company. Machines and paid services require separate authorization.",
-              "审核通过后企业生效。机器与付费服务须另行授权。",
             ),
           ),
         ]),
@@ -4581,6 +4609,7 @@ fn users_view(
         )
       },
     ]),
+    registered_access_form(state, emit),
     match state.authenticated_account {
       Some(account) =>
         @html.section(
@@ -5178,19 +5207,7 @@ fn users_view(
       ]),
     ]),
     @html.div(class="subsection-heading", [
-      @html.div([
-        @html.p(
-          class="eyebrow",
-          localized(state.locale, "Application accounts", "应用账户"),
-        ),
-        @html.h3(
-          localized(
-            state.locale,
-            "External identity mappings",
-            "外部身份映射",
-          ),
-        ),
-      ]),
+      @html.div([@html.h3(localized(state.locale, "Accounts", "账户"))]),
       @html.span(
         class="resource-count",
         localized(
@@ -5256,12 +5273,19 @@ fn users_view(
                   ),
                   @html.td(account_state_badge(state.locale, account.state)),
                   @html.td(
-                    account_role_controls(
-                      state.locale,
-                      account.account_id,
-                      account.roles,
-                      state.loading || account.state == Revoked,
-                      emit,
+                    @controls.advanced(
+                      account.roles
+                      .map(role => account_role_label(state.locale, role))
+                      .join(" · "),
+                      [
+                        account_role_controls(
+                          state.locale,
+                          account.account_id,
+                          account.roles,
+                          state.loading || account.state == Revoked,
+                          emit,
+                        ),
+                      ],
                     ),
                   ),
                   @html.td(class="row-actions", [
@@ -5317,183 +5341,201 @@ fn users_view(
         ]),
       ])
     },
-    @html.h3(localized(state.locale, "Workspace profiles", "工作区档案")),
-    if state.users.length() == 0 {
-      @html.p(
-        class="empty-state",
-        localized(
-          state.locale,
-          "No user identities are available. Use Policies → Invite user to create the first typed workspace record.",
-          "暂无用户身份。请使用“策略 → 邀请用户”创建第一条类型化工作区记录。",
-        ),
-      )
-    } else {
-      @html.div(class="table-scroll", [
-        @html.table(class="resource-table", [
-          @html.caption(
-            class="sr-only",
-            localized(state.locale, "Cluster users", "集群用户"),
+    @html.details(class="ln-advanced", [
+      @html.summary(
+        localized(state.locale, "Workspace profiles", "工作区档案"),
+      ),
+      if state.users.length() == 0 {
+        @html.p(
+          class="empty-state",
+          localized(
+            state.locale,
+            "No user identities are available. Use Policies → Invite user to create the first typed workspace record.",
+            "暂无用户身份。请使用“策略 → 邀请用户”创建第一条类型化工作区记录。",
           ),
-          @html.thead(
-            @html.tr([
-              @html.th(scope=Col, localized(state.locale, "User", "用户")),
-              @html.th(scope=Col, localized(state.locale, "Status", "状态")),
-              @html.th(
-                scope=Col,
-                localized(state.locale, "Last active", "最近活动"),
-              ),
-              @html.th(scope=Col, localized(state.locale, "Grants", "授权")),
-              @html.th(scope=Col, localized(state.locale, "Actions", "操作")),
-            ]),
-          ),
-          @html.tbody(
-            [
-              for user in state.users => {
-                @html.tr([
-                  @html.td([
-                    @html.strong(user.display_name),
-                    @html.span(class="secondary", user.email),
-                    @html.span(class="mono secondary", user.user_id),
-                  ]),
-                  @html.td(user_state_badge(state.locale, user.state)),
-                  @html.td(generated_time_label(state.locale, user.last_active)),
-                  @html.td(user.grant_count.to_string()),
-                  @html.td(class="row-actions", [
-                    if user.state == UserInvited || user.state == UserSuspended {
-                      @html.button(
-                        type_="button",
-                        disabled=state.loading,
-                        title=localized(
-                          state.locale,
-                          "Activate user \{user.user_id}",
-                          "激活用户 \{user.user_id}",
-                        ),
-                        on_click=command(emit, ActivateUser(user.user_id)),
-                        localized(state.locale, "Activate", "激活"),
-                      )
-                    } else {
-                      @html.nothing
-                    },
-                    if user.state == UserActive {
-                      @html.button(
-                        type_="button",
-                        class="danger-secondary",
-                        disabled=state.loading,
-                        title=localized(
-                          state.locale,
-                          "Suspend user \{user.user_id}",
-                          "暂停用户 \{user.user_id}",
-                        ),
-                        on_click=command(emit, BeginSuspendUser(user.user_id)),
-                        localized(state.locale, "Suspend…", "暂停…"),
-                      )
-                    } else {
-                      @html.nothing
-                    },
-                    if user.state != UserRevoked {
-                      @html.button(
-                        type_="button",
-                        class="danger-secondary",
-                        disabled=state.loading,
-                        title=localized(
-                          state.locale,
-                          "Revoke user \{user.user_id}",
-                          "撤销用户 \{user.user_id}",
-                        ),
-                        on_click=command(emit, BeginRevokeUser(user.user_id)),
-                        localized(state.locale, "Revoke…", "撤销…"),
-                      )
-                    } else {
-                      @html.span(
-                        class="secondary",
-                        localized(state.locale, "No actions", "无可用操作"),
-                      )
-                    },
-                  ]),
-                ])
-              }
-            ],
-          ),
-        ]),
-      ])
-    },
-    @html.h3(localized(state.locale, "Access grants", "访问授权")),
-    if state.access_grants.length() == 0 {
-      @html.p(
-        class="empty-state compact",
-        localized(
-          state.locale,
-          "No access grants are available.",
-          "暂无访问授权。",
-        ),
-      )
-    } else {
-      @html.div(class="table-scroll", [
-        @html.table(class="resource-table", [
-          @html.caption(
-            class="sr-only",
-            localized(
-              state.locale,
-              "Scoped access grants",
-              "限定范围的访问授权",
+        )
+      } else {
+        @html.div(class="table-scroll", [
+          @html.table(class="resource-table", [
+            @html.caption(
+              class="sr-only",
+              localized(state.locale, "Cluster users", "集群用户"),
             ),
-          ),
-          @html.thead(
-            @html.tr([
-              @html.th(
-                scope=Col,
-                localized(state.locale, "Principal", "主体"),
-              ),
-              @html.th(
-                scope=Col,
-                localized(state.locale, "Role / scope", "角色 / 范围"),
-              ),
-              @html.th(scope=Col, localized(state.locale, "Status", "状态")),
-              @html.th(
-                scope=Col,
-                localized(state.locale, "Expires", "到期时间"),
-              ),
-              @html.th(scope=Col, localized(state.locale, "Action", "操作")),
-            ]),
-          ),
-          @html.tbody(
-            [
-              for grant in state.access_grants => {
-                @html.tr([
-                  @html.td([
-                    @html.strong(grant.user_id),
-                    @html.span(class="mono secondary", grant.grant_id),
-                  ]),
-                  @html.td([
-                    @html.strong(access_label(state.locale, grant.role)),
-                    @html.span(class="secondary", grant.scope),
-                  ]),
-                  @html.td(grant_state_badge(state.locale, grant.state)),
-                  @html.td(generated_time_label(state.locale, grant.expires_at)),
-                  @html.td(
-                    @html.button(
-                      type_="button",
-                      class="danger-secondary",
-                      disabled=grant.state != GrantActive,
-                      title=localized(
-                        state.locale,
-                        "Revoke grant \{grant.grant_id}",
-                        "撤销授权 \{grant.grant_id}",
-                      ),
-                      on_click=command(
-                        emit,
-                        BeginRevokeAccessGrant(grant.grant_id),
-                      ),
-                      localized(state.locale, "Revoke…", "撤销…"),
+            @html.thead(
+              @html.tr([
+                @html.th(scope=Col, localized(state.locale, "User", "用户")),
+                @html.th(scope=Col, localized(state.locale, "Status", "状态")),
+                @html.th(
+                  scope=Col,
+                  localized(state.locale, "Last active", "最近活动"),
+                ),
+                @html.th(scope=Col, localized(state.locale, "Grants", "授权")),
+                @html.th(
+                  scope=Col,
+                  localized(state.locale, "Actions", "操作"),
+                ),
+              ]),
+            ),
+            @html.tbody(
+              [
+                for user in state.users => {
+                  @html.tr([
+                    @html.td([
+                      @html.strong(user.display_name),
+                      @html.span(class="secondary", user.email),
+                      @html.span(class="mono secondary", user.user_id),
+                    ]),
+                    @html.td(user_state_badge(state.locale, user.state)),
+                    @html.td(
+                      generated_time_label(state.locale, user.last_active),
                     ),
-                  ),
-                ])
-              }
-            ],
+                    @html.td(user.grant_count.to_string()),
+                    @html.td(class="row-actions", [
+                      if user.state == UserInvited ||
+                        user.state == UserSuspended {
+                        @html.button(
+                          type_="button",
+                          disabled=state.loading,
+                          title=localized(
+                            state.locale,
+                            "Activate user \{user.user_id}",
+                            "激活用户 \{user.user_id}",
+                          ),
+                          on_click=command(emit, ActivateUser(user.user_id)),
+                          localized(state.locale, "Activate", "激活"),
+                        )
+                      } else {
+                        @html.nothing
+                      },
+                      if user.state == UserActive {
+                        @html.button(
+                          type_="button",
+                          class="danger-secondary",
+                          disabled=state.loading,
+                          title=localized(
+                            state.locale,
+                            "Suspend user \{user.user_id}",
+                            "暂停用户 \{user.user_id}",
+                          ),
+                          on_click=command(emit, BeginSuspendUser(user.user_id)),
+                          localized(state.locale, "Suspend…", "暂停…"),
+                        )
+                      } else {
+                        @html.nothing
+                      },
+                      if user.state != UserRevoked {
+                        @html.button(
+                          type_="button",
+                          class="danger-secondary",
+                          disabled=state.loading,
+                          title=localized(
+                            state.locale,
+                            "Revoke user \{user.user_id}",
+                            "撤销用户 \{user.user_id}",
+                          ),
+                          on_click=command(emit, BeginRevokeUser(user.user_id)),
+                          localized(state.locale, "Revoke…", "撤销…"),
+                        )
+                      } else {
+                        @html.span(
+                          class="secondary",
+                          localized(
+                            state.locale,
+                            "No actions",
+                            "无可用操作",
+                          ),
+                        )
+                      },
+                    ]),
+                  ])
+                }
+              ],
+            ),
+          ]),
+        ])
+      },
+    ]),
+    @html.details(class="ln-advanced", [
+      @html.summary(localized(state.locale, "Access grants", "访问授权")),
+      if state.access_grants.length() == 0 {
+        @html.p(
+          class="empty-state compact",
+          localized(
+            state.locale,
+            "No access grants are available.",
+            "暂无访问授权。",
           ),
-        ]),
-      ])
-    },
+        )
+      } else {
+        @html.div(class="table-scroll", [
+          @html.table(class="resource-table", [
+            @html.caption(
+              class="sr-only",
+              localized(
+                state.locale,
+                "Scoped access grants",
+                "限定范围的访问授权",
+              ),
+            ),
+            @html.thead(
+              @html.tr([
+                @html.th(
+                  scope=Col,
+                  localized(state.locale, "Principal", "主体"),
+                ),
+                @html.th(
+                  scope=Col,
+                  localized(state.locale, "Role / scope", "角色 / 范围"),
+                ),
+                @html.th(scope=Col, localized(state.locale, "Status", "状态")),
+                @html.th(
+                  scope=Col,
+                  localized(state.locale, "Expires", "到期时间"),
+                ),
+                @html.th(scope=Col, localized(state.locale, "Action", "操作")),
+              ]),
+            ),
+            @html.tbody(
+              [
+                for grant in state.access_grants => {
+                  @html.tr([
+                    @html.td([
+                      @html.strong(grant.user_id),
+                      @html.span(class="mono secondary", grant.grant_id),
+                    ]),
+                    @html.td([
+                      @html.strong(access_label(state.locale, grant.role)),
+                      @html.span(class="secondary", grant.scope),
+                    ]),
+                    @html.td(grant_state_badge(state.locale, grant.state)),
+                    @html.td(
+                      generated_time_label(state.locale, grant.expires_at),
+                    ),
+                    @html.td(
+                      @html.button(
+                        type_="button",
+                        class="danger-secondary",
+                        disabled=grant.state != GrantActive,
+                        title=localized(
+                          state.locale,
+                          "Revoke grant \{grant.grant_id}",
+                          "撤销授权 \{grant.grant_id}",
+                        ),
+                        on_click=command(
+                          emit,
+                          BeginRevokeAccessGrant(grant.grant_id),
+                        ),
+                        localized(state.locale, "Revoke…", "撤销…"),
+                      ),
+                    ),
+                  ])
+                }
+              ],
+            ),
+          ]),
+        ])
+      },
+    ]),
   ])
 }
 
@@ -5509,14 +5551,6 @@ fn leases_view(
         @html.h2(
           id="leases-title",
           localized(state.locale, "Lease operations", "租约运维"),
-        ),
-        @html.p(
-          class="section-copy",
-          localized(
-            state.locale,
-            "Ending machine access revokes credentials and stops work. Nodes return to the pool after cleanup is verified.",
-            "结束机器访问将撤销凭据并停止工作。节点通过清理验证后才会重新进入资源池。",
-          ),
         ),
       ]),
       @html.span(
@@ -5542,7 +5576,10 @@ fn leases_view(
       state.compute_leases.length() == 0 {
       @html.nothing
     } else {
-      lease_lifecycle_graph(state)
+      @controls.advanced(
+        localized(state.locale, "Lease lifecycle", "租约生命周期"),
+        [lease_lifecycle_graph(state)],
+      )
     },
     @html.div(class="subsection-heading", [
       @html.div([
@@ -5667,14 +5704,6 @@ fn leases_view(
             "工作区容量租约",
           ),
         ),
-        @html.p(
-          class="section-copy",
-          localized(
-            state.locale,
-            "Workspace capacity does not include direct machine login.",
-            "工作区容量不包含直接登录机器的权限。",
-          ),
-        ),
       ]),
     ]),
     if state.compute_leases.length() == 0 {
@@ -5682,8 +5711,8 @@ fn leases_view(
         class="empty-state",
         localized(
           state.locale,
-          "No compute or workspace leases are active. Use Policies → Create workspace lease after the user and access grant exist; it never grants direct node access.",
-          "暂无有效的计算租约或工作区租约。用户和访问授权就绪后，请使用“策略 → 创建工作区租约”；租约绝不会授予节点直接访问权限。",
+          "No workspace leases. Open access from Users.",
+          "暂无工作区租约，请前往“用户”开通访问。",
         ),
       )
     } else {
@@ -9377,51 +9406,49 @@ fn requests_view(state : ConsoleState) -> @rabbita.Html {
         ]),
       ])
     },
-    @html.div(class="subsection-heading", [
-      @html.h3(localized(state.locale, "Latest live stream", "最新实时流")),
-      @html.span(
-        class="resource-count",
-        localized(state.locale, "Browser session", "浏览器会话"),
+    @html.details(class="ln-advanced", open=!state.stream_events.is_empty(), [
+      @html.summary(
+        localized(state.locale, "Latest live stream", "最新实时流"),
       ),
-    ]),
-    @html.div(class="stream-panel", [
-      if state.stream_events.length() == 0 {
-        @html.p(
-          class="empty-state compact",
-          localized(
-            state.locale,
-            "No live stream has been run in this browser session.",
-            "此浏览器会话尚未运行实时流。",
-          ),
-        )
-      } else {
-        @html.ol(
-          class="stream-list",
-          [
-            for event in state.stream_events => {
-              @html.li([
-                @html.div(class="stream-meta", [
-                  @html.span(
-                    class="stream-sequence",
-                    event.sequence.to_string(),
-                  ),
-                  @html.strong(stream_kind_label(state.locale, event.kind)),
-                  if event.receipt == "" {
+      @html.div(class="stream-panel", [
+        if state.stream_events.length() == 0 {
+          @html.p(
+            class="empty-state compact",
+            localized(
+              state.locale,
+              "No live stream has been run in this browser session.",
+              "此浏览器会话尚未运行实时流。",
+            ),
+          )
+        } else {
+          @html.ol(
+            class="stream-list",
+            [
+              for event in state.stream_events => {
+                @html.li([
+                  @html.div(class="stream-meta", [
+                    @html.span(
+                      class="stream-sequence",
+                      event.sequence.to_string(),
+                    ),
+                    @html.strong(stream_kind_label(state.locale, event.kind)),
+                    if event.receipt == "" {
+                      @html.nothing
+                    } else {
+                      @html.span(class="mono secondary", event.receipt)
+                    },
+                  ]),
+                  if event.text == "" {
                     @html.nothing
                   } else {
-                    @html.span(class="mono secondary", event.receipt)
+                    @html.pre(class="stream-output", event.text)
                   },
-                ]),
-                if event.text == "" {
-                  @html.nothing
-                } else {
-                  @html.pre(class="stream-output", event.text)
-                },
-              ])
-            }
-          ],
-        )
-      },
+                ])
+              }
+            ],
+          )
+        },
+      ]),
     ]),
   ])
 }
@@ -9863,121 +9890,126 @@ fn alerts_view(
         ]),
       ])
     },
-    @html.div(class="subsection-heading", [
-      @html.div([
-        @html.h3(
-          localized(state.locale, "Delivery outbox", "通知投递队列"),
-        ),
-        @html.p(
-          class="section-copy",
+    @html.details(
+      class="ln-advanced",
+      open=state.notification_deliveries.any(row => row.state == DeadLetter),
+      [
+        @html.summary(
           localized(
             state.locale,
-            "Review failed deliveries before retrying.",
-            "请先核对失败的投递，再重试。",
+            "Notification deliveries · \{state.notification_deliveries.count_if(row => row.state == DeadLetter)} failed",
+            "通知投递 · \{state.notification_deliveries.count_if(row => row.state == DeadLetter)} 项失败",
           ),
         ),
-      ]),
-      @html.span(
-        class="resource-count",
-        localized(
-          state.locale,
-          "\{state.notification_deliveries.count_if(row => row.state == DeadLetter)} dead letters",
-          "\{state.notification_deliveries.count_if(row => row.state == DeadLetter)} 个死信",
-        ),
-      ),
-    ]),
-    if state.notification_deliveries.length() == 0 {
-      @html.p(
-        class="empty-state compact",
-        localized(
-          state.locale,
-          "No outbound delivery records are available.",
-          "暂无出站投递记录。",
-        ),
-      )
-    } else {
-      @html.div(class="table-scroll", [
-        @html.table(class="resource-table", [
-          @html.caption(
-            class="sr-only",
+        if state.notification_deliveries.length() == 0 {
+          @html.p(
+            class="empty-state compact",
             localized(
               state.locale,
-              "Outbound notification delivery records",
-              "出站通知投递记录",
+              "No outbound delivery records are available.",
+              "暂无出站投递记录。",
             ),
-          ),
-          @html.thead(
-            @html.tr([
-              @html.th(scope=Col, localized(state.locale, "Delivery", "投递")),
-              @html.th(scope=Col, localized(state.locale, "Channel", "渠道")),
-              @html.th(scope=Col, localized(state.locale, "State", "状态")),
-              @html.th(
-                scope=Col,
-                localized(state.locale, "Attempts", "尝试次数"),
+          )
+        } else {
+          @html.div(class="table-scroll", [
+            @html.table(class="resource-table", [
+              @html.caption(
+                class="sr-only",
+                localized(
+                  state.locale,
+                  "Outbound notification delivery records",
+                  "出站通知投递记录",
+                ),
               ),
-              @html.th(
-                scope=Col,
-                localized(state.locale, "Last error", "最近错误"),
-              ),
-              @html.th(scope=Col, localized(state.locale, "Actions", "操作")),
-            ]),
-          ),
-          @html.tbody(
-            [
-              for row in state.notification_deliveries => {
+              @html.thead(
                 @html.tr([
-                  @html.td([
-                    @html.strong(class="mono", row.delivery_id),
-                    @html.span(class="mono secondary", row.notification_id),
-                  ]),
-                  @html.td(
-                    notification_channel_label(state.locale, row.channel),
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "Delivery", "投递"),
                   ),
-                  @html.td(
-                    status_badge(
-                      notification_delivery_state_label(state.locale, row.state),
-                      if row.state == DeadLetter {
-                        "danger"
-                      } else if row.state == Delivered {
-                        "ok"
-                      } else {
-                        "warning"
-                      },
-                    ),
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "Channel", "渠道"),
                   ),
-                  @html.td(row.attempt_count.to_string()),
-                  @html.td(
-                    class="mono secondary",
-                    notification_delivery_error_label(
-                      state.locale,
-                      row.last_error_code,
-                    ),
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "State", "状态"),
                   ),
-                  @html.td(
-                    if row.state == DeadLetter {
-                      @html.button(
-                        type_="button",
-                        on_click=command(
-                          emit,
-                          BeginRedriveNotificationDelivery(
-                            row.delivery_id,
-                            row.attempt_count,
-                            row.updated_unix_ms,
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "Attempts", "尝试次数"),
+                  ),
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "Last error", "最近错误"),
+                  ),
+                  @html.th(
+                    scope=Col,
+                    localized(state.locale, "Actions", "操作"),
+                  ),
+                ]),
+              ),
+              @html.tbody(
+                [
+                  for row in state.notification_deliveries => {
+                    @html.tr([
+                      @html.td([
+                        @html.strong(class="mono", row.delivery_id),
+                        @html.span(class="mono secondary", row.notification_id),
+                      ]),
+                      @html.td(
+                        notification_channel_label(state.locale, row.channel),
+                      ),
+                      @html.td(
+                        status_badge(
+                          notification_delivery_state_label(
+                            state.locale,
+                            row.state,
                           ),
+                          if row.state == DeadLetter {
+                            "danger"
+                          } else if row.state == Delivered {
+                            "ok"
+                          } else {
+                            "warning"
+                          },
                         ),
-                        localized(state.locale, "Redrive", "重新投递"),
-                      )
-                    } else {
-                      @html.span(class="secondary", "—")
-                    },
-                  ),
-                ])
-              }
-            ],
-          ),
-        ]),
-      ])
-    },
+                      ),
+                      @html.td(row.attempt_count.to_string()),
+                      @html.td(
+                        class="mono secondary",
+                        notification_delivery_error_label(
+                          state.locale,
+                          row.last_error_code,
+                        ),
+                      ),
+                      @html.td(
+                        if row.state == DeadLetter {
+                          @html.button(
+                            type_="button",
+                            on_click=command(
+                              emit,
+                              BeginRedriveNotificationDelivery(
+                                row.delivery_id,
+                                row.attempt_count,
+                                row.updated_unix_ms,
+                              ),
+                            ),
+                            localized(state.locale, "Redrive", "重新投递"),
+                          )
+                        } else {
+                          @html.span(class="secondary", "—")
+                        },
+                      ),
+                    ])
+                  }
+                ],
+              ),
+            ]),
+          ])
+        },
+      ],
+    ),
   ])
 }
 
@@ -10005,13 +10037,18 @@ fn benchmarks_view(
           ),
         ),
       ]),
-      @capacity_planner.view(
-        state.capacity_planner,
-        state.locale,
-        match emit {
-          Some(send) => Some(send.map(message => CapacityPlanner(message)))
-          None => None
-        },
+      @controls.advanced(
+        localized(state.locale, "Plan a benchmark", "配置测速"),
+        [
+          @capacity_planner.view(
+            state.capacity_planner,
+            state.locale,
+            match emit {
+              Some(send) => Some(send.map(message => CapacityPlanner(message)))
+              None => None
+            },
+          ),
+        ],
       ),
       if state.benchmark_evidence.length() == 0 {
         @html.nothing
@@ -10773,7 +10810,10 @@ fn cost_centers_view(state : ConsoleState) -> @rabbita.Html {
       if state.cost_centers.length() == 0 {
         @html.nothing
       } else {
-        cost_center_hierarchy_graph(state)
+        @controls.advanced(
+          localized(state.locale, "Organization hierarchy", "组织层级"),
+          [cost_center_hierarchy_graph(state)],
+        )
       },
       if state.cost_centers.length() == 0 {
         @html.p(
@@ -10892,7 +10932,10 @@ fn agreements_view(
         state.enterprise_lease_requests.length() == 0 {
         @html.nothing
       } else {
-        agreement_lifecycle_graph(state)
+        @controls.advanced(
+          localized(state.locale, "Agreement lifecycle", "协议生命周期"),
+          [agreement_lifecycle_graph(state)],
+        )
       },
       if state.agreements.length() == 0 {
         @html.p(
@@ -11214,7 +11257,12 @@ fn qualified_services_view(state : ConsoleState) -> @rabbita.Html {
                     @html.td(service.capability),
                     @html.td(status_badge(service.environment, "warning")),
                     @html.td(status_badge(service.state, "ok")),
-                    @html.td(service.evidence_policy),
+                    @html.td(
+                      @controls.advanced(
+                        localized(state.locale, "Details", "详情"),
+                        [@html.p(service.evidence_policy)],
+                      ),
+                    ),
                     @html.td(
                       status_badge(
                         if service.production_ready {

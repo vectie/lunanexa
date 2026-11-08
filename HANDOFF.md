@@ -681,3 +681,54 @@ native workspace suite reports **1,959 passed, zero failed**. Native gateway
 tests also passed **44/44** against the dedicated test database, and the deployed
 source account package passed **16/16**. These identity measurements do not
 constitute a model-serving or whole-cluster qualification.
+
+## Progressive portal disclosure and responsibility audit — 2026-11-08
+
+The per-page ledger is `docs/PORTAL_SIMPLIFICATION.md`. Keep code completion,
+official-site acceptance, previously simplified pages, and remaining exceptional
+scenarios separate. Do not infer that every route/state has been accepted from
+one existing company account. Default surfaces show status and the next action;
+technical details/history/settings use named native disclosures. Required
+decisions, scope, payment, destructive confirmations and actual failures remain.
+
+The official Users page rendered hundreds of full access-package milestone
+cards at once. A separate `access_record_account` selector now constructs cards
+only for the inspected person. It is transient UI state, retained across refresh,
+and does not modify the grant form or authority. Organization labels replace raw
+tenant pairs on cards; original identifiers/state remain in technical evidence.
+Missing account/membership readiness must not direct operators to deploy a model.
+Workspace/grant tables and role editing are progressively disclosed. No records
+were deleted or reclassified to make the page look simpler.
+
+Resource allocation forms open for explicit order/person handoffs; the resource
+summary stays visible. Order actions precede secondary details; fulfillment
+requirements are labeled and collapsed rather than displayed as completed checks.
+Customer invitations, agreement hashes and payment history no longer dominate
+the default page. Delivery failures still open the operator outbox. No backend
+policy, model limit, runtime argument, resource allocation or inference hop changed.
+
+Native info/format/deny-warn checks and the full native suite passed: 1,961/1,961.
+The related JS suite passed 452/452, native UI tests 124/124, strict JS check and
+both release bundles passed. JS-only compilation exposed deprecated JSON aliases
+and test callback/state-type issues; these were corrected. The test that invokes
+Rabbita's intentionally experimental server renderer uses the same local
+`alert_unstable` annotation as existing rendering tests, without relaxing
+production compiler warnings. No new polling, request or dependency was added.
+
+Private browser release material is under
+`/home/HwHiAiUser/progressive-portals-20261108`; immutable base blobs are hardlinked
+instead of re-exported. Keep production deployment snapshots and logs private.
+Before publication, both official portals were read while authenticated; the
+browser transport subsequently closed. Final visual acceptance must be recorded
+separately from deployed-byte and Kubernetes rollout verification.
+
+Both portal rollouts succeeded; external 8443 JS matches the tested bundles:
+console `b5d4bcdb107e9df92d6b4ebc02ae2961c358e05eb9d87915d68b223f06660477`,
+enterprise `452682814c92ec9690fa8dff307e7cece8a1f0cf42a75286618c79041180eda9`.
+Images are `sha256:0458f1ad453db22064875a471f32610f47ee5c58f55e33f8901f7dd3b63f8e90`
+and `sha256:a7c4b4431c03cfedce14e5f20f2ab1ccc432acd17367836608c70fc5864b3a7e`.
+The first image-push attempt used a tag outside the existing browser release
+prefix; the retry used the supported prefix without weakening the uploader.
+No backend or GPU runtime deployment was modified. Browser transport failure is
+an outstanding acceptance limitation, not proof of sign-out or a reason to reset
+someone's credentials. Existing unrelated tracked/untracked work remains unstaged.

@@ -8,13 +8,13 @@ fn desktop_handoff_payload(
   allowed_models : Array[String],
 ) -> Json {
   let fields : Map[String, Json] = {
-    "request_id": request_id.to_json(),
-    "client_id": client_id.to_json(),
-    "project_id": project_id.to_json(),
-    "allowed_models": allowed_models.to_json(),
+    "request_id": Json(request_id),
+    "client_id": Json(client_id),
+    "project_id": Json(project_id),
+    "allowed_models": Json(allowed_models),
   }
   if order_id is Some(value) {
-    fields["order_id"] = value.to_json()
+    fields["order_id"] = Json(value)
   }
   Json::object(fields)
 }

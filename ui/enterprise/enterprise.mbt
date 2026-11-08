@@ -2912,74 +2912,84 @@ fn account_access_view(
       ]),
     ]),
     if membership.active && membership.roles.contains(OrganizationAdministrator) {
-      @html.section(class="api-key-panel", [
-        @html.div(class="section-heading", [
-          @html.div([
-            @html.h2(copy(state.locale, "Company members", "企业成员")),
-          ]),
-        ]),
-        @html.div(class="field", [
-          @html.label(
-            for_="member-invite-email",
-            copy(state.locale, "Teammate email", "同事邮箱"),
+      @html.details(
+        class="api-key-panel ln-advanced",
+        open=state.member_invite_loading ||
+          state.member_invite_secret is Some(_) ||
+          state.member_invite_email != "",
+        [
+          @html.summary(
+            copy(state.locale, "Invite a company member", "邀请企业成员"),
           ),
-          @html.input(
-            id="member-invite-email",
-            value=state.member_invite_email,
-            maxlength=320,
-            on_input=text_command(emit, value => MemberInviteEmailChanged(value)),
-          ),
-        ]),
-        if company_active {
-          @html.nothing
-        } else {
-          @html.p(
-            class="notice is-warning",
-            copy(
-              state.locale,
-              "Company registration is awaiting platform review. You can invite members after approval.",
-              "企业注册正在等待平台管理员审核；审核通过后即可邀请成员。",
+          @html.div(class="field", [
+            @html.label(
+              for_="member-invite-email",
+              copy(state.locale, "Teammate email", "同事邮箱"),
             ),
-          )
-        },
-        @html.button(
-          type_="button",
-          class="primary-button",
-          disabled=!company_active ||
-            state.member_invite_loading ||
-            !state.member_invite_email.contains("@"),
-          on_click=command(emit, SubmitMemberInvite),
-          if state.member_invite_loading {
-            copy(
-              state.locale,
-              "Creating invitation…",
-              "正在创建邀请…",
-            )
+            @html.input(
+              id="member-invite-email",
+              value=state.member_invite_email,
+              maxlength=320,
+              on_input=text_command(emit, value => {
+                MemberInviteEmailChanged(value)
+              }),
+            ),
+          ]),
+          if company_active {
+            @html.nothing
           } else {
-            copy(state.locale, "Create member invitation", "创建成员邀请")
+            @html.p(
+              class="notice is-warning",
+              copy(
+                state.locale,
+                "Company registration is awaiting platform review. You can invite members after approval.",
+                "企业注册正在等待平台管理员审核；审核通过后即可邀请成员。",
+              ),
+            )
           },
-        ),
-        match state.member_invite_secret {
-          Some(secret) =>
-            @html.div(class="terms-acceptance", [
-              @html.p(
-                copy(
-                  state.locale,
-                  "Copy this one-time invitation code and send it to the teammate. It will not be displayed again.",
-                  "请复制一次性邀请码并发送给同事；关闭后不再显示。",
+          @html.button(
+            type_="button",
+            class="primary-button",
+            disabled=!company_active ||
+              state.member_invite_loading ||
+              !state.member_invite_email.contains("@"),
+            on_click=command(emit, SubmitMemberInvite),
+            if state.member_invite_loading {
+              copy(
+                state.locale,
+                "Creating invitation…",
+                "正在创建邀请…",
+              )
+            } else {
+              copy(
+                state.locale,
+                "Create member invitation",
+                "创建成员邀请",
+              )
+            },
+          ),
+          match state.member_invite_secret {
+            Some(secret) =>
+              @html.div(class="terms-acceptance", [
+                @html.p(
+                  copy(
+                    state.locale,
+                    "Copy this one-time invitation code and send it to the teammate. It will not be displayed again.",
+                    "请复制一次性邀请码并发送给同事；关闭后不再显示。",
+                  ),
                 ),
-              ),
-              @html.code(secret),
-              @html.button(
-                type_="button",
-                class="quiet-button",
-                on_click=command(emit, DismissMemberInviteSecret),
-                copy(state.locale, "Done", "完成"),
-              ),
-            ])
-          None => @html.nothing
-        },
-      ])
+                @html.code(secret),
+                @html.button(
+                  type_="button",
+                  class="quiet-button",
+                  on_click=command(emit, DismissMemberInviteSecret),
+                  copy(state.locale, "Done", "完成"),
+                ),
+              ])
+            None => @html.nothing
+          },
+        ],
+      )
     } else {
       @html.nothing
     },
@@ -3234,20 +3244,27 @@ fn agreement_card(
         ),
       ]),
       @html.p(agreement.summary),
-      @html.dl(class="record-meta", [
-        @html.div([
-          @html.dt(enterprise_copy(state.locale, Template)),
-          @html.dd([copy_detail(state, emit, agreement.template_ref)]),
-        ]),
-        @html.div([
-          @html.dt(enterprise_copy(state.locale, DocumentHash)),
-          @html.dd([copy_detail(state, emit, agreement.rendered_document_hash)]),
-        ]),
-        @html.div([
-          @html.dt(enterprise_copy(state.locale, Generation)),
-          @html.dd("\{agreement.generation}"),
-        ]),
-      ]),
+      @controls.advanced(
+        copy(state.locale, "Document details", "文件详情"),
+        [
+          @html.dl(class="record-meta", [
+            @html.div([
+              @html.dt(enterprise_copy(state.locale, Template)),
+              @html.dd([copy_detail(state, emit, agreement.template_ref)]),
+            ]),
+            @html.div([
+              @html.dt(enterprise_copy(state.locale, DocumentHash)),
+              @html.dd([
+                copy_detail(state, emit, agreement.rendered_document_hash),
+              ]),
+            ]),
+            @html.div([
+              @html.dt(enterprise_copy(state.locale, Generation)),
+              @html.dd("\{agreement.generation}"),
+            ]),
+          ]),
+        ],
+      ),
     ]),
     action,
   ])
@@ -3708,7 +3725,7 @@ fn costs_view(
         },
       ],
     ),
-    @html.details(class="provider-history", open=!payment_records.is_empty(), [
+    @html.details(class="provider-history", open=checkout_in_progress, [
       @html.summary(enterprise_copy(state.locale, OnlinePaymentActivity)),
       if state.provider_requests_loading {
         @html.p(

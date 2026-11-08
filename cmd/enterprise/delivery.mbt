@@ -365,11 +365,13 @@ fn delivery_workspace_command(
           "request_id": random_identifier("delivery-handoff"),
           "client_id": client.client_id,
           "project_id": operation.project_id,
-          "allowed_models": (if template.kind == "GpuContainer" {
-            ([] : Array[String])
-          } else {
-            [template.model_selector]
-          }).to_json(),
+          "allowed_models": Json(
+            if template.kind == "GpuContainer" {
+              ([] : Array[String])
+            } else {
+              [template.model_selector]
+            },
+          ),
           "delivery_id": operation_id,
         }
         let launch : DesktopClientHandoffLaunch = @json.from_json(

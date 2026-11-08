@@ -1516,6 +1516,7 @@ async fn load_console(
       identity_verified: false,
     },
     registered_access_account: "",
+    access_record_account: "",
     access_organizations: [],
     access_packages: [],
     users: [],
@@ -2872,6 +2873,7 @@ fn merge_loaded_console(
     model_pool: current.model_pool,
     access_packages: current.access_packages,
     registered_access_account: current.registered_access_account,
+    access_record_account: current.access_record_account,
     access_organizations: current.access_organizations,
     users: current.users,
     pending_organizations: current.pending_organizations,
@@ -4909,6 +4911,14 @@ fn update_live(
         cmd,
       )
     }
+    Console(AccessRecordAccountChanged(value)) =>
+      (
+        {
+          ..model,
+          console: { ..model.console, access_record_account: value, },
+        },
+        @rabbita.none,
+      )
     Console(RegisteredAccessAccountChanged(value)) => {
       let selected = model.console.accounts
         .iter()

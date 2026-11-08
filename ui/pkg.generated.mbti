@@ -459,6 +459,7 @@ pub(all) enum ConsoleMessage {
   SubmitAnnouncement
   AccessPackageIssuerChanged(String)
   RegisteredAccessAccountChanged(String)
+  AccessRecordAccountChanged(String)
   SubmitRegisteredAccess
   AccessPackageSubjectChanged(String)
   AccessPackageDisplayNameChanged(String)
@@ -509,6 +510,7 @@ pub(all) struct ConsoleState {
   account_invite : AccountInviteDraft
   access_package_draft : AccessPackageDraft
   registered_access_account : String
+  access_record_account : String
   access_organizations : Array[AccessOrganizationOption]
   access_packages : Array[AccessPackageView]
   access_package_context : (String, String)?

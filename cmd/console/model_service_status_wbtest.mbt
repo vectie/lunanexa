@@ -47,16 +47,18 @@ test "startup refresh prevents overlapping reads and stops when the service is r
     console: { ..base.console, deployments: [row], },
     console_read_groups: Map([(DeploymentReads, true)]),
   }
-  let (loading, _) = refresh_starting_model_services(model, _ => ())
+  let (loading, _) = refresh_starting_model_services(model, _ => @rabbita.none)
   assert_eq(loading.console_read_groups.get(DeploymentReads), Some(false))
-  let (overlap, _) = refresh_starting_model_services(loading, _ => ())
-  assert_eq(overlap, loading)
-  for state in [Ready, Stopped] {
+  let (overlap, _) = refresh_starting_model_services(loading, _ => @rabbita.none)
+  assert_true(overlap == loading)
+  for state in [@contracts.DeploymentState::Ready, Stopped] {
     let settled = {
       ..model,
       console: { ..model.console, deployments: [{ ..row, observed: state, }], },
     }
-    let (unchanged, _) = refresh_starting_model_services(settled, _ => ())
-    assert_eq(unchanged, settled)
+    let (unchanged, _) = refresh_starting_model_services(settled, _ => {
+      @rabbita.none
+    })
+    assert_true(unchanged == settled)
   }
 }

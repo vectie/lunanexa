@@ -1787,22 +1787,6 @@ fn packet_editor(
           state_label(state.locale, packet.state)
         },
       ),
-      @html.span(
-        if @contractdoc.is_undertaking_template(packet.template_id) {
-          copy(
-            state.locale,
-            "Attachment 2 · equipment undertaking",
-            "附件 2 · 设备使用承诺函",
-          )
-        } else {
-          copy(
-            state.locale,
-            "Source packet: 7 forms · 18 pages",
-            "源合同包：7 份表单 · 18 页",
-          )
-        },
-      ),
-      @html.span("Revision \{packet.revision}"),
     ]),
     step_bar(state.locale, packet),
     @html.p(

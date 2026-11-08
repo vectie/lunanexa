@@ -100,6 +100,7 @@ test "late onboarding and order responses cannot replace a new account or organi
 }
 
 ///|
+#warnings("-alert_unstable")
 test "initial authenticated loading does not offer a new order before authority is known" {
   let base = gateway_auth_test_model()
   let model = { ..base, token: "lnxs_test", connecting: true, }

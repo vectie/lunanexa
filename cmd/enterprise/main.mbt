@@ -2284,22 +2284,17 @@ async fn update_notification_preference(
   topic : @notifications.NotificationTopic,
   email_enabled : Bool,
 ) -> @notifications.NotificationPreferenceView {
-  let body = {
-      "topic": topic.to_json(),
-      "channels": if email_enabled {
-        let channels : Array[@notifications.NotificationChannel] = [
-          InApp,
-          Email,
-        ]
-        channels.to_json()
-      } else {
-        let channels : Array[@notifications.NotificationChannel] = [InApp]
-        channels.to_json()
-      },
-      "minimum_severity": @notifications.NotificationSeverity::Information.to_json(),
-    }
-    .to_json()
-    .stringify()
+  let body = Json({
+    "topic": topic.to_json(),
+    "channels": if email_enabled {
+      let channels : Array[@notifications.NotificationChannel] = [InApp, Email]
+      Json(channels)
+    } else {
+      let channels : Array[@notifications.NotificationChannel] = [InApp]
+      Json(channels)
+    },
+    "minimum_severity": @notifications.NotificationSeverity::Information.to_json(),
+  }).stringify()
   let response = request(
     "PUT",
     model.endpoint,
@@ -3675,7 +3670,7 @@ fn contract_packet_command(
           SubmitUndertaking(packet_id, revision, artifact_id, signed_on)
         ) => {
           let intent : Json = {
-            "expected_revision": revision.to_json(),
+            "expected_revision": Json(revision),
             "evidence_artifact_id": artifact_id,
             "signed_on": signed_on,
           }
@@ -4767,7 +4762,7 @@ fn update(
         return (model, @rabbita.none)
       }
       let next = { ..model, portal: model.portal.update(SubmitMemberInvite), }
-      let body = { "email": email.to_json() }.to_json().stringify()
+      let body = Json({ "email": Json(email) }).stringify()
       let generation = model.session_generation
       let cmd = @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
         try

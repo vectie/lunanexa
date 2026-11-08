@@ -16,6 +16,7 @@ test "operator application handoffs retain user tenant and lease and clear stale
     console: {
       ..base.console,
       access_packages: [first, item],
+      access_record_account: first.account_id,
       resource_delivery: {
         ..base.console.resource_delivery,
         selected_nodes: ["previous-node"],

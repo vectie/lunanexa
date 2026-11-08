@@ -49,7 +49,7 @@ test "returning to orders does not replay an obsolete success notice" {
 test "company administrator can invite members in UI without sharing a WebIDE" {
   let state = @enterprise.demo_state()
   let html = @enterprise.render({ ..state, route: AccountAccess, })
-  assert_true(html.contains("Company members"))
+  assert_true(html.contains("Invite a company member"))
   assert_true(html.contains("Create member invitation"))
   assert_true(html.contains("member-invite-email"))
   let company = state.organizations[0]

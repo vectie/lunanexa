@@ -191,6 +191,7 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
       identity_verified: false,
     },
     registered_access_account: "",
+    access_record_account: "",
     access_organizations: [],
     access_packages: [],
     pending_organizations: [],
@@ -527,7 +528,7 @@ test "alerts route localizes durable incident state and actions" {
   assert_true(english.contains("Acknowledge"))
   assert_true(english.contains("Silence 1h"))
   assert_true(english.contains("Resolve"))
-  assert_true(english.contains("Delivery outbox"))
+  assert_true(english.contains("Notification deliveries"))
   assert_true(english.contains("delivery-alert-node-1-email"))
   assert_true(english.contains("Dead letter"))
   assert_true(english.contains("Redrive"))
@@ -536,7 +537,7 @@ test "alerts route localizes durable incident state and actions" {
   assert_true(chinese.contains("运维告警中心"))
   assert_true(chinese.contains("节点心跳已超时"))
   assert_true(chinese.contains("静默 1 小时"))
-  assert_true(chinese.contains("通知投递队列"))
+  assert_true(chinese.contains("通知投递 ·"))
   assert_true(chinese.contains("死信"))
   assert_true(chinese.contains("重新投递"))
   assert_true(chinese.contains("投递供应商不可用"))
@@ -968,6 +969,7 @@ test "operator WebIDE onboarding compresses setup into guided milestones" {
     ..state,
     route: Users,
     access_packages: [item],
+    access_record_account: item.account_id,
     confirmation: None,
   })
   assert_true(html.contains("Create WebIDE access"))
@@ -1539,7 +1541,7 @@ test "users route manages external accounts without exposing identity digests or
   let state = console_state(Users)
   let html = @ui.render(state)
   assert_true(html.contains("Signed-in account"))
-  assert_true(html.contains("External identity mappings"))
+  assert_true(html.contains("Accounts"))
   assert_true(html.contains("Advanced: create account only"))
   assert_true(html.contains("account-provider-subject"))
   assert_true(html.contains("type=\"password\""))
@@ -1722,7 +1724,9 @@ test "management routes render explicit empty states" {
   })
   assert_true(users_html.contains("No user identities are available"))
   assert_true(users_html.contains("No access grants are available"))
-  assert_true(leases_html.contains("No compute or workspace leases are active"))
+  assert_true(
+    leases_html.contains("No workspace leases. Open access from Users."),
+  )
 }
 
 ///|

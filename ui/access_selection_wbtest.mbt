@@ -25,3 +25,21 @@ test "registered access review requires a live operator, active account and appr
     }),
   )
 }
+
+///|
+test "access inspection renders only the selected person" {
+  let base = demo_state()
+  let first = base.access_packages[0]
+  let other = {
+    ..first,
+    account_id: "another-person",
+    package_id: "other-package-evidence",
+  }
+  let state = { ..base, route: Users, access_packages: [first, other], }
+  let initial = render(state)
+  assert_false(initial.contains(first.package_id))
+  assert_false(initial.contains(other.package_id))
+  let selected = render({ ..state, access_record_account: first.account_id, })
+  assert_true(selected.contains(first.package_id))
+  assert_false(selected.contains(other.package_id))
+}

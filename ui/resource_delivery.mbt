@@ -335,13 +335,6 @@ fn resource_delivery_view(
         busy=panel.loading,
       ),
     ]),
-    @html.p(
-      localized(
-        state.locale,
-        "Reserve nodes for an active workspace. The lease end date stays the same.",
-        "为有效工作区预留节点，租约到期时间不变。",
-      ),
-    ),
     if panel.loading {
       @html.p(
         attrs=@html.Attrs::build().role("status"),
@@ -359,138 +352,294 @@ fn resource_delivery_view(
       None => @html.nothing
     },
     if state.access_package_context is None {
-      @html.fragment([
-        @html.h3(
-          localized(
-            state.locale,
-            "Undertaking allocation",
-            "承诺函整机下发",
-          ),
-        ),
-        @html.p(
-          localized(
-            state.locale,
-            "After approval and full payment, select the quoted number of idle enterprise nodes. Activation may take time; you can resume it here.",
-            "完成审批与全额收款后，按报价数量选择空闲企业节点。开通可能需要时间，可在此继续。",
-          ),
-        ),
-        if panel.loaded && panel.undertaking_orders.is_empty() {
-          @html.p(
+      @html.details(
+        class="ln-advanced",
+        open=panel.selected_undertaking_order != "",
+        [
+          @html.summary(
             localized(
               state.locale,
-              "No undertaking order has been submitted yet.",
-              "暂无已提交的承诺函订单。",
+              "Undertaking allocation",
+              "承诺函整机下发",
             ),
-          )
+          ),
+          if panel.loaded && panel.undertaking_orders.is_empty() {
+            @html.p(
+              localized(
+                state.locale,
+                "No undertaking order has been submitted yet.",
+                "暂无已提交的承诺函订单。",
+              ),
+            )
+          } else if panel.loaded {
+            @html.div(class="form-grid", [
+              @html.label(
+                for_="undertaking-allocation-order",
+                localized(state.locale, "Undertaking order", "承诺函订单"),
+              ),
+              @html.select(
+                id="undertaking-allocation-order",
+                disabled=panel.loading,
+                on_change=text_command(emit, value => {
+                  ResourceDelivery(SelectUndertakingOrder(value))
+                }),
+                [
+                  @html.option(
+                    value="",
+                    selected=panel.selected_undertaking_order == "",
+                    localized(state.locale, "Choose an order", "选择订单"),
+                  ),
+                  ..panel.undertaking_orders.map(row => {
+                    @html.option(
+                      value=row.order_id,
+                      selected=row.order_id == panel.selected_undertaking_order,
+                      "\{row.organization_id} · \{row.order_id} · \{row.node_count} " +
+                      localized(state.locale, "nodes", "台") +
+                      " · " +
+                      undertaking_allocation_status(state.locale, row.status),
+                    )
+                  }),
+                ],
+              ),
+              match
+                panel.undertaking_orders
+                .iter()
+                .find_first(row => {
+                  row.order_id == panel.selected_undertaking_order
+                }) {
+                Some(row) =>
+                  @html.div([
+                    @html.p(
+                      undertaking_allocation_status(state.locale, row.status) +
+                      " · \{row.node_count} " +
+                      localized(state.locale, "nodes required", "台机器"),
+                    ),
+                    @html.button(
+                      type_="button",
+                      class="quiet-button",
+                      on_click=command(
+                        emit,
+                        ContractDocuments(OpenOrder(row.order_id)),
+                      ),
+                      localized(
+                        state.locale,
+                        "Review rental order",
+                        "核对租赁订单",
+                      ),
+                    ),
+                    @html.p(
+                      localized(
+                        state.locale,
+                        "Signed rental term ends: ",
+                        "已签租期结束：",
+                      ) +
+                      row.expires_unix_ms.map_or(
+                        localized(
+                          state.locale,
+                          "not signed yet",
+                          "尚未签署",
+                        ),
+                        value => @contractdoc.format_unix_ms_beijing(value),
+                      ),
+                    ),
+                    if row.status == "Allocated" {
+                      @html.p(
+                        localized(
+                          state.locale,
+                          "Assigned nodes: ",
+                          "已下发节点：",
+                        ) +
+                        row.node_ids.join(", "),
+                      )
+                    } else {
+                      @html.nothing
+                    },
+                  ])
+                None => @html.nothing
+              },
+              @html.div(
+                class="record-actions",
+                state.nodes.map(node => {
+                  let available = resource_node_selectable(
+                    node,
+                    panel.reservations,
+                    true,
+                  )
+                  @html.button(
+                    type_="button",
+                    class="quiet-button",
+                    disabled=panel.loading || !available,
+                    attrs=@html.Attrs::build().aria_pressed(
+                      panel.undertaking_selected_nodes
+                      .contains(node.node_id)
+                      .to_string(),
+                    ),
+                    on_click=command(
+                      emit,
+                      ResourceDelivery(ToggleUndertakingNode(node.node_id)),
+                    ),
+                    node.node_id +
+                    (if available {
+                      ""
+                    } else {
+                      " · " +
+                      undertaking_node_unavailable_reason(state.locale, node)
+                    }),
+                  )
+                }),
+              ),
+              @html.p(
+                localized(
+                  state.locale,
+                  "Confirm host-native and Kubernetes tasks are stopped; 0% GPU utilization alone is not proof of idleness.",
+                  "确认宿主机和 Kubernetes 任务均已停止；GPU 0% 利用率不代表机器空闲。",
+                ),
+              ),
+              @html.button(
+                type_="button",
+                class="quiet-button",
+                disabled=panel.loading,
+                attrs=@html.Attrs::build().aria_pressed(
+                  panel.undertaking_confirmed_idle.to_string(),
+                ),
+                on_click=command(emit, ResourceDelivery(ConfirmUndertakingIdle)),
+                if panel.undertaking_confirmed_idle {
+                  localized(
+                    state.locale,
+                    "Idle review confirmed",
+                    "已确认所选节点空闲",
+                  )
+                } else {
+                  localized(
+                    state.locale,
+                    "Confirm selected nodes are idle",
+                    "确认所选节点空闲",
+                  )
+                },
+              ),
+              @html.button(
+                type_="button",
+                class="primary-button",
+                disabled=!undertaking_allocation_available(panel),
+                on_click=command(emit, ResourceDelivery(AllocateUndertaking)),
+                localized(
+                  state.locale,
+                  "Allocate selected nodes",
+                  "下发所选整机",
+                ),
+              ),
+            ])
+          } else {
+            @html.nothing
+          },
+        ],
+      )
+    } else {
+      @html.nothing
+    },
+    @html.details(
+      class="ln-advanced",
+      open=state.access_package_context is Some(_) || panel.selected_lease != "",
+      [
+        @html.summary(
+          localized(state.locale, "Other resource grants", "其他资源授权"),
+        ),
+        if panel.loaded && panel.leases.is_empty() {
+          @html.div([
+            @html.p(
+              localized(
+                state.locale,
+                "No active Developer lease is available. Enable the intended user's bounded authorization first.",
+                "暂无有效 Developer 租约。请先为目标用户开通限时权限。",
+              ),
+            ),
+            @html.button(
+              type_="button",
+              class="quiet-button",
+              on_click=command(emit, Navigate(Users)),
+              localized(state.locale, "Open user access", "打开用户权限"),
+            ),
+          ])
         } else if panel.loaded {
           @html.div(class="form-grid", [
             @html.label(
-              for_="undertaking-allocation-order",
-              localized(state.locale, "Undertaking order", "承诺函订单"),
+              for_="resource-lease",
+              localized(
+                state.locale,
+                "Authorized user and organization",
+                "已授权用户与企业",
+              ),
             ),
             @html.select(
-              id="undertaking-allocation-order",
+              id="resource-lease",
               disabled=panel.loading,
               on_change=text_command(emit, value => {
-                ResourceDelivery(SelectUndertakingOrder(value))
+                ResourceDelivery(SelectResourceLease(value))
               }),
               [
                 @html.option(
                   value="",
-                  selected=panel.selected_undertaking_order == "",
-                  localized(state.locale, "Choose an order", "选择订单"),
+                  selected=panel.selected_lease == "",
+                  localized(
+                    state.locale,
+                    "Choose authorization",
+                    "选择授权",
+                  ),
                 ),
-                ..panel.undertaking_orders.map(row => {
+                ..if panel.selected_lease != "" &&
+                  !panel.leases.any(lease => lease.key == panel.selected_lease) {
+                  [
+                    @html.option(
+                      value=panel.selected_lease,
+                      selected=true,
+                      disabled=true,
+                      localized(
+                        state.locale,
+                        "Selected access unavailable — refresh user access",
+                        "所选权限不可用，请刷新用户权限",
+                      ),
+                    ),
+                  ]
+                } else {
+                  []
+                },
+                ..panel.leases.map(lease => {
                   @html.option(
-                    value=row.order_id,
-                    selected=row.order_id == panel.selected_undertaking_order,
-                    "\{row.organization_id} · \{row.order_id} · \{row.node_count} " +
-                    localized(state.locale, "nodes", "台") +
-                    " · " +
-                    undertaking_allocation_status(state.locale, row.status),
+                    value=lease.key,
+                    selected=lease.key == panel.selected_lease,
+                    "\{lease.label} · \{@contractdoc.format_unix_ms_beijing(lease.expires_unix_ms)}",
                   )
                 }),
               ],
             ),
-            match
-              panel.undertaking_orders
-              .iter()
-              .find_first(row => {
-                row.order_id == panel.selected_undertaking_order
-              }) {
-              Some(row) =>
-                @html.div([
-                  @html.p(
-                    undertaking_allocation_status(state.locale, row.status) +
-                    " · \{row.node_count} " +
-                    localized(state.locale, "nodes required", "台机器"),
-                  ),
-                  @html.button(
-                    type_="button",
-                    class="quiet-button",
-                    on_click=command(
-                      emit,
-                      ContractDocuments(OpenOrder(row.order_id)),
-                    ),
-                    localized(
-                      state.locale,
-                      "Review rental order",
-                      "核对租赁订单",
-                    ),
-                  ),
-                  @html.p(
-                    localized(
-                      state.locale,
-                      "Signed rental term ends: ",
-                      "已签租期结束：",
-                    ) +
-                    row.expires_unix_ms.map_or(
-                      localized(state.locale, "not signed yet", "尚未签署"),
-                      value => @contractdoc.format_unix_ms_beijing(value),
-                    ),
-                  ),
-                  if row.status == "Allocated" {
-                    @html.p(
-                      localized(
-                        state.locale,
-                        "Assigned nodes: ",
-                        "已下发节点：",
-                      ) +
-                      row.node_ids.join(", "),
-                    )
-                  } else {
-                    @html.nothing
-                  },
-                ])
-              None => @html.nothing
-            },
             @html.div(
               class="record-actions",
               state.nodes.map(node => {
                 let available = resource_node_selectable(
                   node,
                   panel.reservations,
-                  true,
+                  false,
                 )
                 @html.button(
                   type_="button",
                   class="quiet-button",
                   disabled=panel.loading || !available,
                   attrs=@html.Attrs::build().aria_pressed(
-                    panel.undertaking_selected_nodes
-                    .contains(node.node_id)
-                    .to_string(),
+                    panel.selected_nodes.contains(node.node_id).to_string(),
                   ),
                   on_click=command(
                     emit,
-                    ResourceDelivery(ToggleUndertakingNode(node.node_id)),
+                    ResourceDelivery(ToggleResourceNode(node.node_id)),
                   ),
                   node.node_id +
                   (if available {
                     ""
                   } else {
-                    " · " +
-                    undertaking_node_unavailable_reason(state.locale, node)
+                    localized(
+                      state.locale,
+                      " · unavailable",
+                      " · 不可预留",
+                    )
                   }),
                 )
               }),
@@ -498,8 +647,8 @@ fn resource_delivery_view(
             @html.p(
               localized(
                 state.locale,
-                "Confirm host-native and Kubernetes tasks are stopped; 0% GPU utilization alone is not proof of idleness.",
-                "确认宿主机和 Kubernetes 任务均已停止；GPU 0% 利用率不代表机器空闲。",
+                "GPU utilization at 0% is not proof a node is idle. Confirm that existing host-native and Kubernetes workloads have been coordinated and stopped before allocation.",
+                "GPU 利用率为 0% 不代表空闲。分配前须确认宿主进程及 Kubernetes 现有任务已协调并停止。",
               ),
             ),
             @html.button(
@@ -507,181 +656,40 @@ fn resource_delivery_view(
               class="quiet-button",
               disabled=panel.loading,
               attrs=@html.Attrs::build().aria_pressed(
-                panel.undertaking_confirmed_idle.to_string(),
+                panel.confirmed_idle.to_string(),
               ),
-              on_click=command(emit, ResourceDelivery(ConfirmUndertakingIdle)),
-              if panel.undertaking_confirmed_idle {
+              on_click=command(emit, ResourceDelivery(ConfirmResourceIdle)),
+              if panel.confirmed_idle {
                 localized(
                   state.locale,
-                  "Idle review confirmed",
-                  "已确认所选节点空闲",
+                  "Idle-node review confirmed",
+                  "已确认所选节点无其他任务",
                 )
               } else {
                 localized(
                   state.locale,
-                  "Confirm selected nodes are idle",
-                  "确认所选节点空闲",
+                  "Confirm selected nodes have no other workloads",
+                  "确认所选节点无其他任务",
                 )
               },
             ),
             @html.button(
               type_="button",
               class="primary-button",
-              disabled=!undertaking_allocation_available(panel),
-              on_click=command(emit, ResourceDelivery(AllocateUndertaking)),
+              disabled=!resource_reservation_available(panel),
+              on_click=command(emit, ResourceDelivery(ReserveResources)),
               localized(
                 state.locale,
-                "Allocate selected nodes",
-                "下发所选整机",
+                "Reserve selected nodes",
+                "预留所选整机",
               ),
             ),
           ])
         } else {
           @html.nothing
         },
-      ])
-    } else {
-      @html.nothing
-    },
-    @html.h3(
-      localized(state.locale, "Other resource grants", "其他资源授权"),
+      ],
     ),
-    if panel.loaded && panel.leases.is_empty() {
-      @html.div([
-        @html.p(
-          localized(
-            state.locale,
-            "No active Developer lease is available. Enable the intended user's bounded authorization first.",
-            "暂无有效 Developer 租约。请先为目标用户开通限时权限。",
-          ),
-        ),
-        @html.button(
-          type_="button",
-          class="quiet-button",
-          on_click=command(emit, Navigate(Users)),
-          localized(state.locale, "Open user access", "打开用户权限"),
-        ),
-      ])
-    } else if panel.loaded {
-      @html.div(class="form-grid", [
-        @html.label(
-          for_="resource-lease",
-          localized(
-            state.locale,
-            "Authorized user and organization",
-            "已授权用户与企业",
-          ),
-        ),
-        @html.select(
-          id="resource-lease",
-          disabled=panel.loading,
-          on_change=text_command(emit, value => {
-            ResourceDelivery(SelectResourceLease(value))
-          }),
-          [
-            @html.option(
-              value="",
-              selected=panel.selected_lease == "",
-              localized(state.locale, "Choose authorization", "选择授权"),
-            ),
-            ..if panel.selected_lease != "" &&
-              !panel.leases.any(lease => lease.key == panel.selected_lease) {
-              [
-                @html.option(
-                  value=panel.selected_lease,
-                  selected=true,
-                  disabled=true,
-                  localized(
-                    state.locale,
-                    "Selected access unavailable — refresh user access",
-                    "所选权限不可用，请刷新用户权限",
-                  ),
-                ),
-              ]
-            } else {
-              []
-            },
-            ..panel.leases.map(lease => {
-              @html.option(
-                value=lease.key,
-                selected=lease.key == panel.selected_lease,
-                "\{lease.label} · \{@contractdoc.format_unix_ms_beijing(lease.expires_unix_ms)}",
-              )
-            }),
-          ],
-        ),
-        @html.div(
-          class="record-actions",
-          state.nodes.map(node => {
-            let available = resource_node_selectable(
-              node,
-              panel.reservations,
-              false,
-            )
-            @html.button(
-              type_="button",
-              class="quiet-button",
-              disabled=panel.loading || !available,
-              attrs=@html.Attrs::build().aria_pressed(
-                panel.selected_nodes.contains(node.node_id).to_string(),
-              ),
-              on_click=command(
-                emit,
-                ResourceDelivery(ToggleResourceNode(node.node_id)),
-              ),
-              node.node_id +
-              (if available {
-                ""
-              } else {
-                localized(state.locale, " · unavailable", " · 不可预留")
-              }),
-            )
-          }),
-        ),
-        @html.p(
-          localized(
-            state.locale,
-            "GPU utilization at 0% is not proof a node is idle. Confirm that existing host-native and Kubernetes workloads have been coordinated and stopped before allocation.",
-            "GPU 利用率为 0% 不代表空闲。分配前须确认宿主进程及 Kubernetes 现有任务已协调并停止。",
-          ),
-        ),
-        @html.button(
-          type_="button",
-          class="quiet-button",
-          disabled=panel.loading,
-          attrs=@html.Attrs::build().aria_pressed(
-            panel.confirmed_idle.to_string(),
-          ),
-          on_click=command(emit, ResourceDelivery(ConfirmResourceIdle)),
-          if panel.confirmed_idle {
-            localized(
-              state.locale,
-              "Idle-node review confirmed",
-              "已确认所选节点无其他任务",
-            )
-          } else {
-            localized(
-              state.locale,
-              "Confirm selected nodes have no other workloads",
-              "确认所选节点无其他任务",
-            )
-          },
-        ),
-        @html.button(
-          type_="button",
-          class="primary-button",
-          disabled=!resource_reservation_available(panel),
-          on_click=command(emit, ResourceDelivery(ReserveResources)),
-          localized(
-            state.locale,
-            "Reserve selected nodes",
-            "预留所选整机",
-          ),
-        ),
-      ])
-    } else {
-      @html.nothing
-    },
     @html.h3(localized(state.locale, "Reservations", "资源预留")),
     if panel.reservations.any(row => row.state == "Reserved") {
       @html.p(

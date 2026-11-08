@@ -1504,9 +1504,14 @@ fn order_detail(
       technical=order.technical_acceptance_waiver is Some(_),
     ),
     technical_acceptance_panel(state, emit, order),
+    if state.audience == CustomerCommerce {
+      customer_actions(state, emit, order)
+    } else {
+      operator_actions(state, emit, order)
+    },
     @html.div(class="offline-two-column", [
-      @html.section(class="offline-panel", [
-        @html.h3(copy(state.locale, "Order details", "订单详情")),
+      @html.details(class="offline-panel ln-advanced", [
+        @html.summary(copy(state.locale, "Order details", "订单详情")),
         @html.dl([
           @html.div([
             @html.dt(copy(state.locale, "Service", "服务")),
@@ -1551,15 +1556,9 @@ fn order_detail(
           ]),
         ]),
       ]),
-      @html.section(class="offline-panel", [
-        @html.h3(copy(state.locale, "Fulfillment requirements", "履约要求")),
-        @html.p(
-          class="field-help",
-          copy(
-            state.locale,
-            "These are order requirements, not completed checks. Review evidence and the order status to confirm progress.",
-            "以下为订单要求，并非已完成的核验。实际进度请查看凭证审核结果和订单状态。",
-          ),
+      @html.details(class="offline-panel ln-advanced", [
+        @html.summary(
+          copy(state.locale, "Fulfillment requirements", "履约要求"),
         ),
         @html.ul(
           class="offline-policy-list",
@@ -1571,11 +1570,6 @@ fn order_detail(
         ),
       ]),
     ]),
-    if state.audience == CustomerCommerce {
-      customer_actions(state, emit, order)
-    } else {
-      operator_actions(state, emit, order)
-    },
     @html.section(class="offline-documents", [
       @html.div(class="section-heading", [
         @html.div([

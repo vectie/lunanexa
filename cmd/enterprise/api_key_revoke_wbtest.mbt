@@ -3,9 +3,9 @@ test "revocation accepts legacy and nullable timestamps and closes confirmation"
   for
     value in [
       (
-        { "key_id": "test-key", "revoked_unix_ms": [1791994746000L.to_json()] } :
+        { "key_id": "test-key", "revoked_unix_ms": [Json(1791994746000L)] } :
         Json),
-      { "key_id": "test-key", "revoked_unix_ms": 1791994746000L.to_json() },
+      { "key_id": "test-key", "revoked_unix_ms": Json(1791994746000L) },
     ] {
     let revoked : PortalApiKeyRevokeView = @json.from_json(value)
     assert_eq(revoked.key_id, "test-key")
