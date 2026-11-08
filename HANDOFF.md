@@ -732,3 +732,69 @@ prefix; the retry used the supported prefix without weakening the uploader.
 No backend or GPU runtime deployment was modified. Browser transport failure is
 an outstanding acceptance limitation, not proof of sign-out or a reason to reset
 someone's credentials. Existing unrelated tracked/untracked work remains unstaged.
+
+## Pagination, exception handoffs and company scope — 2026-11-08
+
+Continue from `docs/PORTAL_SIMPLIFICATION.md` second-round ledger. Six operator
+lists now build only a 25-row/card window: accounts, selected-person company
+access, workspace profiles, grants, audit and request receipts. Search resets
+its page and lists retain independent UI state across refresh; a shrinking
+result clamps its visible page. The existing API still returns snapshots: do
+not claim server cursor pagination or reduced network bytes. Latest audit and
+request records come first; the extra 50-receipt truncation/front-removal loop
+was removed. Receipt expansion and copying retain the full value.
+
+Delivery readiness timeouts offer same-operation retry. File/template/unknown
+failures name the platform operator, expose a bounded failure reference copy,
+and retain same-operation retry behind repair disclosure. No server-side
+authorization or retry rule changed. Operator delivery failure links to
+deployments; quarantined lease guidance points to node cleanup verification.
+Rejected workspace requests explain the company-admin requirements handoff.
+
+Company switching must clear the old organization's keys, contracts, costs,
+machines, services, applications and payment projections before asynchronous
+replacement. Same-company refresh retains order/draft state. Creation and join
+advance session/poll generations. Invitation acceptance now retains the returned
+organization ID, selects it for the bootstrap read and clears the invitation
+draft. A missing explicit preferred organization must not silently select
+another company. Existing companies are chosen before expanding creation/join;
+rejected/suspended/closed companies are not labeled as pending verification.
+Pending companies poll company status before application readiness, and old
+scoped outcomes cannot repopulate the new view.
+
+Final strict native and JS checks, release bundles, info/format pass. Native
+workspace tests pass 1,963/1,963; related JS tests pass 460/460. The existing
+native self-service HTTP test verifies multi-company isolation, approval and
+invitation roles in independent temporary storage. No production identity,
+membership, credential, order, grant or GPU service was mutated for acceptance.
+
+Pitfall: two native suite invocations overlapped after a failed format-related
+check and collided in two test packages' timestamp-based /tmp filenames.
+`commercial/offline/store` and `notifications/store` now use independently
+allocated temporary directories with deferred cleanup. The final full suite ran
+serially and passed. Do not run another native matrix concurrently with a
+still-running prior invocation, and do not continue the runner after a failed
+prerequisite merely because shell commands used semicolons.
+
+Private browser release root: `/home/HwHiAiUser/portal-pages-r2-20261108`.
+Official-site visual acceptance is separate: management explicitly reported
+session expiry, and the customer tab returned to login after session restore.
+Sign-in was requested; do not claim new-company production UI-to-UI acceptance
+from a single existing company account or infer permission to create test grants.
+
+The final scope follow-up additionally preserves the machine/UI clock while
+clearing organization projections, and uses the cleared self-service state when
+no company remains; otherwise the command layer restored the old order/quote.
+The enterprise UI/command suite passes 177/177 after those assertions. Final
+customer image staging is under `/home/HwHiAiUser/portal-pages-r3-20261108`.
+
+Both official portal rollouts succeeded. Final console image:
+`sha256:e16ce392e21345b8fa9e21ea76bffcab0d8a5513cb717f50ce8a085a285d6588`;
+customer image:
+`sha256:ce1b6c19add59443052524dd04f85700a1ca94fd32c51233b5c3157d796b4e21`.
+External HTTPS 8443 JS hashes match final tested assets: console
+`af6b006243ea987b735d5ed9e463bd9c7748feef91434b2831f48eb9ddcf48fa`,
+enterprise `ec7df985f19ea25e20ea86044bd5d500b8586917ff46aee8f9213375a3e245ce`.
+No controller, node agent or GPU runtime rollout was required. Login-dependent
+interactive acceptance remains pending; the user has not yet replied to the
+current sign-in request. Do not repeatedly request passwords or reset accounts.

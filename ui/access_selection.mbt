@@ -172,6 +172,25 @@ fn registered_access_records(
   for account in state.accounts {
     people[account.account_id] = "\{account.display_name} · \{account.email}"
   }
+  let records = paged_rows(
+    state,
+    AccessRecords,
+    state.access_packages.filter(item => {
+      item.account_id == state.access_record_account &&
+      Some((item.account_id, item.organization_id)) !=
+      state.access_package_context
+    }),
+    item => {
+      item.organization_id +
+      " " +
+      item.state +
+      " " +
+      state.access_organizations
+      .iter()
+      .find_first(org => org.organization_id == item.organization_id)
+      .map_or("", org => org.display_name)
+    },
+  )
   @html.section(class="access-package-panel field-group", [
     @html.label(
       for_="access-record-person",
@@ -197,13 +216,15 @@ fn registered_access_records(
         }),
       ],
     ),
+    if state.access_record_account != "" {
+      list_controls(state, AccessRecords, records, emit)
+    } else {
+      @html.nothing
+    },
     @html.div(
       class="access-package-list",
       [
-        for item in state.access_packages if item.account_id ==
-        state.access_record_account &&
-        Some((item.account_id, item.organization_id)) !=
-        state.access_package_context => access_package_card(state, item, emit)
+        for item in records.rows => access_package_card(state, item, emit)
       ],
     ),
   ])

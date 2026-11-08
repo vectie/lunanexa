@@ -192,6 +192,7 @@ fn console_state(route : @ui.OperatorRoute) -> @ui.ConsoleState {
     },
     registered_access_account: "",
     access_record_account: "",
+    list_pages: Map([]),
     access_organizations: [],
     access_packages: [],
     pending_organizations: [],

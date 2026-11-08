@@ -1247,8 +1247,9 @@ pub fn EnterpriseState::update(
               },
             }
           }
+          let cleared = clear_organization_data(self)
           {
-            ..self,
+            ..cleared,
             membership: Some(value.membership),
             selected_organization_id: Some(organization_id),
             project_id,
@@ -1261,7 +1262,7 @@ pub fn EnterpriseState::update(
             member_invite_secret: None,
             contract_documents: @contract_documents.default_state(self.locale),
             offline_commerce: {
-              ..self.offline_commerce,
+              ..cleared.offline_commerce,
               project_id,
               orders: [],
               artifacts: [],
@@ -1284,7 +1285,7 @@ pub fn EnterpriseState::update(
         }
         None =>
           {
-            ..self,
+            ..clear_organization_data(self),
             selected_organization_id: None,
             membership: None,
             webide_order_id: None,
@@ -1979,7 +1980,10 @@ fn page_header(
           ],
         ),
       ]),
-      if state.organizations.length() > 1 {
+      if state.organizations.length() > 1 &&
+        !(state.route == SelfService &&
+        state.self_service.step == Organization &&
+        !has_customer_membership(state)) {
         @html.div(class="organization-control", [
           @html.label(
             for_="enterprise-organization",
@@ -3463,6 +3467,15 @@ fn lease_requests_view(
                       state.locale,
                       "Waiting for approval. Status updates automatically.",
                       "等待审核，状态将自动更新。",
+                    ),
+                  )
+                } else if request.state == Rejected {
+                  @html.p(
+                    class="notice is-warning",
+                    copy(
+                      state.locale,
+                      "The operator declined this request. Confirm the requirements with your company administrator before submitting a revised request.",
+                      "申请未通过。请先与企业管理员核对需求，再修改后提交。",
                     ),
                   )
                 } else {

@@ -419,8 +419,7 @@ fn delivery_stage_label(stage : String, locale : @i18n.Locale) -> String {
     "StartingWorkspace" =>
       copy(locale, "Starting workspace", "工作区启动中")
     "Ready" => copy(locale, "Ready to use", "可使用")
-    "Failed" =>
-      copy(locale, "Failed — retry available", "启动失败，可重试")
+    "Failed" => copy(locale, "Failed", "启动失败")
     "Stopping" => copy(locale, "Stopping workloads", "工作负载停止中")
     "Stopped" => copy(locale, "Stopped", "已停止")
     "Expired" => copy(locale, "Expired", "已到期")
@@ -465,18 +464,7 @@ fn delivery_stage_guidance(
         locale, "The required service checks passed. Use a permitted client entry point when available.",
         "所需服务检查已通过。可通过已授权的客户端入口使用服务。",
       )
-    "Failed" =>
-      if operation.can_manage {
-        copy(
-          locale, "Review the failure code below, then retry this same operation.",
-          "查看下方失败代码后，可重试同一次交付操作。",
-        )
-      } else {
-        copy(
-          locale, "Review the failure code below and contact your administrator.",
-          "查看下方失败代码，并联系管理员。",
-        )
-      }
+    "Failed" => delivery_failure_guidance(operation, locale)
     "Stopping" =>
       copy(
         locale, "Access is closing while workloads stop. Saved files follow the published retention policy.",
@@ -1056,6 +1044,17 @@ fn delivery_panel_view(
                     )
                 },
               ),
+              if service.state == "Partial" || service.state == "Unavailable" {
+                @html.p(
+                  class="notice is-warning",
+                  copy(
+                    locale, "Ask the platform operator to check this deployment. Keep the current service reference; do not start another service to replace it.",
+                    "请平台管理员检查此部署；保留当前服务记录，避免重复创建服务。",
+                  ),
+                )
+              } else {
+                @html.nothing
+              },
               @html.div(class="connection-value", [
                 @html.p(
                   class="mono",
@@ -1280,17 +1279,7 @@ fn delivery_panel_view(
             } else {
               @html.nothing
             },
-            if operation.can_manage && operation.stage == "Failed" {
-              @html.button(
-                type_="button",
-                class="primary-button",
-                disabled=panel.loading,
-                on_click=command(emit, Delivery(Retry(operation.operation_id))),
-                copy(locale, "Retry", "重试"),
-              )
-            } else {
-              @html.nothing
-            },
+            delivery_failure_actions(panel, operation, locale, emit),
             if operation.can_manage &&
               operation.stage != "Stopped" &&
               operation.stage != "Stopping" &&

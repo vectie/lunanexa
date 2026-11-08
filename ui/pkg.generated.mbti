@@ -460,6 +460,9 @@ pub(all) enum ConsoleMessage {
   AccessPackageIssuerChanged(String)
   RegisteredAccessAccountChanged(String)
   AccessRecordAccountChanged(String)
+  ListQueryChanged(OperatorList, String)
+  ListPageChanged(OperatorList, Int)
+  CopyReference(String)
   SubmitRegisteredAccess
   AccessPackageSubjectChanged(String)
   AccessPackageDisplayNameChanged(String)
@@ -511,6 +514,7 @@ pub(all) struct ConsoleState {
   access_package_draft : AccessPackageDraft
   registered_access_account : String
   access_record_account : String
+  list_pages : Map[OperatorList, ListPage]
   access_organizations : Array[AccessOrganizationOption]
   access_packages : Array[AccessPackageView]
   access_package_context : (String, String)?
@@ -681,6 +685,13 @@ pub fn ExclusiveNodeLeaseRow::from_json(Json, @json.JsonPath) -> Self raise @jso
 pub fn ExclusiveNodeLeaseRow::not_equal(Self, Self) -> Bool
 pub fn ExclusiveNodeLeaseRow::to_json(Self) -> Json
 pub fn ExclusiveNodeLeaseRow::to_repr(Self) -> @debug.Repr
+
+pub(all) struct ListPage {
+  query : String
+  page : Int
+} derive(Eq)
+pub fn ListPage::equal(Self, Self) -> Bool
+pub fn ListPage::not_equal(Self, Self) -> Bool
 
 pub(all) struct ModelAdoptionDraft {
   import_id : String
@@ -1012,6 +1023,19 @@ pub fn OperatorCommand::from_json(Json, @json.JsonPath) -> Self raise @json.Json
 pub fn OperatorCommand::not_equal(Self, Self) -> Bool
 pub fn OperatorCommand::to_json(Self) -> Json
 pub fn OperatorCommand::to_repr(Self) -> @debug.Repr
+
+pub(all) enum OperatorList {
+  Accounts
+  WorkspaceProfiles
+  AccessGrants
+  AccessRecords
+  AuditEvents
+  RequestReceipts
+} derive(Eq, Hash)
+pub fn OperatorList::equal(Self, Self) -> Bool
+pub fn OperatorList::hash(Self) -> Int
+pub fn OperatorList::hash_combine(Self, Hasher) -> Unit
+pub fn OperatorList::not_equal(Self, Self) -> Bool
 
 pub(all) enum OperatorRoute {
   Overview

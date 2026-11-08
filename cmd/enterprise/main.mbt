@@ -327,7 +327,7 @@ priv enum Outcome {
     @enterprise_ui.AccountView?
   )
   OrganizationCreated(@enterprise_ui.SelfServiceOrganizationView)
-  OrganizationJoined
+  OrganizationJoined(String)
   MachineCommerceLoaded(
     Array[@machinecommerce.MachineOfferingView],
     Array[@machinecommerce.MachineOrder],
@@ -974,7 +974,9 @@ fn preferred_organization(
     }) {
     Some(value) => Some(value)
     None =>
-      if organizations.length() == 1 && organizations[0].membership.active {
+      if requested_id == "" &&
+        organizations.length() == 1 &&
+        organizations[0].membership.active {
         Some(organizations[0])
       } else {
         None
@@ -1123,7 +1125,7 @@ fn organization_join_command(
           ),
         )
     } noraise {
-      _ => OrganizationJoined
+      membership => OrganizationJoined(membership.organization_id)
     }
   })
 }
@@ -2543,7 +2545,7 @@ fn api_key_issue_command(
   model : AppModel,
   emit : @rabbita.Emit[AppMessage],
 ) -> @rabbita.Cmd {
-  @rabbita.perform(result => emit(Outcome(result)), async fn() noraise {
+  @rabbita.perform(result => emit(scoped_outcome(model, result)), async fn() noraise {
     try issue_api_key(model) catch {
       error =>
         Failed(
@@ -5933,17 +5935,24 @@ fn update(
         None => {
           commit_enterprise_organization("")
           let empty = organizations.length() == 0
+          let cleared = model.portal.update(SelfService(SelectOrganization("")))
           let next = {
             ..model,
+            session_generation: if model.portal.selected_organization_id
+              is Some(_) {
+              model.session_generation + 1L
+            } else {
+              model.session_generation
+            },
             connecting: false,
             portal: {
-              ..model.portal,
+              ..cleared,
               route: SelfService,
               organizations,
               selected_organization_id: None,
               membership: None,
               self_service: {
-                ..model.portal.self_service,
+                ..cleared.self_service,
                 step: Organization,
                 action_loading: false,
                 action_error: None,
@@ -5955,8 +5964,8 @@ fn update(
                 Some(
                   portal_copy(
                     model.portal.locale,
-                    "Choose the organization for this session. Scoped requests remain blocked until you do.",
-                    "请选择本次会话使用的组织；选择前，限定组织范围的请求保持关闭。",
+                    "Choose the company to use.",
+                    "请选择要使用的企业。",
                   ),
                 )
               },
@@ -5989,6 +5998,8 @@ fn update(
       let portal = base.update(SelfService(SelectOrganization(organization_id)))
       let next = {
         ..model,
+        session_generation: model.session_generation + 1L,
+        contract_poll_generation: model.contract_poll_generation + 1L,
         connecting: true,
         portal: {
           ..portal,
@@ -6004,14 +6015,20 @@ fn update(
       }
       (next, load_command(next, emit))
     }
-    Outcome(OrganizationJoined) => {
+    Outcome(OrganizationJoined(organization_id)) => {
+      let cleared = model.portal.update(SelfService(SelectOrganization("")))
+      commit_enterprise_organization(organization_id)
       let next = {
         ..model,
+        session_generation: model.session_generation + 1L,
+        contract_poll_generation: model.contract_poll_generation + 1L,
         connecting: true,
         portal: {
-          ..model.portal,
+          ..cleared,
+          selected_organization_id: Some(organization_id),
           self_service: {
-            ..model.portal.self_service,
+            ..cleared.self_service,
+            invitation_code: "",
             action_loading: false,
             action_error: None,
           },

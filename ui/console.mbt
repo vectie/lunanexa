@@ -2073,6 +2073,7 @@ pub(all) struct ConsoleState {
   access_package_draft : AccessPackageDraft
   registered_access_account : String
   access_record_account : String
+  list_pages : Map[OperatorList, ListPage]
   access_organizations : Array[AccessOrganizationOption]
   access_packages : Array[AccessPackageView]
   access_package_context : (String, String)?
@@ -2235,6 +2236,9 @@ pub(all) enum ConsoleMessage {
   AccessPackageIssuerChanged(String)
   RegisteredAccessAccountChanged(String)
   AccessRecordAccountChanged(String)
+  ListQueryChanged(OperatorList, String)
+  ListPageChanged(OperatorList, Int32)
+  CopyReference(String)
   SubmitRegisteredAccess
   AccessPackageSubjectChanged(String)
   AccessPackageDisplayNameChanged(String)
@@ -2332,6 +2336,7 @@ pub fn default_state() -> ConsoleState {
     },
     registered_access_account: "",
     access_record_account: "",
+    list_pages: Map([]),
     access_organizations: [],
     access_packages: [],
     users: [],
@@ -2913,6 +2918,7 @@ pub fn demo_state() -> ConsoleState {
     },
     registered_access_account: "",
     access_record_account: "",
+    list_pages: Map([]),
     access_organizations: [
       {
         organization_id: "org-northstar",
@@ -4525,6 +4531,16 @@ fn users_view(
   state : ConsoleState,
   emit : @rabbita.Emit[ConsoleMessage]?,
 ) -> @rabbita.Html {
+  let accounts = paged_rows(state, Accounts, state.accounts, account => {
+    "\{account.display_name} \{account.email} \{account.account_id} " +
+    account.roles.map(role => account_role_label(state.locale, role)).join(" ")
+  })
+  let profiles = paged_rows(state, WorkspaceProfiles, state.users, user => {
+    "\{user.display_name} \{user.user_id}"
+  })
+  let grants = paged_rows(state, AccessGrants, state.access_grants, grant => {
+    "\{grant.user_id} \{grant.grant_id} \{grant.scope}"
+  })
   @html.section(attrs=@html.Attrs::build().aria_labelledby("users-title"), [
     @html.div(class="section-heading", [
       @html.div([
@@ -5217,6 +5233,7 @@ fn users_view(
         ),
       ),
     ]),
+    list_controls(state, Accounts, accounts, emit),
     if state.accounts.length() == 0 {
       @html.p(
         class="empty-state compact",
@@ -5247,7 +5264,7 @@ fn users_view(
           ),
           @html.tbody(
             [
-              for account in state.accounts => {
+              for account in accounts.rows => {
                 @html.tr([
                   @html.td([
                     @html.strong(account.display_name),
@@ -5345,6 +5362,7 @@ fn users_view(
       @html.summary(
         localized(state.locale, "Workspace profiles", "工作区档案"),
       ),
+      list_controls(state, WorkspaceProfiles, profiles, emit),
       if state.users.length() == 0 {
         @html.p(
           class="empty-state",
@@ -5378,7 +5396,7 @@ fn users_view(
             ),
             @html.tbody(
               [
-                for user in state.users => {
+                for user in profiles.rows => {
                   @html.tr([
                     @html.td([
                       @html.strong(user.display_name),
@@ -5457,6 +5475,7 @@ fn users_view(
     ]),
     @html.details(class="ln-advanced", [
       @html.summary(localized(state.locale, "Access grants", "访问授权")),
+      list_controls(state, AccessGrants, grants, emit),
       if state.access_grants.length() == 0 {
         @html.p(
           class="empty-state compact",
@@ -5497,7 +5516,7 @@ fn users_view(
             ),
             @html.tbody(
               [
-                for grant in state.access_grants => {
+                for grant in grants.rows => {
                   @html.tr([
                     @html.td([
                       @html.strong(grant.user_id),
@@ -5634,9 +5653,31 @@ fn leases_view(
                     @html.span(class="mono secondary", lease.subject_ref),
                   ]),
                   @html.td(class="mono", lease.node_id),
-                  @html.td(
+                  @html.td([
                     exclusive_lease_state_badge(state.locale, lease.state),
-                  ),
+                    if lease.state == "Quarantined" {
+                      @html.div([
+                        @html.p(
+                          localized(
+                            state.locale,
+                            "Cleanup needs verification before this node can be released.",
+                            "需核对清理结果，通过验证后才能释放节点。",
+                          ),
+                        ),
+                        @html.button(
+                          type_="button",
+                          on_click=command(emit, Navigate(Nodes)),
+                          localized(
+                            state.locale,
+                            "Inspect nodes",
+                            "检查节点",
+                          ),
+                        ),
+                      ])
+                    } else {
+                      @html.nothing
+                    },
+                  ]),
                   @html.td(generated_time_label(state.locale, lease.expires_at)),
                   @html.td(class="mono", lease.generation.to_string()),
                   @html.td(class="row-actions", [
@@ -9326,7 +9367,18 @@ fn deployment_item(
 }
 
 ///|
-fn requests_view(state : ConsoleState) -> @rabbita.Html {
+fn requests_view(
+  state : ConsoleState,
+  emit : @rabbita.Emit[ConsoleMessage]?,
+) -> @rabbita.Html {
+  let receipts = paged_rows(
+    state,
+    RequestReceipts,
+    state.request_details.rev(),
+    item => {
+      "\{item.action} \{item.model_selector} \{item.result} \{item.receipt}"
+    },
+  )
   @html.section(attrs=@html.Attrs::build().aria_labelledby("requests-title"), [
     @html.div(class="section-heading", [
       @html.div([
@@ -9345,6 +9397,7 @@ fn requests_view(state : ConsoleState) -> @rabbita.Html {
       ),
     ]),
     request_telemetry_chart(state),
+    list_controls(state, RequestReceipts, receipts, emit),
     if state.request_details.length() == 0 {
       @html.p(
         class="empty-state",
@@ -9382,7 +9435,7 @@ fn requests_view(state : ConsoleState) -> @rabbita.Html {
           ),
           @html.tbody(
             [
-              for detail in state.request_details => {
+              for detail in receipts.rows => {
                 @html.tr([
                   @html.td(
                     class="mono secondary",
@@ -9398,7 +9451,7 @@ fn requests_view(state : ConsoleState) -> @rabbita.Html {
                       "ok",
                     ),
                   ),
-                  @html.td(class="mono secondary", detail.receipt),
+                  @html.td(receipt_detail(state.locale, detail.receipt, emit)),
                 ])
               }
             ],
@@ -11289,7 +11342,13 @@ fn qualified_services_view(state : ConsoleState) -> @rabbita.Html {
 }
 
 ///|
-fn audit_view(state : ConsoleState) -> @rabbita.Html {
+fn audit_view(
+  state : ConsoleState,
+  emit : @rabbita.Emit[ConsoleMessage]?,
+) -> @rabbita.Html {
+  let events = paged_rows(state, AuditEvents, state.audit.rev(), event => {
+    "\{event.actor} \{event.decision} \{event.result} \{event.receipt} \{event.evidence}"
+  })
   @html.section(attrs=@html.Attrs::build().aria_labelledby("audit-title"), [
     @html.div(class="section-heading", [
       @html.div([
@@ -11307,6 +11366,7 @@ fn audit_view(state : ConsoleState) -> @rabbita.Html {
         ),
       ),
     ]),
+    list_controls(state, AuditEvents, events, emit),
     if state.audit.length() == 0 {
       @html.nothing
     } else {
@@ -11355,7 +11415,7 @@ fn audit_view(state : ConsoleState) -> @rabbita.Html {
           ),
           @html.tbody(
             [
-              for event in state.audit => audit_item(state.locale, event)
+              for event in events.rows => audit_item(state.locale, event, emit)
             ],
           ),
         ]),
@@ -11365,13 +11425,17 @@ fn audit_view(state : ConsoleState) -> @rabbita.Html {
 }
 
 ///|
-fn audit_item(locale : @i18n.Locale, event : AuditRow) -> @rabbita.Html {
+fn audit_item(
+  locale : @i18n.Locale,
+  event : AuditRow,
+  emit : @rabbita.Emit[ConsoleMessage]?,
+) -> @rabbita.Html {
   @html.tr([
     @html.td(event.actor),
     @html.td(event.decision),
     @html.td(event.evidence),
     @html.td(status_badge(result_label(locale, event.result), "ok")),
-    @html.td(class="mono secondary", event.receipt),
+    @html.td(receipt_detail(locale, event.receipt, emit)),
   ])
 }
 
@@ -12397,15 +12461,16 @@ fn console_view(
     Models => models_view(state, emit)
     Catalog => catalog_view(state, emit)
     Deployments => deployments_view(state, emit)
-    Requests => requests_view(state)
+    Requests => requests_view(state, emit)
     Benchmarks => benchmarks_view(state, emit)
     Policies => policies_view(state, emit)
-    Audit => audit_view(state)
+    Audit => audit_view(state, emit)
     Blank => blank_view(state)
   }
   @html.div(class="app-shell", [
     @html.style_tag(
       console_styles() +
+      list_page_styles() +
       placement_visual_styles() +
       observability_visual_styles() +
       governance_visual_styles() +

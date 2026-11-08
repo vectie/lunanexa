@@ -65,8 +65,8 @@ async test "order setup restores state after failed writes and releases replay l
 let digest_b : String = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
 ///|
-fn temp_path(name : String) -> String {
-  "/tmp/lunanexa-offline-commerce-\{@async.now()}-\{name}.json"
+async fn temp_path(name : String) -> String {
+  @fs.tmpdir(prefix="lunanexa-offline-commerce-\{name}-") + "/state.json"
 }
 
 ///|
@@ -280,6 +280,10 @@ fn activation(
 ///|
 async test "hybrid order survives restart and fulfills only reviewed evidence" {
   let path = temp_path("happy")
+  defer @fs.rmdir(
+    path.strip_suffix("/state.json").unwrap().to_owned(),
+    recursive=true,
+  )
   let store = @store.OfflineCommerceStore::open(path)
   let awaiting = ready_for_upload(store, "order-happy")
   assert_eq(awaiting.state, PendingEvidenceUpload)
@@ -342,6 +346,10 @@ async test "hybrid order survives restart and fulfills only reviewed evidence" {
 ///|
 async test "v1 snapshot migrates in place without losing orders" {
   let path = temp_path("migrate-v1")
+  defer @fs.rmdir(
+    path.strip_suffix("/state.json").unwrap().to_owned(),
+    recursive=true,
+  )
   let legacy_order = order("order-legacy")
   let legacy : Json = {
     "schema_version": "lunanexa.offline-commerce.snapshot.v1",
@@ -371,6 +379,10 @@ async test "v1 snapshot migrates in place without losing orders" {
 ///|
 async test "expiry cancellation activation and reversal are durable sagas" {
   let path = temp_path("lifecycle")
+  defer @fs.rmdir(
+    path.strip_suffix("/state.json").unwrap().to_owned(),
+    recursive=true,
+  )
   let store = @store.OfflineCommerceStore::open(path)
   let draft = order("order-cancel")
   ignore(
@@ -570,6 +582,10 @@ async test "expiry cancellation activation and reversal are durable sagas" {
 ///|
 async test "activation pending survives expiry and failed reversal is retryable" {
   let path = temp_path("saga-races")
+  defer @fs.rmdir(
+    path.strip_suffix("/state.json").unwrap().to_owned(),
+    recursive=true,
+  )
   let store = @store.OfflineCommerceStore::open(path)
   let awaiting = ready_for_upload(store, "order-saga-race")
   let grant = upload_grant("order-saga-race", "evidence-saga-race")
@@ -667,6 +683,10 @@ async test "activation pending survives expiry and failed reversal is retryable"
 ///|
 async test "upload callback rejects forged object digest size and active content" {
   let path = temp_path("callback")
+  defer @fs.rmdir(
+    path.strip_suffix("/state.json").unwrap().to_owned(),
+    recursive=true,
+  )
   let store = @store.OfflineCommerceStore::open(path)
   ignore(ready_for_upload(store, "order-callback"))
   let grant = upload_grant("order-callback", "evidence-a")
@@ -712,6 +732,10 @@ async test "upload callback rejects forged object digest size and active content
 ///|
 async test "pending sagas cannot be cancelled and transfer sessions are one-time durable" {
   let path = temp_path("transfer-saga")
+  defer @fs.rmdir(
+    path.strip_suffix("/state.json").unwrap().to_owned(),
+    recursive=true,
+  )
   let store = @store.OfflineCommerceStore::open(path)
   ignore(ready_for_upload(store, "order-transfer"))
   let grant = upload_grant("order-transfer", "evidence-transfer")
@@ -806,6 +830,10 @@ async test "pending sagas cannot be cancelled and transfer sessions are one-time
 ///|
 async test "review enforces digest binding separation of duties and tenant isolation" {
   let path = temp_path("review")
+  defer @fs.rmdir(
+    path.strip_suffix("/state.json").unwrap().to_owned(),
+    recursive=true,
+  )
   let store = @store.OfflineCommerceStore::open(path)
   ignore(ready_for_upload(store, "order-review"))
   let grant = upload_grant("order-review", "evidence-review")
@@ -851,6 +879,10 @@ async test "review enforces digest binding separation of duties and tenant isola
 ///|
 async test "generation result is bound to request and forbids active content" {
   let path = temp_path("generation")
+  defer @fs.rmdir(
+    path.strip_suffix("/state.json").unwrap().to_owned(),
+    recursive=true,
+  )
   let store = @store.OfflineCommerceStore::open(path)
   ignore(store.register_template(contract_template()))
   ignore(store.create_order(order("order-generation")))
@@ -917,6 +949,10 @@ async test "generation result is bound to request and forbids active content" {
 ///|
 async test "generation claims fence stale order state and exhaust bounded retries" {
   let path = temp_path("generation-fencing")
+  defer @fs.rmdir(
+    path.strip_suffix("/state.json").unwrap().to_owned(),
+    recursive=true,
+  )
   let store = @store.OfflineCommerceStore::open(path)
   ignore(store.register_template(contract_template()))
   ignore(store.create_order(order("order-generation-fencing")))
@@ -974,6 +1010,10 @@ async test "generation claims fence stale order state and exhaust bounded retrie
 ///|
 async test "reconciler readiness requires a recent completed pass" {
   let path = temp_path("reconciler-health")
+  defer @fs.rmdir(
+    path.strip_suffix("/state.json").unwrap().to_owned(),
+    recursive=true,
+  )
   let store = @store.OfflineCommerceStore::open(path)
   store.record_worker_acceptance(ArtifactDispatcher, 1000L)
   store.record_worker_acceptance(EntitlementDispatcher, 1000L)
@@ -999,6 +1039,10 @@ async test "reconciler readiness requires a recent completed pass" {
 ///|
 async test "delayed generation result cannot mutate a changed order" {
   let path = temp_path("generation-stale-result")
+  defer @fs.rmdir(
+    path.strip_suffix("/state.json").unwrap().to_owned(),
+    recursive=true,
+  )
   let store = @store.OfflineCommerceStore::open(path)
   ignore(store.register_template(contract_template()))
   ignore(store.create_order(order("order-stale-result")))

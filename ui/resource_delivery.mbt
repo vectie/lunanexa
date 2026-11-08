@@ -737,7 +737,27 @@ fn resource_delivery_view(
                 @html.p("\{row.transferred_bytes / 1048576L} MiB")
               },
               match row.failure_code {
-                Some(code) => @html.p(code)
+                Some(code) =>
+                  @html.div(attrs=@html.Attrs::build().role("alert"), [
+                    @html.p(
+                      localized(
+                        state.locale,
+                        "Delivery needs attention. Inspect the model deployment and node state before retrying.",
+                        "交付需要处理，请先检查模型部署与节点状态，再重试。",
+                      ),
+                    ),
+                    @html.code(code),
+                    @html.button(
+                      type_="button",
+                      class="quiet-button",
+                      on_click=command(emit, Navigate(Deployments)),
+                      localized(
+                        state.locale,
+                        "Inspect deployments",
+                        "检查部署",
+                      ),
+                    ),
+                  ])
                 None => @html.nothing
               },
             ])

@@ -1,0 +1,56 @@
+///|
+/// Drop projections of the old organization before another scope is loaded.
+/// Account identity and personal drafts/preferences remain in the same session.
+fn clear_organization_data(state : EnterpriseState) -> EnterpriseState {
+  let empty = default_state(state.machine_access.now_unix_ms)
+  {
+    ..state,
+    membership: None,
+    selected_organization_id: None,
+    project_id: "",
+    api_keys: [],
+    api_key_issue_draft: empty.api_key_issue_draft,
+    api_key_issue_open: false,
+    api_key_revoke_id: None,
+    one_time_api_key_secret: None,
+    revealed_api_key: None,
+    api_key_secret_request: None,
+    api_key_secret_generation: state.api_key_secret_generation + 1L,
+    model_connection_import: None,
+    member_invite_email: "",
+    member_invite_secret: None,
+    member_invite_loading: false,
+    agreements: [],
+    lease_requests: [],
+    notifications: [],
+    notification_preferences: [],
+    machine_access: {
+      ..empty.machine_access,
+      locale: state.locale,
+      now_unix_ms: state.machine_access.now_unix_ms,
+    },
+    offline_commerce: @offline_commerce.default_state(
+      state.locale,
+      CustomerCommerce,
+    ),
+    contract_documents: @contract_documents.default_state(state.locale),
+    cost_centers: [],
+    provisional_spend: "—",
+    payment_checkout_quote: None,
+    provider_requests: [],
+    provider_requests_loading: false,
+    payment_checkout_loading: false,
+    model_catalog: [],
+    desktop_client: None,
+    desktop_clients: [],
+    webide_order_id: None,
+    webide_model_alias: None,
+    desktop_connect_phase: NotStarted,
+    deliveries: default_delivery_panel(),
+    model_ids: "",
+    justification: "",
+    loading: false,
+    success_message: None,
+    error_message: None,
+  }
+}

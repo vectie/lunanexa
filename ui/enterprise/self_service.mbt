@@ -766,6 +766,12 @@ fn organization_step(
   state : EnterpriseState,
   emit : @rabbita.Emit[EnterpriseMessage]?,
 ) -> @rabbita.Html {
+  let customer_options = state.organizations.filter(value => {
+    value.membership.active &&
+    !state.trial.map_or(false, trial => {
+      trial.organization_id == value.organization.organization_id
+    })
+  })
   match state.membership {
     Some(membership) if has_customer_membership(state) => {
       let selected = state.organizations
@@ -778,6 +784,9 @@ fn organization_step(
           Some(value) => value.organization.state == Active
           None => false
         })
+      let review_pending = selected.map_or(false, value => {
+        value.organization.state == PendingVerification
+      })
       let verification = match selected {
         Some(value) => value.verification
         None => None
@@ -790,8 +799,10 @@ fn organization_step(
         @html.h2(
           if organization_active {
             enterprise_copy(state.locale, OrganizationReady)
-          } else {
+          } else if review_pending {
             enterprise_copy(state.locale, OrganizationVerificationPending)
+          } else {
+            copy(state.locale, "Company unavailable", "企业未启用")
           },
         ),
         @html.p(
@@ -811,7 +822,7 @@ fn organization_step(
             ),
           ]),
         ]),
-        if !organization_active {
+        if !organization_active && review_pending {
           match verification {
             Some(value) if value.record is Some(record) &&
               record.action_url is Some(url) =>
@@ -872,6 +883,15 @@ fn organization_step(
                 ),
               )
           }
+        } else if !organization_active {
+          @html.p(
+            class="notice is-warning",
+            copy(
+              state.locale,
+              "This company is not active. Contact the platform operator to review its registration status.",
+              "企业当前不可用，请联系平台管理员核对注册状态。",
+            ),
+          )
         } else {
           @html.nothing
         },
@@ -932,8 +952,39 @@ fn organization_step(
     _ =>
       @html.section(class="guided-panel", [
         @html.p(class="eyebrow", enterprise_copy(state.locale, Organization338)),
-        @html.h2(enterprise_copy(state.locale, CreateACompanyOrJoinOne)),
-        if state.account is Some(_) && !has_customer_membership(state) {
+        @html.h2(copy(state.locale, "Company setup", "企业设置")),
+        if !customer_options.is_empty() {
+          @html.div(class="field", [
+            @html.label(
+              for_="onboarding-organization",
+              copy(state.locale, "Choose a company", "选择企业"),
+            ),
+            @html.select(
+              id="onboarding-organization",
+              on_change=self_service_text_command(emit, value => {
+                SelectOrganization(value)
+              }),
+              [
+                @html.option(
+                  value="",
+                  selected=true,
+                  copy(state.locale, "Choose a company", "选择企业"),
+                ),
+                ..customer_options.map(value => {
+                  @html.option(
+                    value=value.organization.organization_id,
+                    value.organization.display_name,
+                  )
+                }),
+              ],
+            ),
+          ])
+        } else {
+          @html.nothing
+        },
+        if state.account is Some(_) &&
+          customer_options.is_empty() &&
+          !has_customer_membership(state) {
           @html.p(
             attrs=@html.Attrs::build().role("status").aria_live("polite"),
             copy(
@@ -945,249 +996,255 @@ fn organization_step(
         } else {
           @html.nothing
         },
-        @html.div(class="segmented-control", [
-          @html.button(
-            type_="button",
-            class=if state.self_service.organization_mode == CreateCompany {
-              "segment is-selected"
-            } else {
-              "segment"
-            },
-            attrs=@html.Attrs::build().aria_pressed(
-              if state.self_service.organization_mode == CreateCompany {
-                "true"
+        @html.details(class="ln-advanced", open=customer_options.is_empty(), [
+          @html.summary(enterprise_copy(state.locale, CreateACompanyOrJoinOne)),
+          @html.div(class="segmented-control", [
+            @html.button(
+              type_="button",
+              class=if state.self_service.organization_mode == CreateCompany {
+                "segment is-selected"
               } else {
-                "false"
+                "segment"
               },
+              attrs=@html.Attrs::build().aria_pressed(
+                if state.self_service.organization_mode == CreateCompany {
+                  "true"
+                } else {
+                  "false"
+                },
+              ),
+              on_click=self_service_command(
+                emit,
+                ChooseOrganizationMode(CreateCompany),
+              ),
+              enterprise_copy(state.locale, CreateCompany),
             ),
-            on_click=self_service_command(
-              emit,
-              ChooseOrganizationMode(CreateCompany),
-            ),
-            enterprise_copy(state.locale, CreateCompany),
-          ),
-          @html.button(
-            type_="button",
-            class=if state.self_service.organization_mode == JoinCompany {
-              "segment is-selected"
-            } else {
-              "segment"
-            },
-            attrs=@html.Attrs::build().aria_pressed(
-              if state.self_service.organization_mode == JoinCompany {
-                "true"
+            @html.button(
+              type_="button",
+              class=if state.self_service.organization_mode == JoinCompany {
+                "segment is-selected"
               } else {
-                "false"
+                "segment"
               },
+              attrs=@html.Attrs::build().aria_pressed(
+                if state.self_service.organization_mode == JoinCompany {
+                  "true"
+                } else {
+                  "false"
+                },
+              ),
+              on_click=self_service_command(
+                emit,
+                ChooseOrganizationMode(JoinCompany),
+              ),
+              enterprise_copy(state.locale, JoinCompany),
             ),
-            on_click=self_service_command(
-              emit,
-              ChooseOrganizationMode(JoinCompany),
-            ),
-            enterprise_copy(state.locale, JoinCompany),
-          ),
-        ]),
-        if state.self_service.organization_mode == CreateCompany {
-          @html.div(class="guided-form", [
-            @html.div(class="form-grid", [
-              @html.div(class="field", [
-                @html.label(
-                  for_="company-subject-kind",
-                  enterprise_copy(state.locale, LegalSubjectType),
-                ),
-                @html.select(
-                  id="company-subject-kind",
-                  on_change=self_service_text_command(emit, value => {
-                    SubjectKindChanged(value)
-                  }),
+          ]),
+          if state.self_service.organization_mode == CreateCompany {
+            @html.div(class="guided-form", [
+              @html.div(class="form-grid", [
+                @html.div(class="field", [
+                  @html.label(
+                    for_="company-subject-kind",
+                    enterprise_copy(state.locale, LegalSubjectType),
+                  ),
+                  @html.select(
+                    id="company-subject-kind",
+                    on_change=self_service_text_command(emit, value => {
+                      SubjectKindChanged(value)
+                    }),
+                    [
+                      @html.option(
+                        value="Company",
+                        selected=state.self_service.subject_kind == "Company",
+                        enterprise_copy(state.locale, Company),
+                      ),
+                      @html.option(
+                        value="Individual",
+                        selected=state.self_service.subject_kind == "Individual",
+                        enterprise_copy(state.locale, Individual),
+                      ),
+                    ],
+                  ),
+                ]),
+                @html.div(class="field", [
+                  @html.label(
+                    for_="company-legal-name",
+                    enterprise_copy(state.locale, LegalName),
+                  ),
+                  @html.input(
+                    id="company-legal-name",
+                    value=state.self_service.legal_name,
+                    maxlength=256,
+                    on_input=self_service_text_command(emit, value => {
+                      LegalNameChanged(value)
+                    }),
+                  ),
+                ]),
+                @controls.advanced(
+                  copy(
+                    state.locale,
+                    "Use a different display name",
+                    "使用其他显示名称",
+                  ),
                   [
-                    @html.option(
-                      value="Company",
-                      selected=state.self_service.subject_kind == "Company",
-                      enterprise_copy(state.locale, Company),
-                    ),
-                    @html.option(
-                      value="Individual",
-                      selected=state.self_service.subject_kind == "Individual",
-                      enterprise_copy(state.locale, Individual),
-                    ),
+                    @html.div(class="field", [
+                      @html.label(
+                        for_="company-display-name",
+                        enterprise_copy(state.locale, DisplayName),
+                      ),
+                      @html.input(
+                        id="company-display-name",
+                        value=state.self_service.display_name,
+                        maxlength=128,
+                        on_input=self_service_text_command(emit, value => {
+                          CompanyDisplayNameChanged(value)
+                        }),
+                      ),
+                    ]),
                   ],
                 ),
-              ]),
-              @html.div(class="field", [
-                @html.label(
-                  for_="company-legal-name",
-                  enterprise_copy(state.locale, LegalName),
-                ),
-                @html.input(
-                  id="company-legal-name",
-                  value=state.self_service.legal_name,
-                  maxlength=256,
-                  on_input=self_service_text_command(emit, value => {
-                    LegalNameChanged(value)
-                  }),
-                ),
-              ]),
-              @controls.advanced(
-                copy(
-                  state.locale,
-                  "Use a different display name",
-                  "使用其他显示名称",
-                ),
-                [
-                  @html.div(class="field", [
-                    @html.label(
-                      for_="company-display-name",
-                      enterprise_copy(state.locale, DisplayName),
+                @html.div(class="field", [
+                  @html.label(
+                    for_="company-country",
+                    enterprise_copy(state.locale, CountryCode),
+                  ),
+                  @html.input(
+                    id="company-country",
+                    value=state.self_service.country_region,
+                    maxlength=2,
+                    on_input=self_service_text_command(emit, value => {
+                      CountryRegionChanged(value)
+                    }),
+                  ),
+                ]),
+                @html.div(class="field", [
+                  @html.label(
+                    for_="company-registration-number",
+                    enterprise_copy(state.locale, RegistrationNumberOptional),
+                  ),
+                  @html.input(
+                    id="company-registration-number",
+                    value=state.self_service.registration_number,
+                    maxlength=128,
+                    on_input=self_service_text_command(emit, value => {
+                      RegistrationNumberChanged(value)
+                    }),
+                  ),
+                ]),
+                @html.div(class="field", [
+                  @html.label(
+                    for_="company-tax-id",
+                    enterprise_copy(state.locale, TaxOrRegistrationIdOptional),
+                  ),
+                  @html.input(
+                    id="company-tax-id",
+                    value=state.self_service.tax_identifier,
+                    maxlength=128,
+                    on_input=self_service_text_command(emit, value => {
+                      TaxIdentifierChanged(value)
+                    }),
+                  ),
+                ]),
+                @html.div(class="field field-wide", [
+                  @html.label(
+                    for_="company-address",
+                    enterprise_copy(state.locale, RegisteredAddress),
+                  ),
+                  @html.input(
+                    id="company-address",
+                    value=state.self_service.registered_address,
+                    maxlength=512,
+                    on_input=self_service_text_command(emit, value => {
+                      RegisteredAddressChanged(value)
+                    }),
+                  ),
+                ]),
+                @html.div(class="field", [
+                  @html.label(
+                    for_="company-billing-contact",
+                    enterprise_copy(state.locale, BillingContact),
+                  ),
+                  @html.input(
+                    id="company-billing-contact",
+                    value=state.self_service.billing_contact_name,
+                    maxlength=128,
+                    on_input=self_service_text_command(emit, value => {
+                      BillingContactNameChanged(value)
+                    }),
+                  ),
+                ]),
+                @html.div(class="field field-wide", [
+                  @html.label(
+                    for_="company-billing-email",
+                    enterprise_copy(state.locale, BillingEmail),
+                  ),
+                  @html.input(
+                    id="company-billing-email",
+                    input_type=Email,
+                    value=state.self_service.billing_email,
+                    maxlength=320,
+                    on_input=self_service_text_command(emit, value => {
+                      BillingEmailChanged(value)
+                    }),
+                  ),
+                  @html.small(
+                    enterprise_copy(
+                      state.locale,
+                      TheCreatorBecomesOrganizationOwnerMachine,
                     ),
-                    @html.input(
-                      id="company-display-name",
-                      value=state.self_service.display_name,
-                      maxlength=128,
-                      on_input=self_service_text_command(emit, value => {
-                        CompanyDisplayNameChanged(value)
-                      }),
-                    ),
-                  ]),
-                ],
+                  ),
+                ]),
+              ]),
+              @html.button(
+                type_="button",
+                class="primary-button",
+                disabled=!company_creation_valid(state.self_service),
+                on_click=self_service_command(emit, SubmitCreateCompany),
+                if state.self_service.action_loading {
+                  enterprise_copy(state.locale, CreatingCompany)
+                } else {
+                  enterprise_copy(state.locale, CreateCompany)
+                },
               ),
+            ])
+          } else {
+            @html.div(class="guided-form", [
               @html.div(class="field", [
                 @html.label(
-                  for_="company-country",
-                  enterprise_copy(state.locale, CountryCode),
+                  for_="company-invitation",
+                  enterprise_copy(state.locale, InvitationCode),
                 ),
                 @html.input(
-                  id="company-country",
-                  value=state.self_service.country_region,
-                  maxlength=2,
-                  on_input=self_service_text_command(emit, value => {
-                    CountryRegionChanged(value)
-                  }),
-                ),
-              ]),
-              @html.div(class="field", [
-                @html.label(
-                  for_="company-registration-number",
-                  enterprise_copy(state.locale, RegistrationNumberOptional),
-                ),
-                @html.input(
-                  id="company-registration-number",
-                  value=state.self_service.registration_number,
-                  maxlength=128,
-                  on_input=self_service_text_command(emit, value => {
-                    RegistrationNumberChanged(value)
-                  }),
-                ),
-              ]),
-              @html.div(class="field", [
-                @html.label(
-                  for_="company-tax-id",
-                  enterprise_copy(state.locale, TaxOrRegistrationIdOptional),
-                ),
-                @html.input(
-                  id="company-tax-id",
-                  value=state.self_service.tax_identifier,
-                  maxlength=128,
-                  on_input=self_service_text_command(emit, value => {
-                    TaxIdentifierChanged(value)
-                  }),
-                ),
-              ]),
-              @html.div(class="field field-wide", [
-                @html.label(
-                  for_="company-address",
-                  enterprise_copy(state.locale, RegisteredAddress),
-                ),
-                @html.input(
-                  id="company-address",
-                  value=state.self_service.registered_address,
+                  id="company-invitation",
+                  value=state.self_service.invitation_code,
                   maxlength=512,
+                  auto_complete=Off,
                   on_input=self_service_text_command(emit, value => {
-                    RegisteredAddressChanged(value)
-                  }),
-                ),
-              ]),
-              @html.div(class="field", [
-                @html.label(
-                  for_="company-billing-contact",
-                  enterprise_copy(state.locale, BillingContact),
-                ),
-                @html.input(
-                  id="company-billing-contact",
-                  value=state.self_service.billing_contact_name,
-                  maxlength=128,
-                  on_input=self_service_text_command(emit, value => {
-                    BillingContactNameChanged(value)
-                  }),
-                ),
-              ]),
-              @html.div(class="field field-wide", [
-                @html.label(
-                  for_="company-billing-email",
-                  enterprise_copy(state.locale, BillingEmail),
-                ),
-                @html.input(
-                  id="company-billing-email",
-                  input_type=Email,
-                  value=state.self_service.billing_email,
-                  maxlength=320,
-                  on_input=self_service_text_command(emit, value => {
-                    BillingEmailChanged(value)
+                    InvitationCodeChanged(value)
                   }),
                 ),
                 @html.small(
                   enterprise_copy(
                     state.locale,
-                    TheCreatorBecomesOrganizationOwnerMachine,
+                    TheSignedOneTimeInvitationSelects,
                   ),
                 ),
               ]),
-            ]),
-            @html.button(
-              type_="button",
-              class="primary-button",
-              disabled=!company_creation_valid(state.self_service),
-              on_click=self_service_command(emit, SubmitCreateCompany),
-              if state.self_service.action_loading {
-                enterprise_copy(state.locale, CreatingCompany)
-              } else {
-                enterprise_copy(state.locale, CreateCompany)
-              },
-            ),
-          ])
-        } else {
-          @html.div(class="guided-form", [
-            @html.div(class="field", [
-              @html.label(
-                for_="company-invitation",
-                enterprise_copy(state.locale, InvitationCode),
+              @html.button(
+                type_="button",
+                class="primary-button",
+                disabled=!company_join_valid(state.self_service),
+                on_click=self_service_command(emit, SubmitJoinCompany),
+                if state.self_service.action_loading {
+                  enterprise_copy(state.locale, JoiningCompany)
+                } else {
+                  enterprise_copy(state.locale, JoinCompany)
+                },
               ),
-              @html.input(
-                id="company-invitation",
-                value=state.self_service.invitation_code,
-                maxlength=512,
-                auto_complete=Off,
-                on_input=self_service_text_command(emit, value => {
-                  InvitationCodeChanged(value)
-                }),
-              ),
-              @html.small(
-                enterprise_copy(state.locale, TheSignedOneTimeInvitationSelects),
-              ),
-            ]),
-            @html.button(
-              type_="button",
-              class="primary-button",
-              disabled=!company_join_valid(state.self_service),
-              on_click=self_service_command(emit, SubmitJoinCompany),
-              if state.self_service.action_loading {
-                enterprise_copy(state.locale, JoiningCompany)
-              } else {
-                enterprise_copy(state.locale, JoinCompany)
-              },
-            ),
-          ])
-        },
+            ])
+          },
+        ]),
         @html.div(class="wizard-actions", [
           @html.button(
             type_="button",

@@ -108,6 +108,11 @@ fn waiting_for_membership(model : AppModel) -> Bool {
 fn waiting_for_application(model : AppModel) -> Bool {
   model.token.has_prefix("lnxs_") &&
   !waiting_for_membership(model) &&
+  model.portal.organizations.any(value => {
+    Some(value.organization.organization_id) ==
+    model.portal.selected_organization_id &&
+    value.organization.state == Active
+  }) &&
   model.portal.membership.map_or(false, membership => {
     membership.active && @portal.role_allows(membership.roles, Developer)
   }) &&

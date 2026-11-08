@@ -825,6 +825,7 @@ test "organization bootstrap honors an active saved choice and fails closed on a
     Some("org-second"),
   )
   assert_eq(preferred_organization(organizations, ""), None)
+  assert_eq(preferred_organization([first], "removed-company"), None)
   assert_eq(
     preferred_organization([first], "").map(value => {
       value.organization.organization_id

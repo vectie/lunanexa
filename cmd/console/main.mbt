@@ -1517,6 +1517,7 @@ async fn load_console(
     },
     registered_access_account: "",
     access_record_account: "",
+    list_pages: Map([]),
     access_organizations: [],
     access_packages: [],
     users: [],
@@ -2082,9 +2083,6 @@ async fn load_console_audit_reads(
         receipt: event.correlation_receipt,
       })
     }
-  }
-  while request_details.length() > 50 {
-    ignore(request_details.remove(0))
   }
   {
     rows: [
@@ -2874,6 +2872,7 @@ fn merge_loaded_console(
     access_packages: current.access_packages,
     registered_access_account: current.registered_access_account,
     access_record_account: current.access_record_account,
+    list_pages: current.list_pages,
     access_organizations: current.access_organizations,
     users: current.users,
     pending_organizations: current.pending_organizations,
@@ -4911,14 +4910,38 @@ fn update_live(
         cmd,
       )
     }
-    Console(AccessRecordAccountChanged(value)) =>
+    Console(ListQueryChanged(kind, query)) => {
+      let pages = model.console.list_pages.copy()
+      pages[kind] = { query, page: 0, }
+      (
+        { ..model, console: { ..model.console, list_pages: pages, }, },
+        @rabbita.none,
+      )
+    }
+    Console(ListPageChanged(kind, page)) => {
+      let pages = model.console.list_pages.copy()
+      let current = pages.get(kind).unwrap_or({ query: "", page: 0, })
+      pages[kind] = { ..current, page: page.max(0), }
+      (
+        { ..model, console: { ..model.console, list_pages: pages, }, },
+        @rabbita.none,
+      )
+    }
+    Console(AccessRecordAccountChanged(value)) => {
+      let pages = model.console.list_pages.copy()
+      pages.remove(@ui.OperatorList::AccessRecords)
       (
         {
           ..model,
-          console: { ..model.console, access_record_account: value, },
+          console: {
+            ..model.console,
+            access_record_account: value,
+            list_pages: pages,
+          },
         },
         @rabbita.none,
       )
+    }
     Console(RegisteredAccessAccountChanged(value)) => {
       let selected = model.console.accounts
         .iter()
@@ -9712,7 +9735,8 @@ fn update_live(
     }
     Console(ContractDocuments(DownloadDocument(artifact_id))) =>
       (model, operator_evidence_download_command(model, artifact_id, emit))
-    Console(ContractDocuments(CopyPublicIdentifier(value))) =>
+    Console(CopyReference(value))
+    | Console(ContractDocuments(CopyPublicIdentifier(value))) =>
       (
         model,
         @rabbita.perform(outcome => emit(Outcome(outcome)), async fn() noraise {

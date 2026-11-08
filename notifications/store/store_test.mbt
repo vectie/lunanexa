@@ -1,6 +1,6 @@
 ///|
-fn temp_path(name : String) -> String {
-  "/tmp/lunanexa-notifications-\{@async.now()}-\{name}.json"
+async fn temp_path(name : String) -> String {
+  @fs.tmpdir(prefix="lunanexa-notifications-\{name}-") + "/state.json"
 }
 
 ///|
@@ -28,6 +28,10 @@ fn lease_event(
 ///|
 async test "notifications persist, replay idempotently and stay tenant scoped" {
   let path = temp_path("restart")
+  defer @fs.rmdir(
+    path.strip_suffix("/state.json").unwrap().to_owned(),
+    recursive=true,
+  )
   let store = @store.NotificationStore::open(path)
   let event = lease_event("notice-a", "audit:lease-a:ready")
   let created = store.enqueue(event)
@@ -59,6 +63,10 @@ async test "notifications persist, replay idempotently and stay tenant scoped" {
 ///|
 async test "external delivery is leased, retried and dead-lettered" {
   let path = temp_path("delivery")
+  defer @fs.rmdir(
+    path.strip_suffix("/state.json").unwrap().to_owned(),
+    recursive=true,
+  )
   let store = @store.NotificationStore::open(path, maximum_delivery_attempts=2)
   ignore(
     store.set_preference({
@@ -104,6 +112,10 @@ async test "external delivery is leased, retried and dead-lettered" {
 ///|
 async test "operator alerts support acknowledgement silence assignment and resolution" {
   let path = temp_path("operator")
+  defer @fs.rmdir(
+    path.strip_suffix("/state.json").unwrap().to_owned(),
+    recursive=true,
+  )
   let store = @store.NotificationStore::open(path)
   let event : @notifications.NotificationEvent = {
     version: @notifications.contract_version,
@@ -155,6 +167,10 @@ async test "operator alerts support acknowledgement silence assignment and resol
 ///|
 async test "elapsed silence expires durably and readiness exposes pending adapters" {
   let path = temp_path("silence-expiry")
+  defer @fs.rmdir(
+    path.strip_suffix("/state.json").unwrap().to_owned(),
+    recursive=true,
+  )
   let store = @store.NotificationStore::open(path)
   let event : @notifications.NotificationEvent = {
     ..lease_event("notice-silenced", "audit:silence"),
@@ -184,6 +200,10 @@ async test "elapsed silence expires durably and readiness exposes pending adapte
 ///|
 async test "critical operator alert escalates and resolved claimed work is skipped" {
   let path = temp_path("operator-escalation-skip")
+  defer @fs.rmdir(
+    path.strip_suffix("/state.json").unwrap().to_owned(),
+    recursive=true,
+  )
   let store = @store.NotificationStore::open(path)
   let event : @notifications.NotificationEvent = {
     ..lease_event("operator-critical", "audit:operator-critical"),
@@ -224,6 +244,10 @@ async test "critical operator alert escalates and resolved claimed work is skipp
 ///|
 async test "expired and silenced outbound work is never claimed" {
   let path = temp_path("expiry-silence-skip")
+  defer @fs.rmdir(
+    path.strip_suffix("/state.json").unwrap().to_owned(),
+    recursive=true,
+  )
   let store = @store.NotificationStore::open(path)
   ignore(
     store.set_preference({
@@ -251,6 +275,10 @@ async test "expired and silenced outbound work is never claimed" {
 ///|
 async test "dead-letter redrive is generation fenced audited and restart durable" {
   let path = temp_path("redrive")
+  defer @fs.rmdir(
+    path.strip_suffix("/state.json").unwrap().to_owned(),
+    recursive=true,
+  )
   let store = @store.NotificationStore::open(path, maximum_delivery_attempts=1)
   ignore(
     store.set_preference({
@@ -328,6 +356,10 @@ async test "dead-letter redrive is generation fenced audited and restart durable
 ///|
 async test "active retention is hard bounded and newest active dedupe wins" {
   let path = temp_path("hard-cap")
+  defer @fs.rmdir(
+    path.strip_suffix("/state.json").unwrap().to_owned(),
+    recursive=true,
+  )
   let store = @store.NotificationStore::open(path, history_limit=2)
   let first : @notifications.NotificationEvent = {
     ..lease_event("notice-old", "audit:old"),
@@ -386,6 +418,10 @@ async test "active retention is hard bounded and newest active dedupe wins" {
 ///|
 async test "worker readiness requires recent successful delivery and survives restart" {
   let path = temp_path("worker-health")
+  defer @fs.rmdir(
+    path.strip_suffix("/state.json").unwrap().to_owned(),
+    recursive=true,
+  )
   let store = @store.NotificationStore::open(path)
   assert_eq(
     store.delivery_readiness(true, now_unix_ms=1000L).state,
