@@ -1,0 +1,146 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn kube(args : Array[String]) -> String {
+  let r = @shell.Cmd(
+    "kubectl",
+    [
+      "--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", "-n", "lunanexa",
+      ..args,
+    ],
+  ).output()
+  r.check()
+  r.stdout()
+}
+
+///|
+async fn main {
+  let root = "/home/HwHiAiUser/coffee-contact-20261109"
+  for name in ["gateway", "control"] {
+    guard @fs.read_file(root + "/build-" + name + ".log")
+      .text()
+      .contains("Finished. moon:") else {
+      fail("Qualified build missing")
+    }
+  }
+  for
+    (deployment, volume, prior, next, binary) in [
+      (
+        "lunanexa-control",
+        "native-glm-control",
+        "/home/HwHiAiUser/portal-finish-20261108/control",
+        root + "/control",
+        "control",
+      ),
+      (
+        "lunanexa-identity-gateway-suanli",
+        "native-long-context",
+        "/home/HwHiAiUser/coffee-auth-queue-20261107/identity-gateway-final",
+        root + "/gateway",
+        "identity-gateway",
+      ),
+    ] {
+    let raw = kube(["get", "deployment", deployment, "-o", "json"])
+    guard @json.parse(raw)
+      is {
+        "metadata": { "resourceVersion": String(version), .. },
+        "spec": {
+          "template": { "spec": { "volumes": Array(volumes), .. }, .. },
+          ..
+        },
+        ..
+      } else {
+      fail("Unexpected deployment")
+    }
+    if volumes.any(item => {
+        item
+        is {
+          "name": String(name),
+          "hostPath": { "path": String(path), .. },
+          ..
+        } &&
+        name == volume &&
+        path == next
+      }) {
+      println(
+        kube(["rollout", "status", "deployment/" + deployment, "--timeout=600s"]),
+      )
+      continue
+    }
+    @fs.write_file(
+      root + "/" + deployment + "-before.json",
+      raw,
+      permission=0o600,
+      create_mode=CreateNew,
+    )
+    let patches : Array[Json] = [
+      { "op": "test", "path": "/metadata/resourceVersion", "value": version },
+    ]
+    for i, item in volumes {
+      if item
+        is {
+          "name": String(name),
+          "hostPath": { "path": String(path), .. },
+          ..
+        } &&
+        name == volume {
+        guard path == prior else {
+          fail("Native deployment changed since inspection")
+        }
+        patches.push({
+          "op": "test",
+          "path": "/spec/template/spec/volumes/" +
+          i.to_string() +
+          "/hostPath/path",
+          "value": prior,
+        })
+        patches.push({
+          "op": "replace",
+          "path": "/spec/template/spec/volumes/" +
+          i.to_string() +
+          "/hostPath/path",
+          "value": next,
+        })
+      }
+    }
+    guard patches.length() == 3 else { fail("Expected one native mount") }
+    @fs.mkdir(next, permission=0o755)
+    @shell.Cmd("cp", ["-a", prior + "/.", next]).run()
+    @fs.chmod(next, 0o755)
+    @shell.Cmd("install", [
+      "-m",
+      "755",
+      root +
+      "/source/_build/native/release/build/vectie/lunanexa/cmd/" +
+      binary +
+      "/" +
+      binary +
+      ".exe",
+      next + "/" + binary + ".exe",
+    ]).run()
+    let file = root + "/" + deployment + "-patch.json"
+    @fs.write_file(
+      file,
+      Json::array(patches).stringify(),
+      permission=0o600,
+      create_mode=CreateNew,
+    )
+    println(
+      kube([
+        "patch", "deployment", deployment, "--type=json", "--patch-file", file,
+      ]),
+    )
+    println(
+      kube(["rollout", "status", "deployment/" + deployment, "--timeout=600s"]),
+    )
+  }
+  println(
+    "Published contact-aware controller and gateway; identity/session configuration and other binaries retained",
+  )
+}

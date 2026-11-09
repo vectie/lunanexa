@@ -35,15 +35,46 @@ priv suberror RegistrationError {
 }
 
 ///|
-/// The portal's registration form. Registration is by email because the realm
-/// sets `registrationEmailAsUsername`, so the provider is the authority on
-/// what the username is and the gateway does not invent a second one.
+/// Exactly one real contact is used as the provider username. A phone account
+/// has no fabricated email and does not claim SMS ownership verification.
 priv struct RegistrationRequest {
-  email : String
+  email : String?
+  phone : String?
   display_name : String
   password : String
   audience : String
+  acquisition : Json?
 } derive(FromJson)
+
+///|
+fn registration_phone(value : String) -> String? {
+  let raw = value.trim().to_owned()
+  let digits = raw.strip_prefix("+86").unwrap_or(raw[:]).to_owned()
+  if digits.length() == 11 &&
+    digits.has_prefix("1") &&
+    digits.iter().all(c => c is ('0'..<='9')) {
+    Some("+86" + digits)
+  } else {
+    None
+  }
+}
+
+///|
+fn registration_contact(request : RegistrationRequest) -> String {
+  request.phone.unwrap_or(request.email.unwrap_or(""))
+}
+
+///|
+fn provider_contact(user : UserInfo) -> String? {
+  match user.email {
+    Some(email) if registration_email(email) is Some(_) => Some(email)
+    _ =>
+      match user.preferred_username {
+        Some(value) => registration_phone(value)
+        None => None
+      }
+  }
+}
 
 ///|
 /// The most a registration body may occupy. The fields are bounded far below
@@ -112,15 +143,26 @@ fn registration_display_name(value : String) -> String? {
 ///|
 fn parse_registration_request(body : String) -> RegistrationRequest raise {
   let request : RegistrationRequest = @json.from_json(@json.parse(body))
-  guard registration_email(request.email) is Some(email) &&
+  let email = match request.email {
+    Some(value) => registration_email(value)
+    None => None
+  }
+  let phone = match request.phone {
+    Some(value) => registration_phone(value)
+    None => None
+  }
+  guard (
+      (email is Some(_) && request.phone is None) ||
+      (phone is Some(_) && request.email is None)
+    ) &&
     registration_display_name(request.display_name) is Some(display_name) &&
-    request.password.length() >= 1 &&
+    request.password.length() >= 6 &&
     request.password.length() <= 1024 &&
     request.password.contains("\u0000") == false &&
     request.audience.length() <= 64 else {
     raise Failure("registration request is invalid")
   }
-  { ..request, email, display_name, }
+  { ..request, email, phone, display_name, }
 }
 
 ///|
@@ -226,14 +268,49 @@ fn registration_user_body(request : RegistrationRequest) -> Json {
   let no_required_actions : Array[Json] = []
   let credentials : Array[Json] = [Json::object(credential)]
   let fields : Map[String, Json] = {
-    "username": Json::string(request.email),
-    "email": Json::string(request.email),
+    "username": Json::string(registration_contact(request)),
     "firstName": Json::string(request.display_name),
     "enabled": Json::boolean(true),
-    "emailVerified": Json::boolean(true),
+    "emailVerified": Json::boolean(request.email is Some(_)),
     "requiredActions": Json::array(no_required_actions),
     "credentials": Json::array(credentials),
   }
+  if request.email is Some(email) {
+    fields["email"] = Json::string(email)
+  }
+  let attributes : Map[String, Json] = {
+    "registration_contact_kind": [
+      if request.phone is Some(_) {
+        "phone"
+      } else {
+        "email"
+      },
+    ],
+  }
+  if request.phone is Some(phone) {
+    attributes["phone_number"] = [Json::string(phone)]
+    attributes["phone_number_verified"] = ["false"]
+  }
+  // Attribution is untrusted marketing metadata, never an authorization input.
+  let acquisition = request.acquisition.unwrap_or(Json::null())
+  for key in ["source", "campaign", "entry"] {
+    let value = match acquisition {
+      Object(values) =>
+        match values.get(key) {
+          Some(String(value)) if value.length() <= 128 &&
+            value
+            .iter()
+            .all(c => {
+              c
+              is ('a'..<='z' | 'A'..<='Z' | '0'..<='9' | '_' | '-' | '.' | '/')
+            }) => value
+          _ => "unknown"
+        }
+      _ => "unknown"
+    }
+    attributes["acquisition_" + key] = [Json::string(value)]
+  }
+  fields["attributes"] = Json::object(attributes)
   Json::object(fields)
 }
 
@@ -369,7 +446,7 @@ async fn handle_registration(
     config,
     host,
     audience,
-    parsed.email,
+    registration_contact(parsed),
     parsed.password,
     now,
   ) catch {

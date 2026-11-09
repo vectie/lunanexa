@@ -1,0 +1,199 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/json",
+  "moonbitlang/core/env",
+  "moonbitlang/x@0.5.5/crypto",
+}
+
+///|
+async fn kube(args : Array[String]) -> String {
+  let result = @shell.Cmd(
+    "kubectl",
+    ["--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", ..args],
+  ).output()
+  if result.exit_code() != 0 {
+    println(result.stderr())
+  }
+  result.check()
+  result.stdout()
+}
+
+///|
+async fn main {
+  let root = "/home/HwHiAiUser/coffee-contact-20261109"
+  let identity = @env.args().contains("identity")
+  let archive = if identity {
+    root + "/identity-original.oci.tar"
+  } else {
+    "/home/HwHiAiUser/moon-public/artifacts/registry-2.8.3-linux-amd64.oci.tar"
+  }
+  if identity {
+    let layout = root + "/identity-original"
+    @fs.mkdir(layout, permission=0o700)
+    @shell.Cmd("tar", [
+      "-xf",
+      root + "/coffee-contact-idp-20261109.oci.tar",
+      "-C",
+      layout,
+    ]).run()
+    let original = @fs.read_file(
+      root + "/coffee-contact-keycloak-original-index.json",
+    ).binary()
+    guard @crypto.bytes_to_hex_string(@crypto.sha256(original)) ==
+      "ff4257d0d64efbe99ed1ddfaf07765cc3c36dc7518bf8324d41961327f441c54" else {
+      fail("Original identity index digest mismatch")
+    }
+    @fs.write_file(
+      layout +
+      "/blobs/sha256/ff4257d0d64efbe99ed1ddfaf07765cc3c36dc7518bf8324d41961327f441c54",
+      original,
+    )
+    let index : Json = {
+      "schemaVersion": 2,
+      "manifests": [
+        {
+          "mediaType": "application/vnd.oci.image.index.v1+json",
+          "digest": "sha256:ff4257d0d64efbe99ed1ddfaf07765cc3c36dc7518bf8324d41961327f441c54",
+          "size": Json::number(original.length().to_double()),
+          "annotations": {
+            "org.opencontainers.image.ref.name": "quay.io/keycloak/keycloak@sha256:ff4257d0d64efbe99ed1ddfaf07765cc3c36dc7518bf8324d41961327f441c54",
+          },
+        },
+      ],
+    }
+    @fs.write_file(
+      layout + "/index.json",
+      index.stringify(),
+      create_mode=CreateOrTruncate,
+    )
+    @shell.Cmd("tar", ["-cf", archive, "-C", layout, "."]).run()
+  }
+  let result = @shell.Cmd("tar", ["-xOf", archive, "./index.json"]).output()
+  result.check()
+  guard @json.parse(result.stdout())
+    is { "manifests": [{ "digest": String(digest), .. }], .. } &&
+    digest ==
+    (if identity {
+      "sha256:ff4257d0d64efbe99ed1ddfaf07765cc3c36dc7518bf8324d41961327f441c54"
+    } else {
+      "sha256:46faa9a1ae6813194b53921a370f2f4f8c5e1aae228a89bceafef5847a6a3278"
+    }) else {
+    fail("Original registry digest mismatch")
+  }
+  let import_archive = root +
+    (if identity {
+      "/identity-import.oci.tar"
+    } else {
+      "/registry-original.oci.tar"
+    })
+  @shell.Cmd("install", ["-m", "644", archive, import_archive]).run()
+  let pod = if identity {
+    "identity-cache-recovery-20261109"
+  } else {
+    "registry-cache-recovery-20261109-v2"
+  }
+  let spec : Json = {
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": { "name": pod, "namespace": "lunanexa-registry" },
+    "spec": {
+      "nodeName": "ubuntu",
+      "restartPolicy": "Never",
+      "activeDeadlineSeconds": 600,
+      "automountServiceAccountToken": false,
+      "containers": [
+        {
+          "name": "importer",
+          "image": "docker.io/rancher/mirrored-library-traefik@sha256:4299bbed850421258fc5448c2e0e6ad350981d4d335a68de11b92448aedbefe5",
+          "imagePullPolicy": "IfNotPresent",
+          "command": ["/bin/sleep", "600"],
+          "securityContext": {
+            "runAsUser": 0,
+            "allowPrivilegeEscalation": false,
+            "capabilities": { "drop": ["ALL"] },
+            "seccompProfile": { "type": "RuntimeDefault" },
+          },
+          "resources": {
+            "requests": { "cpu": "10m", "memory": "32Mi" },
+            "limits": { "cpu": "1", "memory": "512Mi" },
+          },
+          "volumeMounts": [
+            { "name": "k3s", "mountPath": "/host-k3s", "readOnly": true },
+            { "name": "socket", "mountPath": "/run/k3s/containerd" },
+            {
+              "name": "archive",
+              "mountPath": "/registry.oci.tar",
+              "readOnly": true,
+            },
+          ],
+        },
+      ],
+      "volumes": [
+        {
+          "name": "k3s",
+          "hostPath": { "path": "/usr/local/bin/k3s", "type": "File" },
+        },
+        {
+          "name": "socket",
+          "hostPath": { "path": "/run/k3s/containerd", "type": "Directory" },
+        },
+        {
+          "name": "archive",
+          "hostPath": { "path": import_archive, "type": "File" },
+        },
+      ],
+    },
+  }
+  let file = root +
+    (if identity {
+      "/identity-recovery-pod.json"
+    } else {
+      "/registry-recovery-pod-v2.json"
+    })
+  @fs.write_file(
+    file,
+    spec.stringify(),
+    permission=0o600,
+    create_mode=CreateNew,
+  )
+  println(kube(["create", "-f", file]))
+  defer ignore(
+    kube([
+      "-n", "lunanexa-registry", "delete", "pod", pod, "--wait=true", "--timeout=60s",
+    ]),
+  )
+  println(
+    kube([
+      "-n",
+      "lunanexa-registry",
+      "wait",
+      "--for=condition=Ready",
+      "pod/" + pod,
+      "--timeout=90s",
+    ]),
+  )
+  println(
+    kube([
+      "-n", "lunanexa-registry", "exec", pod, "--", "/host-k3s", "ctr", "-n", "k8s.io",
+      "images", "import", "--platform", "linux/amd64", "--digests", "/registry.oci.tar",
+    ]),
+  )
+  if !identity {
+    println(
+      kube([
+        "-n", "lunanexa-registry", "exec", pod, "--", "/host-k3s", "ctr", "-n", "k8s.io",
+        "images", "tag", "docker.io/library/registry:2.8.3", "dockerproxy.net/library/registry:2",
+      ]),
+    )
+  }
+  println(
+    if identity {
+      "Restored original Keycloak image cache; provider configuration unchanged"
+    } else {
+      "Restored original registry 2.8.3 cache; no registry data or deployment changed"
+    },
+  )
+}

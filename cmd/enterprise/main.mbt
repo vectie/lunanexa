@@ -826,7 +826,7 @@ extern "js" fn registration_promise(
   #|     credentials: "same-origin",
   #|     cache: "no-store",
   #|     redirect: "error",
-  #|     body: JSON.stringify({ email, display_name: displayName, password, audience: "enterprise" })
+  #|     body: JSON.stringify({ ...(/^(?:\+86)?1\d{10}$/.test(email.trim()) ? {phone:email.trim()} : {email:email.trim()}), display_name: displayName, password, audience: "enterprise", acquisition:{source:'portal-direct',campaign:'none',entry:'/user/'} })
   #|   });
   #|   const text = await response.text();
   #|   return JSON.stringify({ status: response.status, body: text.slice(0, 4096) });
@@ -2702,13 +2702,13 @@ fn gateway_auth_refusal(
   match gateway_auth_error_code(outcome.body) {
     "email-taken" =>
       portal_copy(
-        locale, "That address already has an account. Sign in instead, or use another address.",
-        "该邮箱已注册。请直接登录，或改用其他邮箱。",
+        locale, "That account already exists. Sign in instead, or use another phone or email.",
+        "该账号已注册。请直接登录，或使用其他手机号或邮箱。",
       )
     "password-rejected" =>
       portal_copy(
-        locale, "The identity provider rejected this password. It must be at least 12 characters and contain an uppercase letter, a lowercase letter, a digit and a symbol, and must not contain your address or username.",
-        "身份提供商拒绝了该密码。密码至少 12 位，且需包含大写字母、小写字母、数字和符号，并且不能包含邮箱或用户名。",
+        locale, "The password must be at least 6 characters. No character combination is required.",
+        "密码至少 6 位，不要求字母、数字或符号组合。",
       )
     "registration-unavailable" =>
       portal_copy(
@@ -2717,13 +2717,13 @@ fn gateway_auth_refusal(
       )
     "invalid-registration-request" =>
       portal_copy(
-        locale, "The registration form was incomplete. A valid email address, a display name and a password are all required.",
-        "注册信息不完整。邮箱、名称和密码都必须填写。",
+        locale, "Check your phone or email, display name and password of at least 6 characters.",
+        "请检查手机号或邮箱、显示名称和至少 6 位的密码。",
       )
     "invalid-credentials" =>
       portal_copy(
-        locale, "The address or password was not accepted. Use your registered email, not your display name.",
-        "邮箱或密码不正确。请使用注册邮箱，不要填写显示名称。",
+        locale, "The account or password was not accepted. Use your registered phone or email.",
+        "账号或密码不正确。请使用注册手机号或邮箱。",
       )
     "account-temporarily-locked" =>
       portal_copy(
@@ -7079,7 +7079,7 @@ fn app_view(
               @html.div([
                 @html.label(
                   for_="portal-login-email",
-                  portal_copy(locale, "Registered email", "注册邮箱"),
+                  portal_copy(locale, "Phone or email", "手机号或邮箱"),
                 ),
                 @html.input(
                   id="portal-login-email",
@@ -7142,8 +7142,8 @@ fn app_view(
                     id="portal-password-requirements",
                     class="password-requirements",
                     portal_copy(
-                      locale, "12 characters minimum, with uppercase, lowercase, a number and a symbol.",
-                      "至少 12 位，包含大写字母、小写字母、数字和符号。",
+                      locale, "At least 6 characters. No character combination is required.",
+                      "至少 6 位，不要求字母、数字或符号组合。",
                     ),
                   )
                 } else {

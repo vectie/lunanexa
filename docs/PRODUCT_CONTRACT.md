@@ -1,5 +1,13 @@
 # LunaNexa product contract
 
+Registration accepts one email or mainland China phone contact and a password
+of at least six characters without required character classes. The identity
+provider owns credentials and throttling. Phone registration does not imply SMS
+ownership verification; the provider records it as unverified. The existing
+signed identity contact slot remains wire compatible for both contact types.
+Optional bounded acquisition source, campaign and entry attributes are private
+administrator marketing records, never inputs to authorization or role grants.
+
 ## Operator list reads
 
 `POST /v1/operator/list-page` accepts the `operator_read.PageQuery` envelope:

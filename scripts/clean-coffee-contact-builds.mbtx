@@ -1,0 +1,66 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/json",
+  "moonbitlang/core/env",
+}
+
+///|
+async fn main {
+  if @env.args().contains("--status") {
+    let result = @shell.Cmd("kubectl", [
+      "--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", "get", "--raw",
+      "/api/v1/nodes/ubuntu/proxy/stats/summary",
+    ]).output()
+    result.check()
+    guard @json.parse(result.stdout())
+      is { "node": { "fs": fs, "runtime": runtime, .. }, .. } else {
+      fail("Missing filesystem statistics")
+    }
+    println(fs.stringify())
+    println(runtime.stringify())
+    return
+  }
+  let parent = "/home/HwHiAiUser/coffee-auth-queue-20261107"
+  let root = "/home/HwHiAiUser/coffee-contact-20261109"
+  guard @fs.exists(root + "/ui-release.json") &&
+    @fs.exists(parent + "/participation-20261109/runtime-final-oci.oci.tar") &&
+    @fs.exists(parent + "/ui-mobile-review-final-oci.oci.tar") else {
+    fail(
+      "Retain current and rollback archives before cleaning generated caches",
+    )
+  }
+  for
+    path in [
+      root + "/ui-oci",
+      root + "/ui-oci.oci.tar",
+      parent + "/_build-profile-final-http-test",
+      parent + "/profile-source/lunanexa/_build/native/debug",
+      parent + "/ui-final-mobile-oci",
+      parent + "/ui-final-mobile-v2-oci",
+      parent + "/ui-original-recovery-oci",
+      parent + "/ui-previews-recovery-oci",
+      parent + "/ui-mobile-review-oci",
+      parent + "/ui-final-mobile-oci.oci.tar",
+      parent + "/ui-final-mobile-v2-oci.oci.tar",
+      parent + "/ui-previews-recovery-oci.oci.tar",
+      parent + "/ui-mobile-review-oci.oci.tar",
+    ] {
+    if !@fs.exists(path) {
+      continue
+    }
+    match @fs.kind(path, follow_symlink=false) {
+      Directory => @fs.rmdir(path, recursive=true)
+      Regular => @fs.remove(path)
+      _ => fail("Refusing non-regular cache path")
+    }
+  }
+  let r = @shell.Cmd("df", ["-h", "/"]).output()
+  r.check()
+  println(r.stdout())
+  println(
+    "Removed only reconstructible owned build/image caches; release backups, identities, models and activity data retained",
+  )
+}

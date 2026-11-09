@@ -182,7 +182,12 @@ fn parse_password_login_request(body : String) -> PasswordLoginRequest raise {
     !request.username.contains("\r") else {
     raise Failure("password login request is invalid")
   }
-  { ..request, username: request.username.trim().to_owned(), }
+  {
+    ..request,
+    username: registration_phone(request.username).unwrap_or(
+      request.username.trim().to_owned(),
+    ),
+  }
 }
 
 ///|
@@ -296,11 +301,7 @@ fn password_identity_cookie(
   user : UserInfo,
   now_unix_ms : Int64,
 ) -> GatewayCookie raise PasswordLoginError {
-  guard user.email is Some(email) &&
-    safe_registration_claim(email, 320) &&
-    email.contains("@") else {
-    raise IdentityRejected
-  }
+  guard provider_contact(user) is Some(email) else { raise IdentityRejected }
   let display_name = match user.name {
     Some(value) => value
     None => user.preferred_username.unwrap_or(email)

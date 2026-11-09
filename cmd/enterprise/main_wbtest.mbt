@@ -1240,10 +1240,10 @@ test "the gateway's refusal codes choose the customer-facing copy" {
     )
   }
   assert_true(refusal("invalid-credentials", false).contains("not accepted"))
-  assert_true(refusal("email-taken", true).contains("already has an account"))
+  assert_true(refusal("email-taken", true).contains("already exists"))
   // The realm's password policy is the provider's, so the form repeats it
   // rather than inventing its own rule.
-  assert_true(refusal("password-rejected", true).contains("12 characters"))
+  assert_true(refusal("password-rejected", true).contains("6 characters"))
   assert_true(
     refusal("registration-unavailable", true).contains("platform administrator"),
   )
@@ -1361,7 +1361,7 @@ test "the registration form asks for a display name the sign-in form does not" {
   assert_true(registering.contains("portal-register-name"))
   assert_true(registering.contains("Create account"))
   // The realm's password policy is stated before the customer picks one.
-  assert_true(registering.contains("12 characters"))
+  assert_true(registering.contains("6 characters"))
   assert_true(
     registering.contains("aria-describedby=\"portal-password-requirements\""),
   )

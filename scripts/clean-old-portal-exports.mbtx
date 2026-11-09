@@ -1,0 +1,100 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn command(args : Array[String]) -> String {
+  let r = @shell.Cmd(args[0], args[1:].to_owned()).output()
+  r.check()
+  r.stdout()
+}
+
+///|
+async fn main {
+  let root = "/home/HwHiAiUser/coffee-contact-20261109"
+  let apply = @env.args().contains("--apply")
+  let active = command([
+    "kubectl", "--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", "get",
+    "pods", "-A", "--field-selector=status.phase=Running", "-o", "jsonpath={range .items[*]}{range .status.containerStatuses[*]}{.imageID}{\"\\n\"}{end}{range .status.initContainerStatuses[*]}{.imageID}{\"\\n\"}{end}{end}",
+  ])
+  let deployments = command([
+    "kubectl", "--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", "get",
+    "deployments", "-A", "-o", "json",
+  ])
+  let rows : Array[Json] = []
+  for
+    parent in [
+      "lunanexa-model-ui-20261022.fJCMrU", "lunanexa-maas-guide-20261016", "lunanexa-four-apps-20261015",
+      "lunanexa-moontown-20260929", "activity-launch-release-20261107", "coffee-journey-release-20261107",
+    ] {
+    let directory = "/home/HwHiAiUser/" + parent
+    if !@fs.exists(directory) {
+      continue
+    }
+    for child in @fs.readdir(directory) {
+      if !(child.contains("console") ||
+        child.contains("enterprise") ||
+        child.contains("ui") ||
+        child.contains("web")) {
+        continue
+      }
+      let path = directory + "/" + child
+      if !(@fs.kind(path, follow_symlink=false) is Directory) {
+        continue
+      }
+      if !@fs.exists(path + "/oci-layout") || !@fs.exists(path + "/blobs") {
+        continue
+      }
+      guard @fs.kind(path, follow_symlink=false) is Directory &&
+        @fs.kind(path + "/blobs", follow_symlink=false) is Directory else {
+        fail("Refusing linked cache")
+      }
+      guard @json.parse(@fs.read_file(path + "/index.json").text())
+        is { "manifests": [{ "digest": String(digest), .. }], .. } else {
+        fail("Unexpected historical OCI layout")
+      }
+      if active.contains(digest) ||
+        deployments.contains(digest) ||
+        deployments.contains(path) {
+        continue
+      }
+      let size = command(["du", "-sh", path + "/blobs"])
+      rows.push({
+        "path": path,
+        "digest": digest,
+        "size": size.trim().to_owned(),
+      })
+      if apply {
+        // Only cached compressed OCI blobs; retain index, source/layer files,
+        // release backups and all executable/venv/model/data directories.
+        @fs.rmdir(path + "/blobs", recursive=true)
+        @fs.write_file(
+          path + "/cache-blobs-pruned.txt",
+          "Historical portal OCI cache removed; image digest " +
+          digest +
+          " retained in index.json; source/layer files retained.\n",
+          permission=0o600,
+          create_mode=CreateNew,
+        )
+      }
+    }
+  }
+  @fs.write_file(
+    root +
+    (if apply {
+      "/portal-caches-cleaned.json"
+    } else {
+      "/portal-caches-reviewed.json"
+    }),
+    Json::array(rows).stringify(indent=2),
+    permission=0o600,
+    create_mode=CreateNew,
+  )
+  println(Json::array(rows).stringify())
+  println(command(["df", "-h", "/"]))
+}

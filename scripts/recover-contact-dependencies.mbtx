@@ -1,0 +1,118 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn kube(args : Array[String]) -> String {
+  let r = @shell.Cmd(
+    "kubectl",
+    ["--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", ..args],
+  ).output()
+  if r.exit_code() != 0 {
+    println(r.stderr())
+  }
+  r.check()
+  r.stdout()
+}
+
+///|
+async fn main {
+  let root = "/home/HwHiAiUser/coffee-contact-20261109"
+  // The original main/identity DB image was the same bb3e1a57 PostgreSQL
+  // index. The recovered identity image changes only an OCI label, as recorded
+  // in EVENT_TRIAL_REHEARSAL_20261022; all filesystem layers/config are retained.
+  let raw = kube([
+    "-n", "lunanexa", "get", "statefulset", "lunanexa-postgres", "-o", "json",
+  ])
+  guard @json.parse(raw)
+    is {
+      "spec": {
+        "template": {
+          "spec": {
+            "containers": [
+              {
+                "name": "postgres",
+                "image": "dockerproxy.net/library/postgres:16-bookworm",
+                ..
+              },
+            ],
+            ..
+          },
+          ..
+        },
+        ..
+      },
+      ..
+    } else {
+    fail("Database baseline changed")
+  }
+  @fs.write_file(
+    root + "/main-postgres-before.json",
+    raw,
+    permission=0o600,
+    create_mode=CreateNew,
+  )
+  let patch : Json = [
+    {
+      "op": "test",
+      "path": "/spec/template/spec/containers/0/image",
+      "value": "dockerproxy.net/library/postgres:16-bookworm",
+    },
+    {
+      "op": "replace",
+      "path": "/spec/template/spec/containers/0/image",
+      "value": "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/identity-postgres@sha256:4fae780d898166b2e44bac091a11111120efad8fb47cfeaf838b94670182199a",
+    },
+  ]
+  println(
+    kube([
+      "-n",
+      "lunanexa",
+      "patch",
+      "statefulset",
+      "lunanexa-postgres",
+      "--type=json",
+      "--patch",
+      patch.stringify(),
+    ]),
+  )
+  let pending = kube([
+    "-n", "lunanexa-identity", "get", "pod", "lunanexa-platform-idp-0", "-o", "json",
+  ])
+  guard @json.parse(pending)
+    is {
+      "metadata": {
+        "uid": "ae97b7f0-776a-4226-a086-51d7388c9889",
+        "deletionTimestamp": String(_),
+        ..
+      },
+      "status": {
+        "containerStatuses": [
+          { "imageID": "", "restartCount": 0, "started": false, .. },
+        ],
+        ..
+      },
+      ..
+    } &&
+    !pending.contains("\"containerID\"") else {
+    fail(
+      "Never-started terminating identity pod changed; inspect before removal",
+    )
+  }
+  @fs.write_file(
+    root + "/never-started-idp-before.json",
+    pending,
+    permission=0o600,
+    create_mode=CreateNew,
+  )
+  println(
+    kube([
+      "-n", "lunanexa-identity", "delete", "pod", "lunanexa-platform-idp-0", "--force",
+      "--grace-period=0", "--wait=false",
+    ]),
+  )
+}

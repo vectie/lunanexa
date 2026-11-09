@@ -12,6 +12,6 @@ test "customer login distinguishes a temporary lock from wrong password" {
     { status: 401, body: "{\"error\":\"invalid-credentials\"}", },
     false,
   )
-  assert_true(rejected.contains("注册邮箱"))
-  assert_true(rejected.contains("不要填写显示名称"))
+  assert_true(rejected.contains("注册手机号或邮箱"))
+  assert_true(rejected.contains("账号或密码不正确"))
 }
