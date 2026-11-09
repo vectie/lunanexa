@@ -4151,6 +4151,17 @@ fn update(
         poll_generation != model.portal.deliveries.poll_generation {
         return (model, @rabbita.none)
       }
+      // An expired browser session is not a runtime outage. Recover the shared
+      // cookie without replaying a start, stop, activation or delivery request.
+      if model.token.has_prefix("lnxs_") &&
+        result is Err(message) &&
+        message.contains("HTTP 401") {
+        let recovering = { ..signed_out_model(model), connecting: true, }
+        return (
+          recovering,
+          bootstrap_command(recovering, emit, rejected_token=model.token),
+        )
+      }
       let panel = model.portal.deliveries
       let deliveries = match result {
         Ok(

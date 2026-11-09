@@ -975,3 +975,47 @@ recreation/start. Read-only checks of the configured tensorfold rank units on
 without any lifecycle mutation. Adapter status took 0.65–0.83 seconds and the
 controller credential reference matched. Do not disguise observation failures
 as stopped, widen timeouts speculatively, or restart a model to clear this state.
+
+## 2026-11-10 — delivery authentication and operator model handoff
+
+Live user IaaS refresh exposed a swallowed HTTP 401: optional delivery reads
+converted it into a model outage and hid setup. Full reload confirmed the real
+session had expired. Preserve 401 through every optional delivery read and the
+outer catch; after generation/company/poll fencing, recover the shared cookie
+using the existing rejected-token bootstrap. Never replay a lifecycle mutation.
+403 remains an authorization error; stale failures must not sign out a newer
+scope. Enterprise command regressions cover these distinctions.
+
+The operator's access-package model CTA went to Catalog's new-deployment form
+even for an existing stopped service. It now opens Deployments, retaining the
+person/organization context and return action. Context does not claim to filter
+the platform's deployment list or confer company access. Navigation does not
+start, create or change a service. GLM remains stopped by the user's instruction.
+
+Read-only production inspection found the mounted offline readiness Secret has
+all ten historical entries but expired at 2026-10-23 19:28:07 Asia/Shanghai; both
+readiness env references are absent from the active controller. The old README
+missing-implementation inventory predates later retained production evidence.
+Do not invent fresh legal approval, dismiss existing exact-scope approvals, or
+renew technical attestations by changing timestamps. Requalify current inputs
+before configuring a fresh bounded signed document. PdfRenderer versus
+MoonLeafPdfRendererPending is enum versus diagnostic, not a schema mismatch.
+
+Phase checks: info/fmt, strict native/JS, native 1982/1982, related JS 443/443,
+both release bundles. No backend binary, production records, credentials,
+resource ownership or model lifecycle was changed. Real new-company/multi-org
+UI acceptance remains distinct from passing isolated native HTTP scenarios.
+
+Both portal layers were released from the actual R6 console / R7 enterprise
+bases under `/home/HwHiAiUser/portal-session-recovery-20261110`. Public JS hashes:
+console `d04aa6223dcb16a51e2f0a5f9206fbab44b76f63284d7e225eb06590973fafed`,
+enterprise `7c0697fd2a1190c20becc17269f1786f0573e752aa7f0a97d6f8db42e46d1b01`.
+All three supported sites returned HTTP 200. Live operator session recovered
+after reload; person→Deployments→person preserved guojiaan and showed GLM
+Stopped with company-reserved nodes. Final read-only service state remains
+desired=false / Stopped. User session genuinely expired and is at login;
+post-release user-session browser verification awaits the requested login,
+not a controller change or a claim that fixtures constitute that acceptance.
+Screenshot: output/portal-acceptance-20261110/person-deployments.jpg (private,
+uncommitted, no secrets). SSH/scp can transiently close at the jump host; a
+bounded reconnect worked. No credential reset was needed.

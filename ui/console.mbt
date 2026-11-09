@@ -4352,12 +4352,12 @@ fn access_package_card(
           disabled=state.loading,
           on_click=command(
             emit,
-            OpenAccessStep(item.account_id, item.organization_id, Catalog),
+            OpenAccessStep(item.account_id, item.organization_id, Deployments),
           ),
           localized(
             state.locale,
-            "Deploy a serving model",
-            "部署可调用模型",
+            "View model deployments",
+            "查看模型部署",
           ),
         )
       } else if item.ready {

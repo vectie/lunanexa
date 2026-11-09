@@ -26,6 +26,8 @@ test "operator application handoffs retain user tenant and lease and clear stale
   }
   let emit : @rabbita.Emit[AppMessage] = Emit(_ => @rabbita.none)
   assert_true(@ui.render(model.console).contains("Manage GPU resources"))
+  assert_true(@ui.render(model.console).contains("View model deployments"))
+  assert_false(@ui.render(model.console).contains("Deploy a serving model"))
   let (contracts, _) = update(
     model,
     Console(
@@ -43,19 +45,22 @@ test "operator application handoffs retain user tenant and lease and clear stale
     Some(item.tenant_ref),
   )
   assert_eq(contracts.console.contract_documents.order_context, None)
-  let (catalog, _) = update(
+  let (deployments, _) = update(
     contracts,
-    Console(OpenAccessStep(item.account_id, item.organization_id, Catalog)),
+    Console(OpenAccessStep(item.account_id, item.organization_id, Deployments)),
     emit,
   )
-  assert_eq(catalog.console.route, Catalog)
+  assert_eq(deployments.console.route, Deployments)
   assert_eq(
-    catalog.console.access_package_context,
+    deployments.console.access_package_context,
     Some((item.account_id, item.organization_id)),
   )
-  assert_true(@ui.render(catalog.console).contains("Back to user access"))
+  assert_true(@ui.render(deployments.console).contains("Back to user access"))
+  assert_true(@ui.render(deployments.console).contains("Clear user context"))
+  assert_true(deployments.console.model_pool == contracts.console.model_pool)
+  assert_eq(deployments.console.deployments, contracts.console.deployments)
   let (resources, _) = update(
-    catalog,
+    deployments,
     Console(OpenAccessStep(item.account_id, item.organization_id, Leases)),
     emit,
   )

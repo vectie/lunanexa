@@ -124,6 +124,7 @@ fn delivery_command(
             ),
           )
         catch {
+          error if error.to_string().contains("HTTP 401") => raise error
           _ => panel.operations
         } noraise {
           value => value
@@ -142,6 +143,7 @@ fn delivery_command(
           ),
           None,
         ) catch {
+          error if error.to_string().contains("HTTP 401") => raise error
           _ =>
             (
               { reservations: [], templates: [], shared_trials: [], },
@@ -193,6 +195,7 @@ fn delivery_command(
             }
             (selected, services, None)
           } catch {
+            error if error.to_string().contains("HTTP 401") => raise error
             error if error.to_string().contains("HTTP 404 NotFound") =>
               (None, [], None)
             _ =>
@@ -242,6 +245,7 @@ fn delivery_command(
             ),
           )
         catch {
+          error if error.to_string().contains("HTTP 401") => raise error
           _ => None
         } noraise {
           value => value
@@ -253,6 +257,8 @@ fn delivery_command(
           ),
         )
       } catch {
+        error if error.to_string().contains("HTTP 401") =>
+          Err("HTTP 401 Unauthenticated")
         _ =>
           Err(
             portal_copy(

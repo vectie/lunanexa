@@ -12,6 +12,7 @@ pub fn ConsoleState::open_access_step(
       route == Users ||
       route == Leases ||
       route == Catalog ||
+      route == Deployments ||
       route == ContractDocuments
     ) else {
     return self
@@ -67,6 +68,7 @@ fn access_context_view(
       state.route == Users ||
       state.route == Leases ||
       state.route == Catalog ||
+      state.route == Deployments ||
       state.route == ContractDocuments
     ) else {
     return @html.nothing
@@ -111,7 +113,7 @@ fn access_context_view(
         } else if state.route == Leases {
           localized(state.locale, "All resources", "全部资源")
         } else {
-          localized(state.locale, "Clear user focus", "取消用户筛选")
+          localized(state.locale, "Clear user context", "清除人员上下文")
         },
       ),
     ]),

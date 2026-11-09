@@ -9,6 +9,31 @@ and verifies with `LUNANEXA_OFFLINE_COMMERCE_READINESS_SECRET`. See
 The file is committed on purpose: an attestation should be reviewable in git, not
 live only in a cluster secret.
 
+## Current deployment observation — 2026-11-10
+
+The production controller mounts Secret `lunanexa-offline-commerce-readiness`,
+but neither readiness environment variable is configured. The retained signed
+document covers all ten capabilities and expired on **2026-10-23 at 19:28:07
+Asia/Shanghai**. The portal therefore correctly reports an unconfigured, pending
+readiness projection; mounting a Secret alone does not enable it.
+
+The sections below are the **early 2026-09-22 qualification inventory**, not a
+current list of missing implementations. Subsequent production worker, quote,
+storage and callback evidence is linked by `capabilities.json` and
+[`docs/evidence/offline-ofl-v2-20260922/README.md`](../../docs/evidence/offline-ofl-v2-20260922/README.md).
+In particular, the existing platform template/policy approvals must not be
+mistaken for absent approvals or replaced with invented ones.
+
+To restore readiness, first compare the current adapters, callback identities,
+template versions/hashes and runtime inputs with those retained approvals and
+rerun the relevant technical qualification. Then sign a fresh bounded document
+using the deployment's existing secret reference, configure both environment
+references together, and verify operation-specific readiness after rollout.
+Changing the timestamps alone does not renew technical evidence. No renewal,
+configuration change, order activation or model start was performed during this
+read-only inspection. `PdfRenderer` is the contract enum name;
+`MoonLeafPdfRendererPending` is its diagnostic code, not a schema mismatch.
+
 ## Why each entry says what it says
 
 **Declared true — the artifact exists and was checked.**
