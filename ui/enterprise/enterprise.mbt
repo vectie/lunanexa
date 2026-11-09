@@ -1026,7 +1026,7 @@ pub fn EnterpriseState::update(
       }
     OpenModelConnectionQr(model_name) =>
       if self.deliveries.external_model.map_or(false, service => {
-          service.ready && service.model_alias == model_name
+          service.model_alias == model_name
         }) ||
         personal_trial_model(self, model_name) {
         {
@@ -3814,7 +3814,11 @@ fn shared_trial_panel(
             @html.h3("\{slot.model_name} · \{slot.node_label}"),
             @html.p(
               if !slot.node_online {
-                copy(state.locale, "Machine offline", "机器未在线")
+                copy(
+                  state.locale,
+                  "Shared trial unavailable",
+                  "共享试用暂不可用",
+                )
               } else if !slot.service_responding {
                 copy(
                   state.locale,
@@ -3986,7 +3990,17 @@ pub fn webide_launch_selection(
           None
         }
       } else {
-        Some((None, state.project_id, client.approved_model_aliases))
+        // Client discovery can precede a runtime stop or a delivery refresh.
+        // Do not include a model the current service snapshot marks offline.
+        let models = client.approved_model_aliases.filter(model => {
+          !webide_model_source_known(state, model) ||
+          webide_model_source_ready(state, model)
+        })
+        if models.is_empty() {
+          None
+        } else {
+          Some((None, state.project_id, models))
+        }
       }
     Some(order_id) => {
       let orders = webide_orders(state)

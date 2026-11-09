@@ -1026,6 +1026,7 @@ fn operator_actions(
     ]),
   )
   if order.state == Draft {
+    actions.push(quote_readiness_notice(state))
     actions.push(
       @html.div(class="offline-field", [
         @html.label(
@@ -1093,7 +1094,7 @@ fn operator_actions(
         @html.button(
           type_="button",
           class="primary-action",
-          disabled=state.loading,
+          disabled=state.loading || !quote_blockers(state).is_empty(),
           on_click=command(
             emit,
             BeginConfirmation(
@@ -1156,6 +1157,7 @@ fn operator_actions(
           type_="button",
           class="primary-action",
           disabled=state.loading ||
+            !quote_blockers(state).is_empty() ||
             state.operator_actor_ref.trim() == "" ||
             state.quote_minor_units.trim() == "" ||
             !@offline.valid_sha256(state.terms_digest.trim().to_owned()),
@@ -1176,11 +1178,12 @@ fn operator_actions(
     }
   }
   if order.state == Quoted {
+    actions.push(quote_readiness_notice(state))
     actions.push(
       @html.button(
         type_="button",
         class="primary-action",
-        disabled=state.loading,
+        disabled=state.loading || !quote_blockers(state).is_empty(),
         on_click=command(
           emit,
           BeginConfirmation(BeginOrder(order.order_id, order.generation)),
@@ -1432,7 +1435,11 @@ fn artifact_card(
       @html.span("")
     },
     if state.audience == OperatorCommerce &&
-      artifact.review_state == AwaitingReview {
+      artifact.scan_state == ScanPassed &&
+      artifact.review_state == AwaitingReview &&
+      state.orders.any(order => {
+        order.order_id == artifact.order_id && order.accepts_evidence_review()
+      }) {
       @html.div(class="review-actions", [
         @html.button(
           type_="button",
@@ -1468,14 +1475,7 @@ fn artifact_card(
         ),
       ])
     } else {
-      @html.p(
-        class="offline-action-note",
-        copy(
-          state.locale,
-          "The file is tracked by digest. Replacements create a new revision.",
-          "文件按摘要跟踪；重新上传会创建新版本。",
-        ),
-      )
+      @html.nothing
     },
   ])
 }
@@ -1678,9 +1678,10 @@ fn create_order_form(
 
 ///|
 fn confirmation_title(
-  locale : @i18n.Locale,
+  state : OfflineCommerceState,
   action : OfflineCommerceConsequentialAction,
 ) -> String {
+  let locale = state.locale
   match action {
     QuoteOrder(_, _, _, _) | QuoteUndertakingOrder(_, _, _) =>
       copy(
@@ -1716,10 +1717,16 @@ fn confirmation_title(
       copy(
         locale, "Authorize limited non-commercial testing?", "确认授权本订单限时非商业测试？",
       )
-    CancelOrder(_, _) =>
-      copy(
-        locale, "Cancel this order or end its active access?", "确认取消此订单或结束其有效访问？",
-      )
+    CancelOrder(id, _) =>
+      if state.orders.any(order => {
+          order.order_id == id && order.state == Fulfilled
+        }) {
+        copy(
+          locale, "End this order's access?", "确认结束此订单的访问？",
+        )
+      } else {
+        copy(locale, "Cancel this order?", "确认取消此订单？")
+      }
     RequestEntitlementReversal(_, _) =>
       copy(locale, "Revoke this entitlement?", "确认撤销此权益？")
     RecoverFailedReversal(_, _, _, RetryReversal) =>
@@ -1739,9 +1746,10 @@ fn confirmation_title(
 
 ///|
 fn confirmation_description(
-  locale : @i18n.Locale,
+  state : OfflineCommerceState,
   action : OfflineCommerceConsequentialAction,
 ) -> String {
+  let locale = state.locale
   match action {
     PrepareTechnicalWorkspace(_, _) =>
       copy(
@@ -1788,11 +1796,20 @@ fn confirmation_description(
         locale, "Unsigned, unpaid, non-commercial testing only. No signature, payment or invoice evidence is fabricated. Existing administrator grants, target binding and automatic expiry remain mandatory; resource activation is a separate action.",
         "仅用于未签署、未付款、非商业测试，不伪造签字、付款或发票凭证。仍须已有管理员资源授权、精确资源绑定和到期回收；本操作不直接开通资源。",
       )
-    CancelOrder(_, _) =>
-      copy(
-        locale, "Before fulfillment this cancels the order. After fulfillment it starts a generation-fenced entitlement reversal; access ends only after authority confirmation.",
-        "履约前将取消订单；履约后将启动受状态版本保护的权益撤销，只有授权方确认后访问权限才会结束。",
-      )
+    CancelOrder(id, _) =>
+      if state.orders.any(order => {
+          order.order_id == id && order.state == Fulfilled
+        }) {
+        copy(
+          locale, "Access ends after the authority confirms revocation. The order history is retained.",
+          "授权方确认撤销后访问结束，订单历史保留。",
+        )
+      } else {
+        copy(
+          locale, "The unfulfilled order will be cancelled. Its history is retained.",
+          "取消尚未履约的订单，历史记录保留。",
+        )
+      }
     RequestEntitlementReversal(_, _) =>
       copy(
         locale, "This starts a generation-fenced authority request. Access remains tracked until the external entitlement authority confirms revocation.",
@@ -1837,11 +1854,11 @@ fn commerce_confirmation(
           ),
           @html.h3(
             id="offline-confirmation-title",
-            confirmation_title(state.locale, value.action),
+            confirmation_title(state, value.action),
           ),
           @html.p(
             id="offline-confirmation-description",
-            confirmation_description(state.locale, value.action),
+            confirmation_description(state, value.action),
           ),
           @html.code(value.evidence),
           @html.div(class="offline-confirmation-actions", [
@@ -1856,11 +1873,15 @@ fn commerce_confirmation(
               type_="button",
               class="primary-action",
               on_click=command(emit, ConfirmAction(value.action)),
-              copy(
-                state.locale,
-                "Confirm with this evidence",
-                "根据此证据确认",
-              ),
+              if value.action is CancelOrder(_, _) {
+                copy(state.locale, "Confirm", "确认")
+              } else {
+                copy(
+                  state.locale,
+                  "Confirm with this evidence",
+                  "根据此证据确认",
+                )
+              },
             ),
           ]),
         ],

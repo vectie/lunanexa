@@ -142,12 +142,9 @@ test "customer cancellation and fulfilled access termination require confirmatio
   let confirming = @offline_commerce.render(
     state.update(BeginConfirmation(action)),
   )
-  assert_true(
-    confirming.contains("确认取消此订单或结束其有效访问？"),
-  )
-  assert_true(
-    confirming.contains("只有授权方确认后访问权限才会结束"),
-  )
+  assert_true(confirming.contains("确认结束此订单的访问？"))
+  assert_true(confirming.contains("授权方确认撤销后访问结束"))
+  assert_false(confirming.contains("取消尚未履约的订单"))
 }
 
 ///|

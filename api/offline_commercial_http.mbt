@@ -93,20 +93,6 @@ priv struct OfflineReadinessGateError {
 extend OfflineReadinessGateError with ToJson::{to_json}
 
 ///|
-fn readiness_blocker(capability : @offline.OfflineCommerceCapability) -> String {
-  match capability {
-    ApprovedLegalTemplates => "ApprovedLegalTemplatesPending"
-    ObjectStorage => "ObjectStoragePending"
-    MalwareScanner => "MalwareScannerPending"
-    OoxmlWorker => "OoxmlWorkerPending"
-    PdfRenderer => "MoonLeafPdfRendererPending"
-    SpreadsheetFormulaEngine => "SpreadsheetFormulaEnginePending"
-    CjkFonts => "CjkFontsPending"
-    MachineCallbackIdentity => "MachineCallbackIdentityPending"
-    EntitlementAuthority => "EntitlementAuthorityPending"
-    FinanceLegalPolicy => "FinanceLegalPolicyPending"
-  }
-}
 
 ///| Re-evaluates the signed evidence window on every projection and mutation;
 
@@ -167,27 +153,7 @@ fn offline_blocker_applies(
   code : String,
   required : Array[@offline.OfflineCommerceCapability],
 ) -> Bool {
-  let artifact = required.contains(OoxmlWorker) ||
-    required.contains(PdfRenderer)
-  let entitlement = required.contains(EntitlementAuthority)
-  match code {
-    "ReadinessTemplateApprovalScopeMissing" =>
-      artifact || required.contains(ApprovedLegalTemplates)
-    "ReadinessArtifactDispatcherSuccessStale"
-    | "ReadinessEntitlementDispatcherSuccessStale"
-    | "ReadinessOfflineWorkRetryExhausted" => false
-    "ReadinessArtifactDispatcherHeartbeatStale"
-    | "ReadinessArtifactWorkerCallbackUnavailable" => artifact
-    "ReadinessEntitlementDispatcherHeartbeatStale"
-    | "ReadinessEntitlementAuthorityCallbackUnavailable"
-    | "ReadinessOfflineReconcilerDegraded" => entitlement
-    "ReadinessArtifactScannerCallbackUnavailable" =>
-      required.contains(MalwareScanner)
-    "ReadinessTransferAdapterUnavailable" => required.contains(ObjectStorage)
-    _ =>
-      code.has_prefix("Readiness") ||
-      required.any(capability => readiness_blocker(capability) == code)
-  }
+  @offline.offline_blocker_applies(code, required)
 }
 
 ///| Returns a typed fail-closed 503 for a side effect whose externally verified

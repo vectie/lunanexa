@@ -868,3 +868,83 @@ Public JS hashes: console
 enterprise `52aa7e7413f878f06d2e293b3c5372bb19d6c80cfa3fff3a7ee541f8a0f5e23f`.
 All three supported public sites return HTTP 200. Official browser interaction
 and production business/failure drills remain distinct, unclaimed gates.
+
+## GLM pair paused through the operator UI — 2026-11-09
+
+The user explicitly requested pausing .178/.179 using the UI. In the official
+`/mana/` deployment page, stopped `glm-5.3.flash` / `service:service-company-text`
+once and accepted its existing stop confirmation. The operation completed with
+an explicit stopped receipt; the service row now shows stopped and Start.
+Both named resources remain spark-57f5-98a504ed (.178) and spark-368c-0f2ee8b2
+(.179). Their fresh UI node telemetry shows 112.1/112.7 GiB available memory
+respectively (previously 4.0/4.5 GiB), and 0% GPU utilization. This was UI-only
+acceptance, not a shell/process-list inspection. No node power-off or scheduling
+cordon was requested or performed. Qwen on .177 remains ready; MiniMax on .176
+was already stopped before this action and was not changed.
+
+Screenshot: `output/cluster-status-20261109/glm-178-179-stopped.jpg`. The official
+management tab is retained as the deliverable. Do not restart the pair without
+a subsequent user request.
+
+## Official portal state/button acceptance — 2026-11-09
+
+Fresh official tabs restored browser control; an old tab-binding failure does
+not imply session expiry. After a reload, allow the existing session restore
+to finish before requesting another sign-in. Both guojiaan and operator were
+verified through the real portals. Detailed pass/blocker matrix is in
+`docs/PORTAL_SIMPLIFICATION.md`, fourth round.
+
+Pitfalls fixed: a failed console commerce operation cleared global loading but
+left its nested commerce view busy; terminal orders still offered evidence
+review and a rejection could revive a cancelled order; shared trial status
+compared a newly read heartbeat against an older request-start clock. Review
+now obeys order lifecycle/deadline while preserving completed idempotent
+receipts. Heartbeat checks observe time after the snapshot, keeping the same
+timeout, pool and active-state rules. Live .177 telemetry additionally showed
+about three seconds of positive agent clock skew: status checks must use the
+same existing future replay-window bound as signed heartbeat admission, not
+reject every future timestamp. Far-future timestamps remain rejected; do not
+adjust host clocks or enlarge heartbeat limits to disguise this mismatch.
+Quote UI and API share capability blocker
+selection; unrelated historical diagnostics remain nonblocking.
+
+Stopped owned services retain existing-key QR access. Default application
+launches exclude models the current snapshot marks unavailable. QR selection,
+outside/Escape dismissal and restored focus were exercised live. Key and URL
+copy were verified by private clipboard readback; no secret or QR payload was
+written to the repository. Passive access-loaded banners and credential advice
+on copying public values were removed; explicit action feedback remains.
+No-pending lease approvals omit the node picker. Linked historical rental
+documents show the ended order state and cannot offer machine allocation,
+even if the retained packet has its own effective state. Do not conflate a
+packet's document lifecycle with the parent order's resource authority.
+
+One nonbinding rental draft was created, observed in both portals, then normally
+cancelled with a receipt explicitly confirming no access was activated. The
+signed commerce readiness document is not configured, and online GPU inventory
+has no capacity; full commercial conversion cannot be claimed. GLM and MiniMax
+remain stopped. Do not restart them to turn a blocked acceptance gate green.
+The user subsequently confirmed keeping GLM stopped and limiting this run to
+stopped-state buttons, connection configuration and error handling.
+Real multi-company creation/invitation/switching remains a separate production
+gate; fixture coverage is recorded separately.
+
+The actual production controller/enterprise baseline had advanced to the
+coffee-contact release. Preserve its signed phone-contact registration
+compatibility (never accept unsigned browser contact headers), and build portal
+layers on the active image, not the earlier image recorded in the third round.
+The existing gateway and profile helpers must remain in the controller volume.
+
+Workspace lease acceptance found 848 lease records despite only six active
+leases. The local page now shows 25, searches the whole snapshot, prioritizes
+requested/active work, and scopes the optional lifecycle graph to that page.
+Page/search actions do not call the server cursor API; the existing full
+workspace read is unchanged. Request/benchmark metric caveats are inside the
+data disclosure; default UI no longer exposes ConsoleState implementation text.
+
+Final strict native checks and the complete runner pass 1,979/1,979; related
+JS UI/command tests pass 440/440. Isolation/public-response heuristics pass.
+Production controller SHA-256 is
+`623773f93a317a800baa1b3bd73b5c8a6e7545b5d006f3a6b0b6d755e2a41118`.
+Native release root: `/home/HwHiAiUser/portal-acceptance-control-r2-20261109`;
+final frontend root: `/home/HwHiAiUser/portal-acceptance-ui-r6-20261109`.

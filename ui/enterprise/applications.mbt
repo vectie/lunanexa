@@ -148,7 +148,6 @@ fn application_cards(
                 type_="button",
                 class=if ready { "primary-button" } else { "quiet-button" },
                 disabled=state.loading || (client is None && comfy is None),
-                attrs=@html.Attrs::build().aria_pressed(selected.to_string()),
                 on_click=command(
                   emit,
                   match comfy {

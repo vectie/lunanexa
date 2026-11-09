@@ -1,4 +1,34 @@
 ///|
+/// Match an operation to the same relevant blockers in every portal and the
+/// API. Historical diagnostics alone do not prevent the next business action.
+pub fn offline_blocker_applies(
+  code : String,
+  required : Array[OfflineCommerceCapability],
+) -> Bool {
+  let artifact = required.contains(OoxmlWorker) ||
+    required.contains(PdfRenderer)
+  let entitlement = required.contains(EntitlementAuthority)
+  match code {
+    "ReadinessTemplateApprovalScopeMissing" =>
+      artifact || required.contains(ApprovedLegalTemplates)
+    "ReadinessArtifactDispatcherSuccessStale"
+    | "ReadinessEntitlementDispatcherSuccessStale"
+    | "ReadinessOfflineWorkRetryExhausted" => false
+    "ReadinessArtifactDispatcherHeartbeatStale"
+    | "ReadinessArtifactWorkerCallbackUnavailable" => artifact
+    "ReadinessEntitlementDispatcherHeartbeatStale"
+    | "ReadinessEntitlementAuthorityCallbackUnavailable"
+    | "ReadinessOfflineReconcilerDegraded" => entitlement
+    "ReadinessArtifactScannerCallbackUnavailable" =>
+      required.contains(MalwareScanner)
+    "ReadinessTransferAdapterUnavailable" => required.contains(ObjectStorage)
+    _ =>
+      code.has_prefix("Readiness") ||
+      required.any(capability => capability_blocker(capability) == code)
+  }
+}
+
+///|
 fn capability_blocker(capability : OfflineCommerceCapability) -> String {
   match capability {
     ApprovedLegalTemplates => "ApprovedLegalTemplatesPending"

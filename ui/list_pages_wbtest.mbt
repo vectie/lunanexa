@@ -1,4 +1,41 @@
 ///|
+test "workspace lease history is bounded searchable and follows pending and active work" {
+  let base = demo_state()
+  let lease = base.compute_leases[0]
+  let leases = [
+    for index in 0..<61 => {
+      {
+        ..lease,
+        lease_id: "history-\{index}",
+        user_id: "owner-\{index}",
+        state: Expired,
+      }
+    }
+  ]
+  leases.push({ ..lease, lease_id: "z-active", state: Active, })
+  leases.push({ ..lease, lease_id: "z-pending", state: Requested, })
+  let state = { ..base, route: Leases, compute_leases: leases, }
+  let first = render(state)
+  assert_true(first.contains("1 / 3"))
+  assert_true(first.contains("z-active"))
+  assert_true(first.contains("z-pending"))
+  assert_false(first.contains("owner-60</strong>"))
+  let next = render({
+    ..state,
+    list_pages: Map([(WorkspaceLeases, { query: "", page: 2, })]),
+  })
+  assert_true(next.contains("3 / 3"))
+  assert_false(next.contains("z-active"))
+  let search = render({
+    ..state,
+    list_pages: Map([(WorkspaceLeases, { query: "history-60", page: 0, })]),
+  })
+  assert_true(search.contains("owner-60"))
+  assert_false(search.contains("owner-0</strong>"))
+  assert_true(search.contains("1 / 1"))
+}
+
+///|
 test "pagination filters before slicing and clamps after refresh shrinks the list" {
   let base = default_state()
   let values = [ for i in 0..<61 => "person-\{i}" ]

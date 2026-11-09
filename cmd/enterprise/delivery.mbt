@@ -148,8 +148,8 @@ fn delivery_command(
               Some(
                 portal_copy(
                   model.portal.locale,
-                  "Service status loaded, but launch options are unavailable. Check that your resource authorization is active and refresh.",
-                  "服务状态已加载，但启动选项暂不可用。请确认资源授权有效后刷新。",
+                  "Service status loaded, but launch options are temporarily unavailable. Refresh to retry.",
+                  "服务状态已加载，启动选项暂不可用。请刷新重试。",
                 ),
               ),
             )

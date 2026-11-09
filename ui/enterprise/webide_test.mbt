@@ -114,7 +114,7 @@ test "ComfyUI is selectable beside code WebIDE without weakening readiness" {
   let rendered = @enterprise.render(selected)
   assert_true(rendered.contains("Applications"))
   assert_true(rendered.contains("ComfyUI"))
-  assert_true(rendered.contains("aria-pressed=\"true\""))
+  assert_false(rendered.contains("aria-pressed="))
   assert_false(rendered.contains("Open ComfyUI</button>"))
   assert_true(rendered.contains("Set up a GPU workspace below"))
   assert_false(rendered.contains("One-click connection"))
@@ -360,6 +360,8 @@ test "MoonDesk model picker separates trial Qwen from dedicated GLM and blocks o
     },
   }
   let rendered = @enterprise.render(state)
+  // The default “all authorized” selection follows current runtime state too.
+  assert_eq(@enterprise.webide_launch_selection(state), None)
   assert_true(rendered.contains("Trial · Qwen3.8-27B · unavailable"))
   assert_true(rendered.contains("Dedicated · glm-5.3 · unavailable"))
   assert_true(rendered.contains("MoonGate usage for my MoonDesk"))
@@ -392,6 +394,10 @@ test "MoonDesk model picker separates trial Qwen from dedicated GLM and blocks o
   }.update(SelectWebIdeOrder("model:text.qwen"))
   assert_eq(
     @enterprise.webide_launch_selection(ready),
+    Some((None, demo.project_id, ["text.qwen"])),
+  )
+  assert_eq(
+    @enterprise.webide_launch_selection({ ..ready, webide_model_alias: None, }),
     Some((None, demo.project_id, ["text.qwen"])),
   )
 }

@@ -389,7 +389,7 @@ priv enum Outcome {
   ApiKeyRevoked(Int64, String, Int64?)
   ApiKeySecretLoaded(Int64, Int64, String, String, KeySecretPurpose)
   ApiKeySecretLoadFailed(Int64, Int64)
-  ApiKeySecretCopied(Int64)
+  ApiKeySecretCopied(Int64, Int64, @enterprise_ui.EnterpriseRoute)
   Failed(@i18n.Locale, String)
 }
 
@@ -2613,7 +2613,12 @@ fn copy_api_key_secret_command(
           ),
         )
     } noraise {
-      _ => ApiKeySecretCopied(model.session_generation)
+      _ =>
+        ApiKeySecretCopied(
+          model.session_generation,
+          model.portal.api_key_secret_generation,
+          model.portal.route,
+        )
     }
   })
 }
@@ -5862,8 +5867,10 @@ fn update(
           @rabbita.none,
         )
       }
-    Outcome(ApiKeySecretCopied(generation)) =>
-      if generation != model.session_generation {
+    Outcome(ApiKeySecretCopied(generation, nonce, route)) =>
+      if generation != model.session_generation ||
+        nonce != model.portal.api_key_secret_generation ||
+        route != model.portal.route {
         (model, @rabbita.none)
       } else {
         (
@@ -5872,11 +5879,7 @@ fn update(
             portal: {
               ..model.portal,
               success_message: Some(
-                portal_copy(
-                  model.portal.locale,
-                  "Copied. Keep any credentials private.",
-                  "已复制。请妥善保管所有凭据。",
-                ),
+                portal_copy(model.portal.locale, "Copied.", "已复制。"),
               ),
               error_message: None,
             },
@@ -6380,13 +6383,7 @@ fn update(
             error_message: None,
           },
           loading: false,
-          success_message: Some(
-            portal_copy(
-              model.portal.locale,
-              "Enterprise access loaded.",
-              "企业访问权限已加载。",
-            ),
-          ),
+          success_message: model.portal.success_message,
           error_message: None,
         },
       }

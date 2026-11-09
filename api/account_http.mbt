@@ -183,6 +183,15 @@ priv struct TrustedRegistrationAssertion {
 }
 
 ///|
+// Preserve the deployed, provider-verified phone contact format. The signed
+// legacy email slot is a contact identifier; browser input is never trusted.
+fn valid_registration_phone_contact(value : String) -> Bool {
+  value.length() == 14 &&
+  value.has_prefix("+861") &&
+  value[3:].iter().all(c => c is ('0'..<='9'))
+}
+
+///|
 fn ApiService::trusted_registration_assertion(
   self : ApiService,
   headers : Map[String, String],
@@ -207,7 +216,7 @@ fn ApiService::trusted_registration_assertion(
     !safe_identity_value(subject, 1024) ||
     !safe_identity_value(email, 320) ||
     !safe_identity_value(display_name, 128) ||
-    !email.contains("@") ||
+    (!email.contains("@") && !valid_registration_phone_contact(email)) ||
     !@contracts.valid_identifier(nonce) ||
     issued_unix_ms > now_unix_ms + 5000L ||
     issued_unix_ms < now_unix_ms - 30000L ||

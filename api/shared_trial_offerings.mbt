@@ -117,14 +117,20 @@ async fn ApiService::shared_trial_authorized_key(
 async fn ApiService::shared_trial_node_online(
   self : ApiService,
   node_id : String,
-  now : Int64,
+  _request_started_unix_ms : Int64,
 ) -> Bool {
-  self.store
-  .heartbeats()
-  .any(heartbeat => {
+  let heartbeats = self.store.heartbeats()
+  // Membership/contract reads can span a new heartbeat. Compare this snapshot
+  // with its observation time, not with the older request start time.
+  let now = @async.now()
+  heartbeats.any(heartbeat => {
     heartbeat.node_id == node_id &&
     heartbeat.state == Active &&
-    heartbeat.timestamp_unix_ms <= now &&
+    // These signed heartbeats already passed admission's replay-window check.
+    // Use that same clock-skew bound rather than declaring an accepted node
+    // offline whenever its clock is a few seconds ahead of the controller.
+    heartbeat.timestamp_unix_ms <=
+    now + self.global_settings.control_timing.heartbeat_replay_window_ms &&
     now - heartbeat.timestamp_unix_ms <=
     self.global_settings.control_timing.heartbeat_timeout_ms &&
     heartbeat.inventory.labels.get(machine_usage_pool_label) == Some("trial")

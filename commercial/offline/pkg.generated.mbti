@@ -16,6 +16,8 @@ pub fn evidence_kind(DocumentArtifactKind) -> OfflineEvidenceKind?
 
 pub fn expected_media_type(DocumentArtifactKind) -> Array[String]
 
+pub fn offline_blocker_applies(String, Array[OfflineCommerceCapability]) -> Bool
+
 pub fn offline_commerce_readiness(Array[OfflineCommerceCapabilityEvidence], Int64) -> OfflineCommerceReadiness
 
 pub fn offline_readiness_material(OfflineReadinessEvidenceDocument) -> String
@@ -189,6 +191,7 @@ pub(all) struct CommercialOrder {
   updated_unix_ms : Int64
   expires_unix_ms : Int64
 } derive(Eq, ToJson, @debug.Debug, @json.FromJson)
+pub fn CommercialOrder::accepts_evidence_review(Self) -> Bool
 pub fn CommercialOrder::begin_offline_execution(Self, Int64, Int64) -> Self raise OfflineCommerceError
 pub fn CommercialOrder::cancel(Self, Int64, Int64) -> Self raise OfflineCommerceError
 pub fn CommercialOrder::confirm_activation(Self, Int64, String, Int64) -> Self raise OfflineCommerceError

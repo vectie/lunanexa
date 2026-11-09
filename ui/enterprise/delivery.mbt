@@ -1103,7 +1103,6 @@ fn delivery_panel_view(
               @html.button(
                 type_="button",
                 class="quiet-button",
-                disabled=!service.ready,
                 on_click=command(
                   emit,
                   OpenModelConnectionQr(service.model_alias),
@@ -1317,10 +1316,7 @@ fn delivery_panel_view(
         ])
       }),
     ),
-    if (
-        kind == "ModelApi" &&
-        panel.external_model.map_or(false, model => model.ready)
-      ) ||
+    if (kind == "ModelApi" && panel.external_model is Some(_)) ||
       operations.any(operation => {
         operation.stage != "Stopped" &&
         operation.stage != "Expired" &&

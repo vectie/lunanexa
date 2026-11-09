@@ -2962,11 +2962,19 @@ fn offline_action_command(
       error =>
         ActionFailed(
           model.console.locale,
-          console_copy(
-            model.console.locale,
-            "Offline commercial action failed: \{http_failure_detail(error)}",
-            "线下商务操作失败：\{http_failure_detail(error)}",
-          ),
+          if error.to_string().contains("OfflineCommerceNotReady") {
+            console_copy(
+              model.console.locale,
+              "Commerce setup is not ready. Check commerce readiness and refresh before retrying; the draft is retained.",
+              "商务配置尚未就绪。请查看商务就绪状态，刷新后重试；草稿已保留。",
+            )
+          } else {
+            console_copy(
+              model.console.locale,
+              "Offline commercial action failed: \{http_failure_detail(error)}",
+              "线下商务操作失败：\{http_failure_detail(error)}",
+            )
+          },
         )
     } noraise {
       _ =>
@@ -5967,6 +5975,10 @@ fn update_live(
           console: {
             ..model.console,
             loading: false,
+            offline_commerce: {
+              ..model.console.offline_commerce,
+              loading: false,
+            },
             error_message: Some(
               locale_fenced_notice(
                 model.console.locale,

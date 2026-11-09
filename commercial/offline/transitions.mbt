@@ -1,4 +1,18 @@
 ///|
+/// Evidence review belongs to the pre-fulfillment workflow. Late review must
+/// never reopen a cancelled/expired order or send active access to correction.
+pub fn CommercialOrder::accepts_evidence_review(self : CommercialOrder) -> Bool {
+  match self.state {
+    PendingInternalApproval
+    | PendingOfflineExecution
+    | PendingEvidenceUpload
+    | UnderReconciliation
+    | NeedsCorrection => true
+    _ => false
+  }
+}
+
+///|
 pub fn CommercialOrder::with_quote(
   self : CommercialOrder,
   quote : ImmutableQuote,

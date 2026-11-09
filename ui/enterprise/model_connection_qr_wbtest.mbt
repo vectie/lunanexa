@@ -75,6 +75,41 @@ test "private connection QR contains generic settings and is erased on dismissal
 }
 
 ///|
+test "stopping an owned service retains saved-key connection settings without creating inference authority" {
+  let base = demo_state()
+  let service : ExternalModelServiceView = {
+    service_id: "existing-service",
+    model_alias: "model.chat",
+    state: "Stopped",
+    ready: false,
+    can_stop: true,
+    context_window_tokens: None,
+  }
+  let state = {
+    ..base,
+    route: Models,
+    deliveries: {
+      ..base.deliveries,
+      loaded: true,
+      external_model: Some(service),
+      operations: [],
+      options: { ..base.deliveries.options, reservations: [], },
+    },
+  }
+  let opened = state.update(OpenModelConnectionQr(service.model_alias))
+  assert_true(opened.model_connection_import is Some(_))
+  assert_eq(opened.model_connection_import.unwrap().secret, "")
+  let html = render(state)
+  assert_true(html.contains("Start service"))
+  assert_true(html.contains("<summary>Start another service</summary>"))
+  assert_true(html.contains("Connection QR"))
+  assert_true(html.contains("No active exclusive resource authorization"))
+  // No new service is created and no key is minted by opening the chooser.
+  assert_true(opened.deliveries == state.deliveries)
+  assert_true(opened.api_keys == state.api_keys)
+}
+
+///|
 test "personal trial connects without machine approval and keeps QR within its output budget" {
   let base = demo_state()
   let membership = base.membership.unwrap()

@@ -1050,6 +1050,7 @@ pub(all) enum OperatorList {
   RequestReceipts
   ModelRegistry
   ServiceCatalog
+  WorkspaceLeases
 } derive(Eq, Hash)
 pub fn OperatorList::equal(Self, Self) -> Bool
 pub fn OperatorList::hash(Self) -> Int

@@ -273,7 +273,7 @@ fn merge_operator_page(
             }
           }),
         }
-      ModelRegistry | ServiceCatalog => next
+      ModelRegistry | ServiceCatalog | WorkspaceLeases => next
     }
   } catch {
     _ => {
@@ -295,7 +295,8 @@ fn schedule_operator_page(
   if model.demo_mode ||
     !model.console.operator_authenticated ||
     kind == ModelRegistry ||
-    kind == ServiceCatalog {
+    kind == ServiceCatalog ||
+    kind == WorkspaceLeases {
     return (model, @rabbita.none)
   }
   let pages = model.console.remote_list_pages.copy()

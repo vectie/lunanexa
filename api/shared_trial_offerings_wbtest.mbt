@@ -1,4 +1,59 @@
 ///|
+async test "shared trial observes current heartbeat after earlier request start" {
+  let root = @fs.tmpdir(prefix="shared-trial-heartbeat-")
+  defer @fs.rmdir(root, recursive=true)
+  let store = @store.FileStore::open(root + "/state.json")
+  store.fence_controller(1L)
+  let runtime = @runtimes.OpenAiTextRuntime::new(
+    "http://127.0.0.1:1/v1/responses",
+    "",
+    "fixture",
+    "sha256:" + "b".repeat(64),
+    "sha256:" + "a".repeat(64),
+    allow_http_loopback=true,
+  )
+  let service = ApiService::new(
+    store, runtime, "operator", "inference", "node", "test",
+  )
+  let observed = @async.now()
+  let heartbeat : @contracts.NodeHeartbeat = {
+    node_id: "trial-node",
+    state: Active,
+    observed_generation: 1L,
+    controller_epoch: 1L,
+    inventory: {
+      node_id: "trial-node",
+      agent_version: "test",
+      os_release: "test",
+      runtime_names: ["vllm"],
+      accelerators: [],
+      labels: { "lunanexa.io/usage-pool": "trial" },
+      taints: [],
+    },
+    running_deployments: [],
+    runtime_endpoints: None,
+    timestamp_unix_ms: observed,
+    signature: "",
+  }
+  store.put_heartbeat(heartbeat)
+  assert_true(service.shared_trial_node_online("trial-node", observed - 5000L))
+  assert_false(service.shared_trial_node_online("other-node", observed))
+  store.put_heartbeat({ ..heartbeat, timestamp_unix_ms: observed + 3000L, })
+  assert_true(service.shared_trial_node_online("trial-node", observed))
+  store.put_heartbeat({ ..heartbeat, timestamp_unix_ms: observed + 600000L, })
+  assert_false(service.shared_trial_node_online("trial-node", observed))
+  store.put_heartbeat({ ..heartbeat, timestamp_unix_ms: observed - 600000L, })
+  assert_false(service.shared_trial_node_online("trial-node", observed))
+  store.put_heartbeat({ ..heartbeat, state: Draining, })
+  assert_false(service.shared_trial_node_online("trial-node", observed))
+  store.put_heartbeat({
+    ..heartbeat,
+    inventory: { ..heartbeat.inventory, labels: {}, },
+  })
+  assert_false(service.shared_trial_node_online("trial-node", observed))
+}
+
+///|
 test "shared trial slot belongs only to its exact organization and tenant" {
   let offering : SharedTrialOffering = {
     organization_id: "org-energy",

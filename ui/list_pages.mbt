@@ -8,6 +8,7 @@ pub(all) enum OperatorList {
   RequestReceipts
   ModelRegistry
   ServiceCatalog
+  WorkspaceLeases
 } derive(Eq, Hash)
 
 ///|
@@ -96,6 +97,7 @@ pub fn OperatorList::read_key(self : OperatorList) -> String {
     RequestReceipts => "request-receipts"
     ModelRegistry => "model-registry"
     ServiceCatalog => "service-catalog"
+    WorkspaceLeases => "workspace-leases"
   }
 }
 
@@ -111,6 +113,7 @@ fn list_label(locale : @i18n.Locale, kind : OperatorList) -> String {
     RequestReceipts => localized(locale, "Request receipts", "请求回执")
     ModelRegistry => localized(locale, "Registered models", "已登记模型")
     ServiceCatalog => localized(locale, "Service templates", "服务模板")
+    WorkspaceLeases => localized(locale, "Workspace leases", "工作区租约")
   }
 }
 

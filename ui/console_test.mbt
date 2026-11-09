@@ -487,7 +487,9 @@ test "operator offline commerce route is actionable and bilingual" {
   let demo = @ui.demo_state()
   let english = @ui.render({ ..demo, route: OfflineCommerce, })
   assert_true(english.contains("Offline reconciliation desk"))
-  assert_true(english.contains("Accept exact digest"))
+  // The selected fixture is in reversal intervention, not evidence review.
+  assert_false(english.contains("Accept exact digest"))
+  assert_true(english.contains("Retry reversal"))
   let chinese = @ui.render({
     ..demo,
     route: OfflineCommerce,
@@ -495,7 +497,26 @@ test "operator offline commerce route is actionable and bilingual" {
   })
   assert_eq(demo.offline_commerce.locale, English)
   assert_true(chinese.contains("线下材料核验台"))
-  assert_true(chinese.contains("接受此文件摘要"))
+  assert_false(chinese.contains("接受此文件摘要"))
+  assert_true(chinese.contains("重试撤销"))
+}
+
+///|
+test "lease approval controls appear only when a request needs a decision" {
+  let state = console_state(Agreements)
+  let empty = @ui.render({ ..state, enterprise_lease_requests: [], })
+  assert_true(empty.contains("No enterprise lease requests are waiting"))
+  assert_false(empty.contains("portal-node-id"))
+  let completed = @ui.render({
+    ..state,
+    enterprise_lease_requests: state.enterprise_lease_requests.map(request => {
+      ..request,
+      state: "Approved",
+    }),
+  })
+  assert_true(completed.contains("request-1"))
+  assert_false(completed.contains("portal-node-id"))
+  assert_true(@ui.render(state).contains("portal-node-id"))
 }
 
 ///|

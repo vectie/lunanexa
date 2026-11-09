@@ -47,224 +47,85 @@ fn request_telemetry_chart(state : ConsoleState) -> @rabbita.Html {
     state.requests.p95_ms == 0 &&
     state.requests.throughput_per_second == 0 &&
     state.requests.errors == 0
-  @html.figure(class="obs-figure obs-request-figure", [
-    @html.div(class="obs-figure-heading", [
-      @html.div([
-        @html.h3(
-          observability_localized(
-            locale, "Aggregate request snapshot", "请求聚合快照",
-          ),
-        ),
-      ]),
-      @html.span(
-        class="obs-scope-badge",
-        observability_localized(
-          locale, "Window/profile: not supplied", "时间窗口/配置：未提供",
-        ),
-      ),
-    ]),
-    @html.div(
-      class="obs-metric-plot",
-      attrs=@html.Attrs::build().aria_hidden("true"),
-      [
-        observability_request_metric(
-          observability_localized(locale, "Audited count", "已审计数量"),
-          state.requests.count.to_string(),
-          observability_localized(locale, "events", "个事件"),
-          observability_localized(
-            locale, "Aggregate count in this snapshot", "此快照中的聚合数量",
-          ),
-          "#",
-        ),
-        observability_request_metric(
-          observability_localized(locale, "p95 latency", "p95 延迟"),
-          state.requests.p95_ms.to_string(),
-          "ms",
-          observability_localized(
-            locale, "Reported percentile; sampling window unavailable", "已上报百分位；采样窗口不可用",
-          ),
-          "P95",
-        ),
-        observability_request_metric(
-          observability_localized(locale, "Throughput", "吞吐量"),
-          state.requests.throughput_per_second.to_string(),
-          "/s",
-          observability_localized(
-            locale, "Reported aggregate rate", "已上报聚合速率",
-          ),
-          "TPS",
-        ),
-        observability_request_metric(
-          observability_localized(locale, "Errors", "错误"),
-          state.requests.errors.to_string(),
-          observability_localized(locale, "events", "个事件"),
-          observability_localized(
-            locale, "Absolute error count; no target supplied", "错误绝对数量；未提供目标值",
-          ),
-          "!",
-        ),
-      ],
-    ),
-    if all_zero {
-      @html.p(
-        class="obs-zero-note",
-        observability_localized(
-          locale, "All four values in the current snapshot are zero.", "当前快照中的四项数值均为零。",
-        ),
-      )
-    } else {
-      @html.nothing
-    },
-    @html.details(class="obs-data-alternative", [
-      @html.summary(
-        observability_localized(locale, "Request data table", "请求数据表"),
-      ),
-      @html.div(
-        class="table-scroll",
-        attrs=@html.Attrs::build()
-          .tabindex(0)
-          .aria_label(
-            observability_localized(
-              locale, "Scrollable request telemetry table", "可滚动的请求遥测数据表",
-            ),
-          ),
-        [
-          @html.table(class="resource-table obs-data-table", [
-            @html.caption(
-              observability_localized(
-                locale, "Current request telemetry values", "当前请求遥测数值",
-              ),
-            ),
-            @html.thead(
-              @html.tr([
-                @html.th(
-                  scope=Col,
-                  observability_localized(locale, "Metric", "指标"),
-                ),
-                @html.th(
-                  scope=Col,
-                  observability_localized(locale, "Value", "数值"),
-                ),
-                @html.th(
-                  scope=Col,
-                  observability_localized(locale, "Scope", "范围"),
-                ),
-              ]),
-            ),
-            @html.tbody([
-              @html.tr([
-                @html.th(
-                  scope=Row,
-                  observability_localized(
-                    locale, "Audited count", "已审计数量",
-                  ),
-                ),
-                @html.td(state.requests.count.to_string()),
-                @html.td(
-                  observability_localized(
-                    locale, "Current aggregate snapshot", "当前聚合快照",
-                  ),
-                ),
-              ]),
-              @html.tr([
-                @html.th(
-                  scope=Row,
-                  observability_localized(locale, "p95 latency", "p95 延迟"),
-                ),
-                @html.td("\{state.requests.p95_ms} ms"),
-                @html.td(
-                  observability_localized(
-                    locale, "Window not supplied", "未提供时间窗口",
-                  ),
-                ),
-              ]),
-              @html.tr([
-                @html.th(
-                  scope=Row,
-                  observability_localized(locale, "Throughput", "吞吐量"),
-                ),
-                @html.td("\{state.requests.throughput_per_second}/s"),
-                @html.td(
-                  observability_localized(
-                    locale, "Current aggregate snapshot", "当前聚合快照",
-                  ),
-                ),
-              ]),
-              @html.tr([
-                @html.th(
-                  scope=Row,
-                  observability_localized(locale, "Errors", "错误"),
-                ),
-                @html.td(state.requests.errors.to_string()),
-                @html.td(
-                  observability_localized(
-                    locale, "No target supplied", "未提供目标值",
-                  ),
-                ),
-              ]),
-            ]),
-          ]),
-        ],
-      ),
-    ]),
-    @html.figcaption(
+  @html.figure(
+    class="obs-figure obs-request-figure",
+    attrs=@html.Attrs::build().aria_label(
       observability_localized(
-        locale, "Values come directly from the current ConsoleState aggregate. No time series, target, sampling window, or workload profile is available, so the tiles do not imply a shared scale or trend.",
-        "数值直接来自当前 ConsoleState 聚合数据。由于没有时间序列、目标值、采样窗口或工作负载配置，这些方块不表示共用比例或趋势。",
+        locale, "Aggregate request snapshot", "请求聚合快照",
       ),
     ),
-  ])
-}
-
-///|
-fn benchmark_comparison_chart(state : ConsoleState) -> @rabbita.Html {
-  let locale = state.locale
-  @html.figure(class="obs-figure obs-benchmark-figure", [
-    @html.div(class="obs-figure-heading", [
-      @html.div([
-        @html.p(
-          class="eyebrow",
-          observability_localized(locale, "Evidence comparison", "证据比较"),
-        ),
-        @html.h3(
-          observability_localized(
-            locale, "Recorded benchmark evidence", "已记录的基准证据",
+    [
+      @html.div(class="obs-figure-heading", [
+        @html.div([
+          @html.h3(
+            observability_localized(
+              locale, "Aggregate request snapshot", "请求聚合快照",
+            ),
           ),
-        ),
+        ]),
       ]),
-      @html.span(
-        class="obs-scope-badge",
-        observability_localized(locale, "Text evidence only", "仅文本证据"),
-      ),
-    ]),
-    if state.benchmark_evidence.length() == 0 {
-      @html.p(
-        class="empty-state compact",
-        observability_localized(
-          locale, "No benchmark evidence is available.", "暂无基准测试证据。",
-        ),
-      )
-    } else {
-      @html.ol(
-        class="obs-evidence-plot",
+      @html.div(
+        class="obs-metric-plot",
         attrs=@html.Attrs::build().aria_hidden("true"),
         [
-          for i, evidence in state.benchmark_evidence => {
-            @html.li(class="obs-evidence-lane", [
-              @html.span(class="obs-evidence-index", (i + 1).to_string()),
-              @html.strong(class="mono", evidence),
-            ])
-          }
+          observability_request_metric(
+            observability_localized(locale, "Audited count", "已审计数量"),
+            state.requests.count.to_string(),
+            observability_localized(locale, "events", "个事件"),
+            observability_localized(
+              locale, "Aggregate count in this snapshot", "此快照中的聚合数量",
+            ),
+            "#",
+          ),
+          observability_request_metric(
+            observability_localized(locale, "p95 latency", "p95 延迟"),
+            state.requests.p95_ms.to_string(),
+            "ms",
+            observability_localized(
+              locale, "Reported percentile; sampling window unavailable", "已上报百分位；采样窗口不可用",
+            ),
+            "P95",
+          ),
+          observability_request_metric(
+            observability_localized(locale, "Throughput", "吞吐量"),
+            state.requests.throughput_per_second.to_string(),
+            "/s",
+            observability_localized(
+              locale, "Reported aggregate rate", "已上报聚合速率",
+            ),
+            "TPS",
+          ),
+          observability_request_metric(
+            observability_localized(locale, "Errors", "错误"),
+            state.requests.errors.to_string(),
+            observability_localized(locale, "events", "个事件"),
+            observability_localized(
+              locale, "Absolute error count; no target supplied", "错误绝对数量；未提供目标值",
+            ),
+            "!",
+          ),
         ],
-      )
-    },
-    if state.benchmark_evidence.length() == 0 {
-      @html.nothing
-    } else {
+      ),
+      if all_zero {
+        @html.p(
+          class="obs-zero-note",
+          observability_localized(
+            locale, "All four values in the current snapshot are zero.", "当前快照中的四项数值均为零。",
+          ),
+        )
+      } else {
+        @html.nothing
+      },
       @html.details(class="obs-data-alternative", [
         @html.summary(
           observability_localized(
-            locale, "Benchmark evidence table", "基准测试证据表",
+            locale, "Request data table", "请求数据表",
+          ),
+        ),
+        @html.p(
+          observability_localized(
+            locale, "Current aggregate values; no time trend or shared scale is provided.",
+            "当前聚合值，不表示时间趋势或共同比例。",
           ),
         ),
         @html.div(
@@ -273,52 +134,206 @@ fn benchmark_comparison_chart(state : ConsoleState) -> @rabbita.Html {
             .tabindex(0)
             .aria_label(
               observability_localized(
-                locale, "Scrollable benchmark evidence table", "可滚动的基准证据表",
+                locale, "Scrollable request telemetry table", "可滚动的请求遥测数据表",
               ),
             ),
           [
             @html.table(class="resource-table obs-data-table", [
               @html.caption(
                 observability_localized(
-                  locale, "Unparsed benchmark evidence in recorded order", "按记录顺序展示的未解析基准测试证据",
+                  locale, "Current request telemetry values", "当前请求遥测数值",
                 ),
               ),
               @html.thead(
                 @html.tr([
                   @html.th(
                     scope=Col,
-                    observability_localized(locale, "Lane", "通道"),
+                    observability_localized(locale, "Metric", "指标"),
                   ),
                   @html.th(
                     scope=Col,
-                    observability_localized(
-                      locale, "Recorded evidence", "已记录证据",
-                    ),
+                    observability_localized(locale, "Value", "数值"),
+                  ),
+                  @html.th(
+                    scope=Col,
+                    observability_localized(locale, "Scope", "范围"),
                   ),
                 ]),
               ),
-              @html.tbody(
-                [
-                  for i, evidence in state.benchmark_evidence => {
-                    @html.tr([
-                      @html.th(scope=Row, (i + 1).to_string()),
-                      @html.td(class="mono", evidence),
-                    ])
-                  }
-                ],
-              ),
+              @html.tbody([
+                @html.tr([
+                  @html.th(
+                    scope=Row,
+                    observability_localized(
+                      locale, "Audited count", "已审计数量",
+                    ),
+                  ),
+                  @html.td(state.requests.count.to_string()),
+                  @html.td(
+                    observability_localized(
+                      locale, "Current aggregate snapshot", "当前聚合快照",
+                    ),
+                  ),
+                ]),
+                @html.tr([
+                  @html.th(
+                    scope=Row,
+                    observability_localized(locale, "p95 latency", "p95 延迟"),
+                  ),
+                  @html.td("\{state.requests.p95_ms} ms"),
+                  @html.td(
+                    observability_localized(
+                      locale, "Window not supplied", "未提供时间窗口",
+                    ),
+                  ),
+                ]),
+                @html.tr([
+                  @html.th(
+                    scope=Row,
+                    observability_localized(locale, "Throughput", "吞吐量"),
+                  ),
+                  @html.td("\{state.requests.throughput_per_second}/s"),
+                  @html.td(
+                    observability_localized(
+                      locale, "Current aggregate snapshot", "当前聚合快照",
+                    ),
+                  ),
+                ]),
+                @html.tr([
+                  @html.th(
+                    scope=Row,
+                    observability_localized(locale, "Errors", "错误"),
+                  ),
+                  @html.td(state.requests.errors.to_string()),
+                  @html.td(
+                    observability_localized(
+                      locale, "No target supplied", "未提供目标值",
+                    ),
+                  ),
+                ]),
+              ]),
             ]),
           ],
         ),
-      ])
-    },
-    @html.figcaption(
+      ]),
+    ],
+  )
+}
+
+///|
+fn benchmark_comparison_chart(state : ConsoleState) -> @rabbita.Html {
+  let locale = state.locale
+  @html.figure(
+    class="obs-figure obs-benchmark-figure",
+    attrs=@html.Attrs::build().aria_label(
       observability_localized(
-        locale, "Each lane is the exact benchmark evidence string supplied by ConsoleState. Lane length and order carry no numeric performance meaning; typed model, runtime, hardware, metric, unit, and target fields are not available for a quantitative plot.",
-        "每个通道均为 ConsoleState 提供的原始基准证据字符串。通道长度和顺序不代表数值性能；当前没有可用于定量绘图的类型化模型、运行时、硬件、指标、单位和目标字段。",
+        locale, "Recorded benchmark evidence", "已记录的基准证据",
       ),
     ),
-  ])
+    [
+      @html.div(class="obs-figure-heading", [
+        @html.div([
+          @html.p(
+            class="eyebrow",
+            observability_localized(
+              locale, "Evidence comparison", "证据比较",
+            ),
+          ),
+          @html.h3(
+            observability_localized(
+              locale, "Recorded benchmark evidence", "已记录的基准证据",
+            ),
+          ),
+        ]),
+        @html.span(
+          class="obs-scope-badge",
+          observability_localized(
+            locale, "Text evidence only", "仅文本证据",
+          ),
+        ),
+      ]),
+      if state.benchmark_evidence.length() == 0 {
+        @html.p(
+          class="empty-state compact",
+          observability_localized(
+            locale, "No benchmark evidence is available.", "暂无基准测试证据。",
+          ),
+        )
+      } else {
+        @html.ol(
+          class="obs-evidence-plot",
+          attrs=@html.Attrs::build().aria_hidden("true"),
+          [
+            for i, evidence in state.benchmark_evidence => {
+              @html.li(class="obs-evidence-lane", [
+                @html.span(class="obs-evidence-index", (i + 1).to_string()),
+                @html.strong(class="mono", evidence),
+              ])
+            }
+          ],
+        )
+      },
+      if state.benchmark_evidence.length() == 0 {
+        @html.nothing
+      } else {
+        @html.details(class="obs-data-alternative", [
+          @html.summary(
+            observability_localized(
+              locale, "Benchmark evidence table", "基准测试证据表",
+            ),
+          ),
+          @html.p(
+            observability_localized(
+              locale, "Evidence order does not rank performance.", "证据顺序不代表性能排名。",
+            ),
+          ),
+          @html.div(
+            class="table-scroll",
+            attrs=@html.Attrs::build()
+              .tabindex(0)
+              .aria_label(
+                observability_localized(
+                  locale, "Scrollable benchmark evidence table", "可滚动的基准证据表",
+                ),
+              ),
+            [
+              @html.table(class="resource-table obs-data-table", [
+                @html.caption(
+                  observability_localized(
+                    locale, "Unparsed benchmark evidence in recorded order", "按记录顺序展示的未解析基准测试证据",
+                  ),
+                ),
+                @html.thead(
+                  @html.tr([
+                    @html.th(
+                      scope=Col,
+                      observability_localized(locale, "Lane", "通道"),
+                    ),
+                    @html.th(
+                      scope=Col,
+                      observability_localized(
+                        locale, "Recorded evidence", "已记录证据",
+                      ),
+                    ),
+                  ]),
+                ),
+                @html.tbody(
+                  [
+                    for i, evidence in state.benchmark_evidence => {
+                      @html.tr([
+                        @html.th(scope=Row, (i + 1).to_string()),
+                        @html.td(class="mono", evidence),
+                      ])
+                    }
+                  ],
+                ),
+              ]),
+            ],
+          ),
+        ])
+      },
+    ],
+  )
 }
 
 ///|

@@ -1364,6 +1364,12 @@ pub async fn OfflineCommerceStore::review_evidence(
   guard self.orders.get(review.order_id) is Some(order) else {
     raise @offline.OfflineCommerceError::NotFound("review order")
   }
+  if !order.accepts_evidence_review() ||
+    review.reviewed_unix_ms >= order.expires_unix_ms {
+    raise @offline.OfflineCommerceError::InvalidTransition(
+      "order is not accepting evidence review",
+    )
+  }
   if artifact.order_id != order.order_id ||
     artifact.sha256 != review.expected_artifact_sha256 ||
     artifact.scan_state != ScanPassed ||

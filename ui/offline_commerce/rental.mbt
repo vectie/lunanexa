@@ -75,64 +75,70 @@ fn rental_handoff(
   }
   @html.section(class="offline-panel", [
     rental_quote_summary(state.locale, order),
-    @html.p(
-      attrs=@html.Attrs::build().role("status"),
-      if order.state == Draft {
-        if operator {
+    if operator &&
+      (order.state == Draft || order.state == Quoted) &&
+      !quote_blockers(state).is_empty() {
+      @html.nothing
+    } else {
+      @html.p(
+        attrs=@html.Attrs::build().role("status"),
+        if order.state == Draft {
+          if operator {
+            copy(
+              state.locale,
+              "Confirm the requested tariff below.",
+              "请在下方确认申请档位报价。",
+            )
+          } else {
+            copy(
+              state.locale,
+              "Waiting for the operator's quote.",
+              "等待运营方确认报价。",
+            )
+          }
+        } else if order.state == Quoted {
+          if operator {
+            copy(
+              state.locale,
+              "Send the quote to start document preparation.",
+              "发送报价，开始准备文件。",
+            )
+          } else {
+            copy(
+              state.locale,
+              "Waiting for the operator to release the quote.",
+              "等待运营方发布报价。",
+            )
+          }
+        } else if effective {
+          if operator {
+            copy(
+              state.locale,
+              "Undertaking approved. Check payment and allocate the quoted machines.",
+              "承诺函已批准。核对到账并下发报价对应机器。",
+            )
+          } else {
+            copy(
+              state.locale,
+              "Undertaking approved. Machine access opens after allocation.",
+              "承诺函已批准，机器下发后即可开通访问。",
+            )
+          }
+        } else if operator && packet is None {
           copy(
             state.locale,
-            "Confirm the requested tariff below.",
-            "请在下方确认申请档位报价。",
+            "Waiting for the customer to prepare the rental document.",
+            "等待客户准备租赁文件。",
           )
         } else {
           copy(
             state.locale,
-            "Waiting for the operator's quote.",
-            "等待运营方确认报价。",
+            "Complete the rental document and signed-scan approval.",
+            "完成租赁文件与签章审批。",
           )
-        }
-      } else if order.state == Quoted {
-        if operator {
-          copy(
-            state.locale,
-            "Send the quote to start document preparation.",
-            "发送报价，开始准备文件。",
-          )
-        } else {
-          copy(
-            state.locale,
-            "Waiting for the operator to release the quote.",
-            "等待运营方发布报价。",
-          )
-        }
-      } else if effective {
-        if operator {
-          copy(
-            state.locale,
-            "Undertaking approved. Check payment and allocate the quoted machines.",
-            "承诺函已批准。核对到账并下发报价对应机器。",
-          )
-        } else {
-          copy(
-            state.locale,
-            "Undertaking approved. Machine access opens after allocation.",
-            "承诺函已批准，机器下发后即可开通访问。",
-          )
-        }
-      } else if operator && packet is None {
-        copy(
-          state.locale,
-          "Waiting for the customer to prepare the rental document.",
-          "等待客户准备租赁文件。",
-        )
-      } else {
-        copy(
-          state.locale,
-          "Complete the rental document and signed-scan approval.",
-          "完成租赁文件与签章审批。",
-        )
-      },
-    ),
+        },
+      )
+    },
     match action {
       Some((label, message)) =>
         @html.button(
@@ -191,6 +197,12 @@ pub fn rental_evidence_view(
     return @html.nothing
   }
   let operator = state.audience == OperatorCommerce
+  let ended = order.state == Cancelled ||
+    order.state == Expired ||
+    order.state == Rejected ||
+    order.state == Revoked ||
+    order.state == ReversalPending ||
+    order.state == ReversalManualIntervention
   let artifacts = state.artifacts.filter(artifact => {
     artifact.order_id == order_id &&
     (
@@ -209,7 +221,18 @@ pub fn rental_evidence_view(
       copy(state.locale, "Payment & signed evidence", "付款与签章凭证"),
     ),
     rental_quote_summary(state.locale, order),
-    if operator {
+    if ended {
+      @html.p(attrs=@html.Attrs::build().role("status"), [
+        @html.strong(order_state_label(state.locale, order.state)),
+        @html.span(
+          copy(
+            state.locale,
+            " · Historical documents; this order cannot activate access.",
+            " · 历史资料，本订单不再办理开通。",
+          ),
+        ),
+      ])
+    } else if operator {
       if rental_packet(state, order).map_or(false, packet => {
           packet.state == Effective
         }) {

@@ -3899,19 +3899,31 @@ fn access_label(
 }
 
 ///|
+fn lease_state_label(
+  locale : @i18n.Locale,
+  state : @workspace.WorkspaceLeaseState,
+) -> String {
+  match state {
+    Requested => localized(locale, "Requested", "待审批")
+    Active => localized(locale, "Active", "有效")
+    Suspended => localized(locale, "Suspended", "已暂停")
+    Expired => localized(locale, "Expired", "已过期")
+    Revoked => localized(locale, "Revoked", "已撤销")
+  }
+}
+
+///|
 fn lease_state_badge(
   locale : @i18n.Locale,
   state : @workspace.WorkspaceLeaseState,
 ) -> @rabbita.Html {
-  match state {
-    Requested =>
-      status_badge(localized(locale, "Requested", "待审批"), "pending")
-    Active => status_badge(localized(locale, "Active", "有效"), "ok")
-    Suspended =>
-      status_badge(localized(locale, "Suspended", "已暂停"), "warning")
-    Expired => status_badge(localized(locale, "Expired", "已过期"), "muted")
-    Revoked => status_badge(localized(locale, "Revoked", "已撤销"), "muted")
+  let tone = match state {
+    Requested => "pending"
+    Active => "ok"
+    Suspended => "warning"
+    _ => "muted"
   }
+  status_badge(lease_state_label(locale, state), tone)
 }
 
 ///|
@@ -5602,6 +5614,25 @@ fn leases_view(
   state : ConsoleState,
   emit : @rabbita.Emit[ConsoleMessage]?,
 ) -> @rabbita.Html {
+  let leases = state.compute_leases.copy()
+  let priority = (lease : ComputeLeaseRow) => {
+    match lease.state {
+      Requested => 0
+      Active => 1
+      _ => 2
+    }
+  }
+  leases.sort_by((left, right) => {
+    let rank = priority(left).compare(priority(right))
+    if rank == 0 {
+      left.lease_id.compare(right.lease_id)
+    } else {
+      rank
+    }
+  })
+  let workspace_page = paged_rows(state, WorkspaceLeases, leases, lease => {
+    "\{lease.lease_id} \{lease.user_id} \{lease.subject_ref} \{lease.workspace} \{lease.resource} \{Repr(lease.state)} \{lease_state_label(state.locale, lease.state)}"
+  })
   @html.section(attrs=@html.Attrs::build().aria_labelledby("leases-title"), [
     resource_delivery_view(state, emit),
     @html.div(class="section-heading", [
@@ -5635,8 +5666,17 @@ fn leases_view(
       @html.nothing
     } else {
       @controls.advanced(
-        localized(state.locale, "Lease lifecycle", "租约生命周期"),
-        [lease_lifecycle_graph(state)],
+        localized(
+          state.locale,
+          "Lease lifecycle · current page",
+          "本页租约生命周期",
+        ),
+        [
+          lease_lifecycle_graph({
+            ..state,
+            compute_leases: workspace_page.rows,
+          }),
+        ],
       )
     },
     @html.div(class="subsection-heading", [
@@ -5786,6 +5826,11 @@ fn leases_view(
         ),
       ]),
     ]),
+    if state.compute_leases.length() > 0 {
+      list_controls(state, WorkspaceLeases, workspace_page, emit)
+    } else {
+      @html.nothing
+    },
     if state.compute_leases.length() == 0 {
       @html.p(
         class="empty-state",
@@ -5827,7 +5872,7 @@ fn leases_view(
           ),
           @html.tbody(
             [
-              for lease in state.compute_leases => {
+              for lease in workspace_page.rows => {
                 @html.tr([
                   @html.td([
                     @html.strong(lease.user_id),
@@ -11162,48 +11207,46 @@ fn agreements_view(
               "企业租用申请",
             ),
           ),
-          @html.p(
-            class="section-copy",
-            localized(
-              state.locale,
-              "Choose a node before approving the request.",
-              "批准申请前请选择一个节点。",
+        ]),
+        if state.enterprise_lease_requests.any(request => {
+            request.state == "Submitted"
+          }) {
+          @html.div(class="portal-node-picker", [
+            @html.label(
+              for_="portal-node-id",
+              localized(state.locale, "Assigned node", "分配节点"),
             ),
-          ),
-        ]),
-        @html.div(class="portal-node-picker", [
-          @html.label(
-            for_="portal-node-id",
-            localized(state.locale, "Assigned node", "分配节点"),
-          ),
-          @html.select(
-            id="portal-node-id",
-            on_change=text_command(emit, value => PortalNodeChanged(value)),
-            [
-              @html.option(
-                value="",
-                selected=state.portal_node_id == "",
-                localized(
-                  state.locale,
-                  "Choose an enrolled machine",
-                  "选择已纳管机器",
+            @html.select(
+              id="portal-node-id",
+              on_change=text_command(emit, value => PortalNodeChanged(value)),
+              [
+                @html.option(
+                  value="",
+                  selected=state.portal_node_id == "",
+                  localized(
+                    state.locale,
+                    "Choose an enrolled machine",
+                    "选择已纳管机器",
+                  ),
                 ),
-              ),
-              ..[
-                for node in state.nodes => {
-                  @html.option(
-                    value=node.node_id,
-                    selected=state.portal_node_id == node.node_id,
-                    disabled=node.state != Active ||
-                      node.lease_holder != "" ||
-                      node.active_assignment != "",
-                    "\{node.node_id} · \{node.architecture} · \{node.free_memory_mib} MiB",
-                  )
-                }
+                ..[
+                  for node in state.nodes => {
+                    @html.option(
+                      value=node.node_id,
+                      selected=state.portal_node_id == node.node_id,
+                      disabled=node.state != Active ||
+                        node.lease_holder != "" ||
+                        node.active_assignment != "",
+                      "\{node.node_id} · \{node.architecture} · \{memory_gib(node.free_memory_mib)}",
+                    )
+                  }
+                ],
               ],
-            ],
-          ),
-        ]),
+            ),
+          ])
+        } else {
+          @html.nothing
+        },
       ]),
       if state.enterprise_lease_requests.length() == 0 {
         @html.p(

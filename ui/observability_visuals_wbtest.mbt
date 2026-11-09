@@ -9,11 +9,12 @@ test "observability visuals render populated demo values without inventing scale
   let state = demo_state()
   let requests = render_observability_visual(request_telemetry_chart(state))
   assert_true(requests.contains("Aggregate request snapshot"))
-  assert_true(requests.contains("Window/profile: not supplied"))
+  assert_false(requests.contains("Window/profile: not supplied"))
+  assert_false(requests.contains("ConsoleState"))
   for value in ["1842", "142", "38", "3"] {
     assert_true(requests.contains(value))
   }
-  assert_true(requests.contains("do not imply a shared scale or trend"))
+  assert_true(requests.contains("no time trend or shared scale"))
   let benchmarks = render_observability_visual(
     benchmark_comparison_chart(state),
   )
@@ -22,7 +23,8 @@ test "observability visuals render populated demo values without inventing scale
       "demo-throughput · p95 142 ms · 38/s · failures 1‰ · demo-run-01",
     ),
   )
-  assert_true(benchmarks.contains("Lane length and order carry no numeric"))
+  assert_true(benchmarks.contains("Evidence order does not rank performance"))
+  assert_false(benchmarks.contains("ConsoleState"))
   let audit = render_observability_visual(audit_decision_graph(state))
   for
     value in [
@@ -69,7 +71,8 @@ test "observability visuals localize structure while preserving evidence" {
   }
   let requests = render_observability_visual(request_telemetry_chart(state))
   assert_true(requests.contains("请求聚合快照"))
-  assert_true(requests.contains("时间窗口/配置：未提供"))
+  assert_false(requests.contains("时间窗口/配置：未提供"))
+  assert_true(requests.contains("当前聚合值，不表示时间趋势"))
   assert_true(requests.contains("已上报百分位；采样窗口不可用"))
   let benchmarks = render_observability_visual(
     benchmark_comparison_chart(state),
@@ -109,12 +112,13 @@ test "observability visual evidence is escaped and has accessible alternatives" 
     assert_false(html.contains("<img"))
     assert_true(html.contains("&lt;img src=x onerror=alert(1)&gt;"))
     assert_true(html.contains("<figure"))
-    assert_true(html.contains("<figcaption"))
     assert_true(html.contains("<table"))
   }
   let requests = render_observability_visual(request_telemetry_chart(state))
   assert_true(requests.contains("Request data table"))
-  assert_true(requests.contains("<figcaption"))
+  assert_true(requests.contains("aria-label=\"Aggregate request snapshot\""))
+  assert_true(benchmark.contains("aria-label=\"Recorded benchmark evidence\""))
+  assert_true(audit.contains("<figcaption"))
   let styles = observability_visual_styles()
   assert_true(styles.contains("@media (max-width: 54rem)"))
   assert_true(styles.contains(".obs-audit-path"))

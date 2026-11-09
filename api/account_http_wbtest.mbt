@@ -343,6 +343,62 @@ async test "operator invitation enables one-time OIDC self-registration" {
 }
 
 ///|
+async test "signed phone contacts survive registration without trusting changed browser headers" {
+  let directory = @fs.tmpdir(prefix="signed-phone-contact-")
+  defer @fs.rmdir(directory, recursive=true)
+  let secret = "signed-phone-contact-secret-more-than-32-bytes"
+  let accounts = @account.AccountStore::open(
+    directory + "/accounts.json",
+    secret,
+  )
+  let runtime = @runtimes.OpenAiTextRuntime::new(
+    "http://127.0.0.1:1/v1/responses",
+    "",
+    "fixture",
+    "sha256:" + "b".repeat(64),
+    "sha256:" + "a".repeat(64),
+    allow_http_loopback=true,
+  )
+  let service = ApiService::new(
+    @store.FileStore::open(directory + "/state.json"),
+    runtime,
+    "operator",
+    "inference",
+    "node",
+    "test",
+  ).with_account_store(accounts, secret)
+  let now = @async.now()
+  let headers = signed_registration_headers(
+    secret,
+    "https://identity.example/realms/lunanexa",
+    "phone-subject",
+    "+8613912345678",
+    "Phone user",
+    "phone-nonce",
+    now,
+    now + 30000L,
+  )
+  assert_true(service.trusted_registration_assertion(headers, now) is Some(_))
+  let changed = headers.copy()
+  changed["X-LunaNexa-Identity-Email"] = "+8613912345679"
+  assert_true(service.trusted_registration_assertion(changed, now) is None)
+  assert_true(
+    service.trusted_registration_assertion(headers, now + 30001L) is None,
+  )
+  let invalid = signed_registration_headers(
+    secret,
+    "https://identity.example/realms/lunanexa",
+    "phone-subject",
+    "+861391234567x",
+    "Phone user",
+    "phone-nonce",
+    now,
+    now + 30000L,
+  )
+  assert_true(service.trusted_registration_assertion(invalid, now) is None)
+}
+
+///|
 async test "verified OIDC identity can register freely without machine authority" {
   let directory = @fs.tmpdir(prefix="lunanexa-open-registration-http-")
   let assertion_secret = "open-registration-assertion-secret-more-than-32-bytes"
