@@ -967,3 +967,11 @@ update instead of force pushing. Its provider phone-contact implementation
 agreed with the already deployed controller; the only API merge conflict was
 the duplicate explanatory comment. Preserve the merged gateway and signup
 behavior as well as the tested portal fixes.
+
+The final merged-page reload exercised a real transient Unknown observation.
+The desired state stayed stopped and the UI retained the service and blocked
+recreation/start. Read-only checks of the configured tensorfold rank units on
+.178/.179 showed loaded/inactive; both adapter and controller recovered Stopped
+without any lifecycle mutation. Adapter status took 0.65–0.83 seconds and the
+controller credential reference matched. Do not disguise observation failures
+as stopped, widen timeouts speculatively, or restart a model to clear this state.
