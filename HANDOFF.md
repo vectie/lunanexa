@@ -1019,3 +1019,19 @@ not a controller change or a claim that fixtures constitute that acceptance.
 Screenshot: output/portal-acceptance-20261110/person-deployments.jpg (private,
 uncommitted, no secrets). SSH/scp can transiently close at the jump host; a
 bounded reconnect worked. No credential reset was needed.
+
+Screenshot review then caught deployment buttons clipped at a 1036px desktop
+viewport: the table's global 48rem minimum plus a 12% action column squeezed
+the stop label; start also reused the stop danger class. The deployment table
+now has its own 36rem minimum, fixed status/action widths and nonwrapping action
+buttons. Only stopped managed services get the primary Start action; Stop keeps
+its danger style and existing confirmation. No lifecycle condition changed.
+Final phase checks pass native 1983/1983 and related JS 444/444. The final console
+overlay is `/home/HwHiAiUser/portal-deployment-actions-20261110`, JS SHA-256
+`a4d35619cecbce27b92ff4701e2c7bfa46323373c6e6089dda17516ab548d2cb`.
+Enterprise remains the session-recovery release above.
+Final official browser screenshot at 1036px confirmed tables 728px within 730px
+containers and all action buttons 80x44px without wrapping or clipping. Start
+is primary, Stop is danger; no lifecycle button was clicked. Final screenshot
+is output/portal-acceptance-20261110/deployment-actions.jpg. Public digest and
+all three site HTTP checks passed again after the final console rollout.

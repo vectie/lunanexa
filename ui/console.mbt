@@ -9420,6 +9420,8 @@ fn deployment_item(
   deployment : DeploymentRow,
   emit : @rabbita.Emit[ConsoleMessage]?,
 ) -> @rabbita.Html {
+  let can_start = deployment.assignment_id.has_prefix("service:") &&
+    deployment.observed == Stopped
   @html.tr([
     @html.td([
       @html.strong(deployment.deployment_id),
@@ -9451,11 +9453,10 @@ fn deployment_item(
     @html.td(
       @html.button(
         type_="button",
-        class="danger-secondary",
+        class=if can_start { "primary-button" } else { "danger-secondary" },
         on_click=command(
           emit,
-          if deployment.assignment_id.has_prefix("service:") &&
-            deployment.observed == Stopped {
+          if can_start {
             ModelPoolAction(
               "service-start/" + deployment.assignment_id[8:].to_owned(),
             )
@@ -9463,8 +9464,7 @@ fn deployment_item(
             BeginStopDeployment(deployment.assignment_id)
           },
         ),
-        if deployment.assignment_id.has_prefix("service:") &&
-          deployment.observed == Stopped {
+        if can_start {
           localized(locale, "Start", "启动")
         } else {
           localized(locale, "Stop…", "停止…")
@@ -12139,12 +12139,13 @@ fn console_styles() -> String {
     #|.resource-table th { height: 2.4rem; background: var(--surface-subtle); color: var(--muted); font-size: .66rem; font-weight: 760; letter-spacing: .07em; text-transform: uppercase; }
     #|.resource-table tbody tr:last-child td { border-bottom: 0; }
     #|.resource-table tbody tr:hover { background: var(--surface-hover); }
-    #|.model-service-table { table-layout: fixed; }
-    #|.model-service-table th:nth-child(1) { width: 42%; }
-    #|.model-service-table th:nth-child(2) { width: 12%; }
+    #|.model-service-table { table-layout: fixed; min-width: 36rem; }
+    #|.model-service-table th:nth-child(1) { width: auto; }
+    #|.model-service-table th:nth-child(2) { width: 6rem; }
     #|.model-service-table th:nth-child(3) { width: 34%; }
-    #|.model-service-table th:nth-child(4) { width: 12%; }
+    #|.model-service-table th:nth-child(4) { width: 7rem; }
     #|.model-service-table td { overflow-wrap: anywhere; }
+    #|.model-service-table td:last-child button { min-width: 5rem; white-space: nowrap; }
     #|.resource-table td > span, .resource-table td > strong { display: block; }
     #|.row-actions { white-space: nowrap; }
     #|.row-actions button { min-width: 5rem; margin-right: .35rem; }

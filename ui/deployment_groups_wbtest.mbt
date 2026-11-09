@@ -54,3 +54,31 @@ test "pool picker groups only available models by family and numeric generation"
   assert_true(html.contains("<details class=\"pool-deployment-settings\">"))
   assert_true(html.contains("服务未就绪"))
 }
+
+///|
+#warnings("-alert_unstable")
+test "stopped managed service offers start as a normal action while stop stays destructive" {
+  let base = demo_state().deployments[0]
+  let stopped = {
+    ..base,
+    assignment_id: "service:existing-service",
+    observed: Stopped,
+  }
+  let start = @rabbita.render_to_string(() => {
+    @rabbita.Val::constant(deployment_item(ChineseSimplified, stopped, None))
+  })
+  assert_true(start.contains("class=\"primary-button\""))
+  assert_true(start.contains(">启动</button>"))
+  assert_false(start.contains("danger-secondary"))
+  let running = { ..stopped, observed: Ready, }
+  let stop = @rabbita.render_to_string(() => {
+    @rabbita.Val::constant(deployment_item(ChineseSimplified, running, None))
+  })
+  assert_true(stop.contains("class=\"danger-secondary\""))
+  assert_true(stop.contains(">停止…</button>"))
+  let assignment = { ..stopped, assignment_id: "assignment:old", }
+  let legacy = @rabbita.render_to_string(() => {
+    @rabbita.Val::constant(deployment_item(ChineseSimplified, assignment, None))
+  })
+  assert_false(legacy.contains(">启动</button>"))
+}
