@@ -1,0 +1,90 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn command(args : Array[String]) -> String {
+  let result = @shell.Cmd(args[0], args[1:].to_owned()).output()
+  result.check()
+  result.stdout()
+}
+
+///|
+async fn main {
+  let root = "/home/HwHiAiUser/coffee-contact-20261109"
+  let apply = @env.args().contains("--apply")
+  let refs = command([
+    "kubectl", "--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", "get",
+    "deployments,statefulsets,daemonsets,pods", "-A", "-o", "json",
+  ])
+  let rows : Array[Json] = []
+  for
+    parent in [
+      "lunanexa-model-ui-20261022.fJCMrU", "lunanexa-maas-guide-20261016", "lunanexa-four-apps-20261015",
+      "lunanexa-moontown-20260929", "activity-launch-release-20261107", "coffee-journey-release-20261107",
+      "release-8f19a95", "offline-production-build.TT3wLN",
+    ] {
+    let directory = "/home/HwHiAiUser/" + parent
+    for child in @fs.readdir(directory) {
+      let path = directory + "/" + child
+      if @fs.kind(path, follow_symlink=false) is Directory {
+        if !@fs.exists(path + "/oci-layout") || !@fs.exists(path + "/blobs") {
+          continue
+        }
+        guard @json.parse(@fs.read_file(path + "/index.json").text())
+          is { "manifests": [{ "digest": String(digest), .. }], .. } else {
+          continue
+        }
+        if refs.contains(digest) || refs.contains(path) {
+          continue
+        }
+        rows.push({
+          "path": path + "/blobs",
+          "digest": digest,
+          "size": command(["du", "-sh", path + "/blobs"]).trim().to_owned(),
+        })
+        if apply {
+          @fs.rmdir(path + "/blobs", recursive=true)
+        }
+      } else if child.has_suffix(".tar") || child.has_suffix(".oci.tar") {
+        let index = @shell.Cmd("tar", ["-xOf", path, "index.json"]).output()
+        if index.exit_code() != 0 {
+          continue
+        }
+        guard @json.parse(index.stdout())
+          is { "manifests": [{ "digest": String(digest), .. }], .. } else {
+          continue
+        }
+        if refs.contains(digest) || refs.contains(path) {
+          continue
+        }
+        rows.push({
+          "path": path,
+          "digest": digest,
+          "size": command(["du", "-sh", path]).trim().to_owned(),
+        })
+        if apply {
+          @fs.remove(path)
+        }
+      }
+    }
+  }
+  @fs.write_file(
+    root +
+    (if apply {
+      "/inactive-exports-cleaned.json"
+    } else {
+      "/inactive-exports-review.json"
+    }),
+    Json::array(rows).stringify(indent=2),
+    permission=0o600,
+    create_mode=CreateNew,
+  )
+  println(Json::array(rows).stringify())
+  println(command(["df", "-h", "/"]))
+}

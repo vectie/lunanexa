@@ -313,9 +313,7 @@ async fn complete_oidc_callback(
     claims.sub,
     now_unix_ms,
   )
-  guard user.email is Some(email) &&
-    safe_registration_claim(email, 320) &&
-    email.contains("@") else {
+  guard provider_contact(user) is Some(email) else {
     raise Failure("OIDC identity has no usable email")
   }
   let display_name = match user.name {

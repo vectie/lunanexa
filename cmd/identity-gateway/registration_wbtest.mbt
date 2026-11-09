@@ -1,7 +1,9 @@
 ///|
 fn registration_test_request() -> RegistrationRequest {
   {
-    email: "buyer@example.test",
+    email: Some("buyer@example.test"),
+    phone: None,
+    acquisition: None,
     display_name: "Example Buyer",
     password: "Correct-Horse-9!",
     audience: "enterprise",
@@ -15,7 +17,7 @@ test "registration accepts only an address the realm can adopt as a username" {
   )
   // The provider stores the address as the username, so the surrounding
   // whitespace must not survive into the account.
-  assert_eq(accepted.email, "buyer@example.test")
+  assert_eq(accepted.email, Some("buyer@example.test"))
   assert_eq(accepted.display_name, "Example Buyer")
   for
     rejected in [

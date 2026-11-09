@@ -114,7 +114,7 @@ spec:
     enabled: true
     sslRequired: external
     registrationAllowed: true
-    registrationEmailAsUsername: true
+    registrationEmailAsUsername: false
     editUsernameAllowed: false
     resetPasswordAllowed: true
     rememberMe: true
@@ -129,7 +129,7 @@ spec:
     minimumQuickLoginWaitSeconds: 60
     maxFailureWaitSeconds: 900
     maxDeltaTimeSeconds: 43200
-    passwordPolicy: "length(12) and upperCase(1) and lowerCase(1) and digits(1) and specialChars(1) and notUsername(undefined) and notEmail(undefined) and passwordHistory(5)"
+    passwordPolicy: "length(6) and passwordHistory(5)"
     defaultSignatureAlgorithm: RS256
     accessTokenLifespan: 300
     accessCodeLifespan: 60

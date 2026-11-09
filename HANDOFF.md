@@ -1,5 +1,17 @@
 # Product simplification — 2026-11-04
 
+## 2026-11-09 · Alternative registration contact and acquisition
+
+- The unified gateway accepts exactly one email or mainland China phone. Phone usernames normalize to +86, have no fabricated email, and retain phone_number_verified=false. Minimum password length is six with no character classes; provider hashing, lockout and five-password history remain enabled.
+- The existing signed X-LunaNexa-Identity-Email / Account.email slot carries the real contact identifier for compatibility. It is not proof of verified email or SMS ownership. Phone acceptance remains behind the same provider identity and HMAC assertion. Do not prefill billing email from a phone contact (onboarding regression covered).
+- Optional acquisition source/campaign/entry are bounded ASCII marketing metadata stored in admin-managed provider attributes. They never assign roles. The private report/export helper writes mode-0600 records; do not commit exports, tokens or realm backups.
+- Release evidence and backups: /home/HwHiAiUser/coffee-contact-20261109/. Controller c24f8af1e808dc990f0f54268acbb03a244ccaba21ab065743b0f9f7397e0e53; external gateway 20af766bffbd7ce85926d09b7c8ae69e0b16c936e75e1508b005d9512efffb69. Existing glm-control helper hash unchanged. Final user UI digest 1ce0dcd1c119ea5e475f0a187fb9abadf0edc2a64a1b246b007ef3df45c108bf.
+- Full native 1972/1972, gateway 46/46, portal JS 73/73, isolation heuristic and native deny-warn checks passed. Canonical generated public interfaces unchanged. Live email and phone registration and provider attributes were checked; phone uses a deliberately non-routable QA number, no SMS was sent.
+- DiskPressure evicted platform, registry and identity dependencies. Kubelet 5% hard threshold +10% minimum reclaim requires ~15% free and a five-minute transition. Reviewed inactive OCI export caches were removed; models, PVC/account/activity state, executable/venv dependencies and retained rollback archives were preserved. Never lower thresholds or force-clear taints to hide pressure.
+- Registry 2.8.3 was restored from the retained original 46faa9a1 OCI archive. Keycloak retained original ff4257d0 index and amd64 child; the original index bytes were verified before cached import. Temporary importer pods dropped capabilities, mounted only k3s/socket and the public image archive, had no service-account token, and were deleted on exit. Only a terminating, never-started, exact-UID identity Pod was force-removed.
+- Main PostgreSQL's unreachable mutable external alias was replaced with the already-qualified private 4fae780d metadata-only recovery image. Its original bb3e1a57 index, exact filesystem/config preservation and shared main/identity provenance are recorded in EVENT_TRIAL_REHEARSAL_20261022 and UNDERTAKING_TWO_SIDED_RECONCILIATION_20260922. StatefulSet/PVC/config/credentials retained; database and control recovered Ready.
+- Check .mbtx scripts before upload. Source overlays need COPYFILE_DISABLE=1 and --no-xattrs; the Linux build's moonleaf sibling must contain CSV. Controller native release took about fifteen minutes and 6.6GB peak GCC RSS; avoid redundant rebuilds. The browser/portal is JS-only, so its tests must use --target js.
+
 Read this before continuing UI work, together with AGENTS.md.
 
 ## Current scope
@@ -942,9 +954,16 @@ Page/search actions do not call the server cursor API; the existing full
 workspace read is unchanged. Request/benchmark metric caveats are inside the
 data disclosure; default UI no longer exposes ConsoleState implementation text.
 
-Final strict native checks and the complete runner pass 1,979/1,979; related
-JS UI/command tests pass 440/440. Isolation/public-response heuristics pass.
+After merging upstream phone/email registration support, final strict native
+checks and the complete runner pass 1,982/1,982; related JS UI/command tests
+pass 441/441. Isolation/public-response heuristics pass.
 Production controller SHA-256 is
 `623773f93a317a800baa1b3bd73b5c8a6e7545b5d006f3a6b0b6d755e2a41118`.
 Native release root: `/home/HwHiAiUser/portal-acceptance-control-r2-20261109`;
-final frontend root: `/home/HwHiAiUser/portal-acceptance-ui-r6-20261109`.
+final console root: `/home/HwHiAiUser/portal-acceptance-ui-r6-20261109`;
+enterprise overlay root: `/home/HwHiAiUser/portal-acceptance-ui-r7-20261109`.
+Both remotes advanced to `74c3f21` during acceptance. Merge that registration
+update instead of force pushing. Its provider phone-contact implementation
+agreed with the already deployed controller; the only API merge conflict was
+the duplicate explanatory comment. Preserve the merged gateway and signup
+behavior as well as the tested portal fixes.

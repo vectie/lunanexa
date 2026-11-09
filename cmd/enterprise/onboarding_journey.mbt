@@ -64,7 +64,8 @@ fn onboarding_account_defaults(
       } else {
         portal.self_service.billing_contact_name
       },
-      billing_email: if portal.self_service.billing_email.trim() == "" {
+      billing_email: if portal.self_service.billing_email.trim() == "" &&
+        value.email.contains("@") {
         value.email
       } else {
         portal.self_service.billing_email

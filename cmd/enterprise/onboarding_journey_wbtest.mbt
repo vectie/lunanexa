@@ -1,4 +1,18 @@
 ///|
+test "phone identity never fills the billing email field with a phone number" {
+  let account = {
+    ..@enterprise_ui.demo_state().account.unwrap(),
+    email: "+8613800138000",
+  }
+  let filled = onboarding_account_defaults(
+    @enterprise_ui.default_state(1000L),
+    Some(account),
+  )
+  assert_eq(filled.self_service.billing_email, "")
+  assert_eq(filled.self_service.billing_contact_name, account.display_name)
+}
+
+///|
 test "registered identity fills contact fields before any organization exists without inventing legal identity" {
   let base = @enterprise_ui.demo_state()
   let account = base.account.unwrap()

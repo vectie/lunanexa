@@ -1,0 +1,207 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/json",
+  "moonbitlang/core/env",
+  "moonbitlang/x@0.5.5/crypto",
+}
+
+///|
+async fn run(program : String, args : Array[String]) -> String {
+  let result = @shell.Cmd(program, args).output()
+  if result.exit_code() != 0 {
+    println(result.stderr())
+  }
+  result.check()
+  result.stdout()
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, mode] else {
+    fail("stage | prepare | push | publish")
+  }
+  let root = "/home/HwHiAiUser/coffee-contact-20261109/portal-contact-final"
+  let moon = "/home/HwHiAiUser/.moon-new/bin/moon"
+  if mode == "stage" {
+    let staging = "/tmp/coffee-contact-portal-20261109"
+    if !@fs.exists(staging + "/enterprise") {
+      @fs.mkdir(staging + "/enterprise", recursive=true, permission=0o700)
+    }
+    let bytes = @fs.read_file(
+      "_build/js/release/build/vectie/lunanexa/cmd/enterprise/enterprise.js",
+    ).binary()
+    let digest = @crypto.bytes_to_hex_string(@crypto.sha256(bytes))
+    @fs.write_file(
+      staging + "/enterprise/enterprise.js",
+      bytes,
+      permission=0o644,
+    )
+    @fs.write_file(
+      staging + "/enterprise/index.html",
+      @fs.read_file("cmd/enterprise/index.html")
+      .text()
+      .replace(old="__LUNANEXA_ENTERPRISE_ASSET_DIGEST__", new=digest),
+      permission=0o644,
+    )
+    ignore(
+      run("env", [
+        "COPYFILE_DISABLE=1",
+        "tar",
+        "--no-xattrs",
+        "-czf",
+        staging + "/portal.tgz",
+        "-C",
+        staging,
+        "enterprise",
+      ]),
+    )
+    ignore(
+      run("scp", [
+        staging + "/portal.tgz",
+        "scripts/package-coffee-contact-portal.mbtx",
+        "lunanexa-management:" + root + "/",
+      ]),
+    )
+    println("Portal JS " + digest)
+    return
+  }
+  let kube = [
+    "--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", "-n", "lunanexa",
+  ]
+  let raw = run(
+    "kubectl",
+    [..kube, "get", "deployment", "lunanexa-enterprise", "-o", "json"],
+  )
+  guard @json.parse(raw)
+    is {
+      "spec": {
+        "template": {
+          "spec": { "containers": [{ "image": String(prior), .. }], .. },
+          ..
+        },
+        ..
+      },
+      ..
+    } else {
+    fail("Missing portal image")
+  }
+  if mode == "prepare" {
+    guard prior.has_suffix(
+      "@sha256:a9a0f89c79757d5f309d51b5a5d21c67eec45551f3a0ef94ceb1903d0177a7a2",
+    ) else {
+      fail("Portal baseline changed")
+    }
+    @fs.write_file(
+      root + "/enterprise-before.json",
+      raw,
+      permission=0o600,
+      create_mode=CreateNew,
+    )
+    @fs.mkdir(root + "/portal-dist", permission=0o700)
+    ignore(
+      run("tar", ["-xf", root + "/portal.tgz", "-C", root + "/portal-dist"]),
+    )
+    let base = "/home/HwHiAiUser/portal-finish-shipped-ui-20261108"
+    ignore(
+      run(moon, [
+        "run",
+        base + "/package-existing.mbtx",
+        "--",
+        base + "/enterprise-image",
+        root + "/portal-dist",
+        root + "/enterprise-image-v3",
+        "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/lunanexa-web:model-catalog-ui-coffee-contact-20261109-v4",
+        "enterprise",
+      ]),
+    )
+    ignore(
+      run(moon, [
+        "run",
+        base + "/push-browser-oci.mbtx",
+        "--",
+        root + "/enterprise-image-v3",
+        "https://lunanexa-registry.lunanexa-registry.svc.cluster.local:5000",
+        "moon/lunanexa-web",
+        "model-catalog-ui-coffee-contact-20261109-v4",
+      ]),
+    )
+  } else if mode == "push" {
+    ignore(
+      run(moon, [
+        "run",
+        "/home/HwHiAiUser/portal-finish-shipped-ui-20261108/push-browser-oci.mbtx",
+        "--",
+        root + "/enterprise-image-v3",
+        "https://lunanexa-registry.lunanexa-registry.svc.cluster.local:5000",
+        "moon/lunanexa-web",
+        "model-catalog-ui-coffee-contact-20261109-v4",
+      ]),
+    )
+  } else if mode == "publish" {
+    guard @json.parse(@fs.read_file(root + "/enterprise-before.json").text())
+      is {
+        "spec": {
+          "template": {
+            "spec": { "containers": [{ "image": String(expected), .. }], .. },
+            ..
+          },
+          ..
+        },
+        ..
+      } &&
+      expected == prior else {
+      fail("Portal changed since preparation")
+    }
+    guard @json.parse(
+        @fs.read_file(root + "/enterprise-image-v3/index.json").text(),
+      )
+      is { "manifests": [{ "digest": String(digest), .. }], .. } else {
+      fail("No qualified portal image")
+    }
+    let patch : Json = [
+      {
+        "op": "test",
+        "path": "/spec/template/spec/containers/0/image",
+        "value": prior,
+      },
+      {
+        "op": "replace",
+        "path": "/spec/template/spec/containers/0/image",
+        "value": prior.split("@").next().unwrap().to_owned() + "@" + digest,
+      },
+    ]
+    @fs.write_file(
+      root + "/enterprise-patch.json",
+      patch.stringify(),
+      permission=0o600,
+      create_mode=CreateNew,
+    )
+    println(
+      run(
+        "kubectl",
+        [
+          ..kube,
+          "patch",
+          "deployment",
+          "lunanexa-enterprise",
+          "--type=json",
+          "--patch-file",
+          root + "/enterprise-patch.json",
+        ],
+      ),
+    )
+    println(
+      run(
+        "kubectl",
+        [
+          ..kube, "rollout", "status", "deployment/lunanexa-enterprise", "--timeout=240s",
+        ],
+      ),
+    )
+  } else {
+    fail("Unknown portal phase")
+  }
+}

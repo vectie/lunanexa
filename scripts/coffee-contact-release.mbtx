@@ -1,0 +1,404 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/core/encoding/base64",
+  "moonbitlang/core/encoding/utf8",
+}
+
+///|
+async fn run(program : String, args : Array[String]) -> String {
+  let r = @shell.Cmd(program, args).output()
+  if r.exit_code() != 0 {
+    @fs.write_file(
+      "/home/HwHiAiUser/coffee-contact-20261109/last-command-error.log",
+      r.stderr() + r.stdout(),
+      permission=0o600,
+      create_mode=CreateOrTruncate,
+    )
+  }
+  r.check()
+  r.stdout()
+}
+
+///|
+async fn main {
+  let root = "/home/HwHiAiUser/coffee-contact-20261109"
+  let moon = "/home/HwHiAiUser/.moon-new/bin/moon"
+  guard @env.args() is [_, mode] else { fail("build | inspect-realm") }
+  if mode == "build" {
+    if !@fs.exists(root + "/source") {
+      @fs.mkdir(root + "/source", permission=0o700)
+    }
+    if !@fs.exists(root + "/moonleaf") {
+      ignore(
+        run("ln", [
+          "-s",
+          "/home/HwHiAiUser/coffee-auth-queue-20261107/profile-source/moonleaf",
+          root + "/moonleaf",
+        ]),
+      )
+    }
+    ignore(
+      run("tar", ["-xzf", root + "/source-base.tgz", "-C", root + "/source"]),
+    )
+    ignore(
+      run("tar", ["-xzf", root + "/source-overlay.tgz", "-C", root + "/source"]),
+    )
+    ignore(
+      run("find", [root + "/source", "-name", "._*", "-type", "f", "-delete"]),
+    )
+    let repo = root + "/source"
+    guard @fs.read_file(repo + "/account/store.mbt")
+      .text()
+      .contains("activity_checkpoint_ms = Some(now_unix_ms)") &&
+      @fs.read_file(repo + "/api/server.mbt")
+      .text()
+      .contains("identity_profile_observation_failed") else {
+      fail("Existing identity latency fixes missing")
+    }
+    for
+      path in [
+        "cmd/control/moon.pkg", "cmd/identity-gateway/moon.pkg", "internal/postgres/moon.pkg",
+        "pgclient/moon.pkg",
+      ] {
+      let file = repo + "/" + path
+      @fs.write_file(
+        file,
+        @fs.read_file(file)
+        .text()
+        .replace(
+          old="-L/opt/homebrew/lib/postgresql@17",
+          new="-L/usr/lib/x86_64-linux-gnu",
+        ),
+        create_mode=CreateOrTruncate,
+      )
+    }
+    for target in ["cmd/identity-gateway", "cmd/control"] {
+      let result = @shell.Cmd("prlimit", [
+        "--stack=unlimited", moon, "-C", repo, "build", target, "--target", "native",
+        "--release", "--jobs", "2",
+      ]).output()
+      @fs.write_file(
+        root +
+        "/build-" +
+        (if target == "cmd/control" { "control" } else { "gateway" }) +
+        ".log",
+        result.stdout() + result.stderr(),
+        permission=0o600,
+      )
+      result.check()
+    }
+    println(
+      "Contact registration native builds complete; no deployment changed",
+    )
+  } else if mode == "inspect-realm" ||
+    mode == "configure-realm" ||
+    mode == "report" {
+    let kube = [
+      "--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", "-n", "lunanexa-identity",
+    ]
+    let admin = @json.parse(
+      run(
+        "kubectl",
+        [
+          ..kube, "get", "secret", "lunanexa-platform-idp-initial-admin", "-o", "json",
+        ],
+      ),
+    )
+    guard admin
+      is {
+        "data": {
+          "username": String(username),
+          "password": String(password),
+          ..
+        },
+        ..
+      } else {
+      fail("Bootstrap identity unavailable")
+    }
+    for (name, value) in [("admin-user", username), ("admin-pass", password)] {
+      @fs.write_file(root + "/" + name, @base64.decode(value), permission=0o600)
+    }
+    defer @shell.Cmd("rm", ["-f", root + "/admin-user", root + "/admin-pass"]).run()
+    let tls = @json.parse(
+      run(
+        "kubectl",
+        [
+          ..kube, "get", "secret", "lunanexa-platform-idp-internal-tls", "-o", "json",
+        ],
+      ),
+    )
+    guard tls is { "data": Object(data), .. } else {
+      fail("Provider trust unavailable")
+    }
+    let trust = match data.get("ca.crt") {
+      Some(value) => Some(value)
+      None => data.get("tls.crt")
+    }
+    guard trust is Some(String(certificate)) else {
+      fail("Provider trust missing")
+    }
+    @fs.write_file(
+      root + "/provider-ca.pem",
+      @base64.decode(certificate),
+      permission=0o600,
+    )
+    let origin = "https://lunanexa-platform-idp-service.lunanexa-identity.svc.cluster.local:18443"
+    let curl = [
+      "--silent",
+      "--show-error",
+      "--fail",
+      "--max-time",
+      "25",
+      "--resolve",
+      "lunanexa-platform-idp-service.lunanexa-identity.svc.cluster.local:18443:127.0.0.1",
+      "--cacert",
+      root + "/provider-ca.pem",
+    ]
+    @fs.write_file(root + "/admin-token.json", "", permission=0o600)
+    ignore(
+      run(
+        "curl",
+        [
+          ..curl,
+          "--data-urlencode",
+          "username@" + root + "/admin-user",
+          "--data-urlencode",
+          "password@" + root + "/admin-pass",
+          "--data",
+          "client_id=admin-cli&grant_type=password",
+          "--output",
+          root + "/admin-token.json",
+          origin + "/realms/master/protocol/openid-connect/token",
+        ],
+      ),
+    )
+    guard @json.parse(@fs.read_file(root + "/admin-token.json").text())
+      is { "access_token": String(token), .. } else {
+      fail("Admin login unavailable")
+    }
+    @fs.write_file(
+      root + "/admin-header",
+      "Authorization: Bearer " + token,
+      permission=0o600,
+    )
+    defer @shell.Cmd("rm", [
+      "-f",
+      root + "/admin-header",
+      root + "/admin-token.json",
+    ]).run()
+    for
+      (path, name) in [
+        ("realms/lunanexa", "realm"),
+        ("users/profile -r lunanexa", "profile"),
+      ] {
+      let endpoint = if name == "realm" {
+        "/admin/" + path
+      } else {
+        "/admin/realms/lunanexa/users/profile"
+      }
+      let raw = run(
+        "curl",
+        [..curl, "--header", "@" + root + "/admin-header", origin + endpoint],
+      )
+      if mode == "inspect-realm" {
+        @fs.write_file(
+          root + "/" + name + "-before.json",
+          raw,
+          permission=0o600,
+          create_mode=CreateNew,
+        )
+      }
+      let value = @json.parse(raw)
+      if value is Object(fields) {
+        let selected : Map[String, Json] = Map([])
+        for
+          key in [
+            "passwordPolicy", "registrationEmailAsUsername", "loginWithEmailAllowed",
+            "unmanagedAttributePolicy", "attributes",
+          ] {
+          if fields.get(key) is Some(v) && key != "attributes" {
+            selected[key] = v
+          }
+        }
+        if name == "profile" &&
+          fields.get("attributes") is Some(Array(attributes)) {
+          selected["email_profile"] = Json::array(
+            attributes.filter(v => v is { "name": "email", .. }),
+          )
+        }
+        println(Json::object(selected).stringify())
+      }
+    }
+    if mode == "report" {
+      let records : Array[Json] = []
+      let counts : Map[String, Int32] = Map([])
+      for page in 0..<100 {
+        let value = @json.parse(
+          run(
+            "curl",
+            [
+              ..curl,
+              "--header",
+              "@" + root + "/admin-header",
+              origin +
+              "/admin/realms/lunanexa/users?first=" +
+              (page * 100).to_string() +
+              "&max=100&briefRepresentation=false",
+            ],
+          ),
+        )
+        guard value is Array(users) else { fail("Invalid acquisition report") }
+        for user in users {
+          let source = match user {
+            {
+              "attributes": { "acquisition_source": [String(value), ..], .. },
+              ..
+            } if value.length() <= 128 &&
+              value.iter().all(c => c.is_printable()) => value
+            _ => "unknown"
+          }
+          counts[source] = counts.get(source).unwrap_or(0) + 1
+          if user is Object(fields) {
+            let row : Map[String, Json] = Map([])
+            for key in ["id", "username", "createdTimestamp", "attributes"] {
+              if fields.get(key) is Some(value) {
+                row[key] = value
+              }
+            }
+            records.push(Json::object(row))
+          }
+        }
+        if users.length() < 100 {
+          break
+        }
+        guard page < 99 else { fail("Report exceeded bounded page limit") }
+      }
+      @fs.write_file(
+        root + "/acquisition-report.json",
+        Json::array(records).stringify(indent=2),
+        permission=0o600,
+        create_mode=CreateOrTruncate,
+      )
+      let summary : Map[String, Json] = Map([])
+      for source, count in counts {
+        summary[source] = Json::number(count.to_double())
+      }
+      @fs.write_file(
+        root + "/acquisition-summary.json",
+        Json::object(summary).stringify(indent=2),
+        permission=0o600,
+        create_mode=CreateOrTruncate,
+      )
+      println(Json::object(summary).stringify())
+    }
+    if mode == "configure-realm" {
+      let current = @json.parse(
+        run(
+          "curl",
+          [
+            ..curl,
+            "--header",
+            "@" + root + "/admin-header",
+            origin + "/admin/realms/lunanexa",
+          ],
+        ),
+      )
+      guard current
+        is {
+          "passwordPolicy": "length(12) and upperCase(1) and lowerCase(1) and digits(1) and specialChars(1) and notUsername(undefined) and notEmail(undefined) and passwordHistory(5)",
+          ..
+        } else {
+        fail("Password policy changed since review")
+      }
+      let profile = @json.parse(
+        run(
+          "curl",
+          [
+            ..curl,
+            "--header",
+            "@" + root + "/admin-header",
+            origin + "/admin/realms/lunanexa/users/profile",
+          ],
+        ),
+      )
+      guard profile ==
+        @json.parse(@fs.read_file(root + "/profile-before.json").text()) &&
+        profile is Object(fields) &&
+        fields.get("attributes") is Some(Array(attributes)) else {
+        fail("User profile changed since review")
+      }
+      let next : Array[Json] = attributes.map(value => {
+        if value is { "name": "email", .. } && value is Object(attribute) {
+          ignore(attribute.remove("required"))
+          Json::object(attribute)
+        } else {
+          value
+        }
+      })
+      for
+        name in [
+          "registration_contact_kind", "phone_number", "phone_number_verified", "acquisition_source",
+          "acquisition_campaign", "acquisition_entry",
+        ] {
+        guard !next.any(value => value is { "name": String(n), .. } && n == name) else {
+          fail("Managed contact field already exists")
+        }
+        next.push({
+          "name": name,
+          "validations": { "length": { "max": 128 } },
+          "permissions": { "view": ["admin"], "edit": ["admin"] },
+          "multivalued": false,
+        })
+      }
+      fields["attributes"] = Json::array(next)
+      for
+        (name, value, path) in [
+          (
+            "realm-patch",
+            ({ "passwordPolicy": "length(6) and passwordHistory(5)" } : Json),
+            "/admin/realms/lunanexa",
+          ),
+          (
+            "profile-patch",
+            Json::object(fields),
+            "/admin/realms/lunanexa/users/profile",
+          ),
+        ] {
+        let file = root + "/" + name + ".json"
+        @fs.write_file(
+          file,
+          value.stringify(),
+          permission=0o600,
+          create_mode=CreateNew,
+        )
+        ignore(
+          run(
+            "curl",
+            [
+              ..curl,
+              "--header",
+              "@" + root + "/admin-header",
+              "--header",
+              "Content-Type: application/json",
+              "--request",
+              "PUT",
+              "--data-binary",
+              "@" + file,
+              origin + path,
+            ],
+          ),
+        )
+      }
+      println(
+        "Configured six-character passwords and admin-managed contact/acquisition attributes; existing credentials unchanged",
+      )
+    }
+  } else {
+    fail("Unknown release phase")
+  }
+}
