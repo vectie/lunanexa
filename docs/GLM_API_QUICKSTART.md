@@ -1,7 +1,9 @@
 # GLM API and TRAE quickstart
 
 Public guide: <https://suanli.kechuangfuwu.com:8443/docs/?page=client-api>.
-Connection and settings verified on 2026-10-16.
+Connection guidance reviewed on 2026-11-10. Published alias and URL are stable;
+check current MaaS readiness before invoking. The 2026-11-08 startup check is
+dated evidence, not a promise that a deliberately stopped service is online.
 
 | Setting | Value |
 | --- | --- |
@@ -78,10 +80,16 @@ return HTTP 200 with an error event, so inspect its events too.
   policy accepts 1–131072, omission or `null`. Model context capacity and
   output budget are separate settings.
 - **RequestBudgetExceeded**: reduce conversation history, attached files or
-  tool definitions. The current public request-body ceiling is **1 MiB of
-  UTF-8 JSON**. The runtime's 850000-token context does not override it.
-- **RuntimeUnavailable**: check that MaaS shows the service ready. Retry a
-  new conversation; if the problem persists, give the operator the public
+  tool definitions. The deployed generation-7 profile has a **16 MiB UTF-8
+  JSON request-body ceiling** and a separate **10,000,000-byte input budget**.
+  These two values were re-read from the deployed settings on 2026-11-10.
+  The GLM context configuration is **524,288 tokens**, as recorded in
+  [GLM startup verification](GLM_STARTUP.md); it does not override either byte
+  limit or a narrower workspace budget. Other deployments may set lower limits;
+  read `/v1/settings/effective` through the authorized API for their policy.
+- **RuntimeUnavailable**: check that MaaS shows the service ready. A stopped
+  service requires an authorized start; client retries cannot start it.
+  If the problem persists, give the operator the public
   error and time without a key or private prompt.
 
 The current adapter supports ordinary and streamed text, multipart text,

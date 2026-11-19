@@ -1,4 +1,7 @@
 /_build/
+/output/
+/tmp/
+**/__pycache__/
 /scripts/_build/
 /.mooncakes/
 /.repos/

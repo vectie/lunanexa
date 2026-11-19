@@ -1,0 +1,81 @@
+diff --git a/zig/build/glm_family_host.zig b/zig/build/glm_family_host.zig
+index 3f179ab..eeb1f90 100644
+--- a/zig/build/glm_family_host.zig
++++ b/zig/build/glm_family_host.zig
+@@ -3,6 +3,7 @@ const std = @import("std");
+ 
+ pub fn steps(b: *std.Build, cuda: *std.Build.Module, glm: *std.Build.Module, mods: anytype, step: *std.Build.Step) void {
+     const host = b.graph.host;
++    b.step("test-glm-dense-format-host", "Dense stored format selection without a GPU").dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = glm, .filters = &.{"GLM NVFP4 checkpoint"} })).step);
+     const startup = b.createModule(.{ .root_source_file = b.path("zig/src/families/glm/cuda_start_test.zig"), .target = host, .optimize = .debug });
+     const startup_run = b.addRunArtifact(b.addTest(.{ .root_module = startup }));
+     b.step("test-glm-startup-host", "Page refusals propagate through rank liveness before engine construction").dependOn(&startup_run.step);
+diff --git a/zig/src/families/glm/cuda_state.zig b/zig/src/families/glm/cuda_state.zig
+index ff3983f..2dd0261 100644
+--- a/zig/src/families/glm/cuda_state.zig
++++ b/zig/src/families/glm/cuda_state.zig
+@@ -126,8 +126,8 @@ fn b16Shapes(w: *const weights.Weights) [12][2]usize {
+         .{ c.q_lora + c.kv_lora, c.hidden }, .{ s.mla.len() * c.nope, c.q_lora },  .{ c.i_dim + c.i_heads, c.hidden },
+         .{ c.i_heads * c.i_dim, c.q_lora },  .{ c.hidden, s.mla.len() * c.v_dim }, .{ 2 * s.shared.len(), c.hidden },
+         .{ c.hidden, 2 * c.hidden }, // the MTP head's eh_proj
+-        if (c.exl3) .{ 2 * s.dense.len(), c.hidden } else .{ c.hidden, 2 * c.hidden }, // bf16 dense layers: [gate | up]
+-        if (c.exl3) .{ c.hidden, s.dense.len() } else .{ c.hidden, 2 * c.hidden }, // and down
++        .{ 2 * s.dense.len(), c.hidden }, // BF16 dense layers also occur in NVFP4 checkpoints
++        .{ c.hidden, s.dense.len() },
+     };
+ }
+ 
+@@ -137,6 +137,8 @@ test "GLM TP3: existing scratch covers raw projections through the 127-row split
+     for (0..3) |rank| {
+         const w: weights.Weights = .{ .gpa = std.testing.allocator, .config = c, .share = try Share.of(&c, rank, 3) };
+         const shapes = b16Shapes(&w);
++        try std.testing.expectEqual(2 * w.share.dense.len(), shapes[10][0]);
++        try std.testing.expectEqual(w.share.dense.len(), shapes[11][1]);
+         for ([_]usize{ 1, 17, 64, 65, 127, 128, 2066 }) |rows| {
+             var planned: usize = 4;
+             for (shapes) |shape| planned = @max(planned, b16.partBytes(@min(rows, b16.rows_from - 1), shape[0], shape[1]));
+diff --git a/zig/src/families/glm/cuda_weights.zig b/zig/src/families/glm/cuda_weights.zig
+index a466d78..ae94593 100644
+--- a/zig/src/families/glm/cuda_weights.zig
++++ b/zig/src/families/glm/cuda_weights.zig
+@@ -19,6 +19,21 @@ const projection = @import("cuda_proj.zig");
+ const glue = @import("cuda_glue.zig");
+ const Tensor = core.checkpoint.Tensor;
+ const prefix = "model.language_model.";
++
++fn denseStoredFormat(dtype: core.checkpoint.DType) formats.Format {
++    return switch (dtype) {
++        .bf16 => .bf16,
++        .f8_e4m3 => .mxfp8,
++        else => .nvfp4,
++    };
++}
++
++test "GLM NVFP4 checkpoint may retain dense projections in BF16" {
++    try std.testing.expectEqual(formats.Format.bf16, denseStoredFormat(.bf16));
++    try std.testing.expectEqual(formats.Format.nvfp4, denseStoredFormat(.u8));
++    try std.testing.expectEqual(formats.Format.mxfp8, denseStoredFormat(.f8_e4m3));
++}
++
+ /// A hyper-connection site: fn bf16 [s (s + 2)][s d], base and scale widened to fp32.
+ pub const Hc = struct { fn_w: u64, base: u64, scale: u64 };
+ 
+@@ -330,15 +345,14 @@ const Loader = struct {
+         const c = &L.w.config;
+         const s = L.w.share.dense;
+         const d = c.hidden;
+-        const mx = !c.exl3 and (try L.get("layers.{d}.mlp.gate_proj.weight", .{i})).dtype == .f8_e4m3; // FP4-Local's
+-        const want: formats.Format = if (c.exl3) .bf16 else if (mx) .mxfp8 else .nvfp4;
++        const want = denseStoredFormat((try L.get("layers.{d}.mlp.gate_proj.weight", .{i})).dtype);
+         inline for (.{ "gate_proj", "up_proj", "down_proj" }) |x| try L.format("layers.{d}.mlp." ++ x, .{i}, want);
+-        const w: mlp.Weights = if (c.exl3) bf16: { // an EXL3 checkpoint keeps its dense layers bf16
++        const w: mlp.Weights = if (want == .bf16) bf16: {
+             inline for (.{ "gate_proj", "up_proj" }) |x| try L.rows(try L.get("layers.{d}.mlp." ++ x ++ ".weight", .{i}), s.lo, s.hi, c.dense_inter, .bf16);
+             const gu = try L.put("layers.{d}.mlp.gu", .{i});
+             try L.cols(try L.get("layers.{d}.mlp.down_proj.weight", .{i}), s.lo, s.hi, .bf16);
+             break :bf16 .{ .bf16 = .{ .gu = gu, .down = try L.put("layers.{d}.mlp.down", .{i}) } };
+-        } else if (mx) mx8: {
++        } else if (want == .mxfp8) mx8: {
+             const parts = [_]formats.Part{ .{ .rel = "mlp.gate_proj", .rows = .{ s.lo, s.hi } }, .{ .rel = "mlp.up_proj", .rows = .{ s.lo, s.hi } } };
+             const gu = try formats.cutProj(L, prefix, i, &parts, &.{.mxfp8}, "layers.{d}.mlp.gu");
+             const down = try formats.cutProj(L, prefix, i, &.{.{ .rel = "mlp.down_proj", .cols = .{ s.lo, s.hi } }}, &.{.mxfp8}, "layers.{d}.mlp.down");

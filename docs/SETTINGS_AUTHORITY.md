@@ -33,6 +33,13 @@ The legacy `LUNANEXA_ADMISSION_CAPACITY` and
 `LUNANEXA_RUNTIME_CONCURRENCY` variables are accepted only when
 `LUNANEXA_ADMIN_SETTINGS_PATH` is absent, for migration of older deployments.
 
+`scheduler.runtime_concurrency: 0` means no extra execution semaphore and is the
+new default; it does not disable durable total-request admission or runtime
+memory protection. Positive values are explicit operator execution caps, not
+hardware-capacity measurements. Legacy node binaries that reject zero may keep
+the execution value equal to `admission_capacity` during a rolling migration;
+that introduces no ceiling below already-admitted work.
+
 ## Read APIs
 
 - `GET /v1/settings/effective` accepts enterprise inference authority or

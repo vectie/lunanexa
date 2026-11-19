@@ -1,5 +1,30 @@
 # LunaNexa-operated public identity
 
+## Deployed contact-registration profile — 2026-11-10
+
+The supported public portal currently uses the gateway's contact-registration
+flow: exactly one email address or mainland China mobile number, a display name
+and a password of at least six characters. Phone usernames normalize to `+86`;
+they have no fabricated email and retain `phone_number_verified=false`.
+Registration does not prove email or SMS ownership. The deployed email path
+sets the provider email flag without an SMTP ownership challenge, so that flag
+must not be described as evidence that a verification message was received.
+
+Keycloak remains the password/session provider. The gateway's restricted
+provider-admin integration creates accounts; the platform controller does not
+store passwords. This deployment does not force TOTP setup during this direct
+registration flow. A new account grants neither company membership nor machine
+access. The portal and approved same-origin business applications share their
+audience session across HTTPS 443 and 8443; operator authority remains separate.
+
+Implementation: `cmd/identity-gateway/registration.mbt`,
+`contact_registration_wbtest.mbt`, `shared_session_wbtest.mbt`, and
+`api/phone_registration_wbtest.mbt`. The remainder of this document describes
+the stricter reference OIDC/email-verification/TOTP deployment profile. Do not
+apply its verification claims to the current contact-registration flow.
+
+## Reference OIDC deployment profile
+
 LunaNexa ships a production-oriented, self-hosted public identity profile based
 on Keycloak 26.7.3. It gives people without a corporate directory a LunaNexa
 registration path while preserving the existing authority split:

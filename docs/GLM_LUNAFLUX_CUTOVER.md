@@ -1,4 +1,108 @@
-# GLM LunaFlux route cutover
+# GLM native route cutover
+
+## Current configuration and evidence scope — 2026-11-10
+
+The 1M upgrade below is historical. The owner subsequently authorized 524,288
+context tokens, verified by the 2026-11-08 startup and small JSON/SSE checks in
+[GLM startup](GLM_STARTUP.md). Later stop decisions remain authoritative; this
+report does not assert current online state. Request-body and input-byte budgets
+are separate from model context and remain governed by the effective settings.
+
+## TensorFold 1M upgrade — 4 November 2026
+
+The `.178/.179` pair now serves the same approved
+`LibertAIDAI/GLM-5.3-Flash-NVFP4` checkpoint with TensorFold 1.2.2 native CUDA,
+MTP + copies and a 1,048,576-token context. `.176` video and `.177` Qwen are
+unchanged. No new user admission or model concurrency cap was introduced.
+
+Source: [TensorFold](https://github.com/ashhart/TensorFold), upstream commit
+`00e7dddbdb2dd0c481f3d7e8d850fa3e1f2e80b7`, with local compatibility commit
+`b1922fc9c47b00774a6d183bb19517dffca314c9`. The patch in
+`deploy/patches/tensorfold/1.2.2-nvfp4-bf16-dense.patch` selects the existing
+BF16 loader and scratch shapes for dense projections retained as BF16 inside
+this NVFP4 checkpoint. It does not convert weights or reduce KV precision.
+Both ranks run binary SHA-256
+`57894967f6466b83928ffcb675ac679c4cca2155506b986b13e41e2bf903e79d`.
+
+The measured allocation is 93.83 GiB model memory per rank, a shared BF16 KV
+pool of 2,056 × 512-token pages (12.80 GiB), eight execution streams and 2,048-row
+prefill passes. The pool accommodates one full 1M window, not eight simultaneous
+1M requests. The engine reserve is 3 GiB; observed host `MemAvailable` during
+the long test was about 1.2/1.9 GiB. Existing host swap was nonzero; short sampled
+`vmstat` intervals showed no swap-out. This is a tight memory fit, not a soak
+test or a promise of spare memory for other workloads on the pair.
+
+Runtime qualification (direct private HTTP, temperature 0, same Low reasoning
+effort as the old engine):
+
+| Test | Input / output tokens | First token | Total | Result |
+| --- | --- | ---: | ---: | --- |
+| Ordinary decoding, factual QA | 99 / 157 | 328 ms | 9,143 ms | Natural stop |
+| MTP, same factual QA | 99 / 157 | 322 ms | 5,581 ms | Exact same token SHA-256 |
+| Cold long-context retrieval | 1,039,976 / 38 | 851,444 ms | 852,537 ms | All three beginning/middle/end codes exact; natural stop |
+
+The ordinary/MTP token SHA-256 is
+`d9af064140f42e57427d58e1ced1f7ead41fc8426d3912501b14032d535cb74e`.
+The long prompt was synthetic repeated material with three needles. This proves
+allocation and this retrieval case; it does not certify arbitrary 1M document
+reasoning. Cold prefill took about 14 minutes, and is not low latency.
+
+LunaNexa now forwards reasoning deltas and actual `finish_reason` rather than
+reporting a truncated response as `stop`. The identity gateway body allowance
+is 16 MiB. The active immutable settings ConfigMap is
+`lunanexa-admin-settings-glm-1m-20261104` (generation 7), with 16 MiB body and
+10,000,000 UTF-8 input-byte budgets. Output, timeout and concurrency budgets
+were not reduced. The GPU service EndpointSlice now targets `.178:18889` while
+the existing Service port and public alias `glm-5.3.flash` remain unchanged.
+The two existing controller egress rules were updated to the selected engine
+port 18889 and lifecycle port 5908 at their existing single-host destinations.
+The first cluster-path probe exposed these stale port rules; direct manager
+health alone did not prove the container path. The repaired loopback proxy
+path now reaches the backend successfully.
+The live LunaNexa runtime adapter then passed JSON arithmetic, SSE usage,
+consumer cancellation and a subsequent successful request through the actual
+controller loopback proxy and Kubernetes Service. This is transport acceptance,
+not customer authorization acceptance.
+
+Lifecycle ownership uses the same host token and existing SSH accounts through
+the user service `lunanexa-glm-tensorfold-control.service` on `.175:5908`.
+It observes only `lunanexa-glm-tensorfold-rank0/1.service`; the old root-owned
+adapter on 5907 still targets the stopped LunaFlux units. The new configurable
+memory observations are 768 MiB minimum host availability and 116 GiB maximum
+GPU process memory for this allocation; legacy defaults remain 16/100 GiB.
+No node permissions were expanded. Route, EndpointSlice, network policies, controller, identity
+gateway and application unit snapshots are retained under
+`/home/HwHiAiUser/glm-tensorfold-20261104` on `.175`. Rollback must stop the new
+pair before starting the old pair, restore its route and lifecycle origin, and
+restore the old application if reverting to an 8K engine.
+
+The controller is Ready 1/1, identity gateway 2/2, lifecycle reports `Running`,
+and the actual Kubernetes GLM Service health request succeeds. Six focused
+transport/lifecycle tests pass, including 1.2 MB Chinese request forwarding,
+early SSE delivery, cancellation and truncation reporting. `moon info` and
+formatting completed. The warning-denied native phase gates remain blocked by
+existing deprecated-method warnings outside this change; they are not recorded
+as passing. Browser automation currently fails with `browser.user is unavailable`,
+so these checks are not a new signed-in portal acceptance.
+Six contract tests also pass; the isolation/public-response heuristic still
+flags the existing `api/shared_trial_offerings_wbtest.mbt` fixture.
+
+The organization application now runs from `business-apps-20261104.parallel-v2`
+on `.175`, with two parallel BP assessments followed by one synthesis. The final
+live fixture completed three calls and HTML/Word/PDF/evidence export in
+245.614 seconds, with 12,620 input and 8,271 output tokens and natural stops.
+TTFT was 2.749 / 3.234 / 6.441 seconds; tails 0.113 / 0.001 / 0.001 seconds.
+Twelve application tests and the opt-in live workflow test pass. The live
+fixture's ambiguous title was clarified before the final run; earlier failed
+name assertions remain recorded. Manual review still found incorrect monetary
+arithmetic in model prose (1000 × 2万元 is 2000万元, not 200万元). Workflow and
+export acceptance is not universal answer-quality parity. Full source evidence
+and all report sections remain available for review; no output was truncated to
+obtain a faster result.
+
+Raw non-secret benchmark results are in `output/glm-tensorfold-20261104/`.
+The following sections describe historical LunaFlux deployments, not current
+TensorFold allocation.
 
 The existing company route `glm-5.3.flash` passed authenticated public acceptance
 on the LunaFlux NVFP4 pair on 19 October 2026. The old EXL3/vLLM
@@ -7,7 +111,7 @@ externally operated text binding, not a fabricated single-node managed
 deployment. LunaNexa owns tenant admission, the public alias, metadata and
 the lifecycle adapter; LunaFlux owns inference and the two-rank protocol.
 
-## Current capacity upgrade — validated19 October 2026, 11:37 CST
+## Historical capacity upgrade — validated19 October 2026, 11:37 CST
 
 The public company alias is online with the accepted native NVFP4 TP2 revision
 `5f864415bc33aa630e9c0df4a99b68a7ec40769a`. Both persistent units were installed

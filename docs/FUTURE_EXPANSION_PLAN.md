@@ -4,6 +4,13 @@ Date: 2026-08-21
 Planning horizon: four DGX Spark nodes first, then a private GPU cloud for
 approximately 4–100 machines
 
+This is the dated planning baseline. Its "current status" column and code-size
+estimates describe 2026-08-21, not a live implementation inventory. Later
+physical runtime, unified-service, portal, identity and storage work is recorded
+in `PLAN.md`, `UNIFIED_MODEL_SERVICES.md`, `GLM_STARTUP.md` and the deployment
+runbooks. Preserve independent offering acceptance gates; do not reuse the old
+"not yet deployed" verdict as today's status.
+
 ## Executive decision
 
 The current repository is sufficient to **begin** a controlled deployment and

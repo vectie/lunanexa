@@ -26,6 +26,26 @@ contract. LunaNexa must never import MoonGate or any other MoonSuite product.
 The MoonGate adapter owns any translation from MoonSuite concerns into the
 generic LunaNexa request envelope.
 
+
+## Working style
+- Think from the first principle: confirm the real goal, constraints, and success criteria first.
+- Fix bugs at the root cause; never patch over symptoms.
+- Log pitfalls in HANDOFF.md and read it before each new task.
+- For production work, include performance cost in design and acceptance.
+
+## UI/UX
+- Avoid unnecessary secondary labels and descriptions let the layout do the explaining. 
+- Every element must serve a clear user purpose; no slogans, decoration, repeated info.
+- Show explanations only for abnormal states or required actions, put secondary details 
+behind progressive disclosure.
+- Stay consistent with existing screens; prefer removing or simplifying over adding, and 
+do not redesign the whole page to change one part.
+- Make sure first time user can point out, what to click next, and what gonna happen.
+
+
+
+
+
 ## Product and language rules
 
 - Keep LunaNexa one product with separately deployable internal components.

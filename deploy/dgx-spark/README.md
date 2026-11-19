@@ -7,11 +7,11 @@ path.
 
 Production LunaNexa continues to use this boundary:
 
-1. the management node owns the source artifact below `/data/models`;
+1. the deployment owns the approved source artifact or managed model revision;
 2. a signed assignment authorizes exactly one DGX to pull it;
-3. the node agent verifies its size, digest and detached signature and publishes
-   the current single-artifact form atomically below
-   `/var/lib/lunanexa/models/sha256/`;
+3. the node agent verifies the single-artifact size/digest/detached signature,
+   or the `modelstore://` revision manifest bound to the signed assignment and
+   every listed file's size and SHA-256, before atomic cache publication;
 4. a production runtime adapter receives only its verified, read-only local
    artifact;
 5. the controller reaches the runtime through a separately approved HTTPS
@@ -20,8 +20,9 @@ Production LunaNexa continues to use this boundary:
 The qualification manifests test the runtime boundary before production
 promotion. They intentionally use the separate host path
 `/var/lib/lunanexa/qualification-models/sha256/DIGEST_HEX/model`, because vLLM
-and SGLang normally consume a multi-file Hugging Face model directory while the
-current LunaNexa materializer publishes one signed artifact file. They do not
+and SGLang normally consume a multi-file Hugging Face model directory. The current
+materializer also supports managed revisions; these standalone qualification
+manifests do not exercise that production transfer path. They do not
 download a model, mount `/data/models`, contain credentials, expose a public
 ingress, or replace the node agent.
 
@@ -29,9 +30,13 @@ Stage that qualification directory through a reviewed operator process, verify
 the source archive/tree and detached signature before extraction, make it
 non-writable by the runtime identity, and place it only on the selected DGX.
 Do not copy this qualification path into a production catalog. Production
-promotion additionally requires a reviewed artifact packaging/extraction
-adapter whose output is bound to the signed assignment and reverified before it
-becomes the runtime mount.
+promotion must select the approved artifact form and prove that its runtime mount
+is assignment-bound and verified. A managed revision uses its signed manifest
+binding, rather than inventing a detached signature over a directory. Arbitrary
+archives still need a reviewed packaging/extraction path. The implementation and
+regressions are in `node/artifact_materializer.mbt`,
+`node/managed_revision_test.mbt` and `node/cache_retention_test.mbt`; those fixtures
+do not qualify every model/runtime combination on hardware.
 
 ## Required cluster state
 
