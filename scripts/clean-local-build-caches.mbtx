@@ -1,0 +1,249 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/core/string",
+}
+
+///|
+async fn output(program : String, args : Array[String]) -> String {
+  let result = @shell.Cmd(program, args).output()
+  result.check()
+  result.stdout()
+}
+
+///|
+async fn directories(path : String) -> Array[String] {
+  if !@fs.exists(path) {
+    return []
+  }
+  output("find", [
+    path, "-mindepth", "1", "-maxdepth", "1", "-type", "d", "-print",
+  ])
+  .split("\n")
+  .filter(p => !p.is_empty())
+  .map(p => p.to_owned())
+  .to_array()
+}
+
+///|
+fn compiling(processes : String) -> Bool {
+  processes
+  .split("\n")
+  .any(line => {
+    let text = line.trim().to_owned()
+    let name = text.split(" ").next().unwrap_or("").to_owned()
+    if name == "moon" &&
+      (
+        text.contains("clean-local-build-caches.mbtx") ||
+        text.contains("prune-obsolete-moonfish-builds.mbtx") ||
+        text.contains("maintain-local-builds.mbtx")
+      ) {
+      return false
+    }
+    [
+      "moon", "moonc", "clang", "clang++", "cc", "c++", "gcc", "g++", "ld", "ninja",
+      "make", "gmake", "cargo", "rustc", "cmake", "xcodebuild", "vivado", "yosys",
+      "nextpnr",
+    ].contains(name) ||
+    (
+      name == "node" &&
+      (
+        text.contains("vite build") ||
+        text.contains("webpack") ||
+        text.contains("tsc")
+      )
+    )
+  })
+}
+
+///|
+async fn main {
+  if @env.args() is [_, "self-test"] {
+    assert_true(compiling("moonc /some/project\nclang -c test.c"))
+    assert_true(compiling("moon test --target native"))
+    assert_true(
+      !compiling(
+        "moonclaw daemon\nmoondesk --port 4200\nmoon run scripts/clean-local-build-caches.mbtx clean",
+      ),
+    )
+    println("Compilation exclusion regression checks passed")
+    return
+  }
+  guard @env.args() is [_, phase] && (phase == "report" || phase == "clean") else {
+    fail("report | clean")
+  }
+  let workspace = "/Users/kq/Workspace"
+  let root = "/Users/kq/Library/Logs/MoonSuite/build-retention"
+  if !@fs.exists(root) {
+    @fs.mkdir(root, recursive=true, permission=0o700)
+  }
+  let stamp = output("date", ["-u", "+%Y%m%dT%H%M%SZ"]).trim().to_owned()
+  let before = output("df", ["-k", "/System/Volumes/Data"])
+  if compiling(output("ps", ["-ww", "-axo", "ucomm=,args="])) {
+    println("Cache cleanup deferred: a compiler/build tool is running")
+    return
+  }
+  let opened = @shell.Cmd("lsof", ["-nP", "-Fpn"]).output()
+  guard opened.exit_code() == 0 else {
+    fail("Could not inventory running file references")
+  }
+  let records : Array[Json] = []
+  let mut removed_kib = 0L
+  let repos = directories(workspace)
+  // Archived integration/source checkouts keep generated test and JS caches
+  // outside Workspace. Keep their primary native builds under the same rules.
+  let development = "/Users/kq/moonsuite/development"
+  if @fs.exists(development) {
+    let git_paths = output("find", [
+      development, "-maxdepth", "5", "-name", ".git", "-prune", "-print",
+    ])
+    for git_path in git_paths.split("\n") {
+      let path = git_path.to_owned()
+      if path.has_suffix("/.git") {
+        let repo = path[:path.length() - 5].to_owned()
+        if !repos.contains(repo) &&
+          @fs.kind(repo, follow_symlink=false) is Directory {
+          repos.push(repo)
+        }
+      }
+    }
+  }
+  for repo in repos {
+    let name = repo.split("/").to_array().last().unwrap().to_owned()
+    if (!name.has_prefix("moon") && !name.has_prefix("luna")) ||
+      name == "lunachip" ||
+      !@fs.exists(repo + "/.git") {
+      continue
+    }
+    let candidates : Array[String] = []
+    for path in directories(repo + "/_build") {
+      let leaf = path.split("/").to_array().last().unwrap().to_owned()
+      if leaf == "native" {
+        // Keep primary CLI/shared-library build outputs, including cold launches.
+        for level in directories(path) {
+          for kind in ["test", "check"] {
+            if @fs.exists(level + "/" + kind) {
+              candidates.push(level + "/" + kind)
+            }
+          }
+        }
+        continue
+      }
+      if leaf == "js" ||
+        leaf == "wasm" ||
+        leaf == "wasm-gc" ||
+        leaf == "browser-compiled" ||
+        leaf.has_prefix("desktop-") ||
+        leaf.has_prefix("hosted-preview-") ||
+        leaf.has_prefix("native-qa-") ||
+        leaf.has_prefix("ui-locale-") {
+        candidates.push(path)
+      }
+    }
+    for path in directories(repo + "/scripts/_build") {
+      candidates.push(path)
+    }
+    // Local deployment staging keeps additional generated browser bundles.
+    // Preserve the staging receipts, sources and OCI evidence beside them.
+    for stage in directories(repo + "/tmp") {
+      for path in directories(stage) {
+        let leaf = path.split("/").to_array().last().unwrap().to_owned()
+        if leaf == "browser-dist" ||
+          leaf.has_suffix("-browser-dist") ||
+          leaf.has_prefix("browser-dist-") ||
+          leaf.contains("-browser-dist-") {
+          candidates.push(path)
+        }
+      }
+    }
+    for path in candidates {
+      if !@fs.exists(path) {
+        continue
+      }
+      let relative = path[repo.length() + 1:].to_owned()
+      let tracked = @shell.Cmd("git", ["-C", repo, "ls-files", "--", relative]).output()
+      guard tracked.exit_code() == 0 else {
+        fail("Cannot check tracked build contents")
+      }
+      if !tracked.stdout().trim().is_empty() {
+        records.push({ "path": path, "status": "kept-tracked" })
+        continue
+      }
+      let processes = output("ps", ["-axo", "args="])
+      if processes.contains(path) || opened.stdout().contains(path) {
+        records.push({ "path": path, "status": "kept-running" })
+        continue
+      }
+      let recent = output("find", [path, "-mmin", "-1440", "-print", "-quit"])
+      if !recent.trim().is_empty() {
+        records.push({ "path": path, "status": "kept-recent" })
+        continue
+      }
+      let size = output("du", ["-sk", path])
+        .split("\t")
+        .next()
+        .unwrap()
+        .to_owned()
+      let kib = @string.parse_int64(size.trim().to_owned())
+      if phase == "clean" {
+        if compiling(output("ps", ["-ww", "-axo", "ucomm=,args="])) {
+          println("Cache cleanup deferred: compilation started")
+          break
+        }
+        let live = output("lsof", ["-nP", "-Fpn"])
+        if live.contains(path) ||
+          output("ps", ["-ww", "-axo", "args="]).contains(path) {
+          records.push({ "path": path, "status": "kept-running" })
+          continue
+        }
+        let pending = path + ".cleanup-" + stamp
+        guard !@fs.exists(pending) else {
+          fail("Cleanup staging path already exists")
+        }
+        @shell.Cmd("mv", ["--", path, pending]).run()
+        @shell.Cmd("rm", ["-rf", "--", pending]).run()
+        removed_kib += kib
+      }
+      records.push({
+        "path": path,
+        "allocated_kib": kib,
+        "status": if phase == "clean" {
+          "removed-rebuildable"
+        } else {
+          "candidate"
+        },
+      })
+      @fs.write_file(
+        root + "/" + stamp + "-" + phase + ".json",
+        Json::object({
+          "records": records,
+          "removed_allocated_kib": removed_kib,
+        }).stringify(),
+        permission=0o600,
+      )
+    }
+  }
+  let after = output("df", ["-k", "/System/Volumes/Data"])
+  @fs.write_file(
+    root + "/" + stamp + "-" + phase + ".json",
+    Json::object({
+      "records": records,
+      "removed_allocated_kib": removed_kib,
+      "filesystem_before": before,
+      "filesystem_after": after,
+      "preserved": [
+        "running files", "builds modified within 24 hours", "tracked files", "model directories",
+        "experiment results", "installed packs", "active lunachip hardware work",
+      ],
+    }).stringify(),
+    permission=0o600,
+  )
+  println("Inspected build directories: " + records.length().to_string())
+  println("Removed allocated KiB: " + removed_kib.to_string())
+  println("Manifest: " + root + "/" + stamp + "-" + phase + ".json")
+  println(after)
+}

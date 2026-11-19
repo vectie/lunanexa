@@ -103,6 +103,11 @@ async fn main {
         ] {
         @shell.Cmd("cp", [dist + "/docs/" + name, staging + "/" + name]).run()
       }
+      for name in ["lecture.js", "lecture.css", "lecture-studio.js", "lecture-studio.css", "whiteboard-studio.js", "ai-lecture.json", "ai-speaker-script.html", "ai-speaker-script.md", "speaker-script.css", "speaker-script.js"] {
+        if @fs.exists(dist + "/docs/" + name) {
+          @shell.Cmd("cp", [dist + "/docs/" + name, staging + "/" + name]).run()
+        }
+      }
     } else {
       @shell.Cmd("cp", ["-r", dist + "/" + site, staging + "/" + site]).run()
     }

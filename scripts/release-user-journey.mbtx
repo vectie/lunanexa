@@ -1,0 +1,111 @@
+///|
+import { "moonbitlang/async@0.22.4", "moonbitlang/async@0.22.4/fs", "moonbitlang/async@0.22.4/shell", "moonbitlang/core/env", "moonbitlang/core/json" }
+
+///|
+async fn kube(args : Array[String]) -> String {
+  let result = @shell.Cmd("kubectl", ["--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", "-n", "lunanexa", ..args]).output()
+  result.check()
+  result.stdout()
+}
+
+///|
+async fn fetch_blob(path : String, url : String, digest : String) -> Unit {
+  if !@fs.exists(path) {
+    @shell.Cmd("curl", ["--fail", "--silent", "--show-error", "--max-time", "60", "-H", "Accept: application/vnd.oci.image.manifest.v1+json", url, "-o", path]).run()
+  }
+  let hash = @shell.Cmd("sha256sum", [path]).output()
+  hash.check()
+  guard hash.stdout().has_prefix(digest[7:].to_owned()) else { fail("Image digest mismatch") }
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, phase] else { fail("stage | prepare | publish | verify") }
+  let root = "/home/HwHiAiUser/user-journey-r9-20261104"
+  let registry = "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000"
+  let repository = "moon/lunanexa-web"
+  let image = registry + "/" + repository + ":model-catalog-ui-user-journey-r9-20261104"
+  let moon = "/home/HwHiAiUser/.moon-new/bin/moon"
+  if phase == "stage" {
+    let workspace = "/Users/kq/Workspace/lunanexa"
+    let dist = workspace + "/tmp/user-journey-20261104/browser-dist/enterprise"
+    if !@fs.exists(dist) { @fs.mkdir(dist, recursive=true) }
+    let js = workspace + "/_build/browser-compiled/js/release/build/vectie/lunanexa/cmd/enterprise/enterprise.js"
+    @shell.Cmd("cp", [js, dist + "/enterprise.js"]).run()
+    let hash = @shell.Cmd("shasum", ["-a", "256", js]).output()
+    hash.check()
+    @fs.write_file(dist + "/index.html", @fs.read_file(workspace + "/cmd/enterprise/index.html").text().replace(old="__LUNANEXA_ENTERPRISE_ASSET_DIGEST__", new=hash.stdout().split(" ").next().unwrap().to_owned()))
+    @shell.Cmd("env", ["COPYFILE_DISABLE=1", "tar", "--no-xattrs", "-C", workspace + "/tmp/user-journey-20261104", "-czf", "/tmp/user-journey-portal.tgz", "browser-dist"]).run()
+    @shell.Cmd("ssh", ["-o", "BatchMode=yes", "lunanexa-management", "mkdir", "-p", root]).run()
+    @shell.Cmd("scp", ["/tmp/user-journey-portal.tgz", workspace + "/scripts/release-user-journey.mbtx", workspace + "/scripts/package-browser-layer.mbtx", workspace + "/scripts/push-browser-oci.mbtx", "lunanexa-management:" + root + "/"]).run()
+    return
+  }
+  if phase == "prepare" {
+    for name in ["image-final.oci.tar", "image-final-r2.oci.tar", "image-final-r4.oci.tar"] {
+      if @fs.exists(root + "/" + name) { @shell.Cmd("rm", ["--", root + "/" + name]).run() }
+    }
+    @shell.Cmd("tar", ["-C", root, "-xf", root + "/user-journey-portal.tgz"]).run()
+    let before = kube(["get", "deployment", "lunanexa-enterprise", "-o", "json"])
+    guard @json.parse(before) is { "spec": { "template": { "spec": { "containers": [{ "image": String(current), .. }], .. }, .. }, .. }, .. } && current.has_prefix(registry + "/" + repository + "@sha256:") else { fail("Unexpected portal deployment") }
+    if !@fs.exists(root + "/enterprise-before.json") {
+      @fs.write_file(root + "/enterprise-before.json", before, create_mode=CreateNew, permission=0o600)
+    }
+    let prior = current.split("@").to_array()[1].to_owned()
+    let base = root + "/base"
+    if !@fs.exists(base + "/blobs/sha256") { @fs.mkdir(base + "/blobs/sha256", recursive=true) }
+    let url = "https://" + registry + "/v2/" + repository
+    let path = base + "/blobs/sha256/" + prior[7:].to_owned()
+    fetch_blob(path, url + "/manifests/" + prior, prior)
+    let manifest = @fs.read_file(path).text()
+    guard @json.parse(manifest) is { "config": { "digest": String(config), .. }, "layers": Array(layers), .. } else { fail("Invalid image manifest") }
+    let blobs = [config]
+    for layer in layers { guard layer is { "digest": String(digest), .. } else { fail("Invalid layer") }; blobs.push(digest) }
+    for digest in blobs {
+      let file = base + "/blobs/sha256/" + digest[7:].to_owned()
+      let cached = "/home/HwHiAiUser/product-simple-r2-20261104/portal-image/blobs/sha256/" + digest[7:].to_owned()
+      if @fs.exists(cached) && !@fs.exists(file) { @shell.Cmd("ln", [cached, file]).run() }
+      fetch_blob(file, url + "/blobs/" + digest, digest)
+    }
+    @fs.write_file(base + "/index.json", Json::object({ "schemaVersion": 2, "manifests": [{ "mediaType": "application/vnd.oci.image.manifest.v1+json", "digest": prior, "size": manifest.length(), "platform": { "architecture": "amd64", "os": "linux" } }] }).stringify())
+    @fs.write_file(base + "/oci-layout", "{\"imageLayoutVersion\":\"1.0.0\"}")
+    @shell.Cmd("tar", ["-C", base, "-cf", root + "/base.tar", "."]).run()
+    if !@fs.exists(root + "/image-final-r9/index.json") {
+      @shell.Cmd(moon, ["run", root + "/package-browser-layer.mbtx", root + "/base.tar", root + "/browser-dist", root + "/image-final-r9", image, "enterprise"]).run()
+    }
+    @fs.write_file(root + "/image-final-r9/oci-layout", "{\"imageLayoutVersion\":\"1.0.0\"}")
+    @shell.Cmd("rm", ["--", root + "/base.tar"]).run()
+    @shell.Cmd(moon, ["run", root + "/push-browser-oci.mbtx", root + "/image-final-r9", "https://" + registry, repository, "model-catalog-ui-user-journey-r9-20261104"]).run()
+    return
+  }
+  if phase == "publish" {
+    guard @json.parse(@fs.read_file(root + "/enterprise-before.json").text()) is { "spec": { "template": { "spec": { "containers": [{ "image": String(old), .. }], .. }, .. }, .. }, .. } else { fail("Missing rollback snapshot") }
+    guard @json.parse(@fs.read_file(root + "/image-final-r9/index.json").text()) is { "manifests": [{ "digest": String(digest), .. }], .. } else { fail("Missing prepared image") }
+    println(kube(["patch", "deployment", "lunanexa-enterprise", "--type=json", "-p", Json::array([{ "op": "test", "path": "/spec/template/spec/containers/0/image", "value": old }, { "op": "replace", "path": "/spec/template/spec/containers/0/image", "value": registry + "/" + repository + "@" + digest }]).stringify()]))
+    println(kube(["rollout", "status", "deployment/lunanexa-enterprise", "--timeout=55s"]))
+    return
+  }
+  if phase == "verify-external" {
+    let local_js = "/Users/kq/Workspace/lunanexa/tmp/user-journey-20261104/browser-dist/enterprise/enterprise.js"
+    let expected = @shell.Cmd("shasum", ["-a", "256", local_js]).output()
+    expected.check()
+    @shell.Cmd("curl", ["--fail", "--silent", "--show-error", "--max-time", "30", "https://suanli.kechuangfuwu.com:8443/user/enterprise.js", "-o", "/tmp/user-journey-live-external.js"]).run()
+    let actual = @shell.Cmd("shasum", ["-a", "256", "/tmp/user-journey-live-external.js"]).output()
+    actual.check()
+    assert_eq(expected.stdout().split(" ").next().unwrap().to_owned(), actual.stdout().split(" ").next().unwrap().to_owned())
+    println("8443 portal bundle matches")
+    return
+  }
+  guard phase == "verify" else { fail("Unknown phase") }
+  println(kube(["get", "deployment", "lunanexa-enterprise", "-o", "jsonpath={.status.readyReplicas}"]))
+  let expected = @shell.Cmd("sha256sum", [root + "/browser-dist/enterprise/enterprise.js"]).output()
+  expected.check()
+  for port in ["443"] {
+    let origin = "https://suanli.kechuangfuwu.com:" + port
+    let output = root + "/live-" + port + ".js"
+    @shell.Cmd("curl", ["--fail", "--silent", "--show-error", "--max-time", "30", "--resolve", "suanli.kechuangfuwu.com:" + port + ":192.168.2.175", origin + "/user/enterprise.js", "-o", output]).run()
+    let actual = @shell.Cmd("sha256sum", [output]).output()
+    actual.check()
+    assert_eq(expected.stdout().split(" ").next().unwrap().to_owned(), actual.stdout().split(" ").next().unwrap().to_owned())
+    println(port + " portal bundle matches")
+  }
+}

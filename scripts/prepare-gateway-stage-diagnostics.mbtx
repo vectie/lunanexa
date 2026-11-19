@@ -1,0 +1,44 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/core/env",
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, root, backup] else {
+    fail("Expected source and new backup")
+  }
+  let path = root + "/cmd/webide-gateway/main.mbt"
+  let before = @fs.read_file(path).text()
+  guard !before.contains("startup_stage") else { fail("Already patched") }
+  let changes = [
+    (
+      "async fn main {", "async fn main {\n  let mut startup_stage = \"loading configuration\"",
+    ),
+    (
+      "    let require_exclusive =", "    startup_stage = \"validating workspace host\"\n    let require_exclusive =",
+    ),
+    (
+      "    let bridge =", "    startup_stage = \"creating authenticated bridge\"\n    let bridge =",
+    ),
+    (
+      "    let server =", "    startup_stage = \"binding listener\"\n    let server =",
+    ),
+    (
+      "    @async.with_task_group <| group => {", "    startup_stage = \"serving requests\"\n    @async.with_task_group <| group => {",
+    ),
+    (
+      "\"WebIDE gateway stopped: verify", "\"WebIDE gateway stopped at \" + startup_stage + \": verify",
+    ),
+  ]
+  let mut after = before
+  for (anchor, replacement) in changes {
+    guard after.contains(anchor) else { fail("Unexpected source stage") }
+    after = after.replace(old=anchor, new=replacement)
+  }
+  @fs.write_file(backup, before, permission=0o600, create_mode=CreateNew)
+  @fs.write_file(path, after)
+  println("Added only fixed, non-secret gateway failure stages")
+}

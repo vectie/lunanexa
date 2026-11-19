@@ -1,0 +1,156 @@
+///|
+/// One-time, scoped migration for the three existing shared-video leases.
+/// Stop the in-memory directory owner before changing its durable snapshot.
+/// Preserve identities, grants, expiry, usage, concurrency and all other limits.
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn kube(k : String, args : Array[String]) -> String {
+  let r = @shell.Cmd("kubectl", ["--kubeconfig", k, ..args]).output()
+  r.check()
+  r.stdout()
+}
+
+///|
+async fn sql(k : String, statement : String) -> String {
+  let r = @shell.Cmd(
+    "kubectl",
+    [
+      "--kubeconfig", k, "-n", "lunanexa", "exec", "-i", "lunanexa-postgres-0", "--",
+      "sh", "-c", "exec psql -X -v ON_ERROR_STOP=1 -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -At",
+    ],
+    stdin=Text(statement),
+  ).output()
+  if r.exit_code() != 0 {
+    eprintln(r.stderr())
+  }
+  r.check()
+  r.stdout()
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, k, backup] else {
+    fail("Usage: sync-existing-video-frames.mbtx KUBECONFIG NEW_BACKUP")
+  }
+  for ip in ["10.43.80.214", "10.43.246.11"] {
+    let r = @shell.Cmd("curl", [
+      "-fsS",
+      "--max-time",
+      "10",
+      "http://" + ip + ":8188/queue",
+    ]).output()
+    r.check()
+    guard @json.parse(r.stdout())
+      is { "queue_running": [], "queue_pending": [], .. } else {
+      fail("Leave active workspace jobs untouched")
+    }
+  }
+  let active = sql(
+    k,
+    (
+      #|SELECT count(*) FROM lunanexa.snapshots s, jsonb_array_elements(s.payload->'jobs') j
+      #|WHERE s.domain='media_jobs' AND j->>'state' IN ('Intent','Submitting','SubmissionUnknown','Queued','Running','Cancelling');
+    ),
+  )
+  guard active.trim() == "0" else { fail("Live media jobs exist") }
+  let deployment = kube(k, [
+    "-n", "lunanexa", "get", "deployment", "lunanexa-control", "-o", "json",
+  ])
+  guard @json.parse(deployment) is { "spec": { "replicas": 1, .. }, .. } else {
+    fail("Expected one controller replica")
+  }
+  let pods = kube(k, [
+    "-n", "lunanexa", "get", "pods", "-l", "app=lunanexa-control", "--field-selector=status.phase=Running",
+    "-o", "json",
+  ])
+  guard @json.parse(pods)
+    is { "items": [{ "metadata": { "name": String(pod), .. }, .. }], .. } else {
+    fail("Expected exactly one live controller")
+  }
+  @fs.mkdir(backup, permission=0o700)
+  @fs.write_file(
+    backup + "/controller-before.json",
+    deployment,
+    permission=0o600,
+    create_mode=CreateNew,
+  )
+  // Always restore the pre-existing replica count, including on failed guards.
+  defer ignore(
+    kube(k, [
+      "-n", "lunanexa", "scale", "deployment/lunanexa-control", "--replicas=1",
+    ]),
+  )
+  ignore(
+    kube(k, [
+      "-n", "lunanexa", "scale", "deployment/lunanexa-control", "--replicas=0",
+    ]),
+  )
+  ignore(
+    kube(k, [
+      "-n",
+      "lunanexa",
+      "wait",
+      "--for=delete",
+      "pod/" + pod,
+      "--timeout=120s",
+    ]),
+  )
+  let saved = sql(
+    k,
+    (
+      #|SELECT jsonb_build_object('snapshot',row_to_json(s),'leases',
+      #| (SELECT jsonb_agg(row_to_json(l)) FROM lunanexa.workspace_leases l
+      #|  WHERE lease_id IN ('lease-guojiaan-shared-video-20261015','lease-limuheng-shared-video-20261015','lease-wangzhixiang-shared-video-20261015')))
+      #|FROM lunanexa.snapshots s WHERE domain='workspace_directory';
+    ),
+  )
+  ignore(@json.parse(saved.trim().to_owned()))
+  @fs.write_file(
+    backup + "/workspace-before.json",
+    saved,
+    permission=0o600,
+    create_mode=CreateNew,
+  )
+  ignore(
+    sql(
+      k,
+      (
+        #|BEGIN;
+        #|LOCK TABLE lunanexa.snapshots, lunanexa.workspace_leases IN EXCLUSIVE MODE;
+        #|CREATE TEMP TABLE video_targets AS SELECT * FROM lunanexa.workspace_leases
+        #|WHERE lease_id IN ('lease-guojiaan-shared-video-20261015','lease-limuheng-shared-video-20261015','lease-wangzhixiang-shared-video-20261015');
+        #|DO $$ BEGIN
+        #| IF (SELECT count(*) FROM video_targets) <> 3 THEN RAISE EXCEPTION 'Expected three existing leases'; END IF;
+        #| IF EXISTS (SELECT 1 FROM video_targets WHERE state <> 'Active'
+        #|   OR tenant_ref <> 'tenant-4a2394cf9b9a6b3c02697fab0097489a'
+        #|   OR expires_unix_ms <= extract(epoch FROM now())*1000
+        #|   OR payload->'limits'->'capabilities' <> '[{"capability":"VideoGenerate","max_requests_per_hour":10,"max_concurrent_requests":1,"max_input_units_per_request":1048576,"max_output_units_per_request":121}]'::jsonb)
+        #| THEN RAISE EXCEPTION 'Old lease scope or budgets changed'; END IF;
+        #| IF (SELECT count(*) FROM lunanexa.snapshots s, jsonb_array_elements(s.payload->'leases') l
+        #|   JOIN video_targets t ON t.lease_id=l->>'lease_id' AND t.payload=l
+        #|   WHERE s.domain='workspace_directory') <> 3
+        #| THEN RAISE EXCEPTION 'Snapshot and projection disagree'; END IF;
+        #|END $$;
+        #|UPDATE lunanexa.workspace_leases SET payload=jsonb_set(payload,'{limits,capabilities,0,max_output_units_per_request}','481')
+        #|WHERE lease_id IN (SELECT lease_id FROM video_targets);
+        #|UPDATE lunanexa.snapshots s SET payload=jsonb_set(s.payload,'{leases}',
+        #| (SELECT jsonb_agg(COALESCE(t.payload,l) ORDER BY n)
+        #|  FROM jsonb_array_elements(s.payload->'leases') WITH ORDINALITY a(l,n)
+        #|  LEFT JOIN lunanexa.workspace_leases t ON t.lease_id=l->>'lease_id'
+        #|    AND t.lease_id IN (SELECT lease_id FROM video_targets))),
+        #| revision=revision+1, updated_at=now() WHERE domain='workspace_directory';
+        #|COMMIT;
+      ),
+    ),
+  )
+  println(
+    "Updated only existing video frame budgets: 121 -> 481; private backup retained",
+  )
+}

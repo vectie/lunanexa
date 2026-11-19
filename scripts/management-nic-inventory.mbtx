@@ -1,0 +1,108 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn command(program : String, args : Array[String]) -> String {
+  let result = @shell.Cmd(program, args).output()
+  result.check()
+  result.stdout().trim().to_owned()
+}
+
+///|
+async fn physical_nics() -> Array[Json] {
+  let devices = command("ls", ["-1", "/sys/class/net"])
+  let entries : Array[Json] = []
+  for line in devices.split("\n") {
+    let name = line.trim().to_owned()
+    let path = "/sys/class/net/" + name
+    if !@fs.exists(path + "/device/vendor") {
+      continue
+    }
+    let mac = @fs.read_file(path + "/address").text().trim().to_owned()
+    let pci = command("readlink", ["-f", path + "/device"])
+    let vendor = @fs.read_file(path + "/device/vendor").text().trim().to_owned()
+    let device = @fs.read_file(path + "/device/device").text().trim().to_owned()
+    entries.push({
+      "name": name,
+      "mac": mac,
+      "pci_path": pci,
+      "vendor_id": vendor,
+      "device_id": device,
+      "driver": command("ethtool", ["-i", name]),
+      "permanent_mac": command("ethtool", ["-P", name]),
+      "link": @json.parse(command("ip", ["-j", "link", "show", "dev", name])),
+    })
+  }
+  entries
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, phase, path] else {
+    fail("inventory OUTPUT.json | discover BASELINE.json")
+  }
+  let nics = physical_nics()
+  guard nics.length() > 0 else { fail("No physical PCI NICs found") }
+  if phase == "inventory" {
+    guard !@fs.exists(path) else { fail("Preserve the existing NIC baseline") }
+    let snapshot : Json = {
+      "captured_utc": command("date", ["-u", "+%Y-%m-%dT%H:%M:%SZ"]),
+      "host": command("hostname", []),
+      "physical_nics": nics,
+      "ipv4_addresses": @json.parse(command("ip", ["-j", "-4", "address"])),
+      "ipv4_routes": @json.parse(command("ip", ["-j", "-4", "route"])),
+      "routing_rules": @json.parse(command("ip", ["-j", "rule"])),
+      "bridge_ports": @json.parse(command("bridge", ["-j", "link"])),
+      "pci_network_devices": command("lspci", ["-nn"])
+      .split("\n")
+      .filter(line => {
+        line.contains("Ethernet controller") ||
+        line.contains("Network controller")
+      })
+      .map(line => Json::string(line.to_owned()))
+      .to_array(),
+    }
+    @fs.write_file(
+      path,
+      snapshot.stringify(),
+      permission=0o600,
+      create_mode=CreateNew,
+    )
+    println("Saved " + nics.length().to_string() + " physical NICs to " + path)
+    for nic in nics {
+      println(nic.stringify())
+    }
+    return
+  }
+  guard phase == "discover" else { fail("Unknown phase") }
+  guard @json.parse(@fs.read_file(path).text())
+    is { "host": String(host), "physical_nics": Array(baseline), .. } &&
+    host == command("hostname", []) else {
+    fail("Baseline belongs to another host")
+  }
+  let mut added = 0
+  for nic in nics {
+    guard nic is { "mac": String(mac), "pci_path": String(pci), .. } else {
+      fail("Invalid NIC inventory")
+    }
+    if !baseline.any(old => {
+        old is { "mac": String(old_mac), "pci_path": String(old_pci), .. } &&
+        old_mac == mac &&
+        old_pci == pci
+      }) {
+      added += 1
+      println("New or changed physical NIC: " + nic.stringify())
+    }
+  }
+  println(
+    "New or changed NICs: " +
+    added.to_string() +
+    "; no network settings changed",
+  )
+}

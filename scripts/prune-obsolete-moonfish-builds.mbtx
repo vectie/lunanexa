@@ -1,0 +1,365 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/core/string",
+}
+
+///|
+async fn output(program : String, args : Array[String]) -> String {
+  let result = @shell.Cmd(program, args).output()
+  result.check()
+  result.stdout()
+}
+
+///|
+fn version_key(version : String) -> Array[Int32]? {
+  let parts = version.split(".").to_array()
+  guard parts.length() == 3 else { return None }
+  let key : Array[Int32] = []
+  for part in parts {
+    guard !part.is_empty() && part.iter().all(c => c >= '0' && c <= '9') else {
+      return None
+    }
+    key.push(@string.parse_int(part.to_owned()) catch { _ => return None })
+  }
+  Some(key)
+}
+
+///|
+fn older(a : Array[Int32], b : Array[Int32]) -> Bool {
+  for i in 0..<3 {
+    if a[i] != b[i] {
+      return a[i] < b[i]
+    }
+  }
+  false
+}
+
+///|
+fn retained_versions(
+  current : String,
+  installed : Array[String],
+) -> Array[String] {
+  guard version_key(current) is Some(current_key) else { return [current] }
+  let previous = installed.filter(v => {
+    match version_key(v) {
+      Some(key) => older(key, current_key)
+      None => false
+    }
+  })
+  previous.sort_by((a, b) => {
+    let ka = version_key(a).unwrap()
+    let kb = version_key(b).unwrap()
+    if older(ka, kb) {
+      -1
+    } else if older(kb, ka) {
+      1
+    } else {
+      0
+    }
+  })
+  let kept = [current]
+  for i in 0..<2 {
+    if previous.get(previous.length() - i - 1) is Some(version) {
+      kept.push(version)
+    }
+  }
+  kept
+}
+
+///|
+fn payload_names() -> Array[String] {
+  [
+    "apps", "bin", "book", "evaluations", "fixtures", "migrations", "policies", "providers",
+    "schemas", "skills", "workflows",
+  ]
+}
+
+///|
+async fn has_payload(path : String) -> Bool {
+  for name in payload_names() {
+    if @fs.exists(path + "/" + name) {
+      return true
+    }
+  }
+  false
+}
+
+///|
+fn self_test() -> Unit raise {
+  assert_eq(
+    retained_versions("0.22.358", [
+      "0.22.100", "0.22.350", "0.22.356", "0.22.358", "0.22.359",
+    ]),
+    ["0.22.358", "0.22.356", "0.22.350"],
+  )
+  assert_eq(
+    retained_versions("1.0.0", [
+      "0.99.8", "0.9.99", "1.0.0", "2.0.0", "1.0.0-rc1",
+    ]),
+    ["1.0.0", "0.99.8", "0.9.99"],
+  )
+  assert_eq(retained_versions("1.0.0", ["1.0.0"]), ["1.0.0"])
+  assert_eq(version_key("../1.0.0"), None)
+  assert_eq(version_key("1.0.0-rc1"), None)
+  println("Retention regression checks passed")
+}
+
+///|
+async fn remove_payloads(
+  path : String,
+  stamp : String,
+  active_path : String,
+  active : String,
+) -> Unit {
+  for name in payload_names() {
+    let payload = path + "/" + name
+    if !@fs.exists(payload) {
+      continue
+    }
+    guard @fs.kind(payload, follow_symlink=false) is Directory else {
+      fail("Unexpected package payload type")
+    }
+    guard @fs.read_file(active_path).text() == active else {
+      fail("Active version changed")
+    }
+    let pending = payload + ".cleanup-" + stamp
+    guard !@fs.exists(pending) else { fail("Cleanup staging directory exists") }
+    @shell.Cmd("mv", ["--", payload, pending]).run()
+    @shell.Cmd("rm", ["-rf", "--", pending]).run()
+  }
+}
+
+///|
+async fn filesystem_test() -> Unit {
+  let root = @fs.tmpdir(prefix="moonsuite-retention-test-")
+  defer @fs.rmdir(root, recursive=true)
+  let path = root + "/old"
+  @fs.mkdir(path)
+  @fs.mkdir(path + "/bin")
+  @fs.write_file(path + "/bin/app", "old executable")
+  @fs.write_file(path + "/receipt.json", "receipt")
+  @fs.write_file(path + "/pack.json", "manifest")
+  @fs.write_file(path + "/UNINSTALL.md", "provenance")
+  @fs.mkdir(path + "/user-data")
+  @fs.write_file(path + "/user-data/video.mp4", "keep")
+  let active_path = root + "/active.json"
+  @fs.write_file(active_path, "changed")
+  try remove_payloads(path, "test", active_path, "original") catch {
+    _ => ()
+  } noraise {
+    _ => fail("Active pointer change was not rejected")
+  }
+  assert_true(@fs.exists(path + "/bin/app"))
+  @fs.write_file(active_path, "original")
+  remove_payloads(path, "test", active_path, "original")
+  remove_payloads(path, "test", active_path, "original")
+  assert_true(!@fs.exists(path + "/bin"))
+  assert_eq(@fs.read_file(path + "/receipt.json").text(), "receipt")
+  assert_eq(@fs.read_file(path + "/pack.json").text(), "manifest")
+  assert_eq(@fs.read_file(path + "/UNINSTALL.md").text(), "provenance")
+  assert_eq(@fs.read_file(path + "/user-data/video.mp4").text(), "keep")
+  @fs.symlink(target=path + "/user-data", path + "/bin")
+  try remove_payloads(path, "test", active_path, "original") catch {
+    _ => ()
+  } noraise {
+    _ => fail("Symlink payload was not rejected")
+  }
+  assert_eq(@fs.read_file(path + "/user-data/video.mp4").text(), "keep")
+  println(
+    "Filesystem deletion, provenance, pointer-change and repeat-run checks passed",
+  )
+}
+
+///|
+async fn main {
+  if @env.args() is [_, "self-test"] {
+    self_test()
+    filesystem_test()
+    return
+  }
+  guard @env.args() is [_, phase] && (phase == "report" || phase == "clean") else {
+    fail("report | clean")
+  }
+  let report = "/Users/kq/Library/Logs/MoonSuite/build-retention"
+  if !@fs.exists(report) {
+    @fs.mkdir(report, recursive=true, permission=0o700)
+  }
+  let stamp = output("date", ["-u", "+%Y%m%dT%H%M%SZ"]).trim().to_owned()
+  let manifest = report + "/moonfish-versions-" + stamp + "-" + phase + ".json"
+  let now = @string.parse_int64(output("date", ["+%s"]).trim().to_owned())
+  let opened = @shell.Cmd("lsof", ["-nP", "-Fpn"]).output()
+  guard opened.exit_code() == 0 else {
+    fail("Cannot inspect running package references")
+  }
+  let records : Array[Json] = []
+  let kept_records : Array[Json] = []
+  let mut removed_kib = 0L
+  let stores = [
+    (
+      "desktop", "/Users/kq/Library/Application Support/app.vectie.moondesk.lepusa.live/workspace",
+    ),
+    ("home-suite", "/Users/kq/moonsuite"),
+  ]
+  for name in @fs.readdir("/Users/kq/Workspace") {
+    if name.has_prefix("moon") || name.has_prefix("luna") {
+      let path = "/Users/kq/Workspace/" + name
+      if @fs.kind(path, follow_symlink=false) is Directory &&
+        @fs.exists(path + "/.git") {
+        stores.push(("source-" + name, path))
+      }
+    }
+  }
+  for (label, workspace) in stores {
+    let state = workspace + "/.moonsuite"
+    let active_dir = state + "/packs/active"
+    if !@fs.exists(active_dir) {
+      continue
+    }
+    for active_entry in @fs.readdir(active_dir) {
+      if !active_entry.has_suffix(".json") {
+        continue
+      }
+      let active_path = active_dir + "/" + active_entry
+      let active = @fs.read_file(active_path).text()
+      guard @json.parse(active)
+        is {
+          "pack_id": String(pack_id),
+          "version": String(current),
+          "installed_root": String(installed),
+          ..
+        } &&
+        active_entry == pack_id + ".json" &&
+        (pack_id.has_prefix("moon") || pack_id.has_prefix("luna")) &&
+        !pack_id.contains("/") &&
+        version_key(current) is Some(current_key) else {
+        fail("Unexpected active package")
+      }
+      let versions = state + "/packs/versions/" + pack_id
+      guard installed == versions + "/" + current &&
+        @fs.exists(installed + "/pack.json") else {
+        fail("Active installation is not in its expected store")
+      }
+      let installed_versions : Array[String] = []
+      for entry in @fs.readdir(versions) {
+        let path = versions + "/" + entry
+        if version_key(entry) is Some(_) &&
+          @fs.kind(path, follow_symlink=false) is Directory &&
+          @fs.exists(path + "/pack.json") &&
+          @fs.exists(path + "/receipt.json") &&
+          has_payload(path) {
+          guard @json.parse(@fs.read_file(path + "/pack.json").text())
+            is { "id": String(id), "version": String(version), .. } &&
+            id == pack_id &&
+            version == entry else {
+            fail("Package metadata mismatch")
+          }
+          installed_versions.push(entry)
+        }
+      }
+      let kept = retained_versions(current, installed_versions)
+      kept_records.push({ "store": label, "pack": pack_id, "versions": kept })
+      for entry in installed_versions {
+        if kept.contains(entry) ||
+          !older(version_key(entry).unwrap(), current_key) {
+          continue
+        }
+        let path = versions + "/" + entry
+        if !(@fs.kind(path, follow_symlink=false) is Directory) ||
+          !@fs.exists(path + "/pack.json") ||
+          !@fs.exists(path + "/receipt.json") ||
+          !has_payload(path) {
+          continue
+        }
+        guard @json.parse(@fs.read_file(path + "/pack.json").text())
+          is { "id": String(id), "version": String(version), .. } &&
+          id == pack_id &&
+          version == entry else {
+          fail("Package metadata mismatch")
+        }
+        let born = @string.parse_int64(
+          output("stat", ["-f", "%B", path]).trim().to_owned(),
+        )
+        let modified = output("find", [
+          path, "-mmin", "-1440", "-print", "-quit",
+        ])
+        if now - born < 86400L ||
+          !modified.trim().is_empty() ||
+          opened.stdout().contains(path) ||
+          output("ps", ["-ww", "-axo", "args="]).contains(path) {
+          continue
+        }
+        let kib = @string.parse_int64(
+          output("du", ["-sk", path])
+          .split("\t")
+          .next()
+          .unwrap()
+          .trim()
+          .to_owned(),
+        )
+        if phase == "clean" {
+          guard @fs.read_file(active_path).text() == active else {
+            fail("Active version changed; rescan")
+          }
+          // Keep receipts/manifests at their canonical audit paths. Remove only
+          // immutable code/resource payloads, never product workspace data.
+          let live = output("lsof", ["-nP", "-Fpn"])
+          if live.contains(path) ||
+            output("ps", ["-ww", "-axo", "args="]).contains(path) {
+            continue
+          }
+          remove_payloads(path, stamp, active_path, active)
+          let remaining = @string.parse_int64(
+            output("du", ["-sk", path])
+            .split("\t")
+            .next()
+            .unwrap()
+            .trim()
+            .to_owned(),
+          )
+          removed_kib += kib - remaining
+        }
+        records.push({
+          "store": label,
+          "pack": pack_id,
+          "version": entry,
+          "allocated_kib": kib,
+          "status": if phase == "clean" {
+            "removed-obsolete-build-payload"
+          } else {
+            "candidate"
+          },
+        })
+        @fs.write_file(
+          manifest,
+          Json::object({
+            "records": records,
+            "retained": kept_records,
+            "removed_allocated_kib": removed_kib,
+          }).stringify(),
+          permission=0o600,
+        )
+      }
+      guard @fs.read_file(active_path).text() == active else {
+        fail("Active pointer changed during maintenance")
+      }
+    }
+  }
+  @fs.write_file(
+    manifest,
+    Json::object({
+      "records": records,
+      "retained": kept_records,
+      "removed_allocated_kib": removed_kib,
+    }).stringify(),
+    permission=0o600,
+  )
+  println("Obsolete package builds: " + records.length().to_string())
+  println("Removed allocated KiB: " + removed_kib.to_string())
+  println("Manifest: " + manifest)
+  println(output("df", ["-h", "/System/Volumes/Data"]))
+}

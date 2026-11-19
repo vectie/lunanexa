@@ -1,0 +1,19 @@
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/shell",
+}
+
+///|
+async fn main {
+  let statement =
+    #|SELECT jsonb_build_object('organization_id',o->>'organization_id','display_name',o->>'display_name','state',o->>'state')
+    #|FROM lunanexa.snapshots s, jsonb_array_elements(COALESCE(s.payload->'commercial'->'organizations',s.payload->'organizations')) o
+    #|WHERE o->>'display_name' LIKE '%青创%';
+    #|SELECT domain FROM lunanexa.snapshots WHERE domain LIKE '%commercial%' OR domain LIKE '%portal%';
+  let result = @shell.Cmd("kubectl", [
+    "--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", "-n", "lunanexa", "exec", "-i", "lunanexa-postgres-0", "--",
+    "sh", "-c", "exec psql -X -v ON_ERROR_STOP=1 -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -At",
+  ], stdin=Text(statement)).output()
+  result.check()
+  println(result.stdout())
+}

@@ -1,0 +1,58 @@
+///|
+import { "moonbitlang/async@0.22.4", "moonbitlang/async@0.22.4/fs", "moonbitlang/async@0.22.4/shell", "moonbitlang/core/env", "moonbitlang/core/json" }
+
+///|
+async fn kube(args : Array[String]) -> String {
+  let r = @shell.Cmd("kubectl", ["--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", "-n", "lunanexa", ..args]).output()
+  r.check()
+  r.stdout()
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, phase] else { fail("stage | build | publish") }
+  let root = "/home/HwHiAiUser/access-onboarding-r2-20261104"
+  let repo = "/home/HwHiAiUser/lunanexa-event-trial-20261022.9DbhEI/lunanexa"
+  let moon = "/home/HwHiAiUser/.moon-new/bin/moon"
+  let files = ["api/access_onboarding_http.mbt", "api/registered_access_onboarding_wbtest.mbt"]
+  if phase == "stage" {
+    let local_repo = "/Users/kq/Workspace/lunanexa"
+    @shell.Cmd("env", ["COPYFILE_DISABLE=1", "tar", "--no-xattrs", "-C", local_repo, "-czf", "/tmp/access-onboarding.tgz", ..files]).run()
+    @shell.Cmd("ssh", ["-o", "BatchMode=yes", "lunanexa-management", "mkdir", "-p", root]).run()
+    @shell.Cmd("scp", ["/tmp/access-onboarding.tgz", local_repo + "/scripts/release-access-onboarding.mbtx", "lunanexa-management:" + root + "/"]).run()
+    return
+  }
+  if phase == "build" {
+    if !@fs.exists(root + "/access_onboarding_http.before.mbt") {
+      @shell.Cmd("cp", [repo + "/api/access_onboarding_http.mbt", root + "/access_onboarding_http.before.mbt"]).run()
+    }
+    for file in files {
+      let backup = root + "/" + file.replace(old="/", new="-") + ".before"
+      if @fs.exists(repo + "/" + file) && !@fs.exists(backup) { @shell.Cmd("cp", [repo + "/" + file, backup]).run() }
+    }
+    @shell.Cmd("tar", ["-C", repo, "-xf", root + "/access-onboarding.tgz"]).run()
+    @shell.Cmd("prlimit", ["--stack=unlimited", moon, "test", "api/registered_access_onboarding_wbtest.mbt", "api/access_onboarding_http_wbtest.mbt", "--target", "native", "--jobs", "2"], cwd=repo).run()
+    @shell.Cmd(moon, ["build", "cmd/control", "--target", "native", "--release", "--jobs", "2"], cwd=repo).run()
+    return
+  }
+  guard phase == "publish" else { fail("unknown phase") }
+  let before = kube(["get", "deployment", "lunanexa-control", "-o", "json"])
+  guard @json.parse(before) is { "spec": { "template": { "spec": { "volumes": Array(volumes), .. }, .. }, .. }, .. } else { fail("missing controller volumes") }
+  let dest = root + "/control"
+  let patch : Array[Json] = []
+  for index, volume in volumes {
+    if volume is { "name": "native-glm-control", "hostPath": { "path": String(prior), .. }, .. } {
+      @fs.write_file(root + "/controller-before.json", before, create_mode=CreateNew, permission=0o600)
+      @fs.mkdir(dest, permission=0o755)
+      @shell.Cmd("cp", ["-a", prior + "/.", dest]).run()
+      @shell.Cmd("chmod", ["755", dest]).run()
+      @shell.Cmd("install", ["-m", "755", repo + "/_build/native/release/build/vectie/lunanexa/cmd/control/control.exe", dest + "/control.exe"]).run()
+      let path = "/spec/template/spec/volumes/\{index}/hostPath/path"
+      patch.push({ "op": "test", "path": path, "value": prior })
+      patch.push({ "op": "replace", "path": path, "value": dest })
+    }
+  }
+  guard patch.length() == 2 else { fail("controller mount not found") }
+  println(kube(["patch", "deployment", "lunanexa-control", "--type=json", "-p", Json(patch).stringify()]))
+  println(kube(["rollout", "status", "deployment/lunanexa-control", "--timeout=55s"]))
+}

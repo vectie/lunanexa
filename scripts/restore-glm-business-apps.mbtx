@@ -1,0 +1,58 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/http",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, "observe" | "start" as action] else {
+    fail(
+      "Usage on the management host: restore-glm-business-apps.mbtx observe|start",
+    )
+  }
+  let source = @fs.read_file("/etc/lunanexa/glm-native-pair.env").text()
+  for
+    expected in [
+      "LUNANEXA_GLM_RUNTIME=systemd-user", "LUNANEXA_GLM_HEAD_SSH_TARGET=wlc003s@192.168.2.178",
+      "LUNANEXA_GLM_WORKER_SSH_TARGET=wlc004s@192.168.2.179", "LUNANEXA_GLM_HEAD_UNIT=lunanexa-glm-lunaflux-rank0.service",
+      "LUNANEXA_GLM_WORKER_UNIT=lunanexa-glm-lunaflux-rank1.service",
+    ] {
+    guard source.split("\n").contains(expected) else {
+      fail("The deployed GLM pair differs from the approved 178/179 scope")
+    }
+  }
+  let secret = @fs.read_file(
+      "/home/HwHiAiUser/.config/lunanexa/glm-control-token",
+    )
+    .text()
+    .trim()
+    .to_owned()
+  let headers : @http.Headers = { "authorization": "Bearer " + secret }
+  let url = "http://192.168.2.175:5907/v1/glm-control"
+  let (response, body) = @http.get(url, headers~)
+  guard response.code == 200 &&
+    @json.parse(body.text()) is { "state": String(state), .. } else {
+    fail("GLM lifecycle observation failed; no start was attempted")
+  }
+  println("GLM 178/179 lifecycle: " + state)
+  if action == "start" {
+    guard state == "Stopped" else {
+      fail("Refusing to start an already running or partial pair")
+    }
+    // The existing lifecycle owner checks idle GPUs and host memory, starts
+    // peer before coordinator, and stops only this pair if either rank fails.
+    let (started, data) = @http.post(url + ":start", "", headers~)
+    guard started.code == 200 &&
+      @json.parse(data.text()) is { "state": String(next), .. } else {
+      fail("The existing lifecycle owner refused or could not finish startup")
+    }
+    println("GLM 178/179 lifecycle after start: " + next)
+    println(
+      "Process startup is not model readiness; verify readiness and real inference separately.",
+    )
+  }
+}

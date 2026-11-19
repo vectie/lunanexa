@@ -1,0 +1,195 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn kube(args : Array[String]) -> String {
+  let result = @shell.Cmd(
+    "kubectl",
+    [
+      "--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", "-n", "lunanexa",
+      ..args,
+    ],
+  ).output()
+  errdefer println(result.stderr())
+  result.check()
+  result.stdout()
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, phase] else {
+    fail("stage | build | publish | verify")
+  }
+  let root = "/home/HwHiAiUser/business-login-shared-20261104"
+  let repo = "/home/HwHiAiUser/lunanexa-event-trial-20261022.9DbhEI/lunanexa"
+  let files = [
+    "cmd/identity-gateway/config.mbt", "cmd/identity-gateway/server.mbt", "cmd/identity-gateway/password_login.mbt",
+    "cmd/identity-gateway/registration.mbt", "cmd/identity-gateway/shared_domain_wbtest.mbt",
+    "cmd/identity-gateway/shared_session_wbtest.mbt",
+  ]
+  if phase == "stage" {
+    let local_repo = "/Users/kq/Workspace/lunanexa"
+    @shell.Cmd(
+      "env",
+      [
+        "COPYFILE_DISABLE=1", "tar", "--no-xattrs", "-C", local_repo, "-czf", "/tmp/shared-session-gateway.tgz",
+        ..files,
+      ],
+    ).run()
+    @shell.Cmd("ssh", [
+      "-o", "BatchMode=yes", "lunanexa-management", "mkdir", "-p", root,
+    ]).run()
+    @shell.Cmd("scp", [
+      "/tmp/shared-session-gateway.tgz",
+      local_repo + "/scripts/release-shared-session.mbtx",
+      "lunanexa-management:" + root + "/",
+    ]).run()
+  } else if phase == "build" {
+    if !@fs.exists(root + "/identity-before.json") {
+      @fs.write_file(
+        root + "/identity-before.json",
+        kube([
+          "get", "deployment", "lunanexa-identity-gateway-suanli", "-o", "json",
+        ]),
+        create_mode=CreateNew,
+        permission=0o600,
+      )
+      @shell.Cmd(
+        "tar",
+        ["-C", repo, "-czf", root + "/gateway-source-before.tgz", ..files[:5]],
+      ).run()
+    }
+    @shell.Cmd("tar", ["-C", repo, "-xf", root + "/shared-session-gateway.tgz"]).run()
+    let moon = "/home/HwHiAiUser/.moon-new/bin/moon"
+    @shell.Cmd(moon, [
+      "-C", repo, "test", "cmd/identity-gateway", "--target", "native", "--diagnostic-limit",
+      "2",
+    ]).run()
+    @shell.Cmd(moon, [
+      "-C", repo, "build", "cmd/identity-gateway", "--target", "native", "--release",
+      "--diagnostic-limit", "2",
+    ]).run()
+    @fs.mkdir(root + "/gateway", permission=0o755)
+    @shell.Cmd("chmod", ["755", root, root + "/gateway"]).run()
+    @shell.Cmd("install", [
+      "-m",
+      "755",
+      repo +
+      "/_build/native/release/build/vectie/lunanexa/cmd/identity-gateway/identity-gateway.exe",
+      root + "/gateway/identity-gateway.exe",
+    ]).run()
+  } else if phase == "publish" {
+    let current = @json.parse(
+      kube([
+        "get", "deployment", "lunanexa-identity-gateway-suanli", "-o", "json",
+      ]),
+    )
+    guard current
+      is {
+        "metadata": { "resourceVersion": String(rv), .. },
+        "spec": {
+          "template": { "spec": { "volumes": Array(volumes), .. }, .. },
+          ..
+        },
+        ..
+      } else {
+      fail("gateway deployment missing")
+    }
+    let patch : Array[Json] = [
+      { "op": "test", "path": "/metadata/resourceVersion", "value": rv },
+    ]
+    for index, volume in volumes {
+      if volume
+        is {
+          "name": "native-long-context",
+          "hostPath": { "path": String(old), .. },
+          ..
+        } {
+        guard old == "/home/HwHiAiUser/glm-tensorfold-20261104/platform" else {
+          fail("gateway release changed")
+        }
+        patch.push({
+          "op": "replace",
+          "path": "/spec/template/spec/volumes/\{index}/hostPath/path",
+          "value": root + "/gateway",
+        })
+      }
+    }
+    guard patch.length() == 2 else { fail("gateway binary mount missing") }
+    println(
+      kube([
+        "patch",
+        "deployment",
+        "lunanexa-identity-gateway-suanli",
+        "--type=json",
+        "-p",
+        Json(patch).stringify(),
+      ]),
+    )
+    println(
+      kube([
+        "rollout", "status", "deployment/lunanexa-identity-gateway-suanli", "--timeout=55s",
+      ]),
+    )
+  } else if phase == "verify" {
+    println(
+      kube([
+        "get", "deployment", "lunanexa-identity-gateway-suanli", "-o", "jsonpath={.status.readyReplicas}",
+      ]),
+    )
+    @shell.Cmd("curl", [
+      "--fail", "--silent", "--show-error", "--max-time", "10", "http://10.43.234.138:8081/health",
+    ]).run()
+    for
+      (port, host) in [
+        ("443", "suanli.kechuangfuwu.com"),
+        ("443", "suanli.kechuangfuwu.com:443"),
+        ("8443", "suanli.kechuangfuwu.com:8443"),
+      ] {
+      for
+        (path, expected) in [
+          ("/user/", "200"),
+          ("/user/business/procurement/", "200"),
+          ("/user/business/bp/", "200"),
+          ("/user/business/assets/portal-session.mjs", "200"),
+          ("/user/auth/session", "401"),
+          ("/user/business/api/bp/bootstrap", "401"),
+        ] {
+        let result = @shell.Cmd("curl", [
+          "--silent",
+          "--show-error",
+          "--max-time",
+          "15",
+          "--connect-to",
+          "suanli.kechuangfuwu.com:" + port + ":192.168.2.175:443",
+          "-H",
+          "Host: " + host,
+          "-H",
+          "Sec-Fetch-Site: same-origin",
+          "-H",
+          "Sec-Fetch-Dest: empty",
+          "-o",
+          "/dev/null",
+          "-w",
+          "%{http_code}",
+          "https://suanli.kechuangfuwu.com:" + port + path,
+        ]).output()
+        result.check()
+        guard result.stdout() == expected else {
+          fail(
+            "Unexpected ingress status: " + host + path + " " + result.stdout(),
+          )
+        }
+        println(host + path + " HTTP " + result.stdout())
+      }
+    }
+  } else {
+    fail("unknown phase")
+  }
+}

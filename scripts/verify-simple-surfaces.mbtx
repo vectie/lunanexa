@@ -1,0 +1,50 @@
+///|
+import { "moonbitlang/async@0.22.4", "moonbitlang/async@0.22.4/fs", "moonbitlang/async@0.22.4/shell", "moonbitlang/core/env" }
+
+///|
+async fn main {
+  guard @env.args() is [_, repo, network] && ["internal", "external"].contains(network) else { fail("Usage: verify-simple-surfaces.mbtx REPO_OR_RELEASE_ROOT internal|external") }
+  let host = "suanli.kechuangfuwu.com"
+  let release = if network == "internal" { repo } else { repo + "/tmp/product-simple-20261104" }
+  let dist = release + "/browser-dist"
+  let updated = if network == "internal" { "/home/HwHiAiUser/product-simple-r2-20261104" } else { repo + "/tmp/product-simple-r2-20261104" }
+  let output = release + "/verification"
+  if !@fs.exists(output) { @fs.mkdir(output, recursive=true, permission=0o700) }
+  let assets = [
+    ("/mana/console.js", if network == "internal" { "/home/HwHiAiUser/access-onboarding-ui-r4-20261104/browser-dist/console/console.js" } else { dist + "/console/console.js" }),
+    ("/user/enterprise.js", updated + "/browser-dist/enterprise/enterprise.js"),
+    ("/user/workbench/workbench.js", dist + "/workbench/workbench.js"),
+    ("/docs/app.js", dist + "/docs/app.js"),
+    ("/docs/styles.css", dist + "/docs/styles.css"),
+    ("/docs/coursebook-evidence.json", if network == "internal" { "/home/HwHiAiUser/access-onboarding-ui-20261104/browser-dist/docs/coursebook-evidence.json" } else { dist + "/docs/coursebook-evidence.json" }),
+    ("/community-assets/site.css", dist + "/home/site.css"),
+    ("/community-assets/site.js", dist + "/home/site.js"),
+    ("/user/business/assets/app.js", if network == "internal" { updated + "/application/static/app.js" } else { "/Users/kq/Workspace/kechuang-business-apps/static/app.js" }),
+    ("/user/business/assets/result-review.mjs", if network == "internal" { updated + "/application/static/result-review.mjs" } else { "/Users/kq/Workspace/kechuang-business-apps/static/result-review.mjs" }),
+  ]
+  for external in [network == "external"] {
+    let origin = "https://" + host + (if external { ":8443" } else { "" })
+    let connection = if external { [] } else { ["--resolve", host + ":443:192.168.2.175"] }
+    let path = output + (if external { "/external.body" } else { "/internal.body" })
+    for (remote, expected_path) in assets {
+      @shell.Cmd("curl", ["--fail", "--silent", "--show-error", "--max-time", "20", ..connection, origin + remote, "-o", path]).run()
+      guard @fs.read_file(path).binary() == @fs.read_file(expected_path).binary() else { fail("Asset mismatch: " + remote) }
+      println(origin + remote + " matches release")
+    }
+    for route in ["/", "/mana/", "/user/", "/user/workbench/", "/docs/", "/user/business/bp/", "/user/business/procurement/"] {
+      @shell.Cmd("curl", ["--fail", "--silent", "--show-error", "--max-time", "20", ..connection, origin + route, "-o", path]).run()
+      let html = @fs.read_file(path).text()
+      guard html.contains("<html") else { fail("Expected HTML at " + route) }
+      if route == "/" {
+        guard html.contains("进入算力平台") && html.contains("FDE 计划") && !html.contains("__PUBLIC_TRIAL_KEY__") && !html.contains("__PUBLIC_TRIAL_QR__") else { fail("Homepage release mismatch") }
+      }
+      println(origin + route + " serves HTML")
+    }
+    for endpoint in ["/user/business/api/bp/bootstrap", "/mana/v1/onboarding/access-packages/options"] {
+      let r = @shell.Cmd("curl", ["--silent", "--show-error", "--max-time", "20", ..connection, "-o", path, "-w", "%{http_code}", origin + endpoint]).output()
+      r.check()
+      guard r.stdout() == "401" else { fail("Anonymous access was not rejected: " + endpoint) }
+      println(origin + endpoint + " remains protected")
+    }
+  }
+}

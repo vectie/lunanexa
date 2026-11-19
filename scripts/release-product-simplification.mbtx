@@ -1,0 +1,238 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn kube(args : Array[String]) -> String {
+  let result = @shell.Cmd(
+    "kubectl",
+    [
+      "--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", "-n", "lunanexa",
+      ..args,
+    ],
+  ).output()
+  errdefer println(result.stderr())
+  result.check()
+  result.stdout()
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, phase] else {
+    fail("stage | prepare | publish | verify")
+  }
+  let root = "/home/HwHiAiUser/product-simple-r2-20261104"
+  let app = root + "/application"
+  let old = "/home/HwHiAiUser/product-simple-20261104/application"
+  let repo = "/home/HwHiAiUser/lunanexa-event-trial-20261022.9DbhEI/lunanexa"
+  let unit = "/home/HwHiAiUser/.config/systemd/user/qingchuang-business-apps.service"
+  let registry = "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000"
+  let tag = "model-catalog-ui-product-simple-r2-20261104"
+  if phase == "stage" {
+    let local_repo = "/Users/kq/Workspace/lunanexa"
+    let dist = local_repo +
+      "/tmp/product-simple-r2-20261104/browser-dist/enterprise"
+    if !@fs.exists(dist) {
+      @fs.mkdir(dist, recursive=true)
+    }
+    let js = local_repo +
+      "/_build/browser-compiled/js/release/build/vectie/lunanexa/cmd/enterprise/enterprise.js"
+    @shell.Cmd("cp", [js, dist + "/enterprise.js"]).run()
+    let result = @shell.Cmd("shasum", ["-a", "256", js]).output()
+    result.check()
+    let hash = result.stdout().split(" ").next().unwrap().to_owned()
+    @fs.write_file(
+      dist + "/index.html",
+      @fs.read_file(local_repo + "/cmd/enterprise/index.html")
+      .text()
+      .split("__LUNANEXA_ENTERPRISE_ASSET_DIGEST__")
+      .collect()
+      .join(hash),
+    )
+    @shell.Cmd("env", [
+      "COPYFILE_DISABLE=1",
+      "tar",
+      "--no-xattrs",
+      "-C",
+      local_repo + "/tmp/product-simple-r2-20261104",
+      "-czf",
+      "/tmp/business-login-portal.tgz",
+      "browser-dist",
+    ]).run()
+    @shell.Cmd("env", [
+      "COPYFILE_DISABLE=1", "tar", "--no-xattrs", "--exclude=__pycache__", "-C",
+      "/Users/kq/Workspace/kechuang-business-apps", "-czf", "/tmp/business-login-app.tgz",
+      "config.py", "auth.py", "storage.py", "model_client.py", "workflows.py", "server.py",
+      "static", "vendor", "assets", "requirements.lock", "tests", "deploy", "README.md",
+    ]).run()
+    @shell.Cmd("ssh", [
+      "-o", "BatchMode=yes", "lunanexa-management", "mkdir", "-p", root,
+    ]).run()
+    @shell.Cmd("scp", [
+      "/tmp/business-login-portal.tgz",
+      "/tmp/business-login-app.tgz",
+      local_repo + "/scripts/release-product-simplification.mbtx",
+      "lunanexa-management:" + root + "/",
+    ]).run()
+  } else if phase == "prepare" {
+    @fs.mkdir(app, permission=0o700)
+    @shell.Cmd("tar", ["-C", app, "-xf", root + "/business-login-app.tgz"]).run()
+    @shell.Cmd("tar", ["-C", root, "-xf", root + "/business-login-portal.tgz"]).run()
+    for name in [".venv", "native"] {
+      @shell.Cmd("ln", ["-s", old + "/" + name, app + "/" + name]).run()
+    }
+    @shell.Cmd(app + "/.venv/bin/python", ["-m", "pytest", "-q"], cwd=app, env={
+      "LD_LIBRARY_PATH": app +
+      "/native/usr/lib/x86_64-linux-gnu:" +
+      app +
+      "/native/lib/x86_64-linux-gnu",
+      "FONTCONFIG_FILE": old + "/deploy/fonts.conf",
+    }).run()
+    let before = kube(["get", "deployment", "lunanexa-enterprise", "-o", "json"])
+    let base = "/home/HwHiAiUser/product-simple-20261104/portal-image"
+    guard @json.parse(@fs.read_file(base + "/index.json").text())
+      is { "manifests": [{ "digest": String(prior), .. }], .. } &&
+      @json.parse(before)
+      is {
+        "spec": {
+          "template": {
+            "spec": { "containers": [{ "image": String(current), .. }], .. },
+            ..
+          },
+          ..
+        },
+        ..
+      } &&
+      current == registry + "/moon/lunanexa-web@" + prior else {
+      fail("portal base changed")
+    }
+    @fs.write_file(
+      root + "/enterprise-before.json",
+      before,
+      create_mode=CreateNew,
+      permission=0o600,
+    )
+    @fs.write_file(
+      root + "/business-service.before",
+      @fs.read_file(unit),
+      create_mode=CreateNew,
+      permission=0o600,
+    )
+    @shell.Cmd("tar", [
+      "-C",
+      base,
+      "-cf",
+      root + "/portal-base.tar",
+      "blobs",
+      "index.json",
+      "oci-layout",
+    ]).run()
+    let moon = "/home/HwHiAiUser/.moon-new/bin/moon"
+    @shell.Cmd(moon, [
+      "run",
+      repo + "/scripts/package-browser-layer.mbtx",
+      "--",
+      root + "/portal-base.tar",
+      root + "/browser-dist",
+      root + "/portal-image",
+      registry + "/moon/lunanexa-web:" + tag,
+      "enterprise",
+    ]).run()
+    @shell.Cmd(moon, [
+      "run",
+      "/home/HwHiAiUser/lunanexa-model-ui-20261022.fJCMrU/push-browser-oci.mbtx",
+      "--",
+      root + "/portal-image",
+      "https://" + registry,
+      "moon/lunanexa-web",
+      tag,
+    ]).run()
+  } else if phase == "publish-app" {
+    let pending = @shell.Cmd(app + "/.venv/bin/python", [
+      "-m", "sqlite3", "/home/HwHiAiUser/.local/share/qingchuang-business-apps/jobs.sqlite3",
+      "SELECT count(*) FROM records WHERE kind='job' AND state IN ('queued','running');",
+    ]).output()
+    pending.check()
+    guard pending.stdout().trim() == "(0,)" else {
+      fail("active jobs; publish after completion")
+    }
+    let service = @fs.read_file(root + "/business-service.before").text()
+    guard service.contains(old) && @fs.read_file(unit).text() == service else {
+      fail("application release changed")
+    }
+    @fs.write_file(unit, service.split(old).collect().join(app))
+    @shell.Cmd("systemctl", ["--user", "daemon-reload"]).run()
+    @shell.Cmd("systemctl", [
+      "--user", "restart", "qingchuang-business-apps.service",
+    ]).run()
+  } else if phase == "publish-portal" {
+    let before = @json.parse(
+      @fs.read_file(root + "/enterprise-before.json").text(),
+    )
+    guard before
+      is {
+        "spec": {
+          "template": {
+            "spec": { "containers": [{ "image": String(prior), .. }], .. },
+            ..
+          },
+          ..
+        },
+        ..
+      } &&
+      @json.parse(@fs.read_file(root + "/portal-image/index.json").text())
+      is { "manifests": [{ "digest": String(digest), .. }], .. } else {
+      fail("release metadata missing")
+    }
+    let patch : Json = [
+      {
+        "op": "test",
+        "path": "/spec/template/spec/containers/0/image",
+        "value": prior,
+      },
+      {
+        "op": "replace",
+        "path": "/spec/template/spec/containers/0/image",
+        "value": registry + "/moon/lunanexa-web@" + digest,
+      },
+    ]
+    println(
+      kube([
+        "patch",
+        "deployment",
+        "lunanexa-enterprise",
+        "--type=json",
+        "-p",
+        patch.stringify(),
+      ]),
+    )
+    println(
+      kube([
+        "rollout", "status", "deployment/lunanexa-enterprise", "--timeout=55s",
+      ]),
+    )
+  } else if phase == "verify" {
+    @shell.Cmd("systemctl", [
+      "--user", "is-active", "qingchuang-business-apps.service",
+    ]).run()
+    @shell.Cmd("curl", [
+      "--fail", "--silent", "--show-error", "--max-time", "10", "http://192.168.2.175:5911/health",
+    ]).run()
+    println(
+      kube([
+        "get", "deployment", "lunanexa-enterprise", "-o", "jsonpath={.status.readyReplicas}",
+      ]),
+    )
+    @shell.Cmd(app + "/.venv/bin/python", [
+      "-m", "sqlite3", "/home/HwHiAiUser/.local/share/qingchuang-business-apps/jobs.sqlite3",
+      "SELECT state,count(*) FROM records WHERE kind='job' GROUP BY state;",
+    ]).run()
+  } else {
+    fail("unknown phase")
+  }
+}

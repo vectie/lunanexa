@@ -1,0 +1,43 @@
+///|
+import { "moonbitlang/async@0.22.4", "moonbitlang/async@0.22.4/fs", "moonbitlang/async@0.22.4/shell", "moonbitlang/core/env", "moonbitlang/core/string" }
+
+///|
+async fn main {
+  let clean = @env.args().get(1) == Some("clean")
+  let listed = @shell.Cmd("find", ["/home/HwHiAiUser", "-xdev", "-type", "f", "(", "-name", "*.oci.tar", "-o", "-name", "*-base.tar", "-o", "-name", "*layer.tar", ")", "-size", "+100M", "-printf", "%s %p\n"]).output()
+  if listed.exit_code() != 0 { println("Unreadable directories were skipped") }
+  let uid = @shell.Cmd("id", ["-u"]).output()
+  uid.check()
+  let mut count = 0
+  let mut bytes = 0L
+  let removed : Array[String] = []
+  for line in listed.stdout().split("\n") {
+    let fields = line.split(" ").to_array()
+    if fields.length() != 2 { continue }
+    let path = fields[1].to_owned()
+    if path.contains("/user-journey-20261104/") { continue }
+    let parts = path.split("/").to_array()
+    let parent = path[:path.length() - parts[parts.length() - 1].length() - 1].to_owned()
+    let image = match path.strip_suffix(".oci.tar") {
+      Some(value) => value.to_owned()
+      None => if path.has_suffix("-base.tar") {
+        path.strip_suffix(".tar").unwrap().to_owned()
+      } else { parent }
+    }
+    // Keep the extracted OCI image, its blobs and receipt. Only remove the
+    // redundant tar export, which can be reconstructed from these same files.
+    if !@fs.exists(image + "/index.json") || !@fs.exists(image + "/blobs/sha256") { continue }
+    let owner = @shell.Cmd("stat", ["-c", "%u", path]).output()
+    owner.check()
+    if owner.stdout().trim() != uid.stdout().trim() { continue }
+    count += 1
+    bytes += @string.parse_int64(fields[0])
+    if clean {
+      @shell.Cmd("rm", ["--", path]).run()
+      removed.push(path)
+    }
+  }
+  if clean { @fs.write_file("/home/HwHiAiUser/user-journey-20261104/cleaned-exports.txt", removed.join("\n"), permission=0o600) }
+  println("Redundant image exports: \{count}, bytes: \{bytes}, removed: \{clean}")
+  @shell.Cmd("df", ["-h", "/home"]).run()
+}

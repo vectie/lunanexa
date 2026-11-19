@@ -1,0 +1,216 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn get_json(url : String) -> Json {
+  let result = @shell.Cmd("curl", [
+    "--fail", "--silent", "--show-error", "--max-time", "20", url,
+  ]).output()
+  guard result.exit_code() == 0 else { fail("Anonymous JSON endpoint failed") }
+  @json.parse(result.stdout())
+}
+
+///|
+fn video_file(value : Json) -> Json? {
+  match value {
+    Object(fields) => {
+      if value is { "filename": String(name), "type": "output", .. } &&
+        (name.has_suffix(".mp4") || name.has_suffix(".webm")) {
+        return Some(value)
+      }
+      for _, child in fields {
+        if video_file(child) is Some(found) {
+          return Some(found)
+        }
+      }
+      None
+    }
+    Array(values) => {
+      for child in values {
+        if video_file(child) is Some(found) {
+          return Some(found)
+        }
+      }
+      None
+    }
+    _ => None
+  }
+}
+
+///|
+async fn main {
+  let base = "http://192.168.2.175:5005"
+  let root = "/home/HwHiAiUser/public-comfyui-native-20261110"
+  let stats = get_json(base + "/system_stats")
+  guard stats is { "devices": Array(devices), .. } else {
+    fail("Missing device metadata")
+  }
+  println(
+    "Anonymous runtime devices: " +
+    devices
+    .map(device => {
+      match device {
+        { "name": String(name), .. } => name
+        _ => "unknown"
+      }
+    })
+    .join(", "),
+  )
+  let queue = get_json(base + "/queue")
+  guard queue
+    is { "queue_running": Array(running), "queue_pending": Array(pending), .. } else {
+    fail("Invalid native queue")
+  }
+  println(
+    "Queue active=" +
+    running.length().to_string() +
+    " pending=" +
+    pending.length().to_string(),
+  )
+  let catalog = get_json(base + "/object_info")
+  guard catalog is Object(nodes) && nodes.contains("EmptyMiniMaxH3LatentAV") else {
+    fail("Native H3 nodes are absent")
+  }
+  let history = get_json(base + "/history?max_items=50")
+  guard history is Object(records) else { fail("Invalid native history") }
+  let mut chosen : Json? = match @env.args() {
+    [_] => None
+    [_, descriptor] => Some(@json.parse(@fs.read_file(descriptor).text()))
+    _ => fail("Optional argument: retained video descriptor JSON")
+  }
+  for _, record in records {
+    if chosen is Some(_) {
+      break
+    }
+    if record is { "outputs": Object(outputs), .. } {
+      for _, output in outputs {
+        if video_file(output) is Some(found) {
+          chosen = Some(found)
+          break
+        }
+      }
+    }
+    if chosen is Some(_) {
+      break
+    }
+  }
+  guard chosen
+    is Some({ "filename": String(filename), "subfolder": String(folder), .. }) else {
+    fail("No retained completed video found for media verification")
+  }
+  let query = [
+    "--get",
+    "--data-urlencode",
+    "filename=" + filename,
+    "--data-urlencode",
+    "subfolder=" + folder,
+    "--data-urlencode",
+    "type=output",
+  ]
+  let url = @shell.Cmd(
+    "curl",
+    [
+      "--fail",
+      "--silent",
+      "--show-error",
+      "--max-time",
+      "15",
+      ..query,
+      "--head",
+      "-o",
+      "/dev/null",
+      "-w",
+      "%{url_effective}",
+      base + "/view",
+    ],
+  ).output()
+  guard url.exit_code() == 0 else { fail("Video metadata request failed") }
+  let range = @shell.Cmd("curl", [
+    "--fail",
+    "--silent",
+    "--show-error",
+    "--max-time",
+    "15",
+    "--range",
+    "0-65535",
+    "-o",
+    root + "/video-range.bin",
+    "-w",
+    "%{http_code}",
+    url.stdout().trim().to_owned(),
+  ]).output()
+  guard range.exit_code() == 0 && range.stdout().trim() == "206" else {
+    fail("Video byte-range download failed")
+  }
+  let probe = @shell.Cmd("kubectl", [
+    "--kubeconfig",
+    "/home/HwHiAiUser/.kube/lunanexa-management",
+    "-n",
+    "lunanexa",
+    "exec",
+    "deployment/comfyui-h3-native",
+    "--",
+    "ffprobe",
+    "-v",
+    "error",
+    "-rw_timeout",
+    "15000000",
+    "-show_entries",
+    "format=duration:stream=codec_name,width,height",
+    "-of",
+    "json",
+    url.stdout().trim().to_owned(),
+  ]).output()
+  guard probe.exit_code() == 0 && probe.stderr().trim().is_empty() else {
+    fail("Proxied video did not pass ffprobe")
+  }
+  let metadata = @json.parse(probe.stdout())
+  let decode = @shell.Cmd("kubectl", [
+    "--kubeconfig",
+    "/home/HwHiAiUser/.kube/lunanexa-management",
+    "-n",
+    "lunanexa",
+    "exec",
+    "deployment/comfyui-h3-native",
+    "--",
+    "ffmpeg",
+    "-nostdin",
+    "-v",
+    "error",
+    "-xerror",
+    "-rw_timeout",
+    "15000000",
+    "-i",
+    url.stdout().trim().to_owned(),
+    "-f",
+    "null",
+    "-",
+  ]).output()
+  guard decode.exit_code() == 0 && decode.stderr().trim().is_empty() else {
+    fail("Full proxied video decode failed")
+  }
+  @fs.write_file(
+    root + "/video-proxy-verification.json",
+    Json::object({
+      "anonymous": true,
+      "native_h3_catalog": true,
+      "range_status": "206",
+      "retained_video_metadata": metadata,
+      "new_generation_submitted": false,
+      "full_video_decode": true,
+      "queue_running": running.length(),
+      "queue_pending": pending.length(),
+    }).stringify(),
+    permission=0o600,
+  )
+  println("Video byte-range status: 206")
+  println("Full retained video decoded without errors")
+  println(metadata.stringify())
+  println("Verified retained video; no new inference job submitted")
+}

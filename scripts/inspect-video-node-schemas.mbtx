@@ -1,0 +1,33 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, path] else {
+    fail("Expected saved object_info JSON")
+  }
+  guard @json.parse(@fs.read_file(path).text()) is Object(nodes) else {
+    fail("Invalid node catalog")
+  }
+  for key, value in nodes {
+    if key != "VLLMOmniGenerateVideo" &&
+      key != "EmptyMiniMaxH3LatentAV" &&
+      key != "MiniMaxH3ImageToVideo" &&
+      key != "MiniMaxH3ReferenceToVideo" {
+      continue
+    }
+    println(key)
+    if value is { "input": Object(input), .. } {
+      for group in ["required", "optional"] {
+        if input.get(group) is Some(Object(fields)) {
+          println("  " + group + ": " + fields.keys().to_array().join(", "))
+        }
+      }
+    }
+  }
+}

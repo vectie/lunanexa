@@ -1,0 +1,133 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, phase] else { fail("pack | stage | build") }
+  let root = "/tmp/glm-tensorfold-20261104"
+  if phase == "pack" {
+    let diff = @shell.Cmd(
+      "git",
+      ["diff", "--binary", "00e7dddbdb2dd0c481f3d7e8d850fa3e1f2e80b7", "HEAD"],
+      cwd=root + "/TensorFold",
+    ).output()
+    diff.check()
+    if !@fs.exists("/Users/kq/Workspace/lunanexa/deploy/patches/tensorfold") {
+      @fs.mkdir(
+        "/Users/kq/Workspace/lunanexa/deploy/patches/tensorfold",
+        recursive=true,
+      )
+    }
+    @fs.write_file(
+      "/Users/kq/Workspace/lunanexa/deploy/patches/tensorfold/1.2.2-nvfp4-bf16-dense.patch",
+      diff.stdout(),
+    )
+    @shell.Cmd("tar", [
+      "--exclude=.git",
+      "-C",
+      root,
+      "-czf",
+      root + "/tensorfold-bf16-source.tgz",
+      "TensorFold",
+    ]).run()
+    @shell.Cmd("scp", [
+      root + "/tensorfold-bf16-source.tgz",
+      root + "/zig-aarch64-linux-0.17.0.tar.xz",
+      "/Users/kq/Workspace/lunanexa/scripts/build-glm-tensorfold.mbtx",
+      "lunanexa-management:/tmp/",
+    ]).run()
+  } else if phase == "stage" {
+    @shell.Cmd("scp", [
+      "/tmp/tensorfold-bf16-source.tgz", "/tmp/zig-aarch64-linux-0.17.0.tar.xz",
+      "/tmp/build-glm-tensorfold.mbtx", "wlc003s@192.168.2.178:/tmp/",
+    ]).run()
+    @shell.Cmd("ssh", [
+      "wlc003s@192.168.2.178", "mkdir", "-p", "/home/wlc003s/.local/share/lunanexa/tensorfold-bf16-build",
+    ]).run()
+    for
+      archive in [
+        "tensorfold-bf16-source.tgz", "zig-aarch64-linux-0.17.0.tar.xz",
+      ] {
+      @shell.Cmd("ssh", [
+        "wlc003s@192.168.2.178",
+        "tar",
+        "-xf",
+        "/tmp/" + archive,
+        "-C",
+        "/home/wlc003s/.local/share/lunanexa/tensorfold-bf16-build",
+      ]).run()
+    }
+  } else if phase == "install" {
+    let root = "/home/HwHiAiUser/glm-tensorfold-20261104"
+    let built = "/home/wlc003s/.local/share/lunanexa/tensorfold-bf16-build/TensorFold/zig-out/native/bin/tensorfold-native"
+    @shell.Cmd("scp", [
+      "wlc003s@192.168.2.178:" + built,
+      root + "/tensorfold-native",
+    ]).run()
+    let sum = @shell.Cmd("sha256sum", [root + "/tensorfold-native"]).output()
+    sum.check()
+    println(sum.stdout())
+    for
+      (host, user) in [
+        ("wlc003s@192.168.2.178", "wlc003s"),
+        ("wlc004s@192.168.2.179", "wlc004s"),
+      ] {
+      let base = "/home/" + user + "/.local/share/lunanexa"
+      let dest = base + "/tensorfold-1.2.2-bf16-dense"
+      @shell.Cmd("ssh", [host, "mkdir", "-p", dest]).run()
+      @shell.Cmd("ssh", [
+        host,
+        "cp",
+        "-a",
+        base + "/tensorfold-1.2.2-linux-aarch64/.",
+        dest + "/",
+      ]).run()
+      @shell.Cmd("scp", [
+        root + "/tensorfold-native",
+        host + ":" + dest + "/bin/tensorfold-native",
+      ]).run()
+      @shell.Cmd("ssh", [host, "sha256sum", dest + "/bin/tensorfold-native"]).run()
+      let info = "TensorFold 1.2.2, base commit 00e7dddbdb2dd0c481f3d7e8d850fa3e1f2e80b7. Local BF16 dense loader and scratch compatibility patch; no checkpoint conversion.\n" +
+        sum.stdout()
+      @shell.Cmd(
+        "ssh",
+        [host, "tee", dest + "/LOCAL_PATCH.txt"],
+        stdin=Text(info),
+        stdout=Discard,
+      ).run()
+    }
+  } else if phase == "build" {
+    let base = "/home/wlc003s/.local/share/lunanexa/tensorfold-bf16-build"
+    let zig = base + "/zig-aarch64-linux-0.17.0/zig"
+    let cwd = base + "/TensorFold"
+    let remote = ["wlc003s@192.168.2.178", "env", "-C", cwd, zig]
+    @shell.Cmd(
+      "ssh",
+      remote +
+      [
+        "fmt", "zig/src/families/glm/cuda_weights.zig", "zig/src/families/glm/cuda_state.zig",
+        "zig/build/glm_family_host.zig",
+      ],
+    ).run()
+    @shell.Cmd(
+      "ssh",
+      remote +
+      ["build", "test-glm-dense-format-host", "test-glm-tp3-host", "-j2"],
+    ).run()
+    @shell.Cmd(
+      "ssh",
+      remote +
+      [
+        "build", "native", "-Dnvcc=/usr/local/cuda/bin/nvcc", "-Dsm=121", "-Doptimize=ReleaseFast",
+        "-Dversion=1.2.2", "-j4",
+      ],
+    ).run()
+  } else {
+    fail("Unknown phase")
+  }
+}

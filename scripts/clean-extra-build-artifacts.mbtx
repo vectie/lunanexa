@@ -1,0 +1,149 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/core/string",
+}
+
+///|
+async fn output(program : String, args : Array[String]) -> String {
+  let r = @shell.Cmd(program, args).output()
+  r.check()
+  r.stdout()
+}
+
+///|
+async fn assert_idle() -> Unit {
+  let processes = output("ps", ["-ww", "-axo", "ucomm=,args="])
+  for line in processes.split("\n") {
+    let value = line.trim().to_owned()
+    let name = value.split(" ").next().unwrap_or("").to_owned()
+    if name == "moon" && value.contains("clean-extra-build-artifacts.mbtx") {
+      continue
+    }
+    guard ![
+      "moon", "moonc", "clang", "clang++", "cc", "c++", "gcc", "g++", "ld", "ninja",
+      "make", "gmake", "cargo", "rustc", "cmake", "xcodebuild", "vivado", "yosys",
+      "nextpnr", "brew",
+    ].contains(name) else {
+      fail("Build/package tool is active; no extra cleanup while it runs")
+    }
+  }
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, phase] && ["report", "clean"].contains(phase) else {
+    fail("report | clean")
+  }
+  let logs = "/Users/kq/Library/Logs/MoonSuite/build-retention"
+  let lock = @fs.open(
+    logs + "/maintenance.lock",
+    mode=ReadWrite,
+    create_mode=OpenOrCreate,
+    permission=0o600,
+  )
+  defer lock.close()
+  guard lock.try_lock(Exclusive) else { fail("Another cleanup is running") }
+  defer lock.unlock()
+  assert_idle()
+  let roots = [("brew-download", "/Users/kq/Library/Caches/Homebrew/downloads")]
+  let raw = output("find", [
+    "/private/tmp", "-mindepth", "1", "-maxdepth", "1", "-type", "d", "-name", "pblaze*-verilator*",
+    "-print",
+  ])
+  for path in raw.split("\n") {
+    if !path.is_empty() {
+      let objects = path.to_owned() + "/model/obj_dir"
+      if @fs.exists(objects) &&
+        @fs.kind(objects, follow_symlink=false) is Directory {
+        roots.push(("verilator-object", objects))
+      }
+    }
+  }
+  let records : Array[Json] = []
+  let mut total = 0L
+  let stamp = output("date", ["-u", "+%Y%m%dT%H%M%SZ"]).trim().to_owned()
+  for (kind, root) in roots {
+    assert_idle()
+    let live = output("lsof", ["-nP", "-Fpn"])
+    let files = output("find", [
+      root, "-maxdepth", "1", "-type", "f", "-mmin", "+1440", "-print",
+    ])
+    for entry in files.split("\n") {
+      let path = entry.to_owned()
+      if path.is_empty() {
+        continue
+      }
+      let allowed = if kind == "brew-download" {
+        path.has_suffix(".tar.gz") ||
+        path.has_suffix(".tar.xz") ||
+        path.has_suffix(".zip")
+      } else {
+        path.has_suffix(".o") || path.has_suffix(".a")
+      }
+      if !allowed || live.contains(path) {
+        continue
+      }
+      if kind == "verilator-object" {
+        let format = output("file", ["-b", path])
+        if !format.contains("relocatable") &&
+          !format.contains("Mach-O 64-bit arm64 object") &&
+          !format.contains("current ar archive") {
+          continue
+        }
+      }
+      let size = @string.parse_int64(
+        output("du", ["-k", path]).split("\t").next().unwrap().trim().to_owned(),
+      )
+      if phase == "clean" {
+        assert_idle()
+        guard @fs.kind(path, follow_symlink=false) is Regular else {
+          fail("File type changed")
+        }
+        if !output("find", [path, "-mmin", "+1440", "-print"]).trim().is_empty() {
+          @fs.remove(path)
+        } else {
+          continue
+        }
+      }
+      total += size
+      records.push({
+        "path": path,
+        "kind": kind,
+        "allocated_kib": size.to_string(),
+        "status": if phase == "clean" {
+          "removed"
+        } else {
+          "candidate"
+        },
+      })
+    }
+  }
+  let manifest = logs + "/extra-artifacts-" + stamp + "-" + phase + ".json"
+  @fs.write_file(
+    manifest,
+    (
+      {
+        "records": records,
+        "allocated_kib": total.to_string(),
+        "preserved": [
+          "simulation executables", "generated sources", "simulation TSV/VCD results",
+          "receipts and logs", "installed Homebrew kegs", "files newer than 24h",
+          "open files",
+        ],
+      } : Json).stringify(),
+    permission=0o600,
+  )
+  println(
+    "Files: " +
+    records.length().to_string() +
+    "; allocated KiB: " +
+    total.to_string(),
+  )
+  println(manifest)
+  println(output("df", ["-k", "/System/Volumes/Data"]))
+}

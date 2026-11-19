@@ -1,0 +1,41 @@
+///|
+import { "moonbitlang/async@0.22.4", "moonbitlang/async@0.22.4/fs", "moonbitlang/async@0.22.4/shell" }
+
+///|
+async fn main {
+  let scratch = [
+    "/home/HwHiAiUser/moon-public/work/r54/linux-source/_build",
+    "/home/HwHiAiUser/moon-public/work/r57/source/_build",
+    "/home/HwHiAiUser/moon-public/work/r57/localfix-probe-source/_build",
+    "/home/HwHiAiUser/release-8f19a95/comfy-arm64-gpu-image/layer",
+    "/home/HwHiAiUser/release-8f19a95/comfy-arm64-gpu-image/comfy-layer.tar",
+    "/home/HwHiAiUser/release-8f19a95/comfy-arm64-image/layer",
+    "/home/HwHiAiUser/lunanexa-event-trial-20261022.9DbhEI/lunanexa/_build/native/debug",
+    "/home/HwHiAiUser/lunanexa-glm-maas-20261014/lunanexa/_build",
+    "/home/HwHiAiUser/moon-public/work/r46/source/_build",
+    "/home/HwHiAiUser/lunaflux-glm-cutover-20261018-v1/lunanexa/_build",
+  ]
+  let mounts = @shell.Cmd("kubectl", ["--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", "get", "deployments,statefulsets", "-A", "-o", "jsonpath={range .items[*]}{range .spec.template.spec.volumes[*]}{.hostPath.path}{\"\\n\"}{end}{end}"]).output()
+  mounts.check()
+  let processes = @shell.Cmd("ps", ["-eo", "args"]).output()
+  processes.check()
+  let uid = @shell.Cmd("id", ["-u"]).output()
+  uid.check()
+  for path in scratch {
+    guard !mounts.stdout().contains(path) && !processes.stdout().contains(path) else {
+      fail("Build scratch is referenced by a live deployment or process")
+    }
+    if @fs.exists(path) {
+      let owner = @shell.Cmd("stat", ["-c", "%u", path]).output()
+      owner.check()
+      if owner.stdout().trim() != uid.stdout().trim() {
+        println("Skipped administrator-owned build cache")
+        continue
+      }
+      @shell.Cmd("du", ["-sh", path]).run()
+      let result = @shell.Cmd("rm", ["-rf", "--", path]).output()
+      if result.exit_code() != 0 { println("Some cache files require administrator ownership") }
+    }
+  }
+  @shell.Cmd("df", ["-h", "/home"]).run()
+}

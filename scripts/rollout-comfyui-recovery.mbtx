@@ -1,0 +1,227 @@
+///|
+/// Upgrade only the public demo and the already approved personal ComfyUI host.
+/// Empty-queue gate, exact resource-version patches, private rollback snapshots.
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn kubectl(k : String, args : Array[String]) -> String {
+  let result = @shell.Cmd(
+    "kubectl",
+    ["--kubeconfig", k, "-n", "aigc-acceptance-20260915", ..args],
+  ).output()
+  if result.exit_code() != 0 {
+    eprintln(result.stderr())
+  }
+  result.check()
+  result.stdout()
+}
+
+///|
+fn object(value : Json) -> Map[String, Json] raise {
+  guard value is Object(fields) else { fail("Expected object") }
+  fields
+}
+
+///|
+async fn idle(k : String, service : String) -> Unit {
+  let raw = kubectl(k, ["get", "service", service, "-o", "json"])
+  guard @json.parse(raw) is { "spec": { "clusterIP": String(ip), .. }, .. } else {
+    fail("No workspace service")
+  }
+  let result = @shell.Cmd("curl", [
+    "-fsS",
+    "--max-time",
+    "10",
+    "http://" + ip + ":8188/queue",
+  ]).output()
+  result.check()
+  guard @json.parse(result.stdout())
+    is { "queue_running": [], "queue_pending": [], .. } else {
+    fail("Workspace has live or queued work; leave it running")
+  }
+}
+
+///|
+async fn main {
+  let args = @env.args()
+  guard args is [_, k, backup, image, gateway_image, ..] &&
+    (args.length() == 5 || args.length() == 6) &&
+    image.has_prefix(
+      "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/acceptance/comfyui-workspace@sha256:",
+    ) &&
+    gateway_image.has_prefix(
+      "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/acceptance/webide-runtime@sha256:",
+    ) else {
+    fail(
+      "Usage: rollout-comfyui-recovery.mbtx KUBECONFIG NEW_BACKUP PINNED_COMFY_IMAGE PINNED_GATEWAY_IMAGE",
+    )
+  }
+  let model_proxy_image = if args.length() == 6 { Some(args[5]) } else { None }
+  guard model_proxy_image.map_or(true, value => {
+    value.has_prefix(
+      "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/hosted-apps@sha256:",
+    )
+  }) else {
+    fail("Unexpected model proxy repository")
+  }
+  let personal = "webide-4625cbebc56c65454d98563e0747c80e9bc05275de9b80c44c40d958"
+  // Verify the exact personal resource before constructing any mutation.
+  let items = [
+    ("deployment", "comfyui-acceptance"),
+    ("deployment", personal),
+    ("deployment", "comfyui-personal-gateway"),
+    ("configmap", "personal-comfyui-runtime"),
+  ]
+  @fs.mkdir(backup, permission=0o700)
+  let saved : Map[String, Json] = Map([])
+  for (kind, name) in items {
+    let raw = kubectl(k, ["get", kind, name, "-o", "json"])
+    @fs.write_file(
+      backup + "/" + name + ".json",
+      raw,
+      permission=0o600,
+      create_mode=CreateNew,
+    )
+    saved[name] = @json.parse(raw)
+  }
+  idle(k, "comfyui-public")
+  idle(k, personal)
+  let cm = saved["personal-comfyui-runtime"]
+  guard cm
+    is {
+      "metadata": { "resourceVersion": String(cm_version), .. },
+      "data": { "host.json": String(host_raw), .. },
+      ..
+    } else {
+    fail("Invalid host config")
+  }
+  let host = object(@json.parse(host_raw))
+  host["comfyui_image"] = Json::string(image)
+  if model_proxy_image is Some(value) {
+    host["model_proxy_image"] = Json::string(value)
+  }
+  let cm_patch : Json = [
+    { "op": "test", "path": "/metadata/resourceVersion", "value": cm_version },
+    {
+      "op": "replace",
+      "path": "/data/host.json",
+      "value": Json::object(host).stringify(),
+    },
+  ]
+  ignore(
+    kubectl(k, [
+      "patch",
+      "configmap",
+      "personal-comfyui-runtime",
+      "--type=json",
+      "-p",
+      cm_patch.stringify(),
+    ]),
+  )
+  for name in ["comfyui-acceptance", personal] {
+    idle(
+      k,
+      if name == "comfyui-acceptance" {
+        "comfyui-public"
+      } else {
+        personal
+      },
+    )
+    let before = saved[name]
+    guard before
+      is {
+        "metadata": { "resourceVersion": String(version), .. },
+        "spec": { "template": { "spec": Object(spec), .. }, .. },
+        ..
+      } &&
+      spec["containers"] is Array(containers) else {
+      fail("Invalid workspace deployment")
+    }
+    guard containers.iter().find_first(c => c is { "name": "comfyui", .. })
+      is Some(Object(comfy)) else {
+      fail("No approved ComfyUI container")
+    }
+    comfy["image"] = Json::string(image)
+    if name == personal && model_proxy_image is Some(value) {
+      guard containers
+        .iter()
+        .find_first(c => c is { "name": "model-proxy", .. })
+        is Some(Object(proxy)) else {
+        fail("No personal model proxy")
+      }
+      proxy["image"] = Json::string(value)
+    }
+    // The image now owns these exact files. Old subPath overrides would mask it.
+    if comfy.get("volumeMounts") is Some(Array(mounts)) {
+      comfy["volumeMounts"] = Json::array(
+        mounts.filter(m => !(m is { "name": "comfyui-vllm-omni-patches", .. })),
+      )
+    }
+    if spec.get("volumes") is Some(Array(volumes)) {
+      spec["volumes"] = Json::array(
+        volumes.filter(v => !(v is { "name": "comfyui-vllm-omni-patches", .. })),
+      )
+    }
+    let patch : Json = [
+      { "op": "test", "path": "/metadata/resourceVersion", "value": version },
+      {
+        "op": "replace",
+        "path": "/spec/template/spec",
+        "value": Json::object(spec),
+      },
+    ]
+    ignore(
+      kubectl(k, [
+        "patch",
+        "deployment",
+        name,
+        "--type=json",
+        "-p",
+        patch.stringify(),
+      ]),
+    )
+    ignore(
+      kubectl(k, ["rollout", "status", "deployment/" + name, "--timeout=240s"]),
+    )
+    println(name + " ready")
+  }
+  ignore(
+    kubectl(k, [
+      "set",
+      "image",
+      "deployment/comfyui-personal-gateway",
+      "gateway=" + gateway_image,
+    ]),
+  )
+  if saved["comfyui-personal-gateway"]
+    is {
+      "spec": {
+        "template": { "spec": { "containers": Array(containers), .. }, .. },
+        ..
+      },
+      ..
+    } &&
+    containers.any(c => {
+      c is { "name": "gateway", "image": String(previous), .. } &&
+      previous == gateway_image
+    }) {
+    // Same binary still needs to reload the new future-workspace image.
+    ignore(
+      kubectl(k, ["rollout", "restart", "deployment/comfyui-personal-gateway"]),
+    )
+  }
+  ignore(
+    kubectl(k, [
+      "rollout", "status", "deployment/comfyui-personal-gateway", "--timeout=120s",
+    ]),
+  )
+  println(
+    "Both workspace images and future personal launches updated; browser acceptance required",
+  )
+}

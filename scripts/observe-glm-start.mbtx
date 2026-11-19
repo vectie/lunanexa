@@ -1,0 +1,31 @@
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/shell",
+}
+
+///|
+async fn main {
+  for sample in 0..<20 {
+    println("sample=" + sample.to_string())
+    for (host, unit) in [
+      ("wlc003s@192.168.2.178", "lunanexa-glm-lunaflux-rank0.service"),
+      ("wlc004s@192.168.2.179", "lunanexa-glm-lunaflux-rank1.service"),
+    ] {
+      let memory = @shell.Cmd("ssh", ["-o", "BatchMode=yes", host, "cat", "/proc/meminfo"]).output()
+      memory.check()
+      println(host)
+      for line in memory.stdout().split("\n") {
+        if line.has_prefix("MemAvailable:") || line.has_prefix("SwapFree:") {
+          println(line)
+        }
+      }
+      let gpu = @shell.Cmd("ssh", ["-o", "BatchMode=yes", host, "nvidia-smi", "--query-compute-apps=used_gpu_memory", "--format=csv,noheader,nounits"]).output()
+      gpu.check()
+      println("GPU MiB=" + gpu.stdout().trim().to_owned())
+      let service = @shell.Cmd("ssh", ["-o", "BatchMode=yes", host, "systemctl", "--user", "show", unit, "-p", "ActiveState", "-p", "MemoryCurrent", "-p", "ExecMainStatus"]).output()
+      service.check()
+      println(service.stdout())
+    }
+    @async.sleep(15000)
+  }
+}

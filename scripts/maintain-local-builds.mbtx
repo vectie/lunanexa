@@ -1,0 +1,76 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/string",
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, mode] &&
+    ["report", "clean", "self-test"].contains(mode) else {
+    fail("report | clean | self-test")
+  }
+  let repo = "/Users/kq/Workspace/lunanexa"
+  let logs = "/Users/kq/Library/Logs/MoonSuite/build-retention"
+  if !@fs.exists(logs) {
+    @fs.mkdir(logs, recursive=true, permission=0o700)
+  }
+  // OS lock is released even when the worker exits unexpectedly.
+  let lock = @fs.open(
+    logs + "/maintenance.lock",
+    mode=ReadWrite,
+    create_mode=OpenOrCreate,
+    permission=0o600,
+  )
+  defer lock.close()
+  guard lock.try_lock(Exclusive) else {
+    fail("Another cleanup is already running")
+  }
+  defer lock.unlock()
+  if mode == "self-test" {
+    let competing = @fs.open(
+      logs + "/maintenance.lock",
+      mode=ReadWrite,
+      create_mode=OpenExisting,
+    )
+    defer competing.close()
+    assert_true(!competing.try_lock(Exclusive))
+    println("Maintenance overlap lock check passed")
+  }
+  for script in ["prune-obsolete-moonfish-builds", "clean-local-build-caches"] {
+    @shell.Cmd("/Users/kq/.moon/bin/moon", [
+      "run",
+      repo + "/scripts/" + script + ".mbtx",
+      mode,
+    ]).run()
+  }
+  let disk = @shell.Cmd("df", ["-k", "/System/Volumes/Data"]).output()
+  disk.check()
+  println(disk.stdout())
+  if mode == "self-test" {
+    return
+  }
+  // These are generated cleanup manifests only, not receipts or user evidence.
+  let expired = @shell.Cmd("find", [
+    logs, "-maxdepth", "1", "-type", "f", "-name", "*.json", "-mtime", "+30", "-print",
+  ]).output()
+  expired.check()
+  for path in expired.stdout().split("\n") {
+    if mode == "clean" && !path.is_empty() {
+      @fs.remove(path.to_owned())
+    }
+  }
+  let fields = disk.stdout().split("\n").to_array()[1]
+    .split(" ")
+    .filter(v => !v.is_empty())
+    .to_array()
+  let available = @string.parse_int64(fields[3].to_owned())
+  if available < 20971520L {
+    fail(
+      "Less than 20 GiB free after safe cleanup; protected builds/data were retained. Review disk use.",
+    )
+  }
+}

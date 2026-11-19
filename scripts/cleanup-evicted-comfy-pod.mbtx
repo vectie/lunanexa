@@ -1,0 +1,58 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn main {
+  let args = @env.args()
+  guard args is [_, kubeconfig, backup, ..] &&
+    (args.length() == 3 || args == [args[0], kubeconfig, backup, "gateway"]) else {
+    fail("Expected kubeconfig and new backup")
+  }
+  let prefix = ["--kubeconfig", kubeconfig, "-n", "aigc-acceptance-20260915"]
+  let gateway = args.length() == 4
+  let name = if gateway {
+    "comfyui-personal-gateway-bddb48945-k22p7"
+  } else {
+    "comfyui-acceptance-774cddc7cb-8z87n"
+  }
+  let owner = if gateway {
+    "comfyui-personal-gateway-bddb48945"
+  } else {
+    "comfyui-acceptance-774cddc7cb"
+  }
+  let response = @shell.Cmd(
+    "kubectl",
+    prefix + ["get", "pod", name, "-o", "json"],
+  ).output()
+  response.check()
+  guard @json.parse(response.stdout())
+    is {
+      "metadata": {
+        "name": String(actual),
+        "ownerReferences": [
+          { "kind": "ReplicaSet", "name": String(actual_owner), .. },
+        ],
+        ..
+      },
+      "status": { "phase": "Failed", "reason": "Evicted", .. },
+      ..
+    } &&
+    actual == name &&
+    actual_owner == owner else {
+    fail("Not the known evicted public workspace pod")
+  }
+  @fs.write_file(
+    backup,
+    response.stdout(),
+    permission=0o600,
+    create_mode=CreateNew,
+  )
+  @shell.Cmd("kubectl", prefix + ["delete", "pod", name, "--wait=false"]).run()
+  println("Removed only the evicted pod object; deployment and PVC retained")
+}

@@ -1,0 +1,25 @@
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn main {
+  let result = @shell.Cmd("kubectl", ["--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", "-n", "lunanexa", "get", "deployment", "lunanexa-control", "-o", "json"]).output()
+  result.check()
+  guard @json.parse(result.stdout()) is { "spec": { "template": { "spec": Object(spec), .. }, .. }, .. } else { fail("missing deployment") }
+  if spec.get("volumes") is Some(volumes) { println(volumes.stringify()) }
+  guard spec.get("containers") is Some(Array(containers)) else { fail("missing containers") }
+  for c in containers {
+    guard c is Object(fields) else { continue }
+    let safe : Map[String, Json] = Map([])
+    for key in ["name", "image", "command", "args", "volumeMounts"] {
+      if fields.get(key) is Some(value) { safe[key] = value }
+    }
+    if fields.get("env") is Some(Array(values)) {
+      safe["client_config"] = Json::array(values.filter(v => v is { "name": String("LUNANEXA_CLIENT_LAUNCH_CATALOG_JSON" | "LUNANEXA_CLIENT_MODEL_POLICIES_JSON"), .. }))
+    }
+    println(Json::object(safe).stringify())
+  }
+}

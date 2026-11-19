@@ -1,0 +1,37 @@
+///|
+/// Apply only the video recovery routes to the previous deployed build source.
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/core/env",
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, source, backup] else {
+    fail("Usage: prepare-video-task-gateway.mbtx SOURCE BACKUP_POLICY")
+  }
+  let path = source + "/workspace/webide/policy.mbt"
+  let before = @fs.read_file(path).text()
+  let get_anchor = "\"/i18n\", \"/experiment/models\", \"/node_replacements\", \"/assets\","
+  let post_anchor = "      (route.has_prefix(\"/jobs/\") && route.has_suffix(\"/cancel\")) ||"
+  guard before.contains(get_anchor) &&
+    before.contains(post_anchor) &&
+    !before.contains("/lunanexa/video-tasks") else {
+    fail("Expected the deployed route policy without video recovery routes")
+  }
+  @fs.write_file(backup, before, permission=0o600, create_mode=CreateNew)
+  let recovery =
+    #|      (match route.split("/").to_array() {
+    #|        ["", "lunanexa", "video-tasks", id, "recover"] =>
+    #|          id.length() == 32 && id.all(c => c is ('0'..='9' | 'a'..='f'))
+    #|        _ => false
+    #|      }) ||
+  let after = before
+    .replace(old=get_anchor, new=get_anchor + " \"/lunanexa/video-tasks\",")
+    .replace(old=post_anchor, new=recovery + "\n" + post_anchor)
+  @fs.write_file(path, after)
+  println(
+    "Added only current-workspace video list and original-task recovery routes",
+  )
+}

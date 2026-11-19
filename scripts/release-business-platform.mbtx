@@ -1,0 +1,177 @@
+import { "moonbitlang/async@0.22.4", "moonbitlang/async@0.22.4/fs", "moonbitlang/async@0.22.4/shell", "moonbitlang/core/env", "moonbitlang/core/json" }
+
+async fn kube(args : Array[String]) -> String {
+  let r = @shell.Cmd("kubectl", ["--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", "-n", "lunanexa", ..args]).output()
+  r.check()
+  r.stdout()
+}
+
+async fn fetch_blob(path : String, url : String, digest : String) -> Unit {
+  if !@fs.exists(path) {
+    @shell.Cmd("curl", ["--fail", "--silent", "--show-error", "--max-time", "60", "-H", "Accept: application/vnd.oci.image.manifest.v1+json", url, "-o", path]).run()
+  }
+  let r = @shell.Cmd("sha256sum", [path]).output()
+  r.check()
+  guard r.stdout().has_prefix(digest[7:].to_owned()) else { fail("image digest mismatch") }
+}
+
+async fn main {
+  let root = "/home/HwHiAiUser/business-apps-20261104.nigP25"
+  let repo = "/home/HwHiAiUser/lunanexa-event-trial-20261022.9DbhEI/lunanexa"
+  let files = ["api/client_handoff_http.mbt", "workspace/client_handoff/types.mbt", "workspace/client_handoff/validation.mbt", "cmd/control/main.mbt"]
+  let phase = @env.args().get(1).unwrap_or("")
+  let moon = "/home/HwHiAiUser/.moon-new/bin/moon"
+  let registry = "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000"
+  if phase == "ui-local-stage" {
+    let local_repo = "/Users/kq/Workspace/lunanexa"
+    let js = local_repo + "/_build/browser-compiled/js/release/build/vectie/lunanexa/cmd/enterprise/enterprise.js"
+    let dist = local_repo + "/tmp/business-apps-20261104/browser-dist/enterprise"
+    if !@fs.exists(dist) { @fs.mkdir(dist, recursive=true) }
+    @shell.Cmd("cp", [js, dist + "/enterprise.js"]).run()
+    let r = @shell.Cmd("shasum", ["-a", "256", js]).output()
+    r.check()
+    let hash = r.stdout().split(" ").next().unwrap().to_owned()
+    @fs.write_file(dist + "/index.html", @fs.read_file(local_repo + "/cmd/enterprise/index.html").text().split("__LUNANEXA_ENTERPRISE_ASSET_DIGEST__").collect().join(hash))
+    @shell.Cmd("env", ["COPYFILE_DISABLE=1", "tar", "--no-xattrs", "-C", local_repo + "/tmp/business-apps-20261104/browser-dist", "-czf", "/tmp/business-portal.tgz", "enterprise"]).run()
+    @shell.Cmd("scp", ["/tmp/business-portal.tgz", local_repo + "/scripts/release-business-platform.mbtx", "lunanexa-management:" + root + "/"]).run()
+    return
+  }
+  if phase == "ui-live-base" {
+    let prior = "sha256:759ec77d0571dd431218cd882833f03782954bb86626f38666f910b84dfc3170"
+    let base = root + "/portal-live-base"
+    @fs.mkdir(base + "/blobs/sha256", recursive=true)
+    let url = "https://" + registry + "/v2/moon/lunanexa-web"
+    let manifest_path = base + "/blobs/sha256/" + prior[7:].to_owned()
+    fetch_blob(manifest_path, url + "/manifests/" + prior, prior)
+    let source = @fs.read_file(manifest_path).text()
+    guard @json.parse(source) is { "config": { "digest": String(config), .. }, "layers": Array(layers), .. } else { fail("invalid image") }
+    let blobs = [config]
+    for layer in layers {
+      guard layer is { "digest": String(digest), .. } else { fail("invalid layer") }
+      blobs.push(digest)
+    }
+    for digest in blobs {
+      let file = base + "/blobs/sha256/" + digest[7:].to_owned()
+      let cached = "/home/HwHiAiUser/lunanexa-model-ui-20261022.fJCMrU/harness-portal-image/blobs/sha256/" + digest[7:].to_owned()
+      if @fs.exists(cached) { @shell.Cmd("ln", [cached, file]).run() }
+      fetch_blob(file, url + "/blobs/" + digest, digest)
+    }
+    @fs.write_file(base + "/index.json", Json::object({ "schemaVersion": 2, "manifests": [{ "mediaType": "application/vnd.oci.image.manifest.v1+json", "digest": prior, "size": source.length(), "platform": { "architecture": "amd64", "os": "linux" } }] }).stringify())
+    @fs.write_file(base + "/oci-layout", "{\"imageLayoutVersion\":\"1.0.0\"}")
+    @shell.Cmd("tar", ["-C", root + "/browser-dist", "-xf", root + "/business-portal.tgz"]).run()
+    return
+  }
+  if phase == "ui-stage" {
+    let base = "/Users/kq/Workspace/lunanexa"
+    @shell.Cmd("scp", [base + "/ui/enterprise/applications.mbt", base + "/scripts/release-business-platform.mbtx", "lunanexa-management:" + root + "/"]).run()
+    return
+  }
+  if phase == "ui-build" || phase == "ui-finish" {
+    if phase == "ui-build" {
+    @shell.Cmd("cp", [repo + "/ui/enterprise/applications.mbt", root + "/applications-before.mbt"]).run()
+    @shell.Cmd("cp", [root + "/applications.mbt", repo + "/ui/enterprise/applications.mbt"]).run()
+    @shell.Cmd(moon, ["-C", repo, "build", "cmd/enterprise", "--target", "js", "--release", "--diagnostic-limit", "2"]).run()
+    }
+    let dist = root + "/browser-dist/enterprise"
+    if !@fs.exists(dist) { @fs.mkdir(dist, recursive=true) }
+    let js = repo + "/_build/js/release/build/vectie/lunanexa/cmd/enterprise/enterprise.js"
+    @shell.Cmd("cp", [js, dist + "/enterprise.js"]).run()
+    let hash = @shell.Cmd("sha256sum", [js]).output()
+    hash.check()
+    let digest = hash.stdout().split(" ").next().unwrap().to_owned()
+    let prior_dist = "/home/HwHiAiUser/lunanexa-model-ui-20261022.fJCMrU/harness-portal-browser-dist/enterprise"
+    let old_hash = @shell.Cmd("sha256sum", [prior_dist + "/enterprise.js"]).output()
+    old_hash.check()
+    let previous = old_hash.stdout().split(" ").next().unwrap().to_owned()
+    let old_index = @fs.read_file(prior_dist + "/index.html").text()
+    guard old_index.contains(previous) else { fail("existing portal asset version missing") }
+    let index = old_index.split(previous).collect().join(digest)
+    @fs.write_file(dist + "/index.html", index)
+    return
+  }
+  if phase == "ui-publish" {
+    let old_root = "/home/HwHiAiUser/lunanexa-model-ui-20261022.fJCMrU"
+    let before = kube(["get", "deployment", "lunanexa-enterprise", "-o", "json"])
+    guard @json.parse(before) is { "metadata": { "resourceVersion": String(rv), .. }, "status": { "readyReplicas": 1, .. }, "spec": { "template": { "spec": { "containers": [{ "image": String(old), .. }], .. }, .. }, .. }, .. } else { fail("portal not ready") }
+    let base = root + "/portal-live-base"
+    guard @json.parse(@fs.read_file(base + "/index.json").text()) is { "manifests": [{ "digest": String(prior), .. }], .. } && old == registry + "/moon/lunanexa-web@" + prior else { fail("portal release changed") }
+    @shell.Cmd("tar", ["-C", base, "-cf", root + "/portal-base.tar", "blobs", "index.json", "oci-layout"]).run()
+    let tag = "model-catalog-ui-org-apps-20261104"
+    let output = root + "/portal-image"
+    @shell.Cmd(moon, ["run", repo + "/scripts/package-browser-layer.mbtx", "--", root + "/portal-base.tar", root + "/browser-dist", output, registry + "/moon/lunanexa-web:" + tag, "enterprise"]).run()
+    @shell.Cmd(moon, ["run", old_root + "/push-browser-oci.mbtx", "--", output, "https://" + registry, "moon/lunanexa-web", tag]).run()
+    guard @json.parse(@fs.read_file(output + "/index.json").text()) is { "manifests": [{ "digest": String(hash), .. }], .. } else { fail("missing image") }
+    @fs.write_file(root + "/enterprise-before.json", before, create_mode=CreateNew, permission=0o600)
+    let patch : Json = [{ "op": "test", "path": "/metadata/resourceVersion", "value": rv }, { "op": "replace", "path": "/spec/template/spec/containers/0/image", "value": registry + "/moon/lunanexa-web@" + hash }]
+    println(kube(["patch", "deployment", "lunanexa-enterprise", "--type=json", "-p", patch.stringify()]))
+    println(kube(["rollout", "status", "deployment/lunanexa-enterprise", "--timeout=55s"]))
+    return
+  }
+  if phase == "catalog" {
+    guard @fs.exists(root + "/controller-before.json") else { fail("scoped controller must be published first") }
+    let original = kube(["get", "configmap", "lunanexa-control-config", "-o", "json"])
+    guard @json.parse(original) is { "metadata": { "resourceVersion": String(rv), .. }, "data": { "client-launch-catalog": String(catalog), .. }, .. } && @json.parse(catalog) is Array(clients) else { fail("missing catalog") }
+    guard !clients.any(c => c is { "client_id": String("qingchuang-bp" | "qingchuang-procurement"), .. }) else { fail("clients already published") }
+    @fs.write_file(root + "/catalog-before.json", original, create_mode=CreateNew, permission=0o600)
+    for (id, title, path) in [("qingchuang-procurement", "采购请示生成器", "procurement"), ("qingchuang-bp", "BP 分析工作站", "bp")] {
+      clients.push({ "client_id": id, "display_name": title, "launch_uri": "https://suanli.kechuangfuwu.com:8443/user/business/" + path + "/connect", "public_api_base_url": "https://suanli.kechuangfuwu.com:8443/user/v1", "handoff_lifetime_ms": "120000", "maximum_requests": "100000", "allowed_organization_ids": ["organization-4a2394cf9b9a6b3c02697fab0097489a"] })
+    }
+    let model_original = kube(["get", "configmap", "lunanexa-client-model-policies", "-o", "json"])
+    guard @json.parse(model_original) is { "metadata": { "resourceVersion": String(mrv), .. }, "data": { "policies.json": String(policies), .. }, .. } && @json.parse(policies) is Object(models) else { fail("missing model policies") }
+    @fs.write_file(root + "/model-policies-before.json", model_original, create_mode=CreateNew, permission=0o600)
+    models["qingchuang-procurement"] = ["glm-5.3.flash"]
+    models["qingchuang-bp"] = ["glm-5.3.flash"]
+    println(kube(["patch", "configmap", "lunanexa-client-model-policies", "--type=json", "-p", Json::array([{ "op": "test", "path": "/metadata/resourceVersion", "value": mrv }, { "op": "replace", "path": "/data/policies.json", "value": Json(models).stringify() }]).stringify()]))
+    println(kube(["patch", "configmap", "lunanexa-control-config", "--type=json", "-p", Json::array([{ "op": "test", "path": "/metadata/resourceVersion", "value": rv }, { "op": "replace", "path": "/data/client-launch-catalog", "value": Json(clients).stringify() }]).stringify()]))
+    println(kube(["rollout", "restart", "deployment/lunanexa-control"]))
+    println(kube(["rollout", "status", "deployment/lunanexa-control", "--timeout=55s"]))
+    return
+  }
+  if phase == "stage" {
+    let base = "/Users/kq/Workspace/lunanexa"
+    let archive = base + "/tmp/business-apps-20261104/controller.tgz"
+    @shell.Cmd("env", ["COPYFILE_DISABLE=1", "tar", "--no-xattrs", "-C", base, "-czf", archive, ..files]).run()
+    @shell.Cmd("scp", [archive, base + "/scripts/release-business-platform.mbtx", "lunanexa-management:" + root + "/"]).run()
+    return
+  }
+  if phase == "build" {
+    guard !@fs.exists(root + "/controller-source-before.tar") else { fail("source backup already exists") }
+    @shell.Cmd("tar", ["-C", repo, "-cf", root + "/controller-source-before.tar", ..files]).run()
+    @shell.Cmd("tar", ["-C", repo, "-xf", root + "/controller.tgz"]).run()
+    @shell.Cmd("/home/HwHiAiUser/.moon-new/bin/moon", ["-C", repo, "build", "cmd/control", "--target", "native", "--release", "--diagnostic-limit", "2"]).run()
+    return
+  }
+  if phase == "memory" {
+    for target in ["wlc003s@192.168.2.178", "wlc004s@192.168.2.179"] {
+      let mem = @shell.Cmd("ssh", ["-o", "BatchMode=yes", target, "cat", "/proc/meminfo"]).output()
+      mem.check()
+      println(target)
+      for line in mem.stdout().split("\n") {
+        if line.has_prefix("MemAvailable:") || line.has_prefix("SwapFree:") { println(line) }
+      }
+      @shell.Cmd("ssh", ["-o", "BatchMode=yes", target, "systemctl", "show", "polkit.service", "-p", "MemoryCurrent", "-p", "ActiveState"]).run()
+    }
+    return
+  }
+  guard phase == "publish" else { fail("stage | build | publish | memory") }
+  let previous = "/home/HwHiAiUser/lunanexa-model-ui-20261022.fJCMrU/control-harness-budget-projection-20261025"
+  let dest = root + "/control-org-apps"
+  let before = kube(["get", "deployment", "lunanexa-control", "-o", "json"])
+  guard @json.parse(before) is { "metadata": { "resourceVersion": String(rv), .. }, "status": { "readyReplicas": 1, .. }, "spec": { "template": { "spec": { "volumes": Array(volumes), .. }, .. }, .. }, .. } else { fail("controller not ready") }
+  let patch : Array[Json] = [{ "op": "test", "path": "/metadata/resourceVersion", "value": rv }]
+  for i, v in volumes {
+    if v is { "name": "native-glm-control", "hostPath": { "path": String(path), .. }, .. } {
+      guard path == previous else { fail("controller release changed") }
+      patch.push({ "op": "replace", "path": "/spec/template/spec/volumes/\{i}/hostPath/path", "value": dest })
+    }
+  }
+  guard patch.length() == 2 && !@fs.exists(dest) else { fail("release exists or mount missing") }
+  @fs.write_file(root + "/controller-before.json", before, create_mode=CreateNew, permission=0o600)
+  @fs.mkdir(dest, permission=0o755)
+  @shell.Cmd("chmod", ["755", dest]).run()
+  @shell.Cmd("install", ["-m", "755", repo + "/_build/native/release/build/vectie/lunanexa/cmd/control/control.exe", dest + "/control.exe"]).run()
+  @shell.Cmd("install", ["-m", "755", previous + "/read-benchmark-report", dest + "/read-benchmark-report"]).run()
+  @shell.Cmd("sha256sum", [dest + "/control.exe"]).run()
+  println(kube(["patch", "deployment", "lunanexa-control", "--type=json", "-p", Json(patch).stringify()]))
+  println(kube(["rollout", "status", "deployment/lunanexa-control", "--timeout=55s"]))
+}

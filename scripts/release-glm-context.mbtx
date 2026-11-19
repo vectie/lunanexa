@@ -1,0 +1,361 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/core/string",
+}
+
+///|
+async fn kube(args : Array[String]) -> Json {
+  let result = @shell.Cmd(
+    "kubectl",
+    [
+      "--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", "-n", "lunanexa",
+    ] +
+    args,
+  ).output()
+  errdefer println(result.stderr())
+  result.check()
+  @json.parse(result.stdout())
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, phase] else { fail("snapshot | stage | build") }
+  let local_root = "/Users/kq/Workspace/lunanexa"
+  let root = "/home/HwHiAiUser/glm-tensorfold-20261104"
+  let repo = "/home/HwHiAiUser/lunanexa-event-trial-20261022.9DbhEI/lunanexa"
+  let files = [
+    "runtimes/text_chat.mbt", "runtimes/text_chat_test.mbt", "api/server.mbt", "api/access_http.mbt",
+    "cmd/identity-gateway/types.mbt", "cmd/identity-gateway/proxy_stream_wbtest.mbt",
+    "cmd/glm-control/native_pair.mbt",
+  ]
+  if phase == "observe" {
+    for name in ["lunanexa-control", "lunanexa-identity-gateway-suanli"] {
+      let value = kube(["get", "deployment", name, "-o", "json"])
+      @fs.write_file(
+        root + "/" + name + "-before.json",
+        value.stringify(indent=2),
+        permission=0o600,
+      )
+      guard value
+        is { "spec": { "template": { "spec": Object(spec), .. }, .. }, .. } else {
+        fail("Deployment spec missing")
+      }
+      println(
+        (
+          {
+            "name": name,
+            "volumes": spec.get("volumes"),
+            "node": spec.get("nodeSelector"),
+          } : Json).stringify(),
+      )
+      if spec.get("containers") is Some(Array(containers)) {
+        for c in containers {
+          if c is Object(fields) {
+            println(
+              (
+                {
+                  "name": fields.get("name"),
+                  "command": fields.get("command"),
+                  "args": fields.get("args"),
+                } : Json).stringify(),
+            )
+            if fields.get("env") is Some(Array(values)) {
+              for v in values {
+                if v is { "name": String("LUNANEXA_GLM_CONTROL_ORIGIN"), .. } {
+                  println(v.stringify())
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    let settings = kube([
+      "get", "configmap", "lunanexa-admin-settings-uncapped-20261022", "-o", "json",
+    ])
+    @fs.write_file(
+      root + "/admin-settings-before.json",
+      settings.stringify(indent=2),
+      permission=0o600,
+    )
+    if settings is { "data": Object(data), .. } {
+      for key, raw in data {
+        if raw is String(s) && @json.parse(s) is Object(f) {
+          println(
+            (
+              {
+                "key": key,
+                "request_budgets": f.get("request_budgets"),
+                "generation": f.get("generation"),
+              } : Json).stringify(),
+          )
+        }
+      }
+    }
+    println(
+      kube([
+        "get", "endpointslices", "-l", "kubernetes.io/service-name=glm53-lunaflux",
+        "-o", "json",
+      ]).stringify(),
+    )
+  } else if phase == "publish-platform" {
+    let dest = root + "/platform"
+    @shell.Cmd("install", [
+      "-m",
+      "755",
+      "/home/HwHiAiUser/business-apps-20261104.nigP25/control-org-apps/read-benchmark-report",
+      dest + "/read-benchmark-report",
+    ]).run()
+    for name in ["lunanexa-control", "lunanexa-identity-gateway-suanli"] {
+      let value = kube(["get", "deployment", name, "-o", "json"])
+      guard value
+        is {
+          "metadata": { "resourceVersion": String(rv), .. },
+          "spec": {
+            "template": {
+              "spec": {
+                "volumes": Array(volumes),
+                "containers": Array(containers),
+                ..
+              },
+              ..
+            },
+            ..
+          },
+          ..
+        } else {
+        fail("Deployment incomplete")
+      }
+      let patch : Array[Json] = [
+        { "op": "test", "path": "/metadata/resourceVersion", "value": rv },
+      ]
+      if name == "lunanexa-control" {
+        for i, volume in volumes {
+          if volume is { "name": "native-glm-control", .. } {
+            patch.push({
+              "op": "replace",
+              "path": "/spec/template/spec/volumes/\{i}/hostPath/path",
+              "value": dest,
+            })
+          }
+        }
+      } else {
+        guard !volumes.any(v => v is { "name": "native-long-context", .. }) else {
+          fail("Identity release already applied")
+        }
+        patch.push({
+          "op": "add",
+          "path": "/spec/template/spec/volumes/-",
+          "value": {
+            "name": "native-long-context",
+            "hostPath": { "path": dest, "type": "Directory" },
+          },
+        })
+        for i, container in containers {
+          if container is { "name": "identity-gateway", .. } {
+            patch.push({
+              "op": "add",
+              "path": "/spec/template/spec/containers/\{i}/volumeMounts/-",
+              "value": {
+                "name": "native-long-context",
+                "mountPath": "/opt/lunanexa-context",
+                "readOnly": true,
+              },
+            })
+            patch.push({
+              "op": "add",
+              "path": "/spec/template/spec/containers/\{i}/command",
+              "value": ["/opt/lunanexa-context/identity-gateway.exe"],
+            })
+          }
+        }
+      }
+      ignore(
+        kube([
+          "patch",
+          "deployment",
+          name,
+          "--type=json",
+          "-p",
+          Json(patch).stringify(),
+          "-o",
+          "json",
+        ]),
+      )
+      @shell.Cmd("kubectl", [
+        "--kubeconfig",
+        "/home/HwHiAiUser/.kube/lunanexa-management",
+        "-n",
+        "lunanexa",
+        "rollout",
+        "status",
+        "deployment/" + name,
+        "--timeout=55s",
+      ]).run()
+    }
+  } else if phase == "budget" {
+    let name = "lunanexa-admin-settings-uncapped-20261022"
+    let value = kube(["get", "configmap", name, "-o", "json"])
+    guard value
+      is {
+        "metadata": { "resourceVersion": String(rv), .. },
+        "data": { "admin-settings.json": String(raw), .. },
+        ..
+      } &&
+      @json.parse(raw) is Object(settings) &&
+      settings.get("request_budgets") is Some(Object(budgets)) else {
+      fail("Request settings absent")
+    }
+    @fs.write_file(
+      root + "/active-admin-settings-before.json",
+      value.stringify(indent=2),
+      permission=0o600,
+    )
+    budgets["maximum_request_body_bytes"] = 16777216
+    budgets["openai_max_input_units"] = 10000000
+    if settings.get("generation") is Some(String(s)) {
+      settings["generation"] = Json((@string.parse_int64(s) + 1L).to_string())
+    }
+    let next_name = "lunanexa-admin-settings-glm-1m-20261104"
+    let manifest : Json = {
+      "apiVersion": "v1",
+      "kind": "ConfigMap",
+      "metadata": { "name": next_name, "namespace": "lunanexa" },
+      "immutable": true,
+      "data": { "admin-settings.json": Json(settings).stringify() },
+    }
+    @shell.Cmd(
+      "kubectl",
+      [
+        "--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", "-n", "lunanexa",
+        "create", "-f", "-",
+      ],
+      stdin=Text(manifest.stringify()),
+    ).run()
+    let deployment = kube([
+      "get", "deployment", "lunanexa-control", "-o", "json",
+    ])
+    guard deployment
+      is {
+        "metadata": { "resourceVersion": String(drv), .. },
+        "spec": {
+          "template": { "spec": { "volumes": Array(volumes), .. }, .. },
+          ..
+        },
+        ..
+      } else {
+      fail("Controller volumes absent")
+    }
+    let patch : Array[Json] = [
+      { "op": "test", "path": "/metadata/resourceVersion", "value": drv },
+    ]
+    for i, volume in volumes {
+      if volume is { "name": "admin-settings", .. } {
+        patch.push({
+          "op": "replace",
+          "path": "/spec/template/spec/volumes/\{i}/configMap/name",
+          "value": next_name,
+        })
+      }
+    }
+    ignore(rv)
+    ignore(
+      kube([
+        "patch",
+        "deployment",
+        "lunanexa-control",
+        "--type=json",
+        "-p",
+        Json(patch).stringify(),
+        "-o",
+        "json",
+      ]),
+    )
+    println(
+      "Active request body and input budgets updated; output and concurrency settings unchanged",
+    )
+  } else if phase == "snapshot" {
+    @shell.Cmd(
+      "ssh",
+      [
+        "lunanexa-management",
+        "tar",
+        "-C",
+        repo,
+        "-czf",
+        root + "/platform-source-before.tgz",
+      ] +
+      files,
+    ).run()
+    @shell.Cmd("scp", [
+      "lunanexa-management:" + root + "/platform-source-before.tgz",
+      "/tmp/glm-tensorfold-20261104/",
+    ]).run()
+    let dest = "/tmp/glm-tensorfold-20261104/platform-before"
+    if !@fs.exists(dest) {
+      @fs.mkdir(dest, recursive=true)
+    }
+    @shell.Cmd("tar", [
+      "-C", dest, "-xf", "/tmp/glm-tensorfold-20261104/platform-source-before.tgz",
+    ]).run()
+    for file in files {
+      let diff = @shell.Cmd("diff", [
+        "-u",
+        dest + "/" + file,
+        local_root + "/" + file,
+      ]).output()
+      println(diff.stdout())
+    }
+  } else if phase == "stage" {
+    @shell.Cmd(
+      "env",
+      [
+        "COPYFILE_DISABLE=1", "tar", "--no-xattrs", "-C", local_root, "-czf", "/tmp/glm-tensorfold-20261104/platform-source.tgz",
+      ] +
+      files +
+      ["api/chat_completion_wbtest.mbt"],
+    ).run()
+    @shell.Cmd("scp", [
+      "/tmp/glm-tensorfold-20261104/platform-source.tgz",
+      local_root + "/scripts/release-glm-context.mbtx",
+      "lunanexa-management:" + root + "/",
+    ]).run()
+  } else if phase == "build" {
+    guard @fs.exists(root + "/platform-source-before.tgz") else {
+      fail("Source backup required")
+    }
+    @shell.Cmd("tar", ["-C", repo, "-xf", root + "/platform-source.tgz"]).run()
+    let moon = "/home/HwHiAiUser/.moon-new/bin/moon"
+    for pkg in ["cmd/control", "cmd/identity-gateway", "cmd/glm-control"] {
+      @shell.Cmd(moon, [
+        "-C", repo, "build", pkg, "--target", "native", "--release", "--diagnostic-limit",
+        "2",
+      ]).run()
+    }
+    let dest = root + "/platform"
+    if !@fs.exists(dest) {
+      @fs.mkdir(dest, permission=0o755)
+    }
+    @shell.Cmd("chmod", ["755", dest]).run()
+    for name in ["control", "identity-gateway", "glm-control"] {
+      @shell.Cmd("install", [
+        "-m",
+        "755",
+        repo +
+        "/_build/native/release/build/vectie/lunanexa/cmd/" +
+        name +
+        "/" +
+        name +
+        ".exe",
+        dest + "/" + name + ".exe",
+      ]).run()
+    }
+  } else {
+    fail("Unknown phase")
+  }
+}

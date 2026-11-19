@@ -1,0 +1,100 @@
+///|
+/// Extend only the restored 176 FL2VA provider to the UI-verified long preset.
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn kube(k : String, args : Array[String]) -> String {
+  let result = @shell.Cmd(
+    "kubectl",
+    ["--kubeconfig", k, "-n", "lunanexa", ..args],
+  ).output()
+  result.check()
+  result.stdout()
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, k, backup] else {
+    fail("Usage: sync-comfyui-long-video.mbtx KUBECONFIG NEW_BACKUP")
+  }
+  let name = "lunanexa-external-media-providers"
+  let raw = kube(k, ["get", "configmap", name, "-o", "json"])
+  guard @json.parse(raw)
+    is {
+      "metadata": { "resourceVersion": String(version), .. },
+      "data": { "providers.json": String(providers_raw), .. },
+      ..
+    } else {
+    fail("Expected provider config")
+  }
+  guard @json.parse(providers_raw) is Array(providers) else {
+    fail("Expected providers")
+  }
+  let mut found = 0
+  for provider in providers {
+    if provider
+      is {
+        "active": true,
+        "node_id": "spark-25e2-3d35c8fd",
+        "profile": Object(profile),
+        ..
+      } &&
+      profile.get("model") == Some(Json::string("video.minimax-h3-fl2va")) {
+      guard profile.get("widths") is Some(Array(widths)) &&
+        profile.get("heights") is Some(Array(heights)) &&
+        profile.get("maximum_frames") == Some(Json::number(121)) else {
+        fail("Expected old short-video profile")
+      }
+      if !widths.contains(Json::number(608)) {
+        widths.push(Json::number(608))
+      }
+      if !heights.contains(Json::number(352)) {
+        heights.push(Json::number(352))
+      }
+      profile["maximum_frames"] = Json::number(481)
+      found += 1
+    }
+  }
+  guard found == 1 else {
+    fail("Expected exactly one active 176 FL2VA provider")
+  }
+  @fs.mkdir(backup, permission=0o700)
+  @fs.write_file(
+    backup + "/provider-before.json",
+    raw,
+    permission=0o600,
+    create_mode=CreateNew,
+  )
+  @fs.write_file(
+    backup + "/control-before.json",
+    kube(k, ["get", "deployment", "lunanexa-control", "-o", "json"]),
+    permission=0o600,
+    create_mode=CreateNew,
+  )
+  let patch : Json = [
+    { "op": "test", "path": "/metadata/resourceVersion", "value": version },
+    {
+      "op": "replace",
+      "path": "/data/providers.json",
+      "value": Json::array(providers).stringify(),
+    },
+  ]
+  ignore(
+    kube(k, ["patch", "configmap", name, "--type=json", "-p", patch.stringify()]),
+  )
+  ignore(kube(k, ["rollout", "restart", "deployment/lunanexa-control"]))
+  ignore(
+    kube(k, [
+      "rollout", "status", "deployment/lunanexa-control", "--timeout=180s",
+    ]),
+  )
+  println(
+    "176 FL2VA profile now includes 608x352 / 481 frames; other providers unchanged",
+  )
+}

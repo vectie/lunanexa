@@ -1,0 +1,136 @@
+///|
+import { "moonbitlang/async@0.22.4", "moonbitlang/async@0.22.4/fs", "moonbitlang/async@0.22.4/shell", "moonbitlang/core/env", "moonbitlang/core/json" }
+
+///|
+async fn kube(args : Array[String]) -> String {
+  let r = @shell.Cmd("kubectl", ["--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", "-n", "lunanexa", ..args]).output()
+  r.check()
+  r.stdout()
+}
+
+///|
+async fn fetch_blob(path : String, url : String, digest : String) -> Unit {
+  if !@fs.exists(path) {
+    @shell.Cmd("curl", ["--fail", "--silent", "--show-error", "--max-time", "60", "-H", "Accept: application/vnd.oci.image.manifest.v1+json", url, "-o", path]).run()
+  }
+  let r = @shell.Cmd("sha256sum", [path]).output()
+  r.check()
+  guard r.stdout().has_prefix(digest[7:].to_owned()) else { fail("Image digest mismatch") }
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, phase, site] else { fail("stage all | prepare SITE | publish SITE") }
+  let root = "/home/HwHiAiUser/access-onboarding-ui-r4-20261104"
+  let registry = "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000"
+  let moon = "/home/HwHiAiUser/.moon-new/bin/moon"
+  let local_repo = "/Users/kq/Workspace/lunanexa"
+  if phase == "stage" {
+    let dist = local_repo + "/tmp/product-simple-20261104/browser-dist"
+    for surface in ["console", "workbench"] {
+      if !@fs.exists(dist + "/" + surface) { @fs.mkdir(dist + "/" + surface, recursive=true) }
+      let js = local_repo + "/_build/browser-compiled/js/release/build/vectie/lunanexa/cmd/" + surface + "/" + surface + ".js"
+      @shell.Cmd("cp", [js, dist + "/" + surface + "/" + surface + ".js"]).run()
+      let sum = @shell.Cmd("shasum", ["-a", "256", js]).output()
+      sum.check()
+      let token = if surface == "console" { "__LUNANEXA_CONSOLE_ASSET_DIGEST__" } else { "__LUNANEXA_WORKBENCH_ASSET_DIGEST__" }
+      @fs.write_file(dist + "/" + surface + "/index.html", @fs.read_file(local_repo + "/cmd/" + surface + "/index.html").text().replace(old=token, new=sum.stdout().split(" ").next().unwrap().to_owned()))
+    }
+    if !@fs.exists(dist + "/docs") { @fs.mkdir(dist + "/docs") }
+    for name in ["index.html", "styles.css", "app.js", "coursebook.json", "coursebook.zh-CN.json", "coursebook-evidence.json", "lecture.js", "lecture.css", "lecture-studio.js", "lecture-studio.css", "ai-lecture.json"] {
+      @shell.Cmd("cp", [local_repo + "/docs-site/" + name, dist + "/docs/" + name]).run()
+    }
+    if !@fs.exists(dist + "/home") { @fs.mkdir(dist + "/home") }
+    for name in ["index.html", "site.css", "site.js"] {
+      @shell.Cmd("cp", [local_repo + "/public-site/" + name, dist + "/home/" + name]).run()
+    }
+    @shell.Cmd("env", ["COPYFILE_DISABLE=1", "tar", "--no-xattrs", "-C", dist, "-czf", "/tmp/product-simple-surfaces.tgz", "console", "workbench", "docs", "home"]).run()
+    @shell.Cmd("ssh", ["-o", "BatchMode=yes", "lunanexa-management", "mkdir", "-p", root]).run()
+    @shell.Cmd("scp", ["/tmp/product-simple-surfaces.tgz", local_repo + "/scripts/release-simple-surfaces.mbtx", local_repo + "/scripts/package-browser-layer.mbtx", local_repo + "/scripts/push-browser-oci.mbtx", "lunanexa-management:" + root + "/"]).run()
+    return
+  }
+  guard ["console", "workbench", "docs", "home"].contains(site) else { fail("Unknown surface") }
+  let deployment = match site {
+    "home" => "nexai-public-landing"
+    "docs" => "lunanexa-coursebook-public-gateway"
+    _ => "lunanexa-" + site
+  }
+  if phase == "prepare" {
+    if !@fs.exists(root + "/browser-dist") { @fs.mkdir(root + "/browser-dist") }
+    @shell.Cmd("tar", ["-C", root + "/browser-dist", "-xf", root + "/product-simple-surfaces.tgz"]).run()
+    let before = kube(["get", "deployment", deployment, "-o", "json"])
+    @fs.write_file(root + "/" + site + "-before.json", before, create_mode=CreateNew, permission=0o600)
+    if site == "home" {
+      guard @json.parse(before) is { "spec": { "template": { "spec": { "volumes": Array(volumes), .. }, .. }, .. }, .. } else { fail("Missing homepage volume") }
+      for volume in volumes {
+        if volume is { "name": "site", "configMap": { "name": String(prior), .. }, .. } {
+          guard @json.parse(kube(["get", "configmap", prior, "-o", "json"])) is Object(cm) && cm.get("data") is Some(Object(data)) && data.get("index.html") is Some(String(old)) else { fail("Missing homepage content") }
+          let key_block = old.split("id=\"public-api-key\"").to_array()[1].to_owned()
+          let key = key_block.split(">").to_array()[1].split("</textarea").next().unwrap().to_owned()
+          let qr = old.split("aria-label=\"公开测试 API 连接二维码\">").to_array()[1].split("</div>").next().unwrap().to_owned()
+          guard key.has_prefix("lnx_") && qr.has_prefix("<svg") else { fail("Existing approved API configuration was not found") }
+          let source = @fs.read_file(root + "/browser-dist/home/index.html").text()
+          data["index.html"] = Json(source.replace(old="__PUBLIC_TRIAL_KEY__", new=key).replace(old="__PUBLIC_TRIAL_QR__", new=qr))
+          for name in ["site.css", "site.js"] { data[name] = Json(@fs.read_file(root + "/browser-dist/home/" + name).text()) }
+          cm["metadata"] = { "name": "nexai-public-landing-simple-20261104", "namespace": "lunanexa", "labels": { "app": deployment } }
+          cm["immutable"] = true
+          cm.remove("status")
+          @fs.write_file(root + "/home-config.json", Json::object(cm).stringify(), create_mode=CreateNew, permission=0o600)
+          println("Prepared homepage; existing key, QR and brand assets retained.")
+          return
+        }
+      }
+      fail("Homepage volume not found")
+    }
+    guard @json.parse(before) is { "spec": { "template": { "spec": { "containers": [{ "image": String(image), .. }], .. }, .. }, .. }, .. } else { fail("Missing image") }
+    let repository = if site == "docs" { "moon/lunanexa-coursebook" } else { "moon/lunanexa-web" }
+    guard image.has_prefix(registry + "/" + repository + "@sha256:") else { fail("Unexpected image source") }
+    let prior = image.split("@").to_array()[1].to_owned()
+    let base = root + "/" + site + "-base"
+    @fs.mkdir(base + "/blobs/sha256", recursive=true)
+    let url = "https://" + registry + "/v2/" + repository
+    let path = base + "/blobs/sha256/" + prior[7:].to_owned()
+    fetch_blob(path, url + "/manifests/" + prior, prior)
+    let manifest = @fs.read_file(path).text()
+    guard @json.parse(manifest) is { "config": { "digest": String(config), .. }, "layers": Array(layers), .. } else { fail("Invalid image manifest") }
+    let blobs = [config]
+    for layer in layers { guard layer is { "digest": String(digest), .. } else { fail("Invalid layer") }; blobs.push(digest) }
+    for digest in blobs {
+      let file = base + "/blobs/sha256/" + digest[7:].to_owned()
+      let cached = "/home/HwHiAiUser/business-login-shared-20261104/portal-image/blobs/sha256/" + digest[7:].to_owned()
+      if @fs.exists(cached) { @shell.Cmd("ln", [cached, file]).run() }
+      fetch_blob(file, url + "/blobs/" + digest, digest)
+    }
+    @fs.write_file(base + "/index.json", Json::object({ "schemaVersion": 2, "manifests": [{ "mediaType": "application/vnd.oci.image.manifest.v1+json", "digest": prior, "size": manifest.length(), "platform": { "architecture": "amd64", "os": "linux" } }] }).stringify())
+    @fs.write_file(base + "/oci-layout", "{\"imageLayoutVersion\":\"1.0.0\"}")
+    @shell.Cmd("tar", ["-C", base, "-cf", base + ".tar", "blobs", "index.json", "oci-layout"]).run()
+    let tag = "model-catalog-ui-access-onboarding-r4-" + site + "-20261104"
+    @shell.Cmd(moon, ["run", root + "/package-browser-layer.mbtx", "--", base + ".tar", root + "/browser-dist", root + "/" + site + "-image", registry + "/" + repository + ":" + tag, site]).run()
+    @shell.Cmd(moon, ["run", root + "/push-browser-oci.mbtx", "--", root + "/" + site + "-image", "https://" + registry, repository, tag]).run()
+    @shell.Cmd("rm", [base + ".tar"]).run()
+    return
+  }
+  guard phase == "publish" else { fail("Unknown phase") }
+  let before = @json.parse(@fs.read_file(root + "/" + site + "-before.json").text())
+  let patch : Array[Json] = []
+  if site == "home" {
+    guard before is { "spec": { "template": { "spec": { "volumes": Array(volumes), .. }, .. }, .. }, .. } else { fail("Missing volume") }
+    println(kube(["create", "-f", root + "/home-config.json"]))
+    for index, volume in volumes {
+      if volume is { "name": "site", "configMap": { "name": String(prior), .. }, .. } {
+        let path = "/spec/template/spec/volumes/\{index}/configMap/name"
+        patch.push({ "op": "test", "path": path, "value": prior })
+        patch.push({ "op": "replace", "path": path, "value": "nexai-public-landing-simple-20261104" })
+      }
+    }
+  } else {
+    guard before is { "spec": { "template": { "spec": { "containers": [{ "image": String(prior), .. }], .. }, .. }, .. }, .. } && @json.parse(@fs.read_file(root + "/" + site + "-image/index.json").text()) is { "manifests": [{ "digest": String(digest), .. }], .. } else { fail("Missing release image") }
+    let repo = prior.split("@").next().unwrap().to_owned()
+    let path = "/spec/template/spec/containers/0/image"
+    patch.push({ "op": "test", "path": path, "value": prior })
+    patch.push({ "op": "replace", "path": path, "value": repo + "@" + digest })
+  }
+  guard patch.length() == 2 else { fail("Ambiguous release target") }
+  println(kube(["patch", "deployment", deployment, "--type=json", "-p", Json(patch).stringify()]))
+  println(kube(["rollout", "status", "deployment/" + deployment, "--timeout=55s"]))
+}

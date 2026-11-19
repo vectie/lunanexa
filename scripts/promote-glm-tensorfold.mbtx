@@ -1,0 +1,249 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/http",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn kube(args : Array[String]) -> Json {
+  let result = @shell.Cmd(
+    "kubectl",
+    [
+      "--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", "-n", "lunanexa",
+    ] +
+    args,
+  ).output()
+  errdefer println(result.stderr())
+  result.check()
+  @json.parse(result.stdout())
+}
+
+///|
+async fn update_network(root : String) -> Unit {
+  for
+    (name, path, port) in [
+      ("lunanexa-control-glm-lunaflux", "/spec/egress/0/ports/0/port", 18889),
+      (
+        "lunanexa-control-to-enterprise-glm53", "/spec/egress/1/ports/0/port", 5908,
+      ),
+    ] {
+    let before = kube(["get", "networkpolicy", name, "-o", "json"])
+    let file = root + "/" + name + "-before.json"
+    if !@fs.exists(file) {
+      @fs.write_file(file, before.stringify(indent=2), permission=0o600)
+    }
+    ignore(
+      kube([
+        "patch",
+        "networkpolicy",
+        name,
+        "--type=json",
+        "-p",
+        ([{ "op": "replace", "path": path, "value": port }] : Json).stringify(),
+        "-o",
+        "json",
+      ]),
+    )
+    println(name + ": selected port " + port.to_string())
+  }
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, phase] else { fail("stage | promote | status") }
+  let root = "/home/HwHiAiUser/glm-tensorfold-20261104"
+  let service = "lunanexa-glm-tensorfold-control.service"
+  if phase == "stage" {
+    let unit = "[Unit]\nDescription=LunaNexa TensorFold GLM pair lifecycle\nAfter=network-online.target\n[Service]\nType=simple\nWorkingDirectory=/home/HwHiAiUser\nEnvironment=LUNANEXA_GLM_RUNTIME=systemd-user\nEnvironment=LUNANEXA_GLM_CONTROL_BIND=192.168.2.175:5908\nEnvironment=LUNANEXA_GLM_CONTROL_TOKEN_FILE=/home/HwHiAiUser/.config/lunanexa/glm-control-token\nEnvironment=LUNANEXA_GLM_HEAD_SSH_TARGET=wlc003s@192.168.2.178\nEnvironment=LUNANEXA_GLM_WORKER_SSH_TARGET=wlc004s@192.168.2.179\nEnvironment=LUNANEXA_GLM_HEAD_UNIT=lunanexa-glm-tensorfold-rank0.service\nEnvironment=LUNANEXA_GLM_WORKER_UNIT=lunanexa-glm-tensorfold-rank1.service\nEnvironment=LUNANEXA_GLM_MIN_HOST_AVAILABLE_MIB=768\nEnvironment=LUNANEXA_GLM_MAX_GPU_MEMORY_MIB=118784\nExecStart=\{root}/platform/glm-control.exe\nRestart=on-failure\nRestartSec=3\n[Install]\nWantedBy=default.target\n"
+    @fs.write_file("/home/HwHiAiUser/.config/systemd/user/" + service, unit)
+    @shell.Cmd("systemctl", ["--user", "daemon-reload"]).run()
+    println("Lifecycle unit staged; engine not restarted")
+  } else if phase == "network" {
+    update_network(root)
+  } else if phase == "engine-status" {
+    let result = @shell.Cmd("ssh", [
+      "-o", "BatchMode=yes", "wlc003s@192.168.2.178", "cat", "/home/wlc003s/.local/share/lunanexa/glm53-lunaflux-ed6be466/backend.credential",
+    ]).output()
+    result.check()
+    let secret = result.stdout().trim().to_owned()
+    for path in ["/v1/load", "/metrics", "/v1/models"] {
+      let (response, body) = @http.get("http://192.168.2.178:18889" + path, headers={
+        "authorization": "Bearer " + secret,
+      })
+      println("\{path} HTTP \{response.code}")
+      if path == "/metrics" {
+        for line in body.text().split("\n") {
+          if !line.has_prefix("#") &&
+            (
+              line.contains("prefill") ||
+              line.contains("running") ||
+              line.contains("waiting") ||
+              line.contains("fill_tokens") ||
+              line.contains("generation_tokens")
+            ) {
+            println(line)
+          }
+        }
+      } else {
+        println(body.text())
+      }
+    }
+  } else if phase == "promote" {
+    let evidence = @json.parse(
+      @fs.read_file(root + "/tensorfold-1m-needle.json").text(),
+    )
+    guard evidence
+      is {
+        "done": true,
+        "finish_reason": "stop",
+        "content": String(content),
+        "usage": { "prompt_tokens": Number(tokens, ..), .. },
+        ..
+      } &&
+      tokens >= 1000000 &&
+      content.contains("ORCHID-6829") &&
+      content.contains("COBALT-4173") &&
+      content.contains("LANTERN-9056") else {
+      fail("Completed 1M retrieval evidence is required")
+    }
+    let name = "lunanexa-glm-native-route"
+    let route_config = kube(["get", "configmap", name, "-o", "json"])
+    let endpoint = kube([
+      "get", "endpointslice", "glm53-lunaflux-enterprise", "-o", "json",
+    ])
+    for
+      pair in [
+        ("glm-route-before.json", route_config),
+        ("glm-endpoint-before.json", endpoint),
+      ] {
+      if !@fs.exists(root + "/" + pair.0) {
+        @fs.write_file(
+          root + "/" + pair.0,
+          pair.1.stringify(indent=2),
+          permission=0o600,
+        )
+      }
+    }
+    guard route_config is { "data": Object(data), .. } &&
+      data.get("route.json") is Some(String(raw)) &&
+      @json.parse(raw) is Object(route) else {
+      fail("Native route missing")
+    }
+    route["runtime_version"] = "tensorfold-1.2.2-bf16-dense-b1922fc"
+    route["native_revision"] = "b1922fc9c47b00774a6d183bb19517dffca314c9"
+    data["route.json"] = Json(Json(route).stringify())
+    let allocation : Json = {
+      "dtype": "NVFP4",
+      "tensor_parallel_size": 2,
+      "context_tokens": 1048576,
+      "host_reserve_gib_per_rank": 3,
+      "resident_sequences": 8,
+      "shared_history_pages": 2056,
+      "history_page_tokens": 512,
+      "kv_cache_dtype": "BF16",
+      "kv_pool_gib_per_rank": 12.8,
+      "speculative_decoding": "MTP + copies",
+      "reasoning_effort": "low",
+      "prefill_chunk_tokens": 2048,
+      "binary_sha256": "57894967f6466b83928ffcb675ac679c4cca2155506b986b13e41e2bf903e79d",
+    }
+    data["allocation.json"] = Json(allocation.stringify())
+    update_network(root)
+    @shell.Cmd("systemctl", ["--user", "enable", "--now", service]).run()
+    let secret = @fs.read_file(
+        "/home/HwHiAiUser/.config/lunanexa/glm-control-token",
+      )
+      .text()
+      .trim()
+      .to_owned()
+    let (response, body) = @http.get(
+      "http://192.168.2.175:5908/v1/glm-control",
+      headers={ "authorization": "Bearer " + secret },
+    )
+    guard response.code == 200 &&
+      @json.parse(body.text()) is { "state": "Running", .. } else {
+      fail("New lifecycle adapter is not observing both ranks")
+    }
+    ignore(
+      kube([
+        "patch",
+        "configmap",
+        name,
+        "--type=merge",
+        "-p",
+        ({ "data": Json(data) } : Json).stringify(),
+        "-o",
+        "json",
+      ]),
+    )
+    ignore(
+      kube([
+        "patch",
+        "endpointslice",
+        "glm53-lunaflux-enterprise",
+        "--type=json",
+        "-p",
+        ([{ "op": "replace", "path": "/ports/0/port", "value": 18889 }] : Json).stringify(),
+        "-o",
+        "json",
+      ]),
+    )
+    @shell.Cmd("kubectl", [
+      "--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", "-n", "lunanexa",
+      "set", "env", "deployment/lunanexa-control", "LUNANEXA_GLM_CONTROL_ORIGIN=http://192.168.2.175:5908",
+    ]).run()
+    println(
+      "GLM route promoted; controller is rolling to the new route and lifecycle endpoint",
+    )
+  } else if phase == "adapter-test" {
+    let repo = "/home/HwHiAiUser/lunanexa-event-trial-20261022.9DbhEI/lunanexa"
+    let result = @shell.Cmd(
+      "/home/HwHiAiUser/.moon-new/bin/moon",
+      [
+        "-C", repo, "test", "--target", "native", "runtimes/text_chat_live_test.mbt",
+        "--diagnostic-limit", "2",
+      ],
+      env={
+        "LUNANEXA_LIVE_TEXT_ENDPOINT": "http://127.0.0.1:19891/v1/chat/completions",
+        "LUNANEXA_LIVE_TEXT_CREDENTIAL_FILE": root + "/runtime-test.credential",
+        "LUNANEXA_LIVE_TEXT_REVISION": "b1922fc9c47b00774a6d183bb19517dffca314c9",
+        "LUNANEXA_LIVE_TEXT_ARTIFACT": "sha256:e6f7173cbfab52a99688dfebdfb0b948bbe418de5ff45f69440cbab0949356d9",
+      },
+    ).output(timeout_ms=300000)
+    @fs.write_file(
+      root + "/live-adapter-test.log",
+      result.stdout() + result.stderr(),
+    )
+    println(result.stdout())
+    errdefer println(result.stderr())
+    result.check()
+  } else if phase == "status" {
+    let secret = @fs.read_file(
+        "/home/HwHiAiUser/.config/lunanexa/glm-control-token",
+      )
+      .text()
+      .trim()
+      .to_owned()
+    let (response, body) = @http.get(
+      "http://192.168.2.175:5908/v1/glm-control",
+      headers={ "authorization": "Bearer " + secret },
+    )
+    println("Lifecycle HTTP \{response.code}: " + body.text())
+    let ep = kube([
+      "get", "endpointslice", "glm53-lunaflux-enterprise", "-o", "json",
+    ])
+    if ep is { "ports": ports, "endpoints": endpoints, .. } {
+      println(({ "ports": ports, "endpoints": endpoints } : Json).stringify())
+    }
+    @shell.Cmd("kubectl", [
+      "--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", "-n", "lunanexa",
+      "rollout", "status", "deployment/lunanexa-control", "--timeout=55s",
+    ]).run()
+  } else {
+    fail("Unknown phase")
+  }
+}

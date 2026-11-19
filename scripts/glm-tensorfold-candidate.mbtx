@@ -1,0 +1,385 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/http",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/core/encoding/utf8",
+}
+
+///|
+async fn remote(host : String, args : Array[String]) -> String {
+  let result = @shell.Cmd(
+    "ssh",
+    ["-o", "BatchMode=yes", "-o", "ConnectTimeout=8", host] + args,
+  ).output(timeout_ms=120000)
+  result.check()
+  result.stdout()
+}
+
+///|
+fn long_prompt(repetitions : Int32) -> String {
+  let row = "General reference entry: routine status complete; no project access code appears in this entry.\n"
+  return "Read the whole reference and return only JSON with keys alpha, beta, gamma, copying the three project codes exactly.\nProject ALPHA code is ORCHID-6829.\n" +
+    row.repeat(repetitions / 2) +
+    "Project BETA code is COBALT-4173.\n" +
+    row.repeat(repetitions - repetitions / 2) +
+    "Project GAMMA code is LANTERN-9056.\nReturn the ALPHA, BETA and GAMMA codes in JSON."
+}
+
+///|
+async fn long_probe() -> Unit {
+  let secret = remote("wlc003s@192.168.2.178", [
+      "cat", "/home/wlc003s/.local/share/lunanexa/glm53-lunaflux-ed6be466/backend.credential",
+    ])
+    .trim()
+    .to_owned()
+  let client = @http.Client("http://192.168.2.178:18889", headers={
+    "authorization": "Bearer " + secret,
+    "content-type": "application/json",
+  })
+  defer client.close()
+  let mut repetitions = 50000
+  let mut prompt = ""
+  for _ in 0..<6 {
+    prompt = long_prompt(repetitions)
+    let body = ({ "messages": [{ "role": "user", "content": prompt }] } : Json).stringify()
+    let response = client.post("/tokenize", body, extra_headers={
+      "content-length": @utf8.encode(body).length().to_string(),
+    })
+    guard response.code == 200 else { fail("Long prompt tokenizer failed") }
+    guard @json.parse(client.read_all().text())
+      is {
+        "count": Number(count, ..),
+        "max_model_len": Number(context, ..),
+        ..
+      } else {
+      fail("No tokenizer count")
+    }
+    println("Long prompt: \{count} tokens; declared context: \{context}")
+    guard context >= 1048576 else { fail("Engine context is below 1M") }
+    if count >= 1039000 && count <= 1041000 {
+      @fs.write_file(
+        "/home/HwHiAiUser/glm-tensorfold-20261104/long-prompt.txt",
+        prompt,
+        permission=0o600,
+      )
+      probe("18889", "tensorfold-1m-needle", prompt, 4096, draft=true)
+      return
+    }
+    repetitions = (repetitions.to_double() * 1040000.0 / count).to_int()
+  }
+  fail("Could not size the 1M acceptance prompt")
+}
+
+///|
+async fn probe(
+  port : String,
+  name : String,
+  prompt : String,
+  limit : Int32,
+  draft? : Bool,
+) -> Unit {
+  let secret = remote("wlc003s@192.168.2.178", [
+      "cat", "/home/wlc003s/.local/share/lunanexa/glm53-lunaflux-ed6be466/backend.credential",
+    ])
+    .trim()
+    .to_owned()
+  let client = @http.Client("http://192.168.2.178:" + port, headers={
+    "authorization": "Bearer " + secret,
+    "content-type": "application/json",
+  })
+  defer client.close()
+  let fields : Map[String, Json] = {
+    "model": "glm-5.3",
+    "messages": [{ "role": "user", "content": prompt }],
+    "stream": true,
+    "temperature": 0,
+    "max_tokens": limit,
+  }
+  if port != "18888" {
+    fields["stream_options"] = { "include_usage": true }
+    fields["reasoning_effort"] = "low"
+  }
+  if draft is Some(value) {
+    fields["draft"] = Json(value)
+  }
+  let payload = Json::object(fields)
+  let started = @async.now()
+  let raw = payload.stringify()
+  let response = client.post("/v1/chat/completions", raw, extra_headers={
+    "content-length": @utf8.encode(raw).length().to_string(),
+  })
+  guard response.code == 200 else {
+    println(client.read_all().text())
+    fail("GLM probe HTTP \{response.code}")
+  }
+  let content = StringBuilder()
+  let reasoning = StringBuilder()
+  let mut first = 0L
+  let mut last = 0L
+  let mut usage : Json = Json::null()
+  let mut finish : Json = Json::null()
+  let mut runtime : Json = Json::null()
+  let mut speculative : Json = Json::null()
+  let mut done = false
+  for ;; {
+    guard client.read_until("\n") is Some(line) else { break }
+    if !line.has_prefix("data:") {
+      continue
+    }
+    let event = line[5:].trim().to_owned()
+    if event == "[DONE]" {
+      done = true
+      break
+    }
+    if event.is_empty() {
+      continue
+    }
+    let data = @json.parse(event)
+    if data is { "tensorfold": value, .. } {
+      runtime = value
+    }
+    if data is { "speculative": value, .. } {
+      speculative = value
+    }
+    if data is { "usage": value, .. } && !(value is Null) {
+      usage = value
+    }
+    if data is { "choices": Array(choices), .. } {
+      for choice in choices {
+        if choice is { "finish_reason": value, .. } && !(value is Null) {
+          finish = value
+        }
+        if choice is { "delta": delta, .. } {
+          let text = match delta {
+            { "content": String(s), .. } => s
+            _ => ""
+          }
+          let thought = match delta {
+            { "reasoning_content": String(s), .. } => s
+            _ => ""
+          }
+          if !text.is_empty() || !thought.is_empty() {
+            last = @async.now()
+            if first == 0L {
+              first = last
+              println("\{name}: first token after \{first - started} ms")
+            }
+          }
+          content.write_string(text)
+          reasoning.write_string(thought)
+        }
+      }
+    }
+  }
+  let ended = @async.now()
+  let result : Json = {
+    "name": name,
+    "elapsed_ms": ended - started,
+    "ttft_ms": first - started,
+    "tail_ms": ended - last,
+    "done": done,
+    "finish_reason": finish,
+    "usage": usage,
+    "content": content.to_string(),
+    "reasoning": reasoning.to_string(),
+    "runtime": runtime,
+    "speculative": speculative,
+  }
+  if !@fs.exists("/home/HwHiAiUser/glm-tensorfold-20261104") {
+    @fs.mkdir(
+      "/home/HwHiAiUser/glm-tensorfold-20261104",
+      recursive=true,
+      permission=0o700,
+    )
+  }
+  @fs.write_file(
+    "/home/HwHiAiUser/glm-tensorfold-20261104/" + name + ".json",
+    result.stringify(indent=2),
+    permission=0o600,
+  )
+  println(
+    (
+      {
+        "name": name,
+        "elapsed_ms": ended - started,
+        "ttft_ms": first - started,
+        "tail_ms": ended - last,
+        "done": done,
+        "finish_reason": finish,
+        "usage": usage,
+        "content": content.to_string(),
+      } : Json).stringify(),
+  )
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, action, .. rest] else {
+    fail(
+      "stage | status | baseline | probe PORT NAME PROMPT | stop-old | start-candidate | stop-candidate",
+    )
+  }
+  let hosts = ["wlc003s@192.168.2.178", "wlc004s@192.168.2.179"]
+  if action == "routes" {
+    let output = @shell.Cmd("kubectl", [
+      "--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", "-n", "lunanexa",
+      "get", "deployment", "lunanexa-control", "-o", "json",
+    ]).output()
+    output.check()
+    guard @json.parse(output.stdout())
+      is {
+        "spec": {
+          "template": { "spec": { "containers": Array(containers), .. }, .. },
+          ..
+        },
+        ..
+      } else {
+      fail("No containers")
+    }
+    for c in containers {
+      if c is { "name": String(name), "args": args, .. } {
+        println(({ "name": name, "args": args } : Json).stringify())
+      }
+      if c is { "name": String(name), "env": Array(values), .. } {
+        for v in values {
+          if v
+            is {
+              "name": String(
+                "LUNANEXA_EXTERNAL_TEXT_ROUTE_JSON"
+                | "LUNANEXA_GLOBAL_SETTINGS_JSON"
+              ),
+              ..
+            } {
+            println(({ "container": name, "setting": v } : Json).stringify())
+          }
+        }
+      }
+    }
+    let sql = "SELECT domain,payload->'request_budgets' FROM lunanexa.snapshots WHERE domain LIKE '%settings%';"
+    let result = @shell.Cmd(
+      "kubectl",
+      [
+        "--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", "-n", "lunanexa",
+        "exec", "-i", "lunanexa-postgres-0", "--", "sh", "-c", "exec psql -X -v ON_ERROR_STOP=1 -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -At",
+      ],
+      stdin=Text(sql),
+    ).output()
+    result.check()
+    println(result.stdout())
+  } else if action == "stage" {
+    for rank, host in hosts {
+      let user = if rank == 0 { "wlc003s" } else { "wlc004s" }
+      let base = "/home/" + user + "/.local/share/lunanexa"
+      let model = base + "/glm53-lunaflux-ed6be466"
+      let iface = if rank == 0 { "enp1s0f1np1" } else { "enp1s0f0np0" }
+      let hca = if rank == 0 { "rocep1s0f1" } else { "rocep1s0f0" }
+      let unit = "[Unit]\nDescription=GLM TensorFold 1.2.2 candidate rank \{rank}\n[Service]\nType=simple\nEnvironment=LD_LIBRARY_PATH=\{model}/nccl\nEnvironment=TF_GLM_RANK=\{rank}\nEnvironment=TF_GLM_WORLD=2\nEnvironment=NCCL_COMM_ID=10.0.0.1:29583\nEnvironment=NCCL_SOCKET_IFNAME=\{iface}\nEnvironment=NCCL_IB_HCA=\{hca}\nEnvironment=NCCL_DEBUG=WARN\nEnvironment=TF_KV_PAGES=on\nEnvironment=TF_GLM_KV_SHARE=16\nEnvironment=TENSORFOLD_PREFILL_SHARE=0.7\nExecStart=\{base}/tensorfold-1.2.2-linux-aarch64/bin/tensorfold-native serve \{model}/model --host 192.168.2.178 --port 18889 --name glm-5.3 --alias glm-5.3.flash --api-key-file \{model}/backend.credential --context 1048576 --max-tokens 32768 --no-update-check\nKillMode=mixed\nTimeoutStopSec=90\nRestart=no\n[Install]\nWantedBy=default.target\n"
+      let dest = "/home/" +
+        user +
+        "/.config/systemd/user/lunanexa-glm-tensorfold-rank\{rank}.service"
+      let configured = unit
+        .replace_all(
+          old="tensorfold-1.2.2-linux-aarch64",
+          new="tensorfold-1.2.2-bf16-dense",
+        )
+        .replace_all(
+          old="Environment=TF_KV_PAGES=on",
+          new="Environment=TENSORFOLD_MEMORY_RESERVE_GIB=3\nEnvironment=TF_CUDA_MEMORY_RECEIPTS=1\nEnvironment=TF_KV_PAGES=on",
+        )
+        .replace_all(
+          old="--max-tokens 32768",
+          new="--max-tokens 32768 --reasoning-effort low",
+        )
+      @shell.Cmd(
+        "ssh",
+        ["-o", "BatchMode=yes", host, "tee", dest],
+        stdin=@shell.Stdin::Text(configured),
+        stdout=@shell.Redirect::Discard,
+      ).run()
+      ignore(remote(host, ["systemctl", "--user", "daemon-reload"]))
+      println("Staged candidate unit on " + host)
+    }
+  } else if action == "status" {
+    for rank, host in hosts {
+      println(host)
+      println(
+        remote(host, [
+          "systemctl",
+          "--user",
+          "show",
+          "lunanexa-glm-tensorfold-rank\{rank}.service",
+          "-p",
+          "ActiveState",
+          "-p",
+          "SubState",
+          "-p",
+          "MainPID",
+        ]),
+      )
+      println(
+        remote(host, [
+          "journalctl",
+          "--user",
+          "-u",
+          "lunanexa-glm-tensorfold-rank\{rank}.service",
+          "-n",
+          "12",
+          "--no-pager",
+        ]),
+      )
+    }
+  } else if action == "stop-old" {
+    let secret = @fs.read_file(
+        "/home/HwHiAiUser/.config/lunanexa/glm-control-token",
+      )
+      .text()
+      .trim()
+      .to_owned()
+    let (r, b) = @http.post("http://192.168.2.175:5907/v1/glm-control", "", headers={
+      "authorization": "Bearer " + secret,
+    })
+    guard r.code == 200 else { fail("Lifecycle stop failed") }
+    println(b.text())
+  } else if action == "start-candidate" {
+    for rank in [1, 0] {
+      ignore(
+        remote(hosts[rank], [
+          "systemctl",
+          "--user",
+          "start",
+          "lunanexa-glm-tensorfold-rank\{rank}.service",
+        ]),
+      )
+    }
+  } else if action == "stop-candidate" {
+    for rank in [0, 1] {
+      ignore(
+        remote(hosts[rank], [
+          "systemctl",
+          "--user",
+          "stop",
+          "lunanexa-glm-tensorfold-rank\{rank}.service",
+        ]),
+      )
+    }
+  } else if action == "baseline" {
+    probe(
+      "18888", "baseline-facts", "虚构验收材料：公司共有8名员工，本材料只提供其中2名成员的履历。2025全年收入240万元，2026年1至6月收入180万元。续费率、毛利率未披露。请用JSON回答：员工总数、已披露履历人数、能否算2026同比、2026年化收入（注明假设）、续费率。只依据材料，不编造。",
+      2048,
+    )
+  } else if action == "probe" && rest is [port, name, prompt] {
+    probe(port, name, prompt, 2048)
+  } else if action == "quality" {
+    let prompt = "虚构验收材料：公司共有8名员工，本材料只提供其中2名成员的履历。2025全年收入240万元，2026年1至6月收入180万元。续费率、毛利率未披露。请用JSON回答：员工总数、已披露履历人数、能否算2026同比、2026年化收入（注明假设）、续费率。只依据材料，不编造。"
+    probe("18889", "tensorfold-facts-low-plain", prompt, 8192, draft=false)
+    probe("18889", "tensorfold-facts-low-mtp", prompt, 8192, draft=true)
+  } else if action == "long" {
+    long_probe()
+  } else {
+    fail("Unknown action")
+  }
+}

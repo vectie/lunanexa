@@ -1,0 +1,54 @@
+///|
+/// Controlled restart of only the UI-submitted acceptance task's workspace.
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, k, backup] else {
+    fail("Expected kubeconfig and new backup path")
+  }
+  let prefix = ["--kubeconfig", k, "-n", "aigc-acceptance-20260915"]
+  let name = "webide-4625cbebc56c65454d98563e0747c80e9bc05275de9b80c44c40d958"
+  let queue = @shell.Cmd("curl", [
+    "-fsS", "--max-time", "10", "http://10.43.246.11:8188/queue",
+  ]).output()
+  queue.check()
+  guard @json.parse(queue.stdout())
+    is { "queue_running": [_], "queue_pending": [], .. } else {
+    fail("Expected only the running acceptance job")
+  }
+  let tasks = @shell.Cmd("curl", [
+    "-fsS", "--max-time", "10", "http://10.43.246.11:8188/lunanexa/video-tasks",
+  ]).output()
+  tasks.check()
+  guard @json.parse(tasks.stdout()) is { "tasks": Array(records), .. } else {
+    fail("No durable task state")
+  }
+  guard records.filter(r => r is { "active": true, .. })
+    is [{ "id": "e59c379b13c44889a0bdc8ff0816d1d7", "phase": "generating", .. }] else {
+    fail("Leave unknown or completed work untouched")
+  }
+  let before = @shell.Cmd(
+    "kubectl",
+    prefix + ["get", "deployment", name, "-o", "json"],
+  ).output()
+  before.check()
+  @fs.write_file(
+    backup,
+    before.stdout(),
+    permission=0o600,
+    create_mode=CreateNew,
+  )
+  @shell.Cmd("kubectl", prefix + ["rollout", "restart", "deployment/" + name]).run()
+  @shell.Cmd(
+    "kubectl",
+    prefix + ["rollout", "status", "deployment/" + name, "--timeout=180s"],
+  ).run()
+  println("Restarted only personal ComfyUI; the model runtime was not touched")
+}

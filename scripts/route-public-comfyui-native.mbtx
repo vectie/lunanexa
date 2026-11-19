@@ -1,0 +1,137 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn kube(args : Array[String]) -> String {
+  let result = @shell.Cmd(
+    "kubectl",
+    [
+      "--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", "-n", "lunanexa",
+      ..args,
+    ],
+  ).output()
+  result.check()
+  result.stdout()
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, phase] && (phase == "publish" || phase == "rollback") else {
+    fail("publish | rollback")
+  }
+  let root = "/home/HwHiAiUser/public-comfyui-native-20261110"
+  if !@fs.exists(root) {
+    @fs.mkdir(root, permission=0o700)
+  }
+  let raw = kube(["get", "configmap", "comfyui-public-proxy", "-o", "json"])
+  guard @json.parse(raw)
+    is {
+      "metadata": { "resourceVersion": String(version), .. },
+      "data": { "nginx.conf.template": String(before), .. },
+      ..
+    } else {
+    fail("Unexpected public proxy configuration")
+  }
+  let after = if phase == "rollback" {
+    guard @json.parse(@fs.read_file(root + "/configmap-before.json").text())
+      is { "data": { "nginx.conf.template": String(original), .. }, .. } else {
+      fail("No rollback configuration")
+    }
+    original
+  } else {
+    guard before.contains("listen 5005;") &&
+      before.contains("minimaxh3-fl2va.lunanexa.svc.cluster.local:8000") &&
+      before.contains(
+        "comfyui-public.aigc-acceptance-20260915.svc.cluster.local:8188",
+      ) else {
+      fail("Review unexpected or already changed public routing")
+    }
+    guard @json.parse(
+        kube(["get", "deployment", "comfyui-h3-native", "-o", "json"]),
+      )
+      is { "status": { "availableReplicas": Number(available, ..), .. }, .. } &&
+      available.to_int() >= 1 else {
+      fail("Native H3 engine is unavailable")
+    }
+    @fs.write_file(
+      root + "/configmap-before.json",
+      raw,
+      permission=0o600,
+      create_mode=CreateNew,
+    )
+    @fs.write_file(
+      root + "/deployment-before.json",
+      kube(["get", "deployment", "comfyui-public-proxy", "-o", "json"]),
+      permission=0o600,
+      create_mode=CreateNew,
+    )
+    (
+      #|pid /tmp/nginx.pid;
+      #|events {}
+      #|http {
+      #|  access_log /dev/stdout;
+      #|  error_log /dev/stderr warn;
+      #|  client_body_temp_path /tmp/client_temp;
+      #|  proxy_temp_path /tmp/proxy_temp;
+      #|  map $http_upgrade $connection_upgrade { default upgrade; '' close; }
+      #|  server {
+      #|    listen 5005;
+      #|    client_max_body_size 100m;
+      #|    proxy_http_version 1.1;
+      #|    proxy_set_header Upgrade $http_upgrade;
+      #|    proxy_set_header Connection $connection_upgrade;
+      #|    proxy_set_header Host $http_host;
+      #|    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      #|    proxy_buffering off;
+      #|    proxy_read_timeout 3600s;
+      #|    proxy_send_timeout 3600s;
+      #|    location / {
+      #|      proxy_pass http://comfyui-h3-native.lunanexa.svc.cluster.local:8188;
+      #|    }
+      #|    location = /view {
+      #|      proxy_intercept_errors on;
+      #|      error_page 404 = @previous_public_video;
+      #|      proxy_pass http://comfyui-h3-native.lunanexa.svc.cluster.local:8188;
+      #|    }
+      #|    location = /api/view {
+      #|      proxy_intercept_errors on;
+      #|      error_page 404 = @previous_public_video;
+      #|      proxy_pass http://comfyui-h3-native.lunanexa.svc.cluster.local:8188;
+      #|    }
+      #|    location @previous_public_video {
+      #|      rewrite ^/api/view$ /view break;
+      #|      proxy_pass http://comfyui-public.aigc-acceptance-20260915.svc.cluster.local:8188;
+      #|    }
+      #|  }
+      #|}
+      #|
+    )
+  }
+  let patch : Json = [
+    { "op": "test", "path": "/metadata/resourceVersion", "value": version },
+    { "op": "test", "path": "/data/nginx.conf.template", "value": before },
+    { "op": "replace", "path": "/data/nginx.conf.template", "value": after },
+  ]
+  println(
+    kube([
+      "patch",
+      "configmap",
+      "comfyui-public-proxy",
+      "--type=json",
+      "-p",
+      patch.stringify(),
+    ]),
+  )
+  println(kube(["rollout", "restart", "deployment/comfyui-public-proxy"]))
+  println(
+    kube([
+      "rollout", "status", "deployment/comfyui-public-proxy", "--timeout=50s",
+    ]),
+  )
+}

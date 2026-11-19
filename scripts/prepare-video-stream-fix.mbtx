@@ -1,0 +1,89 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/core/env",
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, root, backup] else {
+    fail("Expected source and new backup")
+  }
+  @fs.mkdir(backup, permission=0o700)
+  let path = root + "/workspace/webide/bridge.mbt"
+  let before = @fs.read_file(path).text()
+  guard !before.contains("response_started") else {
+    fail("Bridge already changed")
+  }
+  let start = before.find("async fn Bridge::proxy_http(").unwrap()
+  let finish = before.find("async fn relay_socket(").unwrap()
+  let proxy = before[start:finish]
+    .to_owned()
+    .replace(
+      old="  connection : @http.ServerConnection,",
+      new="  connection : @http.ServerConnection,\n  response_started : Ref[Bool],",
+    )
+    .replace(
+      old="  connection.send_response(response.code,",
+      new="  response_started.val = true\n  connection.send_response(response.code,",
+    )
+  let after = (before[:start].to_owned() + proxy + before[finish:].to_owned())
+    .replace(
+      old="  let origin = self.config.public_origin\n",
+      new="  let response_started = Ref(false)\n  let origin = self.config.public_origin\n",
+    )
+    .replace(
+      old="self.proxy_http(session, request, body, connection)",
+      new="self.proxy_http(session, request, body, connection, response_started)",
+    )
+    .replace(
+      old="      reply(connection, 502, \"Workspace is not ready. Retry from your portal.\") catch {\n        _ => ()\n      }",
+      new="      if !response_started.val {\n        reply(connection, 502, \"Workspace is not ready. Retry from your portal.\") catch {\n          _ => ()\n        }\n      }",
+    )
+  guard after.contains("if !response_started.val") else {
+    fail("Unexpected error handler")
+  }
+  @fs.write_file(
+    backup + "/bridge.mbt",
+    before,
+    permission=0o600,
+    create_mode=CreateNew,
+  )
+  @fs.write_file(path, after)
+  let proxy_path = root + "/workspace/webide/host/model_proxy.mbt"
+  let proxy_before = @fs.read_file(proxy_path).text()
+  guard !proxy_before.contains("response_started") else {
+    fail("Model proxy already changed")
+  }
+  let proxy_after = proxy_before
+    .replace(
+      old="  let mut stage = \"workspace authority\"",
+      new="  let mut stage = \"workspace authority\"\n  let response_started = Ref(false)",
+    )
+    .replace(
+      old="      connection.send_response(200, \"OK\",",
+      new="      response_started.val = true\n      connection.send_response(200, \"OK\",",
+    )
+    .replace(
+      old="    connection.send_response(response.code,",
+      new="    response_started.val = true\n    connection.send_response(response.code,",
+    )
+    .replace(
+      old="      proxy_reply(connection, 502, \"Managed model operation could not complete\") catch {\n        _ => ()\n      }",
+      new="      if !response_started.val {\n        proxy_reply(connection, 502, \"Managed model operation could not complete\") catch {\n          _ => ()\n        }\n      }",
+    )
+  guard proxy_after.contains("if !response_started.val") else {
+    fail("Unexpected model handler")
+  }
+  @fs.write_file(
+    backup + "/model_proxy.mbt",
+    proxy_before,
+    permission=0o600,
+    create_mode=CreateNew,
+  )
+  @fs.write_file(proxy_path, proxy_after)
+  println(
+    "Both video stream paths close interrupted responses without sending headers twice",
+  )
+}

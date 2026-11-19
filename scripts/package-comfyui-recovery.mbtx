@@ -1,0 +1,237 @@
+///|
+/// Overlay reviewed third-party adapter patches on the existing immutable CPU
+/// workspace image. Reuse registry layers; do not copy gigabytes of local builds.
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/core/string",
+}
+
+///|
+async fn command(program : String, args : Array[String]) -> String {
+  let result = @shell.Cmd(program, args).output()
+  if result.exit_code() != 0 {
+    eprintln(result.stderr())
+  }
+  result.check()
+  result.stdout().trim().to_owned()
+}
+
+///|
+async fn digest(path : String) -> String {
+  command("sha256sum", [path]).split(" ").next().unwrap().to_owned()
+}
+
+///|
+async fn descriptor(path : String, media_type : String) -> Json {
+  {
+    "mediaType": media_type,
+    "digest": "sha256:" + digest(path),
+    "size": @string.parse_int(command("stat", ["-c", "%s", path])),
+  }
+}
+
+///|
+async fn upload(base : String, path : String) -> Unit {
+  let hash = "sha256:" + digest(path)
+  let exists = @shell.Cmd("curl", ["-fsSI", base + "/blobs/" + hash]).output()
+  if exists.exit_code() == 0 {
+    return
+  }
+  let headers = command("curl", [
+    "-fsS",
+    "-X",
+    "POST",
+    "-D",
+    "-",
+    "-o",
+    "/dev/null",
+    base + "/blobs/uploads/",
+  ])
+  let lines = headers
+    .split("\n")
+    .filter(line => line.has_prefix("location:") || line.has_prefix("Location:"))
+    .to_array()
+  guard lines is [line] else { fail("Expected one registry upload location") }
+  let location = line[9:].trim().to_owned()
+  guard location.has_prefix(base + "/blobs/uploads/") else {
+    fail("Unexpected upload origin")
+  }
+  let separator = if location.contains("?") { "&" } else { "?" }
+  ignore(
+    command("curl", [
+      "-fsS",
+      "-X",
+      "PUT",
+      "-H",
+      "Content-Type: application/octet-stream",
+      "--data-binary",
+      "@" + path,
+      location + separator + "digest=" + hash,
+    ]),
+  )
+}
+
+///|
+async fn main {
+  let args = @env.args()
+  guard args is [_, source, root, ..] &&
+    (
+      args.length() == 3 ||
+      args == [args[0], source, root, "gateway"] ||
+      args == [args[0], source, root, "model-proxy"]
+    ) else {
+    fail(
+      "Usage: package-comfyui-recovery.mbtx REVIEWED_PATCH_DIRECTORY NEW_OUTPUT_DIRECTORY",
+    )
+  }
+  let gateway = args.length() == 4 && args[3] == "gateway"
+  let model_proxy = args.length() == 4 && args[3] == "model-proxy"
+  let repository = if model_proxy {
+    "moon/hosted-apps"
+  } else if gateway {
+    "acceptance/webide-runtime"
+  } else {
+    "acceptance/comfyui-workspace"
+  }
+  let base = "https://lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/v2/" +
+    repository
+  let original = if model_proxy {
+    "sha256:6859204df27c39084ddb8f2044a447eb41a3d8f2eb76aa9b8156e46868f2ed17"
+  } else if gateway {
+    "sha256:292c670748c20f490efcf9c308ac45864b9ed840813fac8d9b27bb82c30208ce"
+  } else {
+    "sha256:4a48ba086b05c3988694c62c42ac87bfdb4654c536a6bf42650113b15388ed9e"
+  }
+  @fs.mkdir(root, permission=0o700)
+  @shell.Cmd("curl", [
+    "-fsS",
+    "-H",
+    "Accept: application/vnd.oci.image.manifest.v1+json",
+    "-o",
+    root + "/base-manifest.json",
+    base + "/manifests/" + original,
+  ]).run()
+  let raw = @fs.read_file(root + "/base-manifest.json").text()
+  guard "sha256:" + digest(root + "/base-manifest.json") == original else {
+    fail("Base manifest digest mismatch")
+  }
+  let manifest = @json.parse(raw)
+  guard manifest is Object(fields) &&
+    manifest
+    is {
+      "config": { "digest": String(config_hash), .. },
+      "layers": Array(layers),
+      ..
+    } else {
+    fail("Invalid base manifest")
+  }
+  let config = @json.parse(
+    command("curl", ["-fsS", base + "/blobs/" + config_hash]),
+  )
+  guard config
+    is {
+      "architecture": "amd64",
+      "os": "linux",
+      "config": Object(runtime),
+      "rootfs": { "diff_ids": Array(diffs), .. },
+      ..
+    } else {
+    fail("Expected the deployed CPU ComfyUI image")
+  }
+  if gateway || model_proxy {
+    @fs.mkdir(root + "/layer/usr/local/bin", recursive=true)
+    @shell.Cmd("install", [
+      "-m",
+      "755",
+      source,
+      root +
+      "/layer/usr/local/bin/" +
+      (if model_proxy {
+        "lunanexa-webide-model-proxy"
+      } else {
+        "lunanexa-webide-gateway"
+      }),
+    ]).run()
+  } else {
+    let adapter_root = root +
+      "/layer/opt/ComfyUI/custom_nodes/ComfyUI-vLLM-Omni"
+    @fs.mkdir(adapter_root + "/comfyui_vllm_omni/utils", recursive=true)
+    @fs.mkdir(adapter_root + "/web", recursive=true)
+    for
+      (name, target) in [
+        ("nodes.py", "/comfyui_vllm_omni/nodes.py"),
+        ("api_client.py", "/comfyui_vllm_omni/utils/api_client.py"),
+        ("video_transport.py", "/comfyui_vllm_omni/utils/video_transport.py"),
+        ("video_recovery.js", "/web/video_recovery.js"),
+      ] {
+      @shell.Cmd("install", [
+        "-m",
+        "644",
+        source + "/" + name,
+        adapter_root + target,
+      ]).run()
+    }
+  }
+  let archive = root + "/recovery.tar"
+  @shell.Cmd("tar", [
+    "--sort=name",
+    "--mtime=@0",
+    "--owner=0",
+    "--group=0",
+    "--mode=u+rwX,go+rX",
+    "-C",
+    root + "/layer",
+    "-cf",
+    archive,
+    ".",
+  ]).run()
+  diffs.push(Json::string("sha256:" + digest(archive)))
+  @shell.Cmd("gzip", ["-n", "-k", archive]).run()
+  layers.push(
+    descriptor(archive + ".gz", "application/vnd.oci.image.layer.v1.tar+gzip"),
+  )
+  let labels = match runtime.get("Labels") {
+    Some(Object(values)) => values
+    _ => {}
+  }
+  labels["io.lunanexa.video-recovery"] = "20261028-v1"
+  runtime["Labels"] = Json::object(labels)
+  fields["mediaType"] = "application/vnd.oci.image.manifest.v1+json"
+  for layer in layers {
+    if layer is Object(entry) &&
+      entry.get("mediaType") ==
+      Some(Json::string("application/vnd.docker.image.rootfs.diff.tar.gzip")) {
+      entry["mediaType"] = "application/vnd.oci.image.layer.v1.tar+gzip"
+    }
+  }
+  @fs.write_file(root + "/config.json", config.stringify())
+  fields["config"] = descriptor(
+    root + "/config.json",
+    "application/vnd.oci.image.config.v1+json",
+  )
+  @fs.write_file(root + "/manifest.json", manifest.stringify())
+  upload(base, archive + ".gz")
+  upload(base, root + "/config.json")
+  ignore(
+    command("curl", [
+      "-fsS",
+      "-X",
+      "PUT",
+      "-H",
+      "Content-Type: application/vnd.oci.image.manifest.v1+json",
+      "--data-binary",
+      "@" + root + "/manifest.json",
+      base + "/manifests/durable-video-20261028-v1",
+    ]),
+  )
+  println(
+    "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/" +
+    repository +
+    "@sha256:" +
+    digest(root + "/manifest.json"),
+  )
+}

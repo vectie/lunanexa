@@ -1,0 +1,58 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/core/env",
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, root, backup] else {
+    fail("Expected source and backup directory")
+  }
+  let main_path = root + "/cmd/webide-gateway/main.mbt"
+  let pkg_path = root + "/cmd/webide-gateway/moon.pkg"
+  let before = @fs.read_file(main_path).text()
+  let pkg = @fs.read_file(pkg_path).text()
+  let bind = "      @socket.Addr::parse(required(\"LUNANEXA_WEBIDE_BIND\")),"
+  let caught = "    _ => {\n      // Full exceptions may include a secret-bearing JSON input or upstream URL."
+  guard before.contains(bind) &&
+    before.contains(caught) &&
+    before.contains("startup_stage") &&
+    !before.contains("reuse_addr=true") else {
+    fail("Unexpected gateway main")
+  }
+  @fs.mkdir(backup, permission=0o700)
+  @fs.write_file(
+    backup + "/main.mbt",
+    before,
+    permission=0o600,
+    create_mode=CreateNew,
+  )
+  @fs.write_file(
+    backup + "/moon.pkg",
+    pkg,
+    permission=0o600,
+    create_mode=CreateNew,
+  )
+  let replacement =
+    #|    error => {
+    #|      // Only fixed stages and OS error numbers; never exception context.
+    #|      let code = match error {
+    #|        @os_error.OSError(errno, ..) => " (OS error " + errno.to_string() + ")"
+    #|        _ => ""
+    #|      }
+  let after = before
+    .replace(old=bind, new=bind + "\n      reuse_addr=true,")
+    .replace(old=caught, new=replacement)
+    .replace(old="+ startup_stage +", new="+ startup_stage + code +")
+  @fs.write_file(main_path, after)
+  @fs.write_file(
+    pkg_path,
+    pkg.replace(
+      old="  \"moonbitlang/async/socket\",",
+      new="  \"moonbitlang/async/socket\",\n  \"moonbitlang/async/os_error\",",
+    ),
+  )
+  println("Enabled listener address reuse; diagnostics reveal no secrets")
+}
