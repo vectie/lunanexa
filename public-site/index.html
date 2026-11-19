@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f2e9">
+  <meta name="description" content="未来社区 AI算力与应用平台现已开放。限时免注册 API 推理体验，复制配置或扫描连接二维码，即可在兼容客户端接入通用模型。">
+  <title>未来社区 · AI算力与应用平台｜通用模型在线试用</title>
+  <link rel="icon" href="/community-assets/mascot-head.png">
+  <link rel="stylesheet" href="/community-assets/site.css?v=20261104-simple">
+  <script src="/community-assets/site.js?v=20261104-simple" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">跳到主要内容</a>
+<header class="header wrap">
+  <a class="brand" href="/" aria-label="未来社区首页"><span>未来社区<span class="brand-dot">.</span></span></a>
+  <nav class="top-links" aria-label="主要入口"><a href="#public-api">免注册体验</a><a href="/user/?trial=event">算力入口</a><a href="#fde">FDE 计划</a></nav>
+  <div class="company" aria-label="北京未来科学城科技服务有限公司"><span class="group-mark"><img src="/community-assets/group-logo.jpg" alt="未来科学城集团"></span><span class="company-word"><img src="/community-assets/company-wordmark.png" alt="北京未来科学城科技服务有限公司"></span></div>
+</header>
+<main id="main">
+  <section class="hero wrap">
+    <div class="hero-copy">
+      <h1>AI 算力<br>与<span class="accent">应用</span></h1>
+      <p class="intro">使用模型、打开应用，或申请独占算力。</p>
+      <div class="actions"><a class="button primary" href="/user/?trial=event">进入算力平台 <span aria-hidden="true">→</span></a><a class="button secondary" href="#fde">FDE 计划</a></div>
+      <p class="trial-note">注册可开通 7 天模型试用，名额与调用次数不限。<br><a href="#public-api">无需注册，复制测试 API 配置</a></p>
+    </div>
+    <div class="hero-art">
+      <img class="mascot" src="/community-assets/mascot.png" width="700" height="700" alt="未来社区吉祥物与算力设备">
+    </div>
+  </section>
+  <section class="public-api wrap" id="public-api" aria-labelledby="public-api-title">
+    <div class="section-heading"><h2 id="public-api-title">免注册 API 体验</h2></div>
+    <p class="api-intro">复制配置到 DeepSeek Harness 等 OpenAI 兼容客户端，或扫码导入。</p>
+    <div class="public-api-grid">
+      <div class="api-config">
+        <div class="api-field"><div class="api-field-label"><label for="public-api-base">API Base URL</label><button type="button" data-copy="public-api-base" aria-label="复制 API Base URL">复制</button></div><input id="public-api-base" type="text" readonly spellcheck="false" value="https://suanli.kechuangfuwu.com/trial/v1"></div>
+        <div class="api-field"><div class="api-field-label"><label for="public-api-model">Model ID</label><button type="button" data-copy="public-api-model" aria-label="复制 Model ID">复制</button></div><input id="public-api-model" type="text" readonly spellcheck="false" value="nv-community-qwen3.6-35b-a3b-nvfp4"></div>
+        <div class="api-field"><div class="api-field-label"><label for="public-api-key">公开测试 API Key</label><button type="button" data-copy="public-api-key" aria-label="复制公开测试 API Key">复制</button></div><textarea id="public-api-key" readonly spellcheck="false" rows="2">__PUBLIC_TRIAL_KEY__</textarea></div>
+        <div class="api-specs"><span>协议：Chat Completions</span><span>输出上限：16,384 tokens</span></div>
+        <button type="button" class="button primary api-copy-all" data-copy="all">复制全部配置</button>
+        <p class="api-copy-status" id="api-copy-status" role="status" aria-live="polite"></p>
+      </div>
+      <figure class="api-qr"><div class="api-qr-code" role="img" aria-label="公开测试 API 连接二维码">__PUBLIC_TRIAL_QR__</div><figcaption><strong>扫码导入连接配置</strong><p>请使用支持 OpenAI 连接码的客户端扫描。<br>此码包含上方测试密钥，不是注册入口。</p></figcaption></figure>
+    </div>
+    <p class="api-note">公开共享测试密钥，仅用于推理体验；请勿提交敏感信息。需要个人密钥，可<a href="/user/?trial=event">注册开通七天试用</a>。</p>
+  </section>
+  <section class="fde wrap" id="fde" aria-labelledby="fde-title">
+    <div class="section-heading"><h2 id="fde-title">FDE 计划</h2><a class="text-link" href="#community">联系社区 <span aria-hidden="true">→</span></a></div>
+    <p class="fde-intro">围绕企业实际业务，提供 AI 咨询、培训与应用开发。</p>
+    <div class="fde-grid">
+      <article><h3>咨询</h3><p>梳理业务需求与数据条件，确定技术路线和试点目标。</p></article>
+      <article><h3>培训</h3><p>结合实际业务开展工具实操与项目演练。</p></article>
+      <article><h3>定制开发</h3><p>开发 AI 应用，完成系统集成、上线与持续迭代。</p></article>
+    </div>
+  </section>
+  <section class="services wrap" id="services" aria-labelledby="services-title">
+    <div class="section-heading"><h2 id="services-title">选择服务</h2><a class="text-link" href="/user/">打开我的服务 →</a></div>
+    <div class="service-grid">
+      <article class="service compute"><h3>算力租赁</h3><p>独占机器，自主管理运行环境。支持月租、年租。</p><div class="price"><strong>¥49<small> / 日起</small></strong></div></article>
+      <article class="service workspace"><h3>应用工作台</h3><p>在浏览器中使用已开通的创作与业务应用。</p><a class="service-action" href="/user/">查看我的应用 →</a></article>
+      <article class="service models"><h3>模型 API</h3><p>用统一 API 将模型接入你的应用。</p><a class="service-action" href="#public-api">获取测试配置 →</a></article>
+    </div>
+    <p class="fine-print">独占算力机器49元/日起，具体配置、租期、价格及可用模型以实际订单和平台展示为准。共享模型试用无需机器审批；独占机器另行申请，应用服务以实时就绪状态为准。</p>
+  </section>
+  <section class="community wrap" id="community" aria-labelledby="community-title">
+    <div class="community-copy"><h2 id="community-title">联系社区</h2><p>了解 FDE 计划、算力租赁及入驻服务。</p><p class="address">北京昌平 · 未来中心 G 座</p></div>
+    <div class="follow"><img src="/community-assets/community-qr.jpg" alt="社区微信公众号二维码，请使用微信扫描或长按识别" loading="lazy" width="210" height="225"><div><strong>关注社区，获取活动与服务动态</strong><p>微信扫描或长按识别二维码</p></div></div>
+  </section>
+</main>
+<footer class="footer wrap"><a class="brand footer-brand" href="/">未来社区<span class="brand-dot">.</span></a><p>北京未来科学城科技服务有限公司</p><a href="/docs/">使用指南</a></footer>
+</body>
+</html>

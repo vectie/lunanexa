@@ -1,0 +1,86 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn main {
+  let old_root = "/home/HwHiAiUser/lead-display-20261114-r3"
+  let root = "/home/HwHiAiUser/lead-display-20261114-r4"
+  let kube = [
+    "--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", "-n", "lunanexa",
+  ]
+  guard !@fs.exists(root + "/site") else {
+    fail("Release already exists; inspect before retry")
+  }
+  let result = @shell.Cmd(
+    "kubectl",
+    [..kube, "get", "deployment", "nexai-lead-display", "-o", "json"],
+  ).output()
+  result.check()
+  guard @json.parse(result.stdout())
+    is {
+      "spec": {
+        "template": {
+          "spec": {
+            "volumes": [{ "hostPath": { "path": String(path), .. }, .. }, ..],
+            ..
+          },
+          ..
+        },
+        ..
+      },
+      ..
+    } &&
+    path == old_root + "/site" else {
+    fail("Unexpected live /lead release")
+  }
+  @fs.write_file(
+    root + "/deployment-before.json",
+    result.stdout(),
+    create_mode=CreateNew,
+  )
+  @shell.Cmd("cp", ["-a", old_root + "/site", root + "/site"]).run()
+  for name in ["index.html", "lead.css"] {
+    @shell.Cmd("cp", [root + "/" + name, root + "/site/" + name]).run()
+  }
+  @shell.Cmd("chmod", ["-R", "a+rX", root + "/site"]).run()
+  let patch : Json = [
+    {
+      "op": "test",
+      "path": "/spec/template/spec/volumes/0/hostPath/path",
+      "value": old_root + "/site",
+    },
+    {
+      "op": "replace",
+      "path": "/spec/template/spec/volumes/0/hostPath/path",
+      "value": root + "/site",
+    },
+  ]
+  @fs.write_file(root + "/patch.json", patch.stringify(), create_mode=CreateNew)
+  @shell.Cmd(
+    "kubectl",
+    [
+      ..kube,
+      "patch",
+      "deployment",
+      "nexai-lead-display",
+      "--type=json",
+      "--patch-file",
+      root + "/patch.json",
+    ],
+  ).run()
+  @shell.Cmd(
+    "kubectl",
+    [
+      ..kube, "rollout", "status", "deployment/nexai-lead-display", "--timeout=90s",
+    ],
+  ).run()
+  @fs.write_file(
+    root + "/receipt.txt",
+    "Image width +5% (scaleX 1.05), height unchanged. Order 03,02,01 and interval 15000 ms retained. Previous r3 retained. Only /lead static volume updated.\n",
+  )
+}

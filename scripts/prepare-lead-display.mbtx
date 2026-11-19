@@ -1,0 +1,63 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/async@0.22.4/fs",
+}
+
+///|
+async fn main {
+  let source = "/Users/kq/Documents/Codex/2026-11-13/an-z/outputs/02-lively-collage-fullsize-repaired-v3.png"
+  let root = "/Users/kq/Workspace/lunanexa"
+  let output = root + "/output/lead-20261114"
+  let assets = root + "/public-site/lead/assets"
+  @fs.mkdir(assets, recursive=true)
+  let filters = [
+    "[0:v]split[a][b];[a]crop=1140:1770:775:690[left];[b]crop=1515:1770:2055:690[right];[left][right]hstack=inputs=2[out]",
+    "[0:v]crop=2370:1765:3730:700[out]", "[0:v]crop=2462:1815:6230:650[out]",
+  ]
+  for i, filter in filters {
+    let name = "slide-0" + (i + 1).to_string()
+    @shell.Cmd("ffmpeg", [
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-y",
+      "-i",
+      source,
+      "-filter_complex",
+      filter,
+      "-map",
+      "[out]",
+      "-frames:v",
+      "1",
+      "-update",
+      "1",
+      output + "/" + name + ".png",
+    ]).run()
+    @shell.Cmd("cwebp", [
+      "-quiet",
+      "-q",
+      "94",
+      "-m",
+      "6",
+      "-sharp_yuv",
+      output + "/" + name + ".png",
+      "-o",
+      assets + "/" + name + ".webp",
+    ]).run()
+    @shell.Cmd("sips", [
+      "-s",
+      "format",
+      "jpeg",
+      "-Z",
+      "1000",
+      output + "/" + name + ".png",
+      "--out",
+      output + "/" + name + "-preview.jpg",
+    ]).run()
+  }
+  println(
+    "Three content crops and local WebP assets prepared; original unchanged.",
+  )
+}

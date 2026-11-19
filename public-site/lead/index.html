@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#fbf0df">
+  <title>创未来生态街区 · 展板</title>
+  <link rel="preload" as="image" href="assets/slide-03.webp">
+  <link rel="stylesheet" href="lead.css?v=20261114-r4">
+  <script src="lead.js?v=20261114-r2" defer></script>
+</head>
+<body>
+  <main aria-label="街区展板轮播" aria-roledescription="轮播">
+    <div class="slides" id="slides">
+      <section class="slide active" aria-label="第 1 张，共 3 张：街区简介" aria-roledescription="幻灯片">
+        <img src="assets/slide-03.webp" width="2462" height="1815" alt="未来科学城能源谷青年人才创未来生态街区简介、街区概览与活动照片" fetchpriority="high">
+      </section>
+      <section class="slide" aria-label="第 2 张，共 3 张：运营、空间与区域" aria-roledescription="幻灯片" aria-hidden="true" inert>
+        <img src="assets/slide-02.webp" width="2370" height="1765" alt="运营管理体系、三层与六层空间情况、未来科学城区域介绍" decoding="async">
+      </section>
+      <section class="slide" aria-label="第 3 张，共 3 张：青年活动、政策与服务" aria-roledescription="幻灯片" aria-hidden="true" inert>
+        <img src="assets/slide-01.webp" width="2655" height="1770" alt="青年创新创业活动剪影、昌平区青年人才创新创业政策速览、运营管理与服务" decoding="async">
+      </section>
+    </div>
+    <nav class="controls" aria-label="轮播控制">
+      <button id="previous" aria-label="上一张" title="上一张（←）"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button>
+      <div class="dots" aria-label="选择展板">
+        <button class="dot" aria-label="第 1 张" aria-current="true" data-index="0"><span></span></button>
+        <button class="dot" aria-label="第 2 张" data-index="1"><span></span></button>
+        <button class="dot" aria-label="第 3 张" data-index="2"><span></span></button>
+      </div>
+      <button id="next" aria-label="下一张" title="下一张（→）"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></button>
+      <span class="divider" aria-hidden="true"></span>
+      <button id="play" aria-label="暂停轮播" title="暂停轮播（空格）"><svg viewBox="0 0 24 24" aria-hidden="true"><path id="play-path" d="M9 5v14M15 5v14"/></svg></button>
+      <button id="fullscreen" aria-label="进入全屏" title="进入全屏（F）"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg></button>
+    </nav>
+    <p id="announcement" class="sr-only" aria-live="polite" aria-atomic="true"></p>
+    <p id="load-error" class="error" hidden>图片加载失败，请刷新页面重试。<button id="retry">重新加载</button></p>
+  </main>
+</body>
+</html>

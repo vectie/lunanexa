@@ -1,0 +1,203 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn command(program : String, args : Array[String]) -> String {
+  let r = @shell.Cmd(program, args).output()
+  r.check()
+  r.stdout()
+}
+
+///|
+async fn kube(args : Array[String]) -> String {
+  command(
+    "kubectl",
+    [
+      "--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management", "-n", "lunanexa",
+      ..args,
+    ],
+  )
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, phase] else { fail("stage | publish") }
+  let root = "/home/HwHiAiUser/lead-display-20261114-r1"
+  let local_repo = "/Users/kq/Workspace/lunanexa"
+  if phase == "stage" {
+    @shell.Cmd("env", [
+      "COPYFILE_DISABLE=1",
+      "tar",
+      "--no-xattrs",
+      "-C",
+      local_repo + "/public-site/lead",
+      "-czf",
+      local_repo + "/output/lead-20261114/site.tgz",
+      "index.html",
+      "lead.css",
+      "lead.js",
+      "nginx.conf",
+      "assets",
+    ]).run()
+    @shell.Cmd("ssh", [
+      "-o", "BatchMode=yes", "lunanexa-management", "mkdir", "-p", root,
+    ]).run()
+    @shell.Cmd("scp", [
+      local_repo + "/output/lead-20261114/site.tgz",
+      local_repo + "/scripts/publish-lead-display.mbtx",
+      "lunanexa-management:" + root + "/",
+    ]).run()
+    println("Staged isolated /lead assets on management node.")
+    return
+  }
+  guard phase == "publish" && command("uname", ["-s"]).trim() == "Linux" else {
+    fail("Publish on management host only")
+  }
+  let name = "nexai-lead-display"
+  for kind in ["deployment", "service", "ingressroute"] {
+    guard kube(["get", kind, name, "--ignore-not-found", "-o", "name"])
+      .trim()
+      .is_empty() else {
+      fail("Existing lead resource; inspect before replacement")
+    }
+  }
+  guard !@fs.exists(root + "/site") else {
+    fail("Release already extracted; inspect before reuse")
+  }
+  @fs.mkdir(root + "/site")
+  @shell.Cmd("tar", ["-xf", root + "/site.tgz", "-C", root + "/site"]).run()
+  @shell.Cmd("chmod", ["-R", "a+rX", root + "/site"]).run()
+  @shell.Cmd("chmod", ["a+x", root]).run()
+  guard @json.parse(
+      kube(["get", "deployment", "nexai-public-landing", "-o", "json"]),
+    )
+    is {
+      "spec": {
+        "template": {
+          "spec": { "containers": [{ "image": String(image), .. }], .. },
+          ..
+        },
+        ..
+      },
+      ..
+    } &&
+    image.has_prefix(
+      "lunanexa-registry.lunanexa-registry.svc.cluster.local:5000/moon/lunanexa-web@sha256:",
+    ) else {
+    fail("Missing existing qualified NGINX image")
+  }
+  let labels : Json = { "app": name }
+  let metadata : Json = {
+    "name": name,
+    "namespace": "lunanexa",
+    "labels": labels,
+  }
+  let deployment : Json = {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": metadata,
+    "spec": {
+      "replicas": 1,
+      "selector": { "matchLabels": labels },
+      "template": {
+        "metadata": { "labels": labels },
+        "spec": {
+          "nodeSelector": { "kubernetes.io/hostname": "ubuntu" },
+          "automountServiceAccountToken": false,
+          "securityContext": {
+            "runAsNonRoot": true,
+            "runAsUser": 101,
+            "runAsGroup": 101,
+          },
+          "containers": [
+            {
+              "name": "web",
+              "image": image,
+              "command": [
+                "nginx", "-c", "/site/nginx.conf", "-g", "daemon off;",
+              ],
+              "ports": [{ "name": "http", "containerPort": 8080 }],
+              "resources": {
+                "requests": { "cpu": "10m", "memory": "16Mi" },
+                "limits": { "memory": "128Mi" },
+              },
+              "securityContext": {
+                "allowPrivilegeEscalation": false,
+                "readOnlyRootFilesystem": true,
+                "capabilities": { "drop": ["ALL"] },
+              },
+              "volumeMounts": [
+                { "name": "site", "mountPath": "/site", "readOnly": true },
+                { "name": "tmp", "mountPath": "/tmp" },
+              ],
+              "readinessProbe": {
+                "httpGet": { "path": "/health", "port": "http" },
+                "periodSeconds": 3,
+              },
+              "livenessProbe": {
+                "httpGet": { "path": "/health", "port": "http" },
+                "periodSeconds": 20,
+              },
+            },
+          ],
+          "volumes": [
+            {
+              "name": "site",
+              "hostPath": { "path": root + "/site", "type": "Directory" },
+            },
+            { "name": "tmp", "emptyDir": {} },
+          ],
+        },
+      },
+    },
+  }
+  let service : Json = {
+    "apiVersion": "v1",
+    "kind": "Service",
+    "metadata": metadata,
+    "spec": {
+      "selector": labels,
+      "ports": [{ "name": "http", "port": 8080, "targetPort": "http" }],
+    },
+  }
+  let route : Json = {
+    "apiVersion": "traefik.io/v1alpha1",
+    "kind": "IngressRoute",
+    "metadata": metadata,
+    "spec": {
+      "entryPoints": ["websecure"],
+      "routes": [
+        {
+          "kind": "Rule",
+          "match": "Host(`suanli.kechuangfuwu.com`) && (Path(`/lead`) || PathPrefix(`/lead/`))",
+          "priority": 50,
+          "services": [{ "name": name, "port": 8080 }],
+        },
+      ],
+      "tls": { "secretName": "lunanexa-public-suanli-tls" },
+    },
+  }
+  let manifest : Json = {
+    "apiVersion": "v1",
+    "kind": "List",
+    "items": [deployment, service, route],
+  }
+  @fs.write_file(
+    root + "/manifest.json",
+    manifest.stringify(indent=2),
+    create_mode=CreateNew,
+  )
+  println(kube(["apply", "-f", root + "/manifest.json"]))
+  println(kube(["rollout", "status", "deployment/" + name, "--timeout=90s"]))
+  @fs.write_file(
+    root + "/receipt.txt",
+    "Published /lead only. Existing site/routes and GPU nodes unchanged.\n" +
+    command("sha256sum", [root + "/site.tgz"]),
+  )
+}
