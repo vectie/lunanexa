@@ -34,11 +34,11 @@ generic LunaNexa request envelope.
 - For production work, include performance cost in design and acceptance.
 
 ## UI/UX
-- Avoid unnecessary secondary labels and descriptions let the layout do the explaining. 
+- Avoid unnecessary secondary labels and descriptions let the layout do the explaining.
 - Every element must serve a clear user purpose; no slogans, decoration, repeated info.
-- Show explanations only for abnormal states or required actions, put secondary details 
+- Show explanations only for abnormal states or required actions, put secondary details
 behind progressive disclosure.
-- Stay consistent with existing screens; prefer removing or simplifying over adding, and 
+- Stay consistent with existing screens; prefer removing or simplifying over adding, and
 do not redesign the whole page to change one part.
 - Make sure first time user can point out, what to click next, and what gonna happen.
 
