@@ -1,0 +1,280 @@
+{
+  "id": "ai-board-scaling",
+  "download_rank": 3,
+  "order": 5,
+  "title": [
+    "05 · 规模、算力与模型的分工",
+    "05 · Scale, compute and model roles"
+  ],
+  "summary": [
+    "数据更多、参数更多、推理更久，分别增加什么；为什么模型变大还牵涉内存和通信。",
+    "Separate more data, more parameters and more inference work, then connect model scale to memory and communication."
+  ],
+  "sections": [
+    {
+      "id": "board-scaling-law",
+      "title": [
+        "Scaling Law：三种“变大”不能混在一起",
+        "Scaling laws: distinguish three kinds of growth"
+      ],
+      "concepts": [
+        "Scaling Law",
+        "规模效应",
+        "数据量",
+        "参数量",
+        "训练计算量",
+        "N D C"
+      ],
+      "points": [
+        "特性",
+        "Scaling Law（规模效应）",
+        "越大越好（需要条件）",
+        "预训练的数据越多",
+        "模型的参数越多"
+      ],
+      "paragraphs": [
+        [
+          "Scaling Law 是对一组训练实验观察到的规律：在相近任务、数据与训练方法下，模型规模、训练数据和计算预算与预测损失之间常呈现可拟合关系。这里的“越大”至少有参数数量、训练 Token 数和总计算量三个维度，不是单独把其中一个拉满就一定最好。",
+          "Scaling laws describe empirical relationships between prediction loss, model size, training data and compute under comparable experimental conditions. “Bigger” has several dimensions: parameters, training tokens and computation. Maximizing one alone is not a universal optimum."
+        ],
+        [
+          "固定训练预算时，更大模型通常意味着每个 Token 更贵，能处理的数据可能更少。图中把 N×D 固定，尝试分配给模型规模 N 和数据量 D。显示的是一条明确标注的玩具损失函数，用来解释资源分配；它不是任何真实模型的能力预测器。",
+          "At fixed compute, a larger model costs more per token and may see less data. The diagram holds N×D constant and varies model scale N against data D. Its explicitly labeled toy loss demonstrates allocation; it does not predict the capability of a real model."
+        ]
+      ],
+      "graphic": "scaling"
+    },
+    {
+      "id": "board-test-time-compute",
+      "title": [
+        "推理时多想：增加的是本次任务的计算",
+        "More inference work belongs to the current task"
+      ],
+      "concepts": [
+        "test-time scaling",
+        "推理时计算",
+        "思考时长",
+        "推理时长",
+        "多次采样",
+        "搜索"
+      ],
+      "points": [
+        "思考时长（test-time scaling）",
+        "推理时长越长",
+        "数据、参数、推理时计算的三路扩展"
+      ],
+      "paragraphs": [
+        [
+          "模型训练好以后，仍可在一个问题上投入更多计算：生成更长的中间过程、提出多个候选、搜索资料、运行代码再检查。它消耗的是这一次任务的推理资源，通常不会因此自动改变模型参数。训练规模与推理时规模是两条不同的轴。",
+          "A trained model can spend more computation on one task: longer intermediate work, several candidates, retrieval or execution and checking. This is inference expenditure and usually does not update parameters. Training scale and inference scale are different axes."
+        ],
+        [
+          "例如一道计算题，直接回答花一轮；写一个计算器程序、运行、核对，再给结论花多轮。如果新增步骤没有提供有效信息，就可能只增加时间与 Token。比较“想得久”有没有帮助，应使用同一批题和明确评分，同时记录延迟，不能把等待更长直接当成能力更强。",
+          "For arithmetic, one response may answer directly; another writes and runs a calculator, checks it and answers. Extra steps help only when they add useful work. Compare the same problems with an explicit score and latency; longer waiting is not itself stronger reasoning."
+        ]
+      ],
+      "reuse_scene": "pre-post-test-time"
+    },
+    {
+      "id": "board-size-memory",
+      "title": [
+        "“脑容量”这个比喻，怎样换成内存数字？",
+        "Translate the “brain capacity” analogy into memory"
+      ],
+      "concepts": [
+        "脑容量",
+        "模型大小",
+        "2.8T",
+        "权重内存",
+        "weights",
+        "显存",
+        "KV cache"
+      ],
+      "points": [
+        "人的脑／脑容量大小的比喻",
+        "模型很大",
+        "Kimi 与 2.8T 的板书例子",
+        "训练资源很大（工程问题）"
+      ],
+      "paragraphs": [
+        [
+          "“脑容量”只能帮助想象可调整数很多，不能把参数个数换算成人的智力。更直接的工程问题是：多少个数、每个数占多少位。作为可核查例子，Kimi K3 技术报告给出 2.8T 总参数、104B 激活参数；若仅用 16 位保存 2.8T 个数，原始权重就是 2.8×10¹²×2≈5.6 TB。",
+          "Brain capacity is only an analogy, not a conversion from parameter count to human intelligence. A concrete question is count times bits per value. Kimi K3's technical report lists 2.8T total and 104B active parameters. Storing 2.8T values at 16 bits would require about 5.6 TB for raw weights."
+        ],
+        [
+          "这只是权重，不是完整运行或训练的内存。推理还存上下文缓存和临时计算；训练还要存梯度、优化器状态等。实际文件可能使用压缩或混合精度，所以文件大小、理论权重体积和设备占用也不是同一个数字。",
+          "That is weights alone. Inference also needs context caches and working memory; training adds gradients and optimizer state. Compression and mixed precision mean file size, theoretical weight size and device usage are different quantities."
+        ]
+      ]
+    },
+    {
+      "id": "board-chip-compute-network",
+      "title": [
+        "芯片与算力：存得下，还要算得动、传得快",
+        "Chips and compute: fit, calculate and communicate"
+      ],
+      "concepts": [
+        "芯片",
+        "GPU",
+        "算力",
+        "显存容量",
+        "带宽",
+        "吞吐",
+        "延迟"
+      ],
+      "points": [
+        "芯片（上万个）的规模想象",
+        "算力（十万卡）的规模想象",
+        "大模型依赖计算与硬件系统"
+      ],
+      "paragraphs": [
+        [
+          "GPU 可并行处理大量相似运算，但性能取决于多件事：计算单元做乘加的速度，显存能存多少，数据怎样从显存搬到计算单元，以及多卡怎样交换数据。显存容量像工作台面积，带宽像搬运速度，计算能力像同时工作的计算单元数量。",
+          "GPUs perform similar operations in parallel, but performance depends on arithmetic, memory capacity, data movement and communication. Capacity is workspace; bandwidth moves data; compute performs operations. One figure cannot replace all three."
+        ],
+        [
+          "“上万个芯片、十万卡”说明系统规模可以很大，不是某个指定模型的最低要求。小模型可以在一台设备上运行，大规模训练则可能用大集群。卡数增加还会增加通信和调度成本，最终速度要从完成的实际工作量测量。",
+          "Thousands-of-chips or hundred-thousand-card examples illustrate possible system scale, not a minimum for every model. Small models can run on one device; large training may use clusters. More cards also introduce communication and coordination cost; speed must be measured from completed work."
+        ]
+      ],
+      "reuse_scene": "gpu-compute-data"
+    },
+    {
+      "id": "board-nvlink-topology",
+      "title": [
+        "NVLink 与多卡连线：传的是哪些数据？",
+        "NVLink and multi-GPU links: what travels?"
+      ],
+      "concepts": [
+        "NVLink",
+        "多卡互联",
+        "GPU communication",
+        "模型并行",
+        "节点",
+        "网络拓扑"
+      ],
+      "points": [
+        "NVLink",
+        "卡之间交叉连接的拓扑图",
+        "多卡承载一个模型",
+        "大规模系统工程"
+      ],
+      "paragraphs": [
+        [
+          "当一份模型分在多张卡上，每张卡存一部分权重，并计算自己负责的部分。层之间传中间结果，某些并行方式还要合并部分结果；训练也会交换梯度。NVLink 是 GPU 互联技术之一，帮助设备间交换数据；跨机器则还涉及机间网络。",
+          "When a model spans GPUs, each stores and computes a portion. Devices exchange intermediate values and sometimes combine partial results; training also exchanges gradients. NVLink is one GPU interconnect technology, while crossing machines involves the cluster network."
+        ],
+        [
+          "把四张 24 GB 卡连起来，不代表任意程序立刻获得一块无差别的 96 GB 显存。推理引擎要实现分片与通信，具体设备和互联也要支持相应方式。图中先把权重块放到不同卡，再让一次请求经过这些卡，最后汇总；增加连线本身没有执行这些步骤。",
+          "Four linked 24 GB cards do not automatically become one transparent 96 GB device for every program. The engine must shard and communicate using supported hardware. The diagram first places weight shards, then moves intermediate results and combines output: wires alone do not perform that work."
+        ]
+      ],
+      "graphic": "interconnect"
+    },
+    {
+      "id": "board-model-families",
+      "title": [
+        "Kimi、DeepSeek、智谱、MiniMax、阶跃，怎样看分工？",
+        "How should we read different model families?"
+      ],
+      "concepts": [
+        "Kimi",
+        "DeepSeek",
+        "Zhipu",
+        "智谱",
+        "GLM",
+        "MiniMax",
+        "Stepfun",
+        "阶跃",
+        "推理",
+        "编程",
+        "多模态",
+        "工具调用",
+        "前端",
+        "质量"
+      ],
+      "points": [
+        "大模型擅长的事情不同",
+        "Kimi",
+        "DeepSeek",
+        "DeepSeek 旁的思维／前端／质量相关评语",
+        "Zhipu（编程能力）",
+        "MiniMax（多模态）",
+        "Stepfun（Agent／工具调用）"
+      ],
+      "paragraphs": [
+        [
+          "先区分公司、模型家族、具体版本与应用。可以用具体版本观察不同侧重：规模、推理与输出质量、编程、多模态、工具调用。这些是理解市场的入口，不是五家各占一种能力的永久排名，也不表示某家只有一种模型。",
+          "Separate a company, family, checkpoint and application. Specific checkpoints illustrate different emphasis: scale, reasoning, coding, multimodality and tool use. These are entry points, not exclusive specialties or permanent rankings."
+        ],
+        [
+          "可核查实例：GLM-5 的模型卡讨论复杂系统工程与长程 Agent；Step 3.5 Flash 的模型卡包括工具使用；MiniMax-M2.7 是文本生成模型，视频生成则要看 MiniMax-H3 等对应系列。写前端界面时，也要分别检查功能是否完成、代码能否运行和视觉是否合适，不能只用“聪明”或“好看”代替任务标准。",
+          "For concrete examples, GLM-5 discusses systems engineering and long-horizon agents; Step 3.5 Flash includes tool-use work. MiniMax-M2.7 is a text-generation model, while MiniMax-H3 belongs to video generation. For frontend work, distinguish working functionality, executable code and suitable visual design."
+        ]
+      ]
+    },
+    {
+      "id": "board-role-platform",
+      "title": [
+        "这与平台的集群管理怎样接起来？",
+        "How does this connect to cluster management?"
+      ],
+      "concepts": [
+        "Kubernetes",
+        "推理引擎",
+        "token factory",
+        "LunaNexa",
+        "模型服务"
+      ],
+      "points": [
+        "芯片互联→集群→服务的关系",
+        "算力基础设施与模型能力不是同一层"
+      ],
+      "paragraphs": [
+        [
+          "芯片执行计算，互联搬运数据，推理引擎加载模型并组织生成，集群软件放置服务。LunaNexa 在模型服务与集群管理这一层，把可用计算组织成可调用的服务。它不会替代上层应用的写文章流程，也不会因为管理 GPU 就自动获得新的模型知识。",
+          "Chips calculate, links move data, inference engines load models and generate, and cluster software places services. LunaNexa organizes model serving and cluster resources. It does not replace an application's writing workflow or acquire model knowledge merely by managing GPUs."
+        ],
+        [
+          "“Token 工厂”把这个视角拉到整个持续运行系统：电力、散热、服务器、网络、模型引擎与输出。选型时，再回到具体问题：任务需要什么、机器装得下什么，以及怎样验证合适。",
+          "A token factory widens the view to power, cooling, machines, network, engines and sustained output. Model selection returns to concrete questions: what the task needs, what fits and how to compare suitable options."
+        ]
+      ],
+      "reuse_scene": "factory-input-output"
+    }
+  ],
+  "references": [
+    {
+      "title": "Scaling Laws for Neural Language Models",
+      "url": "https://arxiv.org/abs/2001.08361"
+    },
+    {
+      "title": "Training Compute-Optimal Large Language Models",
+      "url": "https://arxiv.org/abs/2203.15556"
+    },
+    {
+      "title": "Kimi K3: Open Frontier Intelligence",
+      "url": "https://arxiv.org/abs/2607.24653"
+    },
+    {
+      "title": "NVIDIA NVLink",
+      "url": "https://www.nvidia.com/en-us/data-center/nvlink/"
+    },
+    {
+      "title": "GLM-5 model card",
+      "url": "https://huggingface.co/zai-org/GLM-5"
+    },
+    {
+      "title": "Step 3.5 Flash model card",
+      "url": "https://huggingface.co/stepfun-ai/Step-3.5-Flash"
+    },
+    {
+      "title": "MiniMax-M2.7 model card",
+      "url": "https://huggingface.co/MiniMaxAI/MiniMax-M2.7"
+    },
+    {
+      "title": "MiniMax video models",
+      "url": "https://platform.minimax.io/docs/guides/video-generation"
+    }
+  ]
+}

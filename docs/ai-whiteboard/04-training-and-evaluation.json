@@ -1,0 +1,230 @@
+{
+  "id": "ai-board-training",
+  "download_rank": 4,
+  "order": 4,
+  "title": [
+    "04 · 训练怎样把数据变成参数",
+    "04 · How training turns data into parameters"
+  ],
+  "summary": [
+    "用“离离原上草”看概率与目标，再把预训练、中训练、后训练和考试分开。",
+    "Use a short Chinese sequence to compare probabilities with targets, then distinguish training phases from evaluation."
+  ],
+  "sections": [
+    {
+      "id": "board-corpus-tokens",
+      "title": [
+        "互联网数据，不是逐字抄进一个资料柜",
+        "Internet data is not copied character by character into a filing cabinet"
+      ],
+      "concepts": [
+        "互联网数据",
+        "输入输出",
+        "语料",
+        "Token",
+        "分词",
+        "离离原上草"
+      ],
+      "points": [
+        "学（输入、输出）",
+        "用互联网数据学",
+        "一个字一个字学的直观说法",
+        "离离原上草"
+      ],
+      "paragraphs": [
+        [
+          "训练语料可以包含网页、书籍、代码等材料。准备数据要处理格式、重复和质量，再按分词器转成 Token 序列。板书用“一个字一个字”帮助想象，但模型真正学习的是 Token；一次训练还可同时计算序列中多个位置的预测损失。",
+          "Training material may include web pages, books and code. Preparation handles format, duplication and quality before tokenization. “Character by character” is an intuition: the actual units are tokens, and training can calculate losses at many sequence positions together."
+        ],
+        [
+          "假设把“离离原上草”分成五个字：有了前两个“离”，下一个目标是“原”；有了“离离原”，下一个目标是“上”。同一段材料能形成多个前文与后续的学习位置。实际切分不一定正好五个 Token。",
+          "Assume the line 离离原上草 is split by character. Given 离离, the next target is 原; given 离离原, it is 上. One passage supplies several learning positions. A real tokenizer may choose a different split."
+        ]
+      ]
+    },
+    {
+      "id": "board-probability-target",
+      "title": [
+        "候选概率与正确目标，不是同一列数",
+        "Candidate probabilities and a target are different quantities"
+      ],
+      "concepts": [
+        "概率分布",
+        "目标 Token",
+        "one-hot",
+        "交叉熵",
+        "negative log likelihood",
+        "0.6",
+        "0.1",
+        "0.2"
+      ],
+      "points": [
+        "候选数值 0.6、0.1、0.2、0.1",
+        "候选与目标的对照",
+        "真实后续提供训练目标",
+        "网络连接输出候选分数"
+      ],
+      "paragraphs": [
+        [
+          "假设四个候选的预测概率是 [0.6,0.1,0.2,0.1]，总和为 1，而真实后续落在第三项“原”。目标可用 [0,0,1,0] 表示，意思是“这一次实际出现第三项”，不是又一组模型猜测。训练会根据目标计算损失，推动参数改变。",
+          "Suppose four candidate probabilities are [0.6,0.1,0.2,0.1] and the observed continuation 原 is candidate three. A target [0,0,1,0] marks that observation. It is not another model guess. Training computes a loss from this target and updates parameters."
+        ],
+        [
+          "ln 表示自然对数。负对数把很小的目标概率变成较大损失；目标概率为 1 时，损失为 0。只看本位置的负对数概率：原的概率为 0.2，损失是 −ln(0.2)≈1.609；若调整后为 0.6，损失变为约 0.511。动画中的其他候选也同步调整以保持总和为 1。这是教学数值，不是对诗句做的模型实测。",
+          "ln denotes the natural logarithm. Negative log probability assigns larger loss to smaller target probabilities; probability one gives zero loss. For this position, negative log probability is −ln(0.2)≈1.609. Raising the target's probability to 0.6 lowers it to about 0.511. The animation adjusts other candidates so probabilities still sum to one. These are teaching values, not measured model outputs."
+        ]
+      ],
+      "graphic": "probability"
+    },
+    {
+      "id": "board-parameter-units",
+      "title": [
+        "参数数量里的 K、M、B、T",
+        "K, M, B and T in parameter counts"
+      ],
+      "concepts": [
+        "参数",
+        "thousand",
+        "million",
+        "billion",
+        "trillion",
+        "千",
+        "百万",
+        "十亿",
+        "万亿",
+        "B",
+        "T"
+      ],
+      "points": [
+        "网络连接与参数",
+        "T / trillion / 万亿",
+        "B / billion / 十亿",
+        "M / million / 百万",
+        "K / thousand / 千"
+      ],
+      "paragraphs": [
+        [
+          "参数是训练中可以调整的数，例如权重和偏置。K=10³=一千，M=10⁶=一百万，B=10⁹=十亿，T=10¹²=一万亿。因此 35B 是 350 亿参数，2.8T 是 2.8 万亿。B 在这里是 billion 的缩写；Byte 是存储单位，不能混读。",
+          "Parameters are adjustable values such as weights and biases. K=10³, M=10⁶, B=10⁹ and T=10¹². Thus 35B means 35 billion and 2.8T means 2.8 trillion parameters. B here abbreviates billion; a byte is a storage unit."
+        ],
+        [
+          "数量说明有多少个可存储的数，却没有说明每个数占多少位、训练用了多少数据、一次实际激活多少参数，或任务能做多好。后面会分别把数量接到内存计算和 MoE 激活。",
+          "A count does not specify bits per value, training data, parameters active per token or task quality. Later sections connect counts to memory and MoE activation."
+        ]
+      ]
+    },
+    {
+      "id": "board-pre-mid-training",
+      "title": [
+        "预训练与中训练：广泛阅读，再集中学习",
+        "Pretraining and mid-training: broad exposure, then a focused curriculum"
+      ],
+      "concepts": [
+        "预训练",
+        "早读",
+        "中训练",
+        "精读",
+        "pretraining",
+        "mid-training",
+        "continued pretraining"
+      ],
+      "points": [
+        "预训练（早读）",
+        "中训练（精读）",
+        "广泛数据与集中材料的区别"
+      ],
+      "paragraphs": [
+        [
+          "预训练用较广泛的数据学习语言、代码和其他规律。把它比作“早读”，重点是从很多材料反复预测和调整。模型不是先被写入一套完整语法，再只用训练背知识；这些关系都可以在参数学习中形成。",
+          "Pretraining learns patterns from broad material through repeated prediction and updates. The reading analogy emphasizes exposure across examples rather than a complete hand-written grammar followed by fact memorization."
+        ],
+        [
+          "“中训练”常指在基础模型上继续安排特定的数据或训练目标，例如更高质量的专业材料、代码、长上下文任务。它不是每个团队都严格采用的统一阶段名。“精读”说明学习材料与重点更集中，不能只根据这个词推断具体训练配方。",
+          "Mid-training often means continuing a base model with focused data or objectives, such as specialist material, code or long-context tasks. It is not a universally standardized phase. The close-reading analogy highlights a changed curriculum, not a specific training recipe."
+        ]
+      ]
+    },
+    {
+      "id": "board-posttraining-rlhf",
+      "title": [
+        "后训练与 RLHF：把会续写接到会完成任务",
+        "Post-training and RLHF: move from continuation to task behavior"
+      ],
+      "concepts": [
+        "后训练",
+        "RLHF",
+        "人类反馈强化学习",
+        "偏好",
+        "SFT",
+        "post-training"
+      ],
+      "points": [
+        "后训练",
+        "RLHF",
+        "从人类反馈中强化学习"
+      ],
+      "paragraphs": [
+        [
+          "后训练在已有模型上塑造任务行为。SFT 提供示范：给定通知，怎样整理成表格；偏好数据提供比较：两个答案里哪个更符合要求。RLHF 是 reinforcement learning from human feedback，用人类反馈形成奖励信号，再用强化学习调整策略的一类方法。",
+          "Post-training shapes task behavior in an existing model. SFT supplies demonstrations, while preference data compares possible answers. RLHF—reinforcement learning from human feedback—uses human feedback to form a reward signal for policy training."
+        ],
+        [
+          "例如两份纪要，一份漏了截止日期，另一份保留日期且结构清楚。偏好反馈可以支持更符合任务的行为，但“人更喜欢”与“每个事实都正确”仍是不同评价。后训练也可能使用自动检查、可验证奖励等方法，不是每一次更新都由一个人逐字打分。",
+          "Two meeting summaries may differ in whether a deadline is retained and clearly organized. Preference feedback can favor the more useful behavior, while factual correctness remains a separate property. Post-training can also use automatic checks or verifiable rewards; humans need not score every update word by word."
+        ]
+      ]
+    },
+    {
+      "id": "board-training-vs-exam",
+      "title": [
+        "学习与考试：为什么要把题目留出来？",
+        "Learning and exams: why hold examples out?"
+      ],
+      "concepts": [
+        "训练",
+        "测试",
+        "评测",
+        "考试",
+        "出题",
+        "Benchmark",
+        "数据泄漏",
+        "泛化"
+      ],
+      "points": [
+        "学与考的对照",
+        "考试／出题",
+        "大模型也能生成试题",
+        "结果对标准与反例核验"
+      ],
+      "paragraphs": [
+        [
+          "训练会用样本更新参数；测试用于观察学过以后能否处理未用于这次训练的例子。如果只用刚训练过的原题考试，就分不清记住材料与迁移能力。Benchmark 是一组有任务、输入和评分规则的评测，不只是一个排行榜分数。",
+          "Training updates parameters from examples. Evaluation checks behavior on examples withheld from that training. Testing only on rehearsed answers confuses memorization with transfer. A benchmark is a set of tasks, inputs and scoring rules, not just a leaderboard number."
+        ],
+        [
+          "大模型可以帮忙出题、构造反例或改写题目，但要核对参考答案，保留未参与调参的题，避免把生成题的错误一并带入。比较两个编程助手时，也要说明使用了什么工具、时间与尝试次数；否则分数可能在比较不同考试条件。",
+          "A model can propose questions or counterexamples, but answers and scoring still need checking, and some tasks should remain unused in tuning. Comparing coding assistants also requires describing tools, time and attempts; otherwise the scores may compare different exam conditions."
+        ]
+      ],
+      "graphic": "evaluation"
+    }
+  ],
+  "references": [
+    {
+      "title": "The FineWeb Datasets",
+      "url": "https://arxiv.org/abs/2406.17557"
+    },
+    {
+      "title": "Learning to Summarize from Human Feedback",
+      "url": "https://arxiv.org/abs/2009.01325"
+    },
+    {
+      "title": "Training language models to follow instructions with human feedback",
+      "url": "https://arxiv.org/abs/2203.02155"
+    },
+    {
+      "title": "HELM: Holistic Evaluation of Language Models",
+      "url": "https://arxiv.org/abs/2211.09110"
+    }
+  ]
+}

@@ -1,0 +1,100 @@
+///|
+import { "moonbitlang/async@0.22.4", "moonbitlang/async@0.22.4/fs", "moonbitlang/core/json" }
+
+///|
+fn label(value : Json, language : String) -> String raise {
+  guard value is Object(fields) && fields[language] is String(text) else { fail("Missing classroom language") }
+  text
+}
+
+///|
+fn spoken_units(value : String) -> Int {
+  let mut units = 0
+  let mut ascii_word = false
+  for character in value.iter() {
+    let code = character.to_int()
+    if code >= 0x2e80 && code <= 0x9fff { units += 1; ascii_word = false }
+    else if (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122) {
+      if !ascii_word { units += 1 }; ascii_word = true
+    } else { ascii_word = false }
+  }
+  units
+}
+
+///|
+async fn main {
+  let path = "docs/ai-class-rehearsal.json"
+  let data = @json.parse(@fs.read_file(path).text())
+  guard data is Object(root) && root["scenes"] is Array(scenes) && @json.parse(@fs.read_file("docs/ai-class-storyboard.json").text()) is { "scenes": Array(boards), .. } else { fail("Missing teaching sources") }
+  let report : Array[String] = ["# 两小时课堂模拟排演", "", "这是逐页讲述与学生追问的作者模拟，不是实测两小时课堂或学习效果实验。", "", "按中文每分钟210个汉字/外语词组、英文每分钟135词估计口述下限；每页另留演示、观察、追问与转场时间。问答备稿按需要替代相应讲解，不要求把129题逐题加读。余量留给现场解释，不以延长静默凑时长。", "", "| 页 | 分钟 | 口述估计 | 演示 | 观察/追问 | 转场/余量 |", "| --- | --- | --- | --- | --- | --- |"]
+  let mut elapsed = 0
+  let mut total_speech = 0
+  let mut total_margin = 0
+  let mut total_recovery = 0
+  let mut failures = 0
+  let mut delayed = 0
+  let stress : Array[String] = ["## 追问较多的一轮", "", "在训练插入90秒、Agent插入60秒、缓存插入90秒、批处理与扩散各插入60秒，共增加6分钟。按顺序使用当前及后续页的余量与可缩短细节；不从休息和最后提问借时间。", ""]
+  for scene in scenes {
+    guard scene is Object(fields) && fields["id"] is String(id) && fields["minutes"] is Number(duration, ..) && fields["opening"] is opening && fields["questions"] is Array(questions) && fields["recovery"] is { "seconds": Number(recovery, ..), .. } && boards.search_by(b => b is { "id": String(candidate), .. } && candidate == id) is Some(index) && boards[index] is { "beats": Array(beats), "bridge": [String(bridge_zh), String(bridge_en)], .. } else { fail("Incomplete scene") }
+    let mut zh = label(opening, "zh")
+    let mut en = label(opening, "en")
+    for beat in beats { guard beat is [String(a), String(b)] else { fail("Invalid beat") }; zh += " " + a; en += " " + b }
+    zh += " " + bridge_zh; en += " " + bridge_en
+    let zh_seconds = (spoken_units(zh) * 60 + 209) / 210
+    let en_words = en.replace_all(old="\n", new=" ").split(" ").filter(word => word != "").count()
+    let en_seconds = (en_words * 60 + 134) / 135
+    let speech = ((Int::max(zh_seconds, en_seconds) + 4) / 5) * 5
+    let minutes = duration.to_int()
+    let demo = match id {
+      "attention-context" => 30
+      "training-update" => 55
+      "next-token-probabilities" => 35
+      "cluster-engine-path" => 75
+      "aggregate-throughput-batching" => 65
+      "diffusion-steps" => 55
+      "token-pieces" | "gpu-compute-data" | "weight-memory-arithmetic" | "latency-timeline" | "protein-structure" => 25
+      "pre-post-test-time" | "rag-retrieval" | "tool-roundtrip" | "request-through-factory" | "coding-agent-workflow" | "creative-workflow" | "scientific-search-loop" => 25
+      "agent-loop" => 20
+      _ => if minutes == 1 { 8 } else { Int::max(10, beats.length()*5) }
+    }
+    let process = match id { "training-update" | "aggregate-throughput-batching" | "diffusion-steps" => 25; "cluster-engine-path" => 30; _ => if minutes == 1 { 5 } else if minutes >= 3 { 20 } else { 12 } }
+    let question = match id { "training-update" => 50; "cluster-engine-path" => 65; "aggregate-throughput-batching" | "diffusion-steps" => 45; "next-token-probabilities" | "attention-context" | "latency-timeline" | "protein-structure" => 25; "gpu-compute-data" | "weight-memory-arithmetic" => 30; _ => if minutes == 1 { 5 } else if minutes >= 3 { 20 } else { 15 } }
+    let transition = 5
+    let margin = minutes*60 - speech - demo - process - question - transition
+    let slower_speech = ((Int::max((spoken_units(zh)*60+179)/180,(en_words*60+114)/115)+4)/5)*5
+    let slower_deficit = Int::max(0, slower_speech + demo + process + question + transition - minutes*60)
+    if slower_deficit > recovery.to_int() { failures += 1; println("SLOW-PACE OVERFULL " + id + " needs " + slower_deficit.to_string() + "s, recovery " + recovery.to_int().to_string()+"s") }
+    fields["pacing"] = { "speech_seconds": speech, "demo_seconds": demo, "processing_seconds": process, "question_seconds": question, "transition_seconds": transition, "margin_seconds": margin, "zh_units": spoken_units(zh), "en_words": en_words }
+    if margin < 0 { failures += 1; println("OVERFULL " + id + " by " + (-margin).to_string() + "s") }
+    let extra = match id { "training-update" | "cluster-engine-path" => 90; "agent-loop" | "aggregate-throughput-batching" | "diffusion-steps" => 60; _ => 0 }
+    delayed += extra
+    if delayed > 0 {
+      let absorbed = Int::min(delayed, Int::max(0, margin))
+      delayed -= absorbed
+      let shortened = Int::min(delayed, recovery.to_int())
+      delayed -= shortened
+      stress.push("- " + id + "：新增追问" + extra.to_string() + "秒；用余量" + absorbed.to_string() + "秒，缩短次要讲解" + shortened.to_string() + "秒；剩余延后" + delayed.to_string() + "秒。")
+    }
+    report.push("| " + id + " | " + elapsed.to_string() + "–" + (elapsed+minutes).to_string() + " | " + speech.to_string() + "s | " + demo.to_string() + "s | " + (process+question).to_string() + "s | " + (transition+margin).to_string() + "s |")
+    elapsed += minutes; total_speech += speech; total_margin += margin; total_recovery += recovery.to_int()
+    if ["pre-post-test-time", "parallel-time", "request-through-factory", "different-ai-tasks", "complete-request-map"].contains(id) {
+      guard delayed == 0 else { fail("Questions overrun teaching checkpoint at " + id) }
+      stress.push("\n" + elapsed.to_string() + "分钟检查点：模拟进度已回到安排。\n")
+    }
+    if id == "parallel-time" { guard elapsed == 50 else { fail("First half overruns break") }; elapsed += 10 }
+    guard questions.length() == 3 else { fail("Missing student question") }
+  }
+  guard elapsed == 115 else { fail("Content does not finish at 115") }
+  println("Speech estimate " + total_speech.to_string() + "s; margin " + total_margin.to_string() + "s; recoverable detail " + total_recovery.to_string() + "s")
+  guard failures == 0 else { fail("Repair overfull teaching segments before publishing") }
+  root["pace_model"] = { "kind": "author-simulation-not-timed-class", "zh_units_per_minute": 210, "en_words_per_minute": 135, "speech_seconds": total_speech, "margin_seconds": total_margin, "recovery_seconds": total_recovery, "slower_pace": { "zh_units_per_minute": 180, "en_words_per_minute": 115, "per_slide_recovery_sufficient": true }, "question_heavy": { "added_seconds": 360, "checkpoints_recovered": true } }
+  @fs.write_file(path, data.stringify(indent=2)+"\n")
+  report.push("\n休息50–60分钟；提问115–120分钟。另模拟中文180单位/分钟、英文115词/分钟的较慢讲述，各页可用缩短指令补足，未借用休息。\n\n"+stress.join("\n")+"\n\n## 逐页三问与讲述\n")
+  for scene in scenes {
+    guard scene is { "id": String(id), "opening": opening, "questions": Array(questions), "demonstration": demo, "pause": pause, .. } else { fail("Invalid report scene") }
+    report.push("\n### " + id + "\n\n" + label(opening,"zh") + "\n\n演示：" + label(demo,"zh") + "\n\n停顿：" + label(pause,"zh"))
+    for item in questions { guard item is { "question": q, "answer": a, .. } else { fail("Invalid question") };report.push("\n**" + label(q,"zh") + "**\n\n" + label(a,"zh")) }
+  }
+  @fs.write_file("output/ai-course5-20261111/TEACHING_REHEARSAL.md",report.join("\n")+"\n")
+  println("43 scenes, 129 answered questions, complete 120-minute plan")
+}

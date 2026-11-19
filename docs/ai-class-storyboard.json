@@ -1,0 +1,3003 @@
+{
+  "version": "lunanexa.ai-storyboard.v1",
+  "scenes": [
+    {
+      "id": "text-in-text-out",
+      "beats": [
+        [
+          "大语言模型，简称LLM，处理和生成语言。这里输入中文，按翻译要求生成英文。",
+          "A large language model, or LLM, processes and generates language. A translation request takes Chinese and returns English."
+        ],
+        [
+          "换成会议记录，模型把句子整理成事项、负责人和日期。输入材料与要求一起决定输出内容。",
+          "With meeting notes, it organizes sentences into tasks, owners and dates. The material and instructions both shape the output."
+        ],
+        [
+          "代码是给计算机执行的指令。模型先生成程序，运行后才得到排序数字。",
+          "Code gives a computer instructions. A model generates the program; running it produces the sorted numbers."
+        ]
+      ],
+      "bridge": [
+        "这些是模型能参与的任务。先看屏幕上的应用、语言模型和机器各做什么。",
+        "These are tasks a model can help with. First separate the application, language model and machine."
+      ],
+      "motion": [
+        {
+          "kind": "write",
+          "match": "The meeting"
+        },
+        {
+          "kind": "write",
+          "match": "初稿|Draft:"
+        },
+        {
+          "kind": "write",
+          "match": "\\[3, 20, 100\\]"
+        }
+      ],
+      "key": {
+        "zh": "大语言模型（LLM）处理和生成语言；应用把这种能力接到具体任务里。",
+        "en": "A large language model processes and generates language; an application connects it to a task."
+      }
+    },
+    {
+      "id": "model-application-compute",
+      "beats": [
+        [
+          "应用是你操作的软件：收集要求和文件，显示结果，也能调用工具。",
+          "The app collects requests and files, displays output and can call tools."
+        ],
+        [
+          "模型是生成部分：根据应用送入的文字，计算接下来写什么，再交回应用。",
+          "The model computes what to write from supplied text and returns it to the app."
+        ],
+        [
+          "模型需要在真实机器上运行。图里的芯片执行数字运算；应用、模型和机器共同完成一次回答。",
+          "A model runs on a physical machine. Chips perform numerical operations; app, model and machine together deliver a response."
+        ]
+      ],
+      "bridge": [
+        "模型怎样处理文字？下一页从一个单词开始拆。",
+        "How does a model process text? Start by dividing one word."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              65,
+              180
+            ],
+            [
+              280,
+              180
+            ]
+          ],
+          "label": "request"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              320,
+              200
+            ],
+            [
+              430,
+              200
+            ]
+          ],
+          "label": "input"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              700,
+              200
+            ],
+            [
+              830,
+              200
+            ]
+          ],
+          "label": "compute"
+        }
+      ]
+    },
+    {
+      "id": "token-pieces",
+      "beats": [
+        [
+          "raincoat 是英语里的雨衣。分词器是把文字切成片段的程序；每个片段叫一个 Token。",
+          "Raincoat is one English word. A tokenizer is a program that divides text into pieces; each piece is a token."
+        ],
+        [
+          "示例先切出 rain。一个词可以有多个 Token，Token 不固定等于一个单词或汉字。",
+          "Our example first takes rain. A word can contain several tokens; a token is not always one word or Chinese character."
+        ],
+        [
+          "再切出 coat。词表给每个片段一个编号；编号像目录号，本身不表示这个词有多大或多重要。",
+          "Next comes coat. A vocabulary gives each piece an ID, like a catalog number; a larger ID does not mean greater importance."
+        ],
+        [
+          "模型按编号查出一串数值，再用这些数参与运算。这串数叫数值表示，也常叫向量。",
+          "The model uses the ID to look up a list of numbers for computation. This numerical representation is also called a vector."
+        ]
+      ],
+      "bridge": [
+        "这些片段不仅来自最后一句问题，还来自本次一起送入的资料。",
+        "These pieces come from the material sent with the question as well as the question itself."
+      ],
+      "motion": [
+        {
+          "kind": "write",
+          "match": "raincoat"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              120,
+              120
+            ],
+            [
+              570,
+              120
+            ]
+          ],
+          "label": "rain"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              280,
+              120
+            ],
+            [
+              855,
+              120
+            ]
+          ],
+          "label": "coat"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              570,
+              200
+            ],
+            [
+              570,
+              300
+            ]
+          ],
+          "label": "ID → vector"
+        }
+      ],
+      "caption": {
+        "zh": "rain / coat、编号和数值为切分示意；实际切法由具体分词器决定。",
+        "en": "Pieces, IDs and values are illustrative; an actual tokenizer determines the split."
+      }
+    },
+    {
+      "id": "context-tokens",
+      "beats": [
+        [
+          "上下文就是这一次送给模型的全部信息。问题很短，附带的文章却可能很长；两者都要切成 Token。",
+          "Context is all the information supplied to this call. A short question can accompany a long article; both become tokens."
+        ],
+        [
+          "模型生成的摘要会接在输入后面。上下文窗口是能容纳的 Token 数量上限，要给输入和后续生成都留位置。",
+          "The generated summary follows the input. The context window is a token limit, with space needed for both input and continuation."
+        ]
+      ],
+      "bridge": [
+        "现在知道了输入单位，再看模型怎样选出下一个片段。",
+        "Now use that unit to see how the next piece is selected."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              300,
+              100
+            ],
+            [
+              300,
+              270
+            ]
+          ],
+          "label": "input"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              580,
+              190
+            ],
+            [
+              760,
+              190
+            ]
+          ],
+          "label": "summary"
+        }
+      ],
+      "lead": {
+        "zh": "上下文：模型这一次收到的全部信息，包括问题、资料和选入的历史。",
+        "en": "Context is all information supplied to this call: the question, material and selected history."
+      }
+    },
+    {
+      "id": "next-token-probabilities",
+      "beats": [
+        [
+          "The sky is 的意思是“天空是……”。模型先读取前文，接下来要选择一个 Token。",
+          "The prefix is The sky is. The model reads it before selecting one next token."
+        ],
+        [
+          "模型参数把前文变成候选分数，再转成概率。本图预设60%、30%、10%演示抽样，并非现场测量。",
+          "Parameters turn the prefix into scores and probabilities. Preset 60/30/10 percentages isolate sampling; they are not a live measurement."
+        ],
+        [
+          "抽样像按这些比例抽签，所以不总选 blue。温度是调节概率集中程度的设置：低时更集中，高时更分散。",
+          "Sampling is a draw using those chances, so blue need not win every time. Temperature makes the distribution more concentrated when low and flatter when high."
+        ]
+      ],
+      "bridge": [
+        "下一页固定选 blue 作例子，跟踪新 Token 怎样接回前文；实际抽样也可能选到别的。",
+        "Next, fix blue as the example and follow its return to the prefix; an actual draw can select another token."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              190,
+              140
+            ],
+            [
+              190,
+              235
+            ]
+          ],
+          "label": "prefix"
+        },
+        {
+          "kind": "grow"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              800,
+              120
+            ],
+            [
+              800,
+              360
+            ]
+          ],
+          "label": "1 token"
+        }
+      ],
+      "steps": [
+        {
+          "zh": "读前文",
+          "en": "Read the prefix"
+        },
+        {
+          "zh": "看候选的可能性",
+          "en": "Read candidate probabilities"
+        },
+        {
+          "zh": "按概率选择并追加",
+          "en": "Sample and append"
+        }
+      ],
+      "caption": {
+        "zh": "只画三个教学候选；概率是抽样比例，不是答案事实正确率。",
+        "en": "Three illustrative candidates; probability means selection chance, not factual correctness."
+      }
+    },
+    {
+      "id": "autoregressive-feedback",
+      "beats": [
+        [
+          "已有文字是 The sky is。每一步都以上一步已经有的文字为起点。",
+          "The text so far is The sky is. Each step starts with the text already available."
+        ],
+        [
+          "模型根据这段前文计算下一 Token 的概率；图中的模型重复使用，不需要每写一个词就重新训练。",
+          "The model computes next-token probabilities from the prefix. It is reused, without retraining for each new word."
+        ],
+        [
+          "这次选中 blue，意思是蓝色。它是新增的一小块，还不是整篇回答。",
+          "This draw selects blue, one new piece rather than the whole response."
+        ],
+        [
+          "把 blue 接到前文后，就得到 The sky is blue。再按同样步骤继续；这个用已有输出接着生成的过程叫自回归。",
+          "Appending blue gives The sky is blue. Repeat the same steps: generating from previous output is called autoregressive generation."
+        ]
+      ],
+      "bridge": [
+        "前文中的不同信息怎样影响当前计算？下一页只看一个核心动作：按比例组合。",
+        "How does earlier information affect the current computation? Focus on one operation: combining it in proportions."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              50,
+              115
+            ],
+            [
+              400,
+              115
+            ]
+          ],
+          "label": "The sky is"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              245,
+              165
+            ],
+            [
+              470,
+              255
+            ]
+          ],
+          "label": "prefix"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              735,
+              267
+            ],
+            [
+              920,
+              267
+            ]
+          ],
+          "label": "blue"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              930,
+              217
+            ],
+            [
+              930,
+              45
+            ],
+            [
+              530,
+              45
+            ],
+            [
+              530,
+              110
+            ]
+          ],
+          "label": "blue"
+        }
+      ]
+    },
+    {
+      "id": "attention-context",
+      "beats": [
+        [
+          "读“我买了自行车，周末下雨，想骑它”时，“它”与自行车有关。模型先把各处信息写成数值列表。",
+          "In 'I bought a bicycle; it may rain; I want to ride it', it refers to the bicycle. The model represents positions as lists of numbers."
+        ],
+        [
+          "模型比较当前位置与前文的数值表示，算出组合权重。这里给定80%和20%，只演示后面的乘加。",
+          "A model compares position representations to compute mixing weights. Preset 80/20 weights here isolate the following multiplication and addition."
+        ],
+        [
+          "每组数分别乘自己的权重，再把对应位置相加。交换权重后，哪部分影响更大也跟着变；结果继续参与生成。",
+          "Multiply each value list by its weight, then add matching entries. Swapping weights changes each contribution; the combined result feeds later computation."
+        ]
+      ],
+      "bridge": [
+        "注意力比例是这次算出来的。决定怎么算的内部数值叫参数；下一页用一个数演示它怎样学出来。",
+        "Attention weights are computed for this call. Internal learned numbers called parameters determine the computation. Next, learn one parameter."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              60,
+              150
+            ],
+            [
+              300,
+              150
+            ]
+          ],
+          "label": "values"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              318,
+              165
+            ],
+            [
+              478,
+              165
+            ]
+          ],
+          "label": "proportions"
+        },
+        {
+          "kind": "compute",
+          "duration": 3000
+        }
+      ],
+      "lead": {
+        "zh": "注意力：让当前计算按不同比例使用前文中的信息。",
+        "en": "Attention lets the current computation use information from earlier positions in different proportions."
+      },
+      "caption": {
+        "zh": "自行车/天气、两维数值和 80%/20% 都是教学算例；不是实测注意力。",
+        "en": "Bicycle/weather labels, two-number values and 80%/20% weights are a teaching example, not measured attention."
+      }
+    },
+    {
+      "id": "training-update",
+      "beats": [
+        [
+          "例子是买物品：1 件付 2 元，2 件付 4 元，3 件付 6 元。参数 w 是模型暂时猜的单价；总价 = 件数 × w。",
+          "Buy 1 item for 2, 2 for 4, or 3 for 6. Parameter w is the model's current unit-price estimate; total = quantity × w."
+        ],
+        [
+          "先猜 w=0.5，得到 0.5、1、1.5 元，都低于目标。红色虚线是误差；把误差平方后取平均，得到 10.50。",
+          "With w=0.5, predictions are 0.5, 1, 1.5, all too low. Red lines show errors; averaging their squares gives mean squared error (MSE) 10.50."
+        ],
+        [
+          "三次预测都偏低，所以把单价上调。本例规则给出本轮增加0.70：0.50→1.20，平均平方误差降到2.99。",
+          "All predictions are low, so raise the price. This update rule adds 0.70: 0.50→1.20, lowering mean squared error to 2.99."
+        ]
+      ],
+      "bridge": [
+        "训练就是利用例子调整内部参数。接下来分清：学参数，与拿已有参数回答新问题。",
+        "Training uses examples to adjust parameters. Separate that from answering new questions using existing parameters."
+      ],
+      "motion": [
+        {
+          "kind": "write",
+          "match": "w ="
+        },
+        {
+          "kind": "draw"
+        },
+        {
+          "kind": "compute",
+          "duration": 2600
+        }
+      ],
+      "lead": {
+        "zh": "参数是模型内部可调整的数。用“件数 × 单价 = 总价”看一个参数怎样学。",
+        "en": "A parameter is an adjustable internal number. Learn one using quantity × unit price = total."
+      },
+      "caption": {
+        "zh": "w 是单价估计。平均平方误差 = 三个（预测−目标）² 的平均；本步更新幅度为演示设置。",
+        "en": "w estimates unit price. MSE averages the three squared prediction errors; the update size is chosen for this example."
+      }
+    },
+    {
+      "id": "training-vs-inference",
+      "beats": [
+        [
+          "训练用许多已知输入和目标的例子，反复预测、比较、调参数。学好的参数保存成一个模型版本。",
+          "Training repeatedly predicts, compares and adjusts using examples with known targets. Learned parameters are saved as a model version."
+        ],
+        [
+          "推理就是使用这个版本处理新输入。贴一份新文件后能回答，是因为这次读到了文件，通常没有因此改变参数。",
+          "Inference uses that version on new input. A supplied document can inform a response because it is in context, usually without changing parameters."
+        ]
+      ],
+      "bridge": [
+        "同样的区别也适用于语言模型：先学会续写，再学习怎样更好地回答任务，最后用于调用。",
+        "Language models also learn continuation, learn task responses, then serve calls."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              180,
+              170
+            ],
+            [
+              360,
+              170
+            ],
+            [
+              420,
+              335
+            ],
+            [
+              300,
+              335
+            ],
+            [
+              300,
+              270
+            ]
+          ],
+          "label": "update"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              750,
+              170
+            ],
+            [
+              970,
+              170
+            ],
+            [
+              1050,
+              180
+            ]
+          ],
+          "label": "response"
+        }
+      ],
+      "lead": {
+        "zh": "训练：调整参数。推理：用训练好的参数处理这一次输入。",
+        "en": "Training adjusts parameters. Inference uses learned parameters on this input."
+      },
+      "caption": {
+        "zh": "微调指在已有模型上继续训练；贴入文件是提供上下文。",
+        "en": "Fine-tuning continues training from an existing model; supplying a document provides context."
+      }
+    },
+    {
+      "id": "pre-post-test-time",
+      "beats": [
+        [
+          "语言训练的目标是文本里真实的下一Token。例如目标blue，比较模型给它的概率，再更新参数；不是对Token编号做价格式回归。",
+          "Language training evaluates the actual next token, such as target blue, and updates from its predicted probability; token IDs are not price-regression targets."
+        ],
+        [
+          "任务说明、材料与好回答可组成训练序列。后训练用这些示范或反馈继续调整，塑造按指令回答的行为。",
+          "Instructions, material and good responses can form training sequences. Post-training uses demonstrations or feedback to shape instruction following."
+        ],
+        [
+          "推理时计算是一次任务中花的计算量。可以生成更长的中间步骤，或多试几份候选再比较；这通常不更新参数。",
+          "Inference compute is work spent on one task. Generate intermediate steps or compare several candidates; this usually does not update parameters."
+        ]
+      ],
+      "bridge": [
+        "下面固定模型版本，只改变给它的任务说明，看看输出目标怎样变清楚。",
+        "Keep the model version fixed and change the instructions to make the desired output clearer."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              55,
+              190
+            ],
+            [
+              285,
+              190
+            ]
+          ],
+          "label": "data → weights"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              430,
+              190
+            ],
+            [
+              660,
+              190
+            ]
+          ],
+          "label": "examples"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              805,
+              190
+            ],
+            [
+              1030,
+              190
+            ]
+          ],
+          "label": "one task"
+        }
+      ]
+    },
+    {
+      "id": "prompt-before-after",
+      "beats": [
+        [
+          "给模型的任务说明叫提示词，英文 Prompt。“整理一下”没有说明要摘要、改写还是待办，仍有很多选择。",
+          "A prompt gives instructions to a model. 'Organize this' leaves open a summary, rewrite or task list."
+        ],
+        [
+          "改成“提取事项、负责人、日期，用表格呈现”，就明确了做什么和输出形式。反复改这些说明，就是提示词工程。",
+          "'Extract task, owner and date into a table' specifies the operation and format. Improving these instructions is prompt engineering."
+        ]
+      ],
+      "bridge": [
+        "要求说清后，还要看原文有没有这些信息。下一页逐项对应。",
+        "Clear instructions still depend on available information. Match the source to the result next."
+      ],
+      "motion": [
+        {
+          "kind": "write",
+          "match": "整理|Organize|vague"
+        },
+        {
+          "kind": "write",
+          "match": "日期|date|Date"
+        }
+      ],
+      "lead": {
+        "zh": "提示词（Prompt）是给模型的任务说明。用同一份会议记录比较两种问法。",
+        "en": "A prompt gives the model instructions. Compare two requests about the same meeting notes."
+      }
+    },
+    {
+      "id": "prompt-worked-output",
+      "beats": [
+        [
+          "“小李周四交初稿”分别提供事项、负责人、日期。",
+          "One source sentence supplies a task, owner and date."
+        ],
+        [
+          "放到对应三列；评审负责人没说，就写“未提及”。",
+          "Place them in the three columns; keep the unspecified review owner absent."
+        ]
+      ],
+      "bridge": [
+        "字段来自材料。下一页看材料怎样送入调用。",
+        "Fields need source material. Next assemble that material into a call."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              45,
+              140
+            ],
+            [
+              330,
+              140
+            ]
+          ],
+          "label": "source"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              340,
+              140
+            ],
+            [
+              620,
+              150
+            ]
+          ],
+          "label": "Li · Thu"
+        }
+      ]
+    },
+    {
+      "id": "context-packet",
+      "beats": [
+        [
+          "一次调用是把输入送给模型再接收结果。先放入要做什么的任务说明。",
+          "A call sends input and receives a result. First supply the task instructions."
+        ],
+        [
+          "再选入相关对话；界面里保存的历史未必都发送。",
+          "Select relevant conversation; stored history need not all be sent."
+        ],
+        [
+          "应用读出文件或工具结果，实际放入这次输入。",
+          "The app reads files or tool results and actually supplies their content."
+        ],
+        [
+          "这些信息组装为一次输入；选择和组织它们就是上下文工程。",
+          "Assemble the input: selecting and organizing its information is context engineering."
+        ]
+      ],
+      "bridge": [
+        "资料太多时，先找相关段落，再组装输入；这就是下一页的检索步骤。",
+        "When there is too much material, retrieve relevant passages before assembling the input."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              50,
+              70
+            ],
+            [
+              400,
+              70
+            ]
+          ],
+          "label": "instruction"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              50,
+              200
+            ],
+            [
+              400,
+              200
+            ]
+          ],
+          "label": "history"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              50,
+              335
+            ],
+            [
+              400,
+              335
+            ]
+          ],
+          "label": "evidence"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              440,
+              200
+            ],
+            [
+              650,
+              200
+            ]
+          ],
+          "label": "context"
+        }
+      ]
+    },
+    {
+      "id": "rag-retrieval",
+      "beats": [
+        [
+          "用户问报销最晚什么时候交。系统先用这个问题查公司制度；检索就是从资料中找相关内容。",
+          "The user asks for an expense deadline. The system first searches company policy; retrieval finds relevant source material."
+        ],
+        [
+          "检索找到“次月 5 日前提交”这一段。现在得到的是原文片段，还没有生成给用户的回答。",
+          "Retrieval finds 'submit by the fifth of next month'. This is a source passage, not yet the generated user response."
+        ],
+        [
+          "应用把问题和找到的片段一起送给模型；模型本次因此读到了这条制度。",
+          "The app supplies the question and passage together, making this policy available to the model for the call."
+        ],
+        [
+          "模型根据片段组织答案。RAG 是检索增强生成的缩写：先找资料，再带着资料生成。",
+          "The model answers using the passage. RAG means retrieval-augmented generation: retrieve material, then generate with it."
+        ]
+      ],
+      "bridge": [
+        "检索由软件执行。接下来把“模型提出动作”和“程序实际执行”拆开。",
+        "Software performs retrieval. Next separate a model proposing an action from software executing it."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              275,
+              200
+            ],
+            [
+              365,
+              200
+            ]
+          ],
+          "label": "query"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              390,
+              200
+            ],
+            [
+              620,
+              200
+            ]
+          ],
+          "label": "passage"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              660,
+              200
+            ],
+            [
+              760,
+              200
+            ]
+          ],
+          "label": "evidence"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              900,
+              300
+            ],
+            [
+              900,
+              383
+            ],
+            [
+              620,
+              383
+            ]
+          ],
+          "label": "5th"
+        }
+      ],
+      "lead": {
+        "zh": "检索增强生成（RAG）：先从外部资料找相关片段，再一起送给模型。",
+        "en": "Retrieval-augmented generation (RAG) supplies relevant external passages with the question."
+      },
+      "title": {
+        "zh": "RAG：先找资料，再带着资料回答",
+        "en": "RAG: retrieve material, then answer"
+      }
+    },
+    {
+      "id": "tool-roundtrip",
+      "beats": [
+        [
+          "应用先提供可用工具说明，例如天气工具需要城市和日期。模型才知道怎样提出请求。",
+          "The app describes available tools, including weather's city and day inputs, so the model can request a call."
+        ],
+        [
+          "模型生成工具名称和所需信息。代码中的 city 是城市、day 是日期；这些叫调用参数，还不是查到的结果。",
+          "The model produces a tool name and inputs. In the code city and day specify the request; these arguments are not the weather result."
+        ],
+        [
+          "外围程序读懂这个请求，实际调用天气服务。发起网络查询的是程序，不是屏幕上的文字自己在执行。",
+          "The surrounding program reads the request and calls the weather service. Software performs the query described by the generated text."
+        ],
+        [
+          "服务返回 rain，意思是下雨。程序把结果再送入模型，模型才可以据此继续安排。",
+          "The service returns rain. The program supplies that result to the model, which can then continue planning."
+        ]
+      ],
+      "bridge": [
+        "把准备输入、执行工具和保留结果的外围程序连起来，叫 Harness。下一页看它怎样支持 Agent 循环。",
+        "The surrounding program that prepares inputs, executes tools and retains results is a harness. Next, use it for an agent loop."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              120,
+              200
+            ],
+            [
+              230,
+              200
+            ]
+          ],
+          "label": "need data"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              250,
+              200
+            ],
+            [
+              360,
+              130
+            ]
+          ],
+          "label": "arguments"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              750,
+              130
+            ],
+            [
+              850,
+              185
+            ]
+          ],
+          "label": "call"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              850,
+              270
+            ],
+            [
+              720,
+              315
+            ],
+            [
+              335,
+              315
+            ],
+            [
+              230,
+              250
+            ]
+          ],
+          "label": "rain"
+        }
+      ],
+      "lead": {
+        "zh": "工具调用：模型写出想执行的动作，外围程序执行，再把结果送回来。",
+        "en": "Tool calling: a model describes an action, software executes it, and the result returns."
+      }
+    },
+    {
+      "id": "agent-loop",
+      "beats": [
+        [
+          "目标是安排杭州周六半日活动。Agent（智能体）在这里指：模型根据当前信息提出下一步动作，程序执行后再继续。",
+          "The goal is a Saturday half-day plan in Hangzhou. Here an agent uses a model to propose actions from current information, then continues after software executes them."
+        ],
+        [
+          "Harness 是围绕模型运行的程序。它先查天气，把“下雨”这条新结果放进下一次输入。",
+          "The harness is the program around the model. It obtains weather and includes the new rain result in the next input."
+        ],
+        [
+          "模型根据天气提议下一工具：雨天查场馆，晴天查公园。示意分支用于追踪信息流；仅有分支不能判定Agent。",
+          "A model proposes a tool from weather observations. These illustrative paths expose information flow; branching alone does not establish an agent."
+        ],
+        [
+          "程序接着查场馆时间或公园路线，再把结果送回。Harness/Agent 工程就是把输入、动作、结果和下一轮组织成可工作的软件。",
+          "Software checks opening hours or a park route and returns the result. Harness/agent engineering connects inputs, actions, results and subsequent calls."
+        ]
+      ],
+      "bridge": [
+        "有的任务顺序可以提前写好，有的要读结果再选。下一页对比这两种安排。",
+        "Some task sequences can be predefined; others choose after reading results. Compare both."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              50,
+              140
+            ],
+            [
+              240,
+              140
+            ]
+          ],
+          "label": "goal"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              275,
+              185
+            ],
+            [
+              340,
+              132
+            ]
+          ],
+          "label": "context"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              680,
+              132
+            ],
+            [
+              780,
+              160
+            ]
+          ],
+          "label": "observation"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              860,
+              280
+            ],
+            [
+              860,
+              335
+            ],
+            [
+              680,
+              335
+            ],
+            [
+              650,
+              300
+            ]
+          ],
+          "label": "next tool"
+        }
+      ],
+      "lead": {
+        "zh": "Agent（智能体）读当前结果再选下一步；Harness 是执行并串联这些步骤的外围程序。",
+        "en": "An agent chooses the next action from results; a harness executes and connects those steps."
+      },
+      "steps": [
+        {
+          "zh": "确定目标",
+          "en": "Set the goal"
+        },
+        {
+          "zh": "程序带回天气",
+          "en": "Software returns weather"
+        },
+        {
+          "zh": "根据结果选下一步",
+          "en": "Choose from the result"
+        },
+        {
+          "zh": "执行后继续一轮",
+          "en": "Execute and continue"
+        }
+      ]
+    },
+    {
+      "id": "workflow-vs-agent",
+      "beats": [
+        [
+          "工作流的路径由程序预先写好，也可以有if/else分支；这里按转录、摘要的顺序运行。",
+          "Workflow paths are predefined in code and can include if/else branches; this example transcribes then summarizes."
+        ],
+        [
+          "Agent 则让模型读到结果后再提出动作：缺来源就搜索，缺数值就计算。两种方式可以在同一个应用里组合。",
+          "An agent lets the model propose actions after reading results: search for sources or calculate missing numbers. An app can combine both approaches."
+        ]
+      ],
+      "bridge": [
+        "下一步可能要改刚才的结果。先用三个价格，看看反馈到底改了什么。",
+        "The next action may revise a result. Use three prices to see what feedback actually changes."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              100,
+              180
+            ],
+            [
+              275,
+              180
+            ],
+            [
+              445,
+              180
+            ]
+          ],
+          "label": "audio → text"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              840,
+              140
+            ],
+            [
+              840,
+              180
+            ],
+            [
+              715,
+              240
+            ]
+          ],
+          "label": "next action"
+        }
+      ]
+    },
+    {
+      "id": "task-revision-loop",
+      "beats": [
+        [
+          "目标是把价格 20、100、3 从小到大排。JavaScript 默认按文字顺序比，先比开头的 1、2、3，所以得到 100、20、3。",
+          "The goal is to sort prices 20, 100, 3 numerically. JavaScript's default text order compares leading 1, 2, 3, giving 100, 20, 3."
+        ],
+        [
+          "把输出交回模型后，加上“按数值比较”的规则，再运行得到 3、20、100。不必会读这行代码：看目标、运行结果和修改的对应。",
+          "Feed back the output, add a numeric comparison rule and run again to get 3, 20, 100. Focus on the goal, result and revision; reading the syntax is optional."
+        ]
+      ],
+      "bridge": [
+        "这次改的是排序程序。下一页把改结果、改助手和改模型放在一起比较。",
+        "The sorting program changed. Compare that with changing the assistant or model."
+      ],
+      "motion": [
+        {
+          "kind": "write",
+          "match": "\\[100,20,3\\]"
+        },
+        {
+          "kind": "write",
+          "match": "\\[3,20,100\\]"
+        }
+      ],
+      "lead": {
+        "zh": "反馈是把运行结果带回下一轮。例子：三个价格没有按数值排好，读结果后修改。",
+        "en": "Feedback carries execution results into the next attempt. Here, read a wrong price order and revise it."
+      }
+    },
+    {
+      "id": "three-improvement-loops",
+      "beats": [
+        [
+          "改排序代码：当前成果变，模型可以不变。",
+          "Revise sorting code: change the artifact, not necessarily the model."
+        ],
+        [
+          "给助手加运行工具：以后的工作方式变。",
+          "Add an execution tool: change future assistant behavior."
+        ],
+        [
+          "训练更新参数：模型版本变。循环工程先决定反馈送回哪个对象。",
+          "Training changes model parameters. Loop engineering locates the object receiving feedback."
+        ]
+      ],
+      "bridge": [
+        "下一页看新能力如何用于继续改进自身。",
+        "Next feed improved capability into improving the system again."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              180,
+              170
+            ],
+            [
+              180,
+              265
+            ]
+          ],
+          "label": "code"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              550,
+              170
+            ],
+            [
+              550,
+              265
+            ]
+          ],
+          "label": "tools"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              920,
+              170
+            ],
+            [
+              920,
+              265
+            ]
+          ],
+          "label": "weights"
+        }
+      ],
+      "lead": {
+        "zh": "先问“哪个东西变了”：当前结果、外围助手程序，还是模型内部参数？",
+        "en": "Ask what changed: this result, the surrounding assistant program, or the model's internal parameters?"
+      }
+    },
+    {
+      "id": "rsi-feedback",
+      "beats": [
+        [
+          "RSI即递归自我改进。假设助手先提出给自己的搜索工具加批量查询。",
+          "RSI means recursive self-improvement. Suppose an assistant proposes batch search for its own tools."
+        ],
+        [
+          "实现后，新工具帮助收集下一轮改进方法所需资料。",
+          "The implemented tool gathers material for the next method improvement."
+        ],
+        [
+          "新版本用改过的方法继续研究怎样改自己。",
+          "The new version uses that method to investigate further changes to itself."
+        ],
+        [
+          "回箭头指向改进机制。版本号不代表效果，仍要看同题结果怎样变化。",
+          "Feedback returns to the improvement mechanism; same-task outcomes, not version labels, establish gains."
+        ]
+      ],
+      "bridge": [
+        "一个助手可以多轮工作；也可以把独立问题交给几个助手同时做。",
+        "One assistant can work over several rounds; several assistants can tackle independent questions together."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              60,
+              180
+            ],
+            [
+              290,
+              180
+            ]
+          ],
+          "label": "proposal"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              350,
+              180
+            ],
+            [
+              400,
+              180
+            ]
+          ],
+          "label": "v2"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              715,
+              180
+            ],
+            [
+              765,
+              180
+            ]
+          ],
+          "label": "v3"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              1060,
+              345
+            ],
+            [
+              1060,
+              390
+            ],
+            [
+              185,
+              390
+            ],
+            [
+              185,
+              345
+            ]
+          ],
+          "label": "improve again"
+        }
+      ],
+      "title": {
+        "zh": "递归自我改进（RSI）",
+        "en": "Recursive self-improvement (RSI)"
+      }
+    },
+    {
+      "id": "multi-agent-handoffs",
+      "beats": [
+        [
+          "协调者把三个产品分开调查，都问容量、价格、续航。",
+          "The coordinator assigns three product investigations with the same capacity, price and battery questions."
+        ],
+        [
+          "工作者各有上下文，同一模型可以分别调用三次；不要求三种模型。",
+          "Workers have separate contexts; one model can serve three calls without requiring three different models."
+        ],
+        [
+          "摘要交回后才能合成总表。Agent swarm常指这样一组协作智能体。",
+          "Returned summaries enable synthesis; agent swarm often describes such a collaborating group."
+        ]
+      ],
+      "bridge": [
+        "能独立展开的任务可以同时开始。下一页算的是用户实际等了多久。",
+        "Independent tasks can start together. Next calculate how long the user actually waits."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              50,
+              150
+            ],
+            [
+              220,
+              150
+            ]
+          ],
+          "label": "assignment"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              250,
+              210
+            ],
+            [
+              330,
+              72
+            ]
+          ],
+          "label": "subtask"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              725,
+              210
+            ],
+            [
+              800,
+              210
+            ]
+          ],
+          "label": "findings"
+        }
+      ],
+      "lead": {
+        "zh": "多智能体：几个独立助手分工，通过传递任务和结果共同完成工作。",
+        "en": "Multi-agent systems divide work among independent assistants and exchange tasks and results."
+      },
+      "caption": {
+        "zh": "虚构手机比较：GB 表示存储容量，h 表示小时；多个工作者可使用同一个模型。",
+        "en": "Fictional phone comparison: GB is storage capacity, h is hours; workers can share the same model."
+      }
+    },
+    {
+      "id": "parallel-time",
+      "beats": [
+        [
+          "串行依次做：4+4+4+2=14分钟。",
+          "Serial: 4+4+4+2=14 minutes."
+        ],
+        [
+          "资源允许时同时做：等4分钟再汇总2分钟，共6分钟；工作量仍为14分钟。",
+          "With sufficient resources, parallel tasks take four minutes plus two for synthesis; effort remains fourteen worker-minutes."
+        ]
+      ],
+      "bridge": [
+        "休息10分钟。回来讲承载这些运算的机器。",
+        "Take ten minutes. Resume with the machines executing this work."
+      ],
+      "motion": [
+        {
+          "kind": "grow"
+        },
+        {
+          "kind": "grow"
+        }
+      ]
+    },
+    {
+      "id": "gpu-compute-data",
+      "beats": [
+        [
+          "GPU 是擅长大量相似运算的处理器。显存是它旁边用来存数字的空间，放模型参数和运行数据；容量常用 GB 表示。",
+          "A GPU is a processor suited to many similar operations. Device memory holds parameters and working data; capacity is commonly measured in GB."
+        ],
+        [
+          "计算单元要先拿到数字。带宽是每秒能搬多少数据，常用 GB/s；空间大与搬得快是两个指标。",
+          "Compute units must receive the numbers. Bandwidth measures data moved per second, often GB/s; capacity and movement rate are different."
+        ],
+        [
+          "输入[2,3]、[1,4]都与参数[5,4]逐项相乘相加，独立得到22、21。GPU并行做许多这类计算。",
+          "Inputs [2,3] and [1,4] use shared parameters [5,4] to produce independent sums 22 and 21; GPUs parallelize many such operations."
+        ]
+      ],
+      "bridge": [
+        "模型参数都要占空间。下一页先把数字单位说清，再计算 80 亿参数的体积。",
+        "Parameters take storage. Define the units, then calculate the size of eight billion parameters."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              375,
+              145
+            ],
+            [
+              490,
+              145
+            ]
+          ],
+          "label": "weights"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              405,
+              155
+            ],
+            [
+              610,
+              155
+            ]
+          ],
+          "label": "data"
+        },
+        {
+          "kind": "compute"
+        }
+      ],
+      "lead": {
+        "zh": "GPU 是一种处理器，擅长同时做大量相似计算；运行模型还需要显存和数据搬运。",
+        "en": "A GPU is a processor suited to many similar calculations at once; memory and data movement also matter."
+      }
+    },
+    {
+      "id": "weight-memory-arithmetic",
+      "beats": [
+        [
+          "参数也叫权重。1 字节 = 8 bit；bit 是一个二进制位。FP16 用 16 bit 存一个数，即 2 字节，80 亿个数约占 16 GB。",
+          "Parameters are also called weights. A byte has eight bits; a bit is a binary digit. FP16 uses 16 bits, or two bytes per value: eight billion values take about 16 GB."
+        ],
+        [
+          "量化是用更少的位表示数值。若平均每个数用 4 bit，名义体积变为 4 GB；表示更紧凑，也会改变数值精度。",
+          "Quantization represents values with fewer bits. At an average four bits per value, nominal size is 4 GB; compactness changes numerical precision."
+        ],
+        [
+          "运行时还要存刚才计算的中间结果和前文记录。缓存就是留住结果供后面复用；下一页看这部分怎样随生成增长。",
+          "Runtime also stores intermediate results and earlier context states. A cache retains results for reuse; next see it grow during generation."
+        ]
+      ],
+      "bridge": [
+        "模型放进机器后，需要程序安排在哪台运行、怎样执行。下一页分别看这两件事。",
+        "Once stored, software must place and execute the model. Separate those two jobs next."
+      ],
+      "motion": [
+        {
+          "kind": "grow"
+        },
+        {
+          "kind": "grow"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              800,
+              130
+            ],
+            [
+              1030,
+              130
+            ],
+            [
+              1030,
+              300
+            ]
+          ],
+          "label": "runtime data"
+        }
+      ],
+      "lead": {
+        "zh": "权重就是模型参数。先认识 bit、字节和 GB，再算存这些数需要多少空间。",
+        "en": "Weights are model parameters. Define bits, bytes and GB before calculating their storage size."
+      },
+      "key": {
+        "zh": "位数越少，原始权重体积越小；运行还需要缓存和临时数据。",
+        "en": "Fewer bits reduce raw weight size; runtime also needs caches and temporary data."
+      },
+      "caption": {
+        "zh": "1 字节 = 8 bit；十进制 1 GB = 10 亿字节。只计算原始权重，4 bit 格式另有附加数据。",
+        "en": "One byte = eight bits; decimal GB = one billion bytes. Raw weights only; four-bit formats also have extra metadata."
+      }
+    },
+    {
+      "id": "cluster-engine-path",
+      "beats": [
+        [
+          "集群是联网管理的一组机器；其中一台叫节点。Kubernetes，简称 K8s，是安排程序在哪台机器运行的软件。",
+          "A cluster is a managed group of networked machines; each machine is a node. Kubernetes, or K8s, places programs on those machines."
+        ],
+        [
+          "这里要一块 GPU，第一台有空位，就把一个模型服务放过去。实例就是正在运行的一份服务；Pod 是 K8s 放置它的运行单元。",
+          "This service needs one GPU and node one has room. An instance is one running copy of a service; a pod is its Kubernetes execution unit."
+        ],
+        [
+          "推理引擎是在节点上加载参数、执行模型计算的程序，例如 vLLM。K8s 管放哪里，引擎管怎样算。",
+          "An inference engine loads parameters and runs model computation on a node, for example vLLM. K8s places the service; the engine executes it."
+        ],
+        [
+          "Prefill处理A/B/C生成D并保存旧记录。Decode读取A/B/C缓存，计算并追加D的记录，再生成E；没有丢掉前文。",
+          "Prefill processes A/B/C, caches their states and generates D. Decode reads those states, computes and appends D's states, then generates E."
+        ]
+      ],
+      "bridge": [
+        "一份模型可以跨设备合作，也可以完整复制多份。下一页看为什么要区分。",
+        "One model can span cooperating devices, or be copied into independent instances. Compare them."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              100,
+              70
+            ],
+            [
+              400,
+              70
+            ]
+          ],
+          "label": "place service"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              400,
+              90
+            ],
+            [
+              400,
+              230
+            ]
+          ],
+          "label": "instance"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              650,
+              160
+            ],
+            [
+              820,
+              160
+            ]
+          ],
+          "label": "weights"
+        },
+        {
+          "kind": "compute",
+          "duration": 3600
+        }
+      ],
+      "lead": {
+        "zh": "集群是一组联网的机器。Kubernetes（K8s）安排服务放哪里，推理引擎负责运行模型。",
+        "en": "A cluster is a group of networked machines. Kubernetes (K8s) places services; an inference engine runs the model."
+      },
+      "caption": {
+        "zh": "Prefill = 先处理输入；Decode = 逐步生成。KV 缓存保存注意力中的键/值数值，供后续复用。",
+        "en": "Prefill processes input; decode generates step by step. A KV cache retains attention key/value states for reuse."
+      },
+      "steps": [
+        {
+          "zh": "认识集群与节点",
+          "en": "Identify cluster and nodes"
+        },
+        {
+          "zh": "放置一份模型服务",
+          "en": "Place one model service"
+        },
+        {
+          "zh": "引擎加载并计算",
+          "en": "Load and compute"
+        },
+        {
+          "zh": "生成时复用前文记录",
+          "en": "Reuse earlier states"
+        }
+      ]
+    },
+    {
+      "id": "parallel-vs-replicas",
+      "beats": [
+        [
+          "左边一个模型分在两块 GPU 上合作。它们为同一份模型交换数据；例如一块显存放不下时，可以分开存和算。",
+          "On the left, two GPUs cooperate on one model and exchange data. Splitting storage and computation can help when one device cannot fit it."
+        ],
+        [
+          "右边每块 GPU 都有完整的一份模型，叫副本。请求 A 和 B 各去一份，可以同时服务两个用户；也可以复制多组跨卡模型。",
+          "On the right, each GPU has a complete replica. Requests A and B go to separate copies, serving users concurrently. A multi-GPU model can also be replicated."
+        ]
+      ],
+      "bridge": [
+        "更多设备改变处理能力。用户的等待时间和系统总处理量，要分开量。",
+        "More devices change capacity. Measure user waiting time separately from total system output."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              240,
+              225
+            ],
+            [
+              330,
+              225
+            ]
+          ],
+          "label": "shared work"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              940,
+              70
+            ],
+            [
+              940,
+              200
+            ]
+          ],
+          "label": "request B"
+        }
+      ]
+    },
+    {
+      "id": "latency-timeline",
+      "beats": [
+        [
+          "延迟就是一次请求要等多久。从点击发送开始计时，直到回答全部结束，是端到端延迟。",
+          "Latency measures how long a request takes. End-to-end latency runs from sending it to the completed response."
+        ],
+        [
+          "0.8 秒时第一个 Token 到达。首 Token 等待时间简称 TTFT，包括网络、排队和处理输入等时间。",
+          "The first token arrives at 0.8 seconds. Time to first token, TTFT, includes network, queueing and input processing."
+        ],
+        [
+          "第一个之后还生成 2 秒，文字逐步到达。这段是后续生成时间，和首个之前的等待分开看。",
+          "More tokens arrive over the next two seconds. This is subsequent generation time, separate from the wait for the first token."
+        ],
+        [
+          "在 2.8 秒回答结束。首个等待 0.8 秒 + 后续生成 2 秒 = 全程 2.8 秒。",
+          "The response ends at 2.8 seconds: 0.8 seconds to the first token plus two seconds of further generation."
+        ]
+      ],
+      "bridge": [
+        "接下来把同一条时间线放大，算相邻 Token 到达的间隔。",
+        "Zoom into this same timeline to calculate intervals between token arrivals."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              70,
+              270
+            ],
+            [
+              100,
+              270
+            ]
+          ],
+          "label": "send"
+        },
+        {
+          "kind": "grow"
+        },
+        {
+          "kind": "grow"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              70,
+              270
+            ],
+            [
+              966,
+              270
+            ]
+          ],
+          "label": "2.8 s"
+        }
+      ],
+      "lead": {
+        "zh": "延迟是一次请求花的时间；分别看多久开始有字、多久全部结束。",
+        "en": "Latency is time for a request: distinguish the first visible output from full completion."
+      }
+    },
+    {
+      "id": "token-interval-arithmetic",
+      "beats": [
+        [
+          "先看 3 个到达点只有 2 个间隔。因此 101 个 Token 有 100 个间隔；20 毫秒是 0.020 秒，合起来 2 秒。",
+          "Three arrivals have only two gaps. So 101 tokens have 100 gaps; 20 milliseconds is 0.020 seconds, totaling two seconds."
+        ],
+        [
+          "只看首个之后：100÷2=50 Token/秒。算全程则要带上前面等的 0.8 秒：101÷2.8≈36 Token/秒。计时范围不同，数字就不同。",
+          "After the first: 100÷2=50 tokens/s. Over the whole request: 101÷2.8≈36 tokens/s, including the initial 0.8-second wait. The time ranges differ."
+        ]
+      ],
+      "bridge": [
+        "这只是一名用户的回答。下一页把多名用户的输出一起统计。",
+        "That was one user's response. Next count output across users."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              90,
+              81
+            ],
+            [
+              310,
+              81
+            ],
+            [
+              530,
+              81
+            ]
+          ],
+          "label": "20 ms"
+        },
+        {
+          "kind": "write",
+          "match": "50 Token/s|101 ÷"
+        }
+      ],
+      "lead": {
+        "zh": "毫秒（ms）是千分之一秒。先数间隔，再用 Token 数除以对应时间。",
+        "en": "A millisecond (ms) is one thousandth of a second. Count gaps, then divide token count by the matching time."
+      },
+      "caption": {
+        "zh": "平均相邻 Token 间隔叫 ITL；此处不含第一个 Token 到来前的等待。",
+        "en": "Average inter-token latency, ITL, excludes the wait before the first token."
+      }
+    },
+    {
+      "id": "aggregate-throughput-batching",
+      "beats": [
+        [
+          "吞吐是系统每秒一共处理多少，这里数输出 Token。四人分别要 2、4、1、3 个，共 10 个；两个槽位表示每轮最多推进两人。",
+          "Throughput measures total work per second, here output tokens. Four requests need 2, 4, 1, 3 tokens, ten in total. Two slots advance at most two requests per round."
+        ],
+        [
+          "每格 A1 表示 A 的第一个 Token。第 3 轮 A 已结束：固定批次空等 B，连续批处理把 C 放进空位；下方一轮一轮比较。",
+          "Cell A1 is A's first token. By round three A has finished: fixed batches wait for B, while continuous batching puts C in the free slot. Compare round by round."
+        ],
+        [
+          "同样10个Token，固定批次7轮、连续批处理6轮。B两种都第4轮完成：总吞吐提高不等于每个人都更快。",
+          "Ten tokens finish in seven versus six rounds, but B finishes at round four under both: aggregate throughput and individual latency differ."
+        ]
+      ],
+      "bridge": [
+        "让这套计算持续服务很多人，还要把电力、散热和网络一起组织起来。",
+        "Serving many people continuously also requires organized power, cooling and networking."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              210,
+              55
+            ],
+            [
+              800,
+              55
+            ]
+          ],
+          "label": "same requests"
+        },
+        {
+          "kind": "compute",
+          "duration": 8400
+        },
+        {
+          "kind": "compute"
+        }
+      ],
+      "lead": {
+        "zh": "吞吐量是系统每秒完成的总工作量；批处理是把多个请求放在一起计算。",
+        "en": "Throughput is total work completed per second; batching groups requests for computation."
+      },
+      "caption": {
+        "zh": "简化算例：只看逐步生成，每槽位每轮 1 Token；忽略输入处理与调度开销，不代表真实每轮速度。",
+        "en": "Simplified decode-only example: one token per slot per round, ignoring input processing and scheduling cost; not measured speed."
+      }
+    },
+    {
+      "id": "factory-input-output",
+      "beats": [
+        [
+          "芯片耗电发热，机房提供电力、散热与网络。",
+          "Chips consume power and release heat; facilities supply power, cooling and networking."
+        ],
+        [
+          "机架装机器，机器里有处理器与内存；联网组织成集群。",
+          "Racks hold machines with processors and memory, connected as a cluster."
+        ],
+        [
+          "引擎加载参数运行，模型服务接收请求、生成结果。",
+          "Engines load parameters and execute; model services receive requests and return results."
+        ],
+        [
+          "“Token工厂”比喻这套持续运行的系统，不是一种新模型。",
+          "A token factory is a metaphor for this continuously operating system, not a new model."
+        ]
+      ],
+      "bridge": [
+        "下一页跟踪手机的一句话，把机房和屏幕连起来。",
+        "Follow one phone request to connect the datacenter with the screen."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              70,
+              70
+            ],
+            [
+              1020,
+              70
+            ]
+          ],
+          "label": "power / network"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              140,
+              70
+            ],
+            [
+              140,
+              250
+            ]
+          ],
+          "label": "node"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              140,
+              150
+            ],
+            [
+              390,
+              150
+            ],
+            [
+              640,
+              150
+            ]
+          ],
+          "label": "model service"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              890,
+              367
+            ],
+            [
+              890,
+              396
+            ],
+            [
+              140,
+              396
+            ]
+          ],
+          "label": "output"
+        }
+      ]
+    },
+    {
+      "id": "request-through-factory",
+      "beats": [
+        [
+          "手机上运行的是应用。它把当前问题和选入的资料打包，通过网络发送给模型服务。",
+          "The phone runs the app. It packages the question and selected material and sends them to a model service."
+        ],
+        [
+          "模型服务收到请求，使用训练好的模型版本。服务通常在远端机器运行，不要求手机装下整份模型。",
+          "The service receives the request and uses a trained model version, often on a remote machine rather than on the phone."
+        ],
+        [
+          "推理引擎在 GPU 上读取参数和缓存，执行数字运算。这里是计算发生的位置，不是又多了一层语言模型。",
+          "The inference engine reads parameters and cache and computes on the GPU. This is where execution occurs, rather than another language model."
+        ],
+        [
+          "生成的 Token 经网络逐步返回，手机显示文字。去程送问题，回程送结果，才完成一次远程调用。",
+          "Generated tokens return over the network and the phone displays text. Sending the input and receiving the result completes the remote call."
+        ]
+      ],
+      "bridge": [
+        "基础设施路径已经连上。下面看这些调用在具体工作里形成什么结果。",
+        "The infrastructure path is connected. Now see what these calls produce in real tasks."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              60,
+              180
+            ],
+            [
+              280,
+              180
+            ]
+          ],
+          "label": "request"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              320,
+              200
+            ],
+            [
+              430,
+              200
+            ]
+          ],
+          "label": "context"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              700,
+              200
+            ],
+            [
+              830,
+              200
+            ]
+          ],
+          "label": "compute"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              920,
+              326
+            ],
+            [
+              920,
+              400
+            ],
+            [
+              170,
+              400
+            ],
+            [
+              170,
+              310
+            ]
+          ],
+          "label": "tokens"
+        }
+      ]
+    },
+    {
+      "id": "coding-example",
+      "beats": [
+        [
+          "人用文字说清数值升序的目标。",
+          "A person states the numeric ordering goal."
+        ],
+        [
+          "模型生成比较规则，程序运行得到3、20、100。生成和执行各做一步。",
+          "The model generates a numeric comparator; execution returns 3, 20, 100."
+        ]
+      ],
+      "bridge": [
+        "下一页把文件、修改、运行接成往返。",
+        "Next connect files, edits and execution into a round trip."
+      ],
+      "motion": [
+        {
+          "kind": "write",
+          "match": "\\[100,20,3\\]"
+        },
+        {
+          "kind": "write",
+          "match": "\\[3,20,100\\]"
+        }
+      ]
+    },
+    {
+      "id": "coding-agent-workflow",
+      "beats": [
+        [
+          "编辑器是改文件的软件，终端是运行命令的入口。助手先选入需求和相关文件，模型才知道这次改什么。",
+          "An editor changes files; a terminal runs commands. The assistant supplies the request and relevant files so the model knows what to change."
+        ],
+        [
+          "模型生成修改建议，编辑工具把建议写进文件。提出修改与实际写文件，是两个不同动作。",
+          "The model proposes an edit; an editing tool writes it to the file. Proposing and applying a change are different actions."
+        ],
+        [
+          "终端运行程序，把正常输出或报错返回。这个可观察结果被放进模型下一次输入。",
+          "The terminal runs the program and returns output or an error. That observation enters the model's next input."
+        ],
+        [
+          "模型根据结果再改，再运行。读文件提供上下文，工具执行动作，返回结果接起任务循环。",
+          "The model revises based on results and runs again. Files supply context, tools act, and returned observations connect the task loop."
+        ]
+      ],
+      "bridge": [
+        "代码是文字形式的指令。图像生成则可以从随机数字开始，一轮轮改变状态。",
+        "Code is instructions in text. Image generation can instead start with random numbers and iteratively change a state."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              165,
+              87
+            ],
+            [
+              540,
+              87
+            ]
+          ],
+          "label": "files"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              560,
+              146
+            ],
+            [
+              950,
+              146
+            ]
+          ],
+          "label": "edit"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              950,
+              205
+            ],
+            [
+              560,
+              205
+            ]
+          ],
+          "label": "run result"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              560,
+              264
+            ],
+            [
+              950,
+              264
+            ],
+            [
+              950,
+              323
+            ],
+            [
+              560,
+              323
+            ]
+          ],
+          "label": "revise / run"
+        }
+      ]
+    },
+    {
+      "id": "diffusion-steps",
+      "beats": [
+        [
+          "噪声是随机数形成的杂点，不是藏着一张照片。文字条件说明要画什么，例如绿色遮阳篷的咖啡店。",
+          "Noise is a pattern of random numbers, not a hidden photograph. The text condition describes the requested café with a green awning."
+        ],
+        [
+          "训练时用加噪图像学习预测噪声或更新。生成时模型读当前状态、文字与步数，给出本轮更新；这里示意为−0.20。",
+          "Training uses noisy images to learn noise or updates. During generation the model reads state, text and timestep; −0.20 illustrates one update."
+        ],
+        [
+          "按更新改变当前状态，再送回同一个模型。逐轮得到更符合条件的状态；回箭头表示继续改这份状态。",
+          "Apply the update and feed the new state to the same model. Iteration moves it toward the condition; the return arrow carries the updated state."
+        ],
+        [
+          "在这类潜空间扩散中，状态是压缩的数值表示。解码器把最终表示转为能显示的像素，才得到画面。",
+          "In this latent-diffusion example, states are compressed numerical representations. A decoder converts the final representation into visible pixels."
+        ]
+      ],
+      "bridge": [
+        "一张图之外，还可以把文案、画面和声音接成一个短片工作流。",
+        "Beyond one image, connect script, visuals and audio into a short-film workflow."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              60,
+              150
+            ],
+            [
+              200,
+              150
+            ]
+          ],
+          "label": "noise"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              240,
+              190
+            ],
+            [
+              350,
+              190
+            ]
+          ],
+          "label": "state + text"
+        },
+        {
+          "kind": "compute",
+          "duration": 2400
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              825,
+              190
+            ],
+            [
+              910,
+              190
+            ]
+          ],
+          "label": "decode"
+        }
+      ],
+      "lead": {
+        "zh": "扩散模型的一种生成方式：从随机噪声开始，按文字条件反复调整数值，再得到图像。",
+        "en": "One diffusion workflow starts with random noise, repeatedly updates values using text conditions, then produces an image."
+      },
+      "caption": {
+        "zh": "潜空间扩散的过程示意；中间状态不是模型实测结果，解码后才是可显示图像。",
+        "en": "Latent-diffusion process illustration; intermediate states are not measured model output, and decoding produces the visible image."
+      }
+    },
+    {
+      "id": "creative-workflow",
+      "beats": [
+        [
+          "AIGC 是 AI 生成内容的缩写。先写 15 秒短片的场景、镜头和旁白，给后面各步明确材料。",
+          "AIGC means AI-generated content. A 15-second script specifies scenes, shots and narration for subsequent steps."
+        ],
+        [
+          "画面按 0、5、10 秒排列。视频是连续的图像序列，镜头推进时，要保持咖啡店与前后画面相连。",
+          "Visuals are ordered at 0, 5 and 10 seconds. Video is an image sequence, with café identity and motion kept continuous."
+        ],
+        [
+          "声音用时间上的波形表示。把旁白放在合适的位置、调整长度，让声音和画面对齐。",
+          "A waveform represents audio over time. Place and trim narration so its timing aligns with the visuals."
+        ],
+        [
+          "剪辑把各片段排进同一条时间线，再导出完整短片。多模态指处理文字、图像或声音等不同形式的信息。",
+          "Editing arranges clips on one timeline and exports a film. Multimodal means handling forms such as text, images and audio."
+        ]
+      ],
+      "bridge": [
+        "生成内容之外，AI 也预测科学对象。先用一串字母和一个空间形状理解蛋白质任务。",
+        "AI also predicts scientific objects. Use a letter sequence and a spatial shape to understand a protein task."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              40,
+              140
+            ],
+            [
+              220,
+              140
+            ]
+          ],
+          "label": "script"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              380,
+              250
+            ],
+            [
+              780,
+              250
+            ]
+          ],
+          "label": "time"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              300,
+              315
+            ],
+            [
+              870,
+              315
+            ]
+          ],
+          "label": "audio"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              305,
+              380
+            ],
+            [
+              985,
+              380
+            ]
+          ],
+          "label": "timeline"
+        }
+      ],
+      "lead": {
+        "zh": "AIGC 指 AI 生成内容。以 15 秒咖啡店短片为例，看文字、画面与声音怎样接力。",
+        "en": "AIGC means AI-generated content. Follow text, visuals and audio through a 15-second café film."
+      }
+    },
+    {
+      "id": "protein-structure",
+      "beats": [
+        [
+          "蛋白质由氨基酸连成链。每个字母代表一种氨基酸，顺序不同就像材料排列不同；这里显示其中一小段。",
+          "A protein is a chain of amino acids. Letters identify amino-acid types in order; only a short segment is shown."
+        ],
+        [
+          "AlphaFold 是预测蛋白质结构的模型系统。它利用学习到的规律和相关输入，预测这条链在空间中怎样排列。",
+          "AlphaFold is a model system for protein-structure prediction. It uses learned patterns and related inputs to predict the chain's spatial arrangement."
+        ],
+        [
+          "右边示意同一条链在三维中的形状。AI4S 是 AI for Science，即 AI 用于科学研究；这里的输出是结构预测。",
+          "The right illustrates the chain's three-dimensional shape. AI4S means AI for Science; the output here is a predicted structure."
+        ]
+      ],
+      "bridge": [
+        "研究还要比较候选、继续计算或实验。下一页把预测和新观察分开看。",
+        "Research also compares candidates and performs calculations or experiments. Separate predictions from new observations next."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              25,
+              125
+            ],
+            [
+              380,
+              125
+            ]
+          ],
+          "label": "sequence"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              400,
+              215
+            ],
+            [
+              525,
+              215
+            ]
+          ],
+          "label": "prediction"
+        },
+        {
+          "kind": "draw"
+        }
+      ],
+      "lead": {
+        "zh": "蛋白质是一条氨基酸链；这个任务根据链的序列，预测它在三维空间中的结构。",
+        "en": "A protein is an amino-acid chain; this task predicts a three-dimensional structure from its sequence."
+      }
+    },
+    {
+      "id": "scientific-search-loop",
+      "beats": [
+        [
+          "假设寻找更耐热的材料。横轴是成分比例，纵轴是耐热指标，越高越好；蓝点是模型对 A 到 J 的预测。",
+          "Imagine searching for heat-resistant material. The x-axis is composition, the y-axis a heat-resistance score, higher is better. Blue points predict candidates A to J."
+        ],
+        [
+          "F、G 的预测较高，所以先选它们做后续研究。筛选是在决定下一批查谁，还没有证明实际性质。",
+          "F and G have high predictions, so investigate them first. Selection decides what to examine next; it does not establish their actual properties."
+        ],
+        [
+          "进一步计算或实验得到新观察：F 是 0.58，G 是 0.76。表格把预测值和观察值放在不同列。",
+          "Further calculation or experiment gives new observations: F is 0.58, G 0.76. Predictions and observations occupy separate columns."
+        ],
+        [
+          "把新观察放回图，先更新下一轮研究依据。可以用于再训练，但收到反馈本身不等于参数已改变。",
+          "Return observations to inform the next research choice. They may support retraining, but receiving feedback alone does not change parameters."
+        ]
+      ],
+      "bridge": [
+        "科学任务把预测接回研究。普通工作也会把不同模型与软件动作串起来。",
+        "Scientific tasks connect predictions to research; everyday work also connects models with software actions."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              80,
+              320
+            ],
+            [
+              450,
+              100
+            ]
+          ],
+          "label": "candidates"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              300,
+              110
+            ],
+            [
+              350,
+              135
+            ]
+          ],
+          "label": "F / G"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              490,
+              190
+            ],
+            [
+              610,
+              190
+            ]
+          ],
+          "label": "investigate"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              830,
+              322
+            ],
+            [
+              830,
+              360
+            ],
+            [
+              510,
+              360
+            ],
+            [
+              350,
+              230
+            ]
+          ],
+          "label": "observations"
+        }
+      ],
+      "lead": {
+        "zh": "例子：在许多材料配方中，先用模型挑出值得进一步计算或实验的候选。",
+        "en": "Use model predictions to choose promising material recipes for further calculation or experiment."
+      },
+      "caption": {
+        "zh": "配方与耐热分数为虚构的 0–1 教学数据；蓝色为预测，绿色为新观察。",
+        "en": "Recipes and heat-resistance scores are fictional 0–1 teaching data; blue means predicted, green means newly observed."
+      }
+    },
+    {
+      "id": "meeting-workflow",
+      "beats": [
+        [
+          "录音波形表示声音，还没有文字。",
+          "The recording contains sound, not yet text."
+        ],
+        [
+          "语音识别把声音转成三句原文。",
+          "Speech recognition produces the three source sentences."
+        ],
+        [
+          "语言模型提取三列；没提供的负责人留缺失。",
+          "A language model extracts three fields, keeping missing owners absent."
+        ],
+        [
+          "普通软件再写入任务系统；相对日期须结合会议日期解释，才能定位到日历。",
+          "Software writes tasks; relative dates need a meeting-date reference before calendar placement."
+        ]
+      ],
+      "bridge": [
+        "刚才是识别、生成和软件动作的组合。接下来对比 AI 的其他输出形式。",
+        "That combined recognition, generation and software actions. Compare other forms of AI output."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              45,
+              195
+            ],
+            [
+              290,
+              195
+            ]
+          ],
+          "label": "audio"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              280,
+              190
+            ],
+            [
+              340,
+              190
+            ]
+          ],
+          "label": "transcript"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              635,
+              190
+            ],
+            [
+              700,
+              190
+            ]
+          ],
+          "label": "fields"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              890,
+              290
+            ],
+            [
+              890,
+              355
+            ]
+          ],
+          "label": "tasks"
+        }
+      ]
+    },
+    {
+      "id": "different-ai-tasks",
+      "beats": [
+        [
+          "分类：图片输入，输出“猫”这个类别。",
+          "Classification maps the image to the category cat."
+        ],
+        [
+          "预测：横轴时间、纵轴需求，历史实线延伸到未来估计虚线。",
+          "Forecasting extends demand history into an estimated future value; time runs horizontally."
+        ],
+        [
+          "感知给位置和障碍，规划选绕行路线，输出动作顺序。",
+          "Perception supplies positions and obstacles; planning supplies a route and action sequence."
+        ]
+      ],
+      "bridge": [
+        "同样叫 AI，任务和输出可以不同。最后看谁提供这些能力，以及应用怎样接入。",
+        "AI tasks can have very different outputs. Finish with industry roles and ways to connect an app."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              175,
+              250
+            ],
+            [
+              175,
+              300
+            ]
+          ],
+          "label": "cat"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              430,
+              221
+            ],
+            [
+              480,
+              196
+            ],
+            [
+              530,
+              207
+            ],
+            [
+              580,
+              155
+            ],
+            [
+              630,
+              132
+            ],
+            [
+              680,
+              106
+            ]
+          ],
+          "label": "estimate"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              812,
+              98
+            ],
+            [
+              812,
+              229
+            ],
+            [
+              1032,
+              229
+            ],
+            [
+              1032,
+              98
+            ]
+          ],
+          "label": "route"
+        }
+      ]
+    },
+    {
+      "id": "industry-value-map",
+      "beats": [
+        [
+          "硬件与设施提供芯片、网络、电力和散热。",
+          "Hardware and facilities supply chips, networks, power and cooling."
+        ],
+        [
+          "模型团队训练参数；服务团队把模型运营成可调用的服务。",
+          "Model teams train parameters; serving teams operate callable models."
+        ],
+        [
+          "API是程序调用程序的接口，工具把能力接到应用。",
+          "APIs connect programs; tools connect capabilities to apps."
+        ],
+        [
+          "应用把能力接到具体工作；同一家公司可以跨多层。",
+          "Applications connect capabilities to work; one company can span roles."
+        ]
+      ],
+      "bridge": [
+        "已有 API 服务可以直接调用，也可以拿到模型参数自己运行。下一页比较这两条路径。",
+        "Call an existing API service, or obtain parameters and run a model yourself. Compare those paths next."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              65,
+              200
+            ],
+            [
+              220,
+              200
+            ]
+          ],
+          "label": "compute"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              260,
+              165
+            ],
+            [
+              430,
+              165
+            ]
+          ],
+          "label": "model"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              550,
+              215
+            ],
+            [
+              550,
+              320
+            ]
+          ],
+          "label": "software"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              740,
+              170
+            ],
+            [
+              825,
+              170
+            ]
+          ],
+          "label": "applications"
+        }
+      ],
+      "lead": {
+        "zh": "沿着机器、模型、运行工具和应用，看产业中的不同工作角色。",
+        "en": "Follow machines, models, operating tools and applications to identify industry roles."
+      }
+    },
+    {
+      "id": "api-vs-selfhosting",
+      "beats": [
+        [
+          "调用API：应用发请求，服务方运行模型并返回结果。",
+          "An API call sends a request to a provider-operated model and returns output."
+        ],
+        [
+          "自行运行：准备权重、引擎和机器，再调用自己的服务。开放权重与完整开源涉及的发布内容和许可不同。",
+          "Self-hosting supplies weights, an engine and machines. Open weights and full open-source release concern different contents and licensing."
+        ]
+      ],
+      "bridge": [
+        "我们的平台主要帮助组织右边的模型服务和机器资源。把它放回整张图。",
+        "Our platform mainly organizes model services and compute resources on the right. Place it in the map."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              250,
+              140
+            ],
+            [
+              425,
+              140
+            ],
+            [
+              890,
+              140
+            ]
+          ],
+          "label": "request"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              250,
+              340
+            ],
+            [
+              425,
+              340
+            ],
+            [
+              890,
+              340
+            ]
+          ],
+          "label": "your service"
+        }
+      ],
+      "lead": {
+        "zh": "API 是程序之间的调用接口。同一个应用，可以调用别人运行的模型，也可以调用自己的服务。",
+        "en": "An API connects programs. The same app can call a provider-operated model or your own service."
+      }
+    },
+    {
+      "id": "platform-location",
+      "beats": [
+        [
+          "应用和Harness组织任务、资料与工具。",
+          "The app and harness organize tasks, context and tools."
+        ],
+        [
+          "LunaNexa组织模型访问、服务与计算资源。",
+          "LunaNexa organizes model access, services and compute."
+        ],
+        [
+          "K8s安排运行位置，引擎在设备上执行。",
+          "Kubernetes places services; engines execute on devices."
+        ]
+      ],
+      "bridge": [
+        "最后沿完整请求回收这些分工。",
+        "Finish by reconnecting the complete request."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              65,
+              180
+            ],
+            [
+              280,
+              180
+            ]
+          ],
+          "label": "task"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              320,
+              200
+            ],
+            [
+              400,
+              200
+            ]
+          ],
+          "label": "model access"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              715,
+              200
+            ],
+            [
+              830,
+              200
+            ]
+          ],
+          "label": "service"
+        }
+      ]
+    },
+    {
+      "id": "complete-request-map",
+      "beats": [
+        [
+          "用户给会议原文，要求整理成事项表。",
+          "The user supplies notes and requests a task table."
+        ],
+        [
+          "应用准备提示词和资料，Harness发送调用。",
+          "The app prepares instructions and context; the harness sends the call."
+        ],
+        [
+          "模型用学到的参数逐Token生成表格。",
+          "The model uses learned parameters to generate the table token by token."
+        ],
+        [
+          "虚线表示引擎和芯片执行这份模型运算。",
+          "The dashed link means engines and chips execute that same computation."
+        ],
+        [
+          "结果返回应用，再显示或执行工具。需要继续时，结果进入下一轮。",
+          "Output returns to the app for display or tools, feeding another round if needed."
+        ]
+      ],
+      "bridge": [
+        "最后五分钟围绕这张图提问：输入是什么、谁执行、输出给谁？可以回到对应的演示。",
+        "Use the final five minutes for questions: what enters, who executes, and who receives the output? Revisit the relevant diagram."
+      ],
+      "motion": [
+        {
+          "kind": "flow",
+          "points": [
+            [
+              40,
+              110
+            ],
+            [
+              220,
+              110
+            ]
+          ],
+          "label": "task"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              245,
+              115
+            ],
+            [
+              325,
+              115
+            ]
+          ],
+          "label": "context"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              670,
+              115
+            ],
+            [
+              820,
+              115
+            ]
+          ],
+          "label": "tokens"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              929,
+              310
+            ],
+            [
+              929,
+              207
+            ]
+          ],
+          "label": "compute"
+        },
+        {
+          "kind": "flow",
+          "points": [
+            [
+              799,
+              175
+            ],
+            [
+              670,
+              175
+            ],
+            [
+              490,
+              175
+            ],
+            [
+              490,
+              265
+            ]
+          ],
+          "label": "result"
+        }
+      ],
+      "lead": {
+        "zh": "用同一个会议任务串起来：准备输入、运行模型、返回结果，再接到工作中。",
+        "en": "Connect one meeting task: prepare input, execute the model, return output and continue the work."
+      }
+    }
+  ]
+}

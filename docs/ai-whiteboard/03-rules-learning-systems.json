@@ -1,0 +1,251 @@
+{
+  "id": "ai-board-learning",
+  "download_rank": 5,
+  "order": 3,
+  "title": [
+    "03 · 从写规则到让机器学习",
+    "03 · From written rules to learned behavior"
+  ],
+  "summary": [
+    "用语法、知识图谱、线性模型和神经网络，区分知识怎样表示、行为怎样形成。",
+    "Use grammar, knowledge graphs, linear models and neural networks to distinguish knowledge representation from learned behavior."
+  ],
+  "sections": [
+    {
+      "id": "board-symbolic-connectionist",
+      "title": [
+        "规则路线与连接学习路线",
+        "Symbolic rules and connectionist learning"
+      ],
+      "concepts": [
+        "LLM 历史",
+        "符号主义",
+        "连接主义",
+        "symbolic AI",
+        "connectionism",
+        "规则",
+        "语法"
+      ],
+      "points": [
+        "LLM = Large Language Model",
+        "LLM 历史",
+        "规则（语法）",
+        "连接",
+        "手写规则与学习规则的对照"
+      ],
+      "paragraphs": [
+        [
+          "LLM 是大语言模型，但理解它可以先看更广的 AI 两条路线：一条由人明确写规则和知识；另一条用带参数的计算网络，从样本中学习输入到输出的关系。它们不是一条完全替代另一条的单线历史；现代应用常把确定性规则、检索和学习模型放在一起。",
+          "To understand LLMs, compare two broader AI approaches. One explicitly encodes rules and knowledge; another learns input-output relationships in a parameterized network. This is not a simple history in which one entirely replaces the other. Applications often combine rules, retrieval and learned models."
+        ],
+        [
+          "语法规则可以写“名词＋动词＋宾语”这样的结构；学习系统则从大量句子中调整参数，以处理许多不容易逐条写完的语言关系。规则便于逐条检查，学习方法适合从例子归纳；选哪一种要看任务，而不是把“没有 if/else”当成智能的定义。",
+          "A grammar can encode an explicit sentence structure. A learned system adjusts parameters across examples to handle many language relationships. Rules can be inspected individually; learning generalizes from examples. The absence of if/else is not a definition of intelligence."
+        ]
+      ]
+    },
+    {
+      "id": "board-knowledge-expert",
+      "title": [
+        "知识图谱、语义与专家系统",
+        "Knowledge graphs, meaning and expert systems"
+      ],
+      "concepts": [
+        "知识图谱",
+        "语义",
+        "翻译",
+        "皇帝",
+        "皇上",
+        "专家系统",
+        "expert system",
+        "人工编程"
+      ],
+      "points": [
+        "知识图谱",
+        "皇帝→皇上",
+        "语义／翻译",
+        "专家系统",
+        "人工智能中的人工编程"
+      ],
+      "paragraphs": [
+        [
+          "知识图谱把实体和关系显式保存成节点与连线，例如“皇帝—别称—皇上”。它能支持检索、规则推导和实体关联。语法关注句子怎样组成，语义关注表达的含义；翻译还要处理语境、语序和指代，所以一个同义词关系不足以完成整句翻译。",
+          "A knowledge graph explicitly stores entities and relationships, such as emperor → alternative name → sovereign. It supports lookup and rule-based inference. Syntax concerns structure; semantics concerns meaning. Translation also involves context, order and reference, so a synonym link alone does not translate a sentence."
+        ],
+        [
+          "专家系统把某个领域的知识和推理规则写入程序。例如“设备温度高且风扇停转→检查散热”。规则覆盖不到的新情况，需要补充规则或其他模型。“人工”强调知识组织需要人的工作；这与神经网络从训练样本调整参数，是不同的知识进入方式。",
+          "An expert system encodes domain knowledge and inference rules—for example, high temperature plus a stopped fan suggests checking cooling. New situations may need new rules or another model. Human knowledge engineering and learning parameters from examples are different ways of introducing knowledge."
+        ]
+      ]
+    },
+    {
+      "id": "board-linear-learning",
+      "title": [
+        "y = ax + b：最小的学习例子",
+        "y = ax + b: a small learning example"
+      ],
+      "concepts": [
+        "y=ax+b",
+        "线性模型",
+        "参数",
+        "a",
+        "b",
+        "训练",
+        "预测"
+      ],
+      "points": [
+        "y=ax+b",
+        "a、b 是可调整数",
+        "从线性关系走向复杂关系"
+      ],
+      "paragraphs": [
+        [
+          "设 x 是路程，y 是费用，a 是每公里费用，b 是起步费。记录是 1 公里 5 元、2 公里 7 元、3 公里 9 元。用 a=1、b=2 预测，会得到 3、4、5；用 a=2、b=3 则得到 5、7、9。学习就是利用记录，找到让整体误差更小的参数，而不是为每一个输入单独写答案。",
+          "Let x be distance, y be fare, a be cost per kilometre and b a starting charge. Records (1,5), (2,7), (3,9) disagree with a=1,b=2, which predicts 3,4,5. Parameters a=2,b=3 predict 5,7,9. Learning uses examples to reduce overall error instead of storing one separate answer for every input."
+        ],
+        [
+          "一条直线只能表达有限关系。若真实关系会弯曲、取决于多种条件，就需要更多特征或更复杂的模型。只把许多线性层堆在一起仍可能等价于一个线性变换；神经网络还使用非线性运算，才能表达更复杂的组合。",
+          "A line has limited expressive power. Curved or conditional relationships require more features or a richer model. Stacking linear transformations alone can remain equivalent to one linear map; neural networks also use nonlinear operations."
+        ]
+      ]
+    },
+    {
+      "id": "board-neural-network",
+      "title": [
+        "连接里存的是什么？",
+        "What is stored in a network's connections?"
+      ],
+      "concepts": [
+        "神经网络",
+        "权重",
+        "非线性",
+        "weighted sum",
+        "activation",
+        "neural network"
+      ],
+      "points": [
+        "连接网络示意",
+        "更多参数形成更复杂的函数",
+        "学习得到的数值不等于手写知识图谱"
+      ],
+      "paragraphs": [
+        [
+          "一个简化神经元先把输入乘权重，再加偏置，最后做非线性变换。例如输入是 [2,1]、权重是 [0.5,0.2]、偏置为 0，得到 2×0.5+1×0.2=1.2；再用 ReLU，取 max(0,1.2)=1.2。若和为负，ReLU 输出 0，这个折点就是非线性。",
+          "A simple neuron multiplies inputs by weights, adds a bias and applies a nonlinearity. With input [2,1], weights [0.5,0.2] and zero bias, the sum is 1.2. ReLU outputs max(0,1.2)=1.2; a negative sum would produce zero. That bend makes it nonlinear."
+        ],
+        [
+          "许多层把这些操作组合起来。训练时调整权重，推理时使用当前权重。网络连线表示计算依赖，不等于“某条连线就是某条事实”；知识图谱中明确写出的实体关系，与模型中分散在参数里的统计关系，需要分开理解。",
+          "Layers compose these operations. Training changes weights; inference uses them. A connection represents a computational dependency, not necessarily one stored fact. Explicit graph relations differ from statistical relationships distributed across learned parameters."
+        ]
+      ],
+      "graphic": "neuron"
+    },
+    {
+      "id": "board-autonomic-system",
+      "title": [
+        "自治系统：监测、管理与优化",
+        "Autonomic systems: monitor, manage and optimize"
+      ],
+      "concepts": [
+        "Autonomous System",
+        "autonomic computing",
+        "自治系统",
+        "自我监测",
+        "自我管理",
+        "自我优化"
+      ],
+      "points": [
+        "Autonomous system 自治系统",
+        "自己监测系统",
+        "自己管理系统",
+        "自己优化系统",
+        "None／没有（板书中的成熟度判断）"
+      ],
+      "paragraphs": [
+        [
+          "自治是一个系统层面的目标：监测自身状态，根据目标调整配置或动作，再观察效果。例如服务检测到请求积压，调整工作副本，然后检查等待时间是否下降。监测负责看见变化，管理负责采取动作，优化负责在多个可行方案中改进某个指标。",
+          "Autonomy is a system-level goal: monitor state, change configuration or actions toward an objective, then observe the effect. A service might detect a queue, change replicas and check waiting time. Monitoring detects; management acts; optimization improves a chosen objective among feasible alternatives."
+        ],
+        [
+          "许多局部闭环可以用普通程序实现；包含模型的 Agent 也只能在它实际接入的环境中行动。“完全不用人、什么都能管”的自治是更强的说法，需要明确任务范围，不能由一张有循环箭头的图直接推出。“完全自治还没有实现”应理解为对强自治愿景的讨论，不能当作所有自主系统都不存在的事实。",
+          "Many local loops use conventional software. A model-based agent also acts only in its connected environment. Universal, human-free autonomy is a stronger claim and cannot be inferred from a loop diagram. A discussion of its maturity should not erase existing narrower autonomous systems."
+        ]
+      ]
+    },
+    {
+      "id": "board-game-npc",
+      "title": [
+        "游戏角色：有规则的世界也可以接模型",
+        "Game characters can combine world rules and models"
+      ],
+      "concepts": [
+        "NPC",
+        "游戏",
+        "角色",
+        "环境状态",
+        "规划",
+        "agent"
+      ],
+      "points": [
+        "NPC（手写缩写待核对）",
+        "角色／玩游戏",
+        "预定义系统与模型动态行为的对照"
+      ],
+      "paragraphs": [
+        [
+          "游戏里的非玩家角色通常称 NPC，non-player character。传统做法可以预设状态机：发现玩家就追逐，距离过远就返回。接入语言模型后，系统也可以把角色目标、可见事件和允许的动作送给模型，由它提出下一步。角色说的话和实际执行的游戏动作仍要分别处理。",
+          "NPC means non-player character. A conventional state machine can chase a visible player and return when too far away. A language-model system can instead supply a character goal, visible events and available actions for a proposed next step. Dialogue and executed game actions remain separate."
+        ],
+        [
+          "例如角色说“我去拿钥匙”，游戏程序需要真正更新位置、背包和钥匙状态，下一轮再把结果交回。游戏世界的物理和规则不因此消失；这与办公 Agent 调用工具后更新文件，是同一类“语言提议→软件执行→状态反馈”的关系。",
+          "If a character says it will fetch a key, game software must update location, inventory and the key's state, then return the observation. World rules still exist. The same proposal → execution → state feedback pattern appears in an office agent editing a document."
+        ]
+      ]
+    },
+    {
+      "id": "board-multi-agent-system",
+      "title": [
+        "多 Agent：分开任务与上下文，再交换结果",
+        "Multiple agents: separate tasks and contexts, then exchange results"
+      ],
+      "concepts": [
+        "多 Agent",
+        "Multi Agent",
+        "multi-agent",
+        "Agent swarm",
+        "协作",
+        "独立上下文"
+      ],
+      "points": [
+        "多 Agent",
+        "Multi Agent",
+        "多 Agent 与自治系统不是同一个概念"
+      ],
+      "paragraphs": [
+        [
+          "多 Agent 系统把工作分给多个有各自任务状态的执行者。它们可以调用同一个模型服务，也可以使用不同模型。真正需要说明的是分工、可见资料、交付格式与谁负责合并。单个模型内部有多个专家模块的 MoE，则是另一层结构。",
+          "A multi-agent system assigns work to executors with separate task states. They may share a model service or use different models. Explain assignments, available information, handoff format and synthesis. MoE experts inside one model are a different architectural layer."
+        ],
+        [
+          "做产品比较时，三个 Agent 分别查价格、功能与使用限制，协调者合成同一张比较表。只有任务能独立推进时才有并行收益；资料重复、相互依赖和最后整合都可能增加时间。多几个 Agent 不会自动补齐缺失证据，也不自动构成自我改进。",
+          "For a product comparison, agents can investigate price, features and constraints, then a coordinator combines results. Parallelism helps independent work; duplication, dependencies and synthesis add time. More agents do not automatically supply missing evidence or establish self-improvement."
+        ]
+      ],
+      "reuse_scene": "multi-agent-handoffs"
+    }
+  ],
+  "references": [
+    {
+      "title": "Stanford CS221 course",
+      "url": "https://stanford-cs221.github.io/"
+    },
+    {
+      "title": "The Vision of Autonomic Computing",
+      "url": "https://doi.org/10.1109/MC.2003.1160055"
+    },
+    {
+      "title": "How we built our multi-agent research system",
+      "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+    }
+  ]
+}

@@ -1,0 +1,106 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, repo, mode, .. selectors] else {
+    fail(
+      "Usage: audit-coursebook.mbtx REPO inventory|pages|commands|recipes|drift [PAGE_ID ...]",
+    )
+  }
+  let book = @json.parse(
+    @fs.read_file(repo + "/docs-site/coursebook.json").text(),
+  )
+  let evidence = @json.parse(
+    @fs.read_file(repo + "/docs-site/coursebook-evidence.json").text(),
+  )
+  guard book is { "pages": Array(pages), .. } &&
+    evidence is { "sources": Array(sources), .. } else {
+    fail("Missing coursebook or evidence sources")
+  }
+  if mode == "drift" {
+    let mut changed = 0
+    for source in sources {
+      guard source
+        is {
+          "id": String(id),
+          "path": String(path),
+          "digest": String(prior),
+          ..
+        } else {
+        fail("Invalid source")
+      }
+      guard !path.has_prefix("/") && !path.contains("..") else {
+        fail("Invalid source path")
+      }
+      let result = @shell.Cmd("shasum", ["-a", "256", repo + "/" + path]).output()
+      result.check()
+      let digest = "sha256:" +
+        result.stdout().split(" ").next().unwrap().to_owned()
+      if prior != digest {
+        println("CHANGED \{id}: \{path}")
+        changed += 1
+      }
+    }
+    println("\{changed}/\{sources.length()} sources changed")
+    return
+  }
+  guard ["inventory", "pages", "commands", "recipes"].contains(mode) else {
+    fail("Unknown mode")
+  }
+  let recipe_root = if mode == "recipes" {
+    Some(@fs.tmpdir(prefix="lunanexa-coursebook-recipes-"))
+  } else {
+    None
+  }
+  defer (if recipe_root is Some(path) { @fs.rmdir(path, recursive=true) })
+  println("\{pages.length()} pages; \{sources.length()} sources")
+  for page in pages {
+    guard page
+      is {
+        "id": String(id),
+        "title": String(title),
+        "blocks": Array(blocks),
+        "source_ids": Array(ids),
+        ..
+      } else {
+      fail("Invalid page")
+    }
+    guard id.length() > 0 &&
+      id.length() <= 80 &&
+      id.all(c => c is ('a'..<='z' | '0'..<='9' | '-')) else {
+      fail("Invalid page identifier")
+    }
+    if mode == "inventory" {
+      println("\{id} | \{title} | \{Json::array(ids).stringify()}")
+    } else if selectors.is_empty() || selectors.contains(id) {
+      if mode != "recipes" {
+        println("PAGE \{id}")
+      }
+      if mode == "pages" {
+        println(page.stringify(indent=2))
+      } else {
+        for index, block in blocks {
+          if block is { "kind": "code", "code": String(code), .. } {
+            if recipe_root is Some(root) {
+              if block is { "language": "sh", .. } {
+                let path = root + "/" + id + "-\{index}.sh"
+                @fs.write_file(path, code)
+                @shell.Cmd("bash", ["-n", path]).run()
+                println("Syntax OK \{id} block \{index}; not executed")
+              }
+            } else {
+              println(code)
+            }
+          }
+        }
+      }
+    }
+  }
+}

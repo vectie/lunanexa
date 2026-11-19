@@ -1,0 +1,96 @@
+///|
+import { "moonbitlang/async@0.22.4", "moonbitlang/async@0.22.4/fs", "moonbitlang/async@0.22.4/shell", "moonbitlang/core/json", "moonbitlang/core/env" }
+
+///|
+fn label(value : Json, language : String) -> String raise {
+  guard value is Object(fields) && fields.get(language) is Some(String(text)) else { fail("Missing label") }
+  text
+}
+
+///|
+fn pair(value : Json, language : Int) -> String raise {
+  guard value is Array(items) && items[language] is String(text) else { fail("Missing pair") }
+  text
+}
+
+///|
+async fn main {
+  guard @env.args() is [_,timestamp] else { fail("Expected actual review timestamp") }
+  let site="docs-site/"
+  guard @json.parse(@fs.read_file(site+"ai-lecture.json").text()) is {"lessons":Array(lessons),"outline":Array(outline),"concept_outline":concept_outline,"curriculum":curriculum,..} && @json.parse(@fs.read_file("docs/ai-integrated-course.json").text()) is {"groups":Array(group_specs),..} && @json.parse(@fs.read_file(site+"coursebook.json").text()) is Object(book) && book.get("pages") is Some(Array(before)) && book.get("navigation") is Some(Array(old_nav)) && book.get("project") is Some(Object(project)) && @json.parse(@fs.read_file(site+"coursebook.zh-CN.json").text()) is Object(zh) && zh.get("pages") is Some(Object(zh_pages)) && zh.get("navigation") is Some(Object(zh_nav)) else { fail("Missing integrated book") }
+  let pages : Array[Json]=[]
+  let lecture_ids : Array[Json]=[]
+  let concept_pages : Map[String,Json]=Map([])
+  for lesson in lessons {
+    guard lesson is {"page_id":String(id),"group_id":String(group_id),"title":title,"slides":Array(slides),"sections":Array(sections),"source_ids":sources,"references":Array(references),..} && slides[0] is {"lead":lead,"key":key,..} else { fail("Integrated lesson") }
+    let en_blocks : Array[Json]=[]
+    let zh_blocks : Array[Json]=[]
+    let minutes=slides.fold(init=0,(total,slide)=>{ guard slide is {"minutes":Number(m,..),..} else { fail("Minutes") };total+m.to_int() })
+    for section in sections {
+      guard section is Object(fields) && fields.get("id") is Some(String(section_id)) && fields.get("title") is Some(heading) && fields.get("paragraphs") is Some(Array(paragraphs)) else { fail("Section") }
+      let anchor="concept-"+section_id
+      concept_pages[anchor]=Json::string(id)
+      for language in [0,1] {
+        let blocks=if language==0 { zh_blocks } else { en_blocks }
+        blocks.push({"kind":"heading","level":2,"id":anchor,"text":pair(heading,language)})
+        for paragraph in paragraphs { blocks.push({"kind":"paragraph","text":pair(paragraph,language)}) }
+        if fields.get("visual") is Some(visual) { blocks.push(if language==1 { {"kind":"diagram","alt":pair(heading,language),"visual":visual} } else { {"kind":"diagram","alt":pair(heading,language)} }) }
+      }
+    }
+    if references.length()>0 { en_blocks.push({"kind":"references","label":"Sources","items":references});zh_blocks.push({"kind":"references","label":"资料来源","items":references}) }
+    if id=="ai-start" {
+      for language in [0,1] {
+        let rows : Array[Json]=[]
+        for group in outline {
+          guard group is {"start":Number(start,..),"end":Number(end,..),"title":title,..} else { fail("Schedule") }
+          let text=label(title,if language==0 { "zh" } else { "en" })
+          if start<50 && end>50 { rows.push([Json::string(start.to_int().to_string()+"–50"),Json::string(text)]);rows.push(["50–60",if language==0 { "休息" } else { "Break" }]);rows.push([Json::string("60–"+end.to_int().to_string()),Json::string(text)]) } else { rows.push([Json::string(start.to_int().to_string()+"–"+end.to_int().to_string()),Json::string(text)]) }
+        }
+        rows.push(["115–120",if language==0 { "提问" } else { "Questions" }])
+        let blocks=if language==0 { zh_blocks } else { en_blocks }
+        blocks.push({"kind":"table","visibility":"advanced","columns":if language==0 { ["时间","内容"] } else { ["Time","Topic"] },"rows":rows})
+        blocks.push({"kind":"paragraph","visibility":"advanced","text":if language==0 { "25 分钟路线：模型 5，工具与循环 5，训练反馈 5，算力与选型 5，实际工作与平台 5。完整课保留逐步计算与操作演示。" } else { "25-minute route: models 5, tools and loops 5, learning and feedback 5, infrastructure and selection 5, work and platform 5. The full class retains worked computations and demonstrations." }})
+      }
+    }
+    pages.push({"id":id,"group_id":group_id,"title":label(title,"en"),"summary":label(lead,"en")+" "+label(key,"en"),"status":"documented","audience":"beginners","estimated_minutes":minutes,"tags":["AI","course"],"source_ids":sources,"blocks":en_blocks})
+    zh_pages[id]={"title":label(title,"zh"),"summary":label(lead,"zh")+" "+label(key,"zh"),"audience":"零基础读者","blocks":zh_blocks}
+    lecture_ids.push(Json::string(id))
+  }
+  let directory : Json={"id":"ai-course-map","group_id":"ai-basics","title":"Course directory","summary":"Find a concept in the complete two-hour class. Each entry links to its explanation in the chapter and its matching presentation scene, with Chinese and English search.","status":"documented","audience":"beginners","estimated_minutes":0,"tags":["course","directory","课程目录"],"source_ids":["ai-foundations","integrated-authoring","integrated-plan","lecture-playback"],"blocks":[{"kind":"course-index","label":"Course concepts","groups":concept_outline}]}
+  pages.push(directory);zh_pages["ai-course-map"]={"title":"课程目录","audience":"零基础读者","summary":"按概念找到章节里的具体讲解，也可以直接打开对应投屏画面。模型、工具与循环、训练反馈、算力与选型、实际工作连成一条课程主线；支持中英文查找。","blocks":[{"kind":"course-index","label":"课程概念目录"}]}
+  for page in before { guard page is {"id":String(id),..} else { fail("Page") };if !id.has_prefix("ai-") { pages.push(page) } }
+  let obsolete=["ai-board-models","ai-board-agents","ai-board-learning","ai-board-training","ai-board-scaling","ai-board-selection","ai-board-harness"]
+  for id in obsolete { zh_pages.remove(id) }
+  let navigation : Array[Json]=[]
+  for group in group_specs {
+    guard group is {"id":String(id),"title":title,..} else { fail("Navigation") }
+    let ids : Array[Json]=[]
+    if id=="ai-basics" { ids.push("ai-course-map") }
+    for lesson in lessons { if lesson is {"page_id":String(page_id),"group_id":String(candidate),..} && candidate==id { ids.push(Json::string(page_id)) } }
+    navigation.push({"id":id,"label":pair(title,1),"page_ids":ids});zh_nav[id]=Json::string(pair(title,0))
+  }
+  for group in old_nav { guard group is {"id":String(id),..} else { fail("Group") };if !id.has_prefix("ai-") { navigation.push(group) } }
+  zh_nav.remove("ai-board-notes")
+  book["pages"]=Json::array(pages);book["navigation"]=Json::array(navigation);book["lecture"]={"path":"./ai-lecture.json","page_ids":lecture_ids,"directory_page_id":"ai-course-map"};book["concept_pages"]=Json::object(concept_pages)
+  book["page_aliases"]={"ai-board-models":"ai-start","ai-board-agents":"ai-harness","ai-board-learning":"ai-rules-learning","ai-board-training":"ai-training-inference","ai-board-scaling":"ai-model-scaling","ai-board-selection":"ai-model-selection","ai-board-harness":"ai-agent-systems"}
+  project["updated_at"]=Json::string(timestamp)
+  @fs.write_file(site+"coursebook.json",Json::object(book).stringify(indent=2)+"\n");@fs.write_file(site+"coursebook.zh-CN.json",Json::object(zh).stringify(indent=2)+"\n")
+  guard @json.parse(@fs.read_file(site+"coursebook-actions.json").text()) is Object(actions) && actions.get("conceptual_only_pages") is Some(Array(conceptual)) else { fail("Actions") }
+  actions["conceptual_only_pages"]=Json::array(conceptual.filter(id=>!(id is String(text) && obsolete.contains(text))))
+  guard actions["conceptual_only_pages"] is Array(conceptual) else { fail("Conceptual actions") }
+  for id in lecture_ids { if !conceptual.contains(id) { conceptual.push(id) } }
+  @fs.write_file(site+"coursebook-actions.json",Json::object(actions).stringify(indent=2)+"\n")
+  guard @json.parse(@fs.read_file(site+"coursebook-evidence.json").text()) is Object(evidence) && evidence.get("sources") is Some(Array(sources)) && evidence.get("content_review") is Some(Object(review)) && evidence.get("repository") is Some(Object(repository)) else { fail("Evidence") }
+  for (id,path) in [("integrated-authoring","scripts/integrate-ai-course.mbtx"),("integrated-plan","docs/ai-integrated-course.json"),("integrated-teaching","docs/ai-integrated-teaching.json"),("speaker-authoring","scripts/build-ai-speaker.mbtx"),("speaker-source-1","docs/ai-speaking/01-generation-context.json"),("speaker-source-2","docs/ai-speaking/02-agents-learning.json"),("speaker-source-3","docs/ai-speaking/03-training-infrastructure.json"),("speaker-source-4","docs/ai-speaking/04-selection-work.json"),("speaker-audit","docs/ai-speaking-audit.json"),("speaker-print-layout","docs-site/speaker-script.css"),("speaker-print-action","docs-site/speaker-script.js")] { if !sources.any(source=>source is {"id":String(existing),..} && existing==id) { sources.push({"id":id,"path":path,"kind":"classroom-authoring","public":true,"digest":"pending"}) } }
+  for source in sources {
+    guard source is Object(fields) && fields.get("path") is Some(String(path)) && !path.has_prefix("/") && !path.contains("..") else { fail("Source") }
+    let result=@shell.Cmd("shasum",["-a","256",path]).output();result.check();fields["digest"]=Json::string("sha256:"+result.stdout().split(" ").next().unwrap().to_owned())
+  }
+  review["pages"]=Json::array(pages.map(page=>{ guard page is {"id":String(id),"source_ids":ids,..} else { fail("Review page") };let row : Json={"page_id":id,"locales":["en","zh-CN"],"source_ids":ids,"classification":if id.has_prefix("ai-") { "educational-concept" } else if ["production-ui-validation","future-expansion"].contains(id) { "dated-historical-evidence" } else { "current-source-review" }};row }))
+  review["reviewed_at"]=Json::string(timestamp);repository["inspected_at"]=Json::string(timestamp);review["lecture"]={"source_id":"integrated-authoring","minutes":120,"content_slides":46,"break_minutes":10,"questions_minutes":5,"curriculum":curriculum,"audience_trial":"not-performed"}
+  review["speaking_script"]={"source_id":"speaker-authoring","pages":48,"language":"zh-CN","content_pages":46,"complete_animation_step_coverage":149,"audience_trial":"not-performed"}
+  guard evidence.get("claims") is Some(Array(claims)) else { fail("Claims") }
+  for claim in claims { if claim is Object(fields) && fields.get("id")==Some(Json::string("claim-ai-education")) { fields["statement"]="The integrated AI course has 24 bilingual chapters and 46 animated content scenes. All 186 identifiable board entries form 47 primary sections inside normal chapters, mapped to the main presentation. Primary teaching occupies 78 of 105 content minutes; the full route is 120 minutes including a break and questions.";fields["source_ids"]=["ai-foundations","integrated-authoring","integrated-plan","whiteboard-coverage","product-contract","architecture"] } }
+  @fs.write_file(site+"coursebook-evidence.json",Json::object(evidence).stringify(indent=2)+"\n")
+  println("Synchronized 24 integrated chapters; removed the separate expansion route")
+}

@@ -17,6 +17,7 @@
   };
 
   const localeStorageKey = "lunanexa.locale";
+  let lectureController;
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -165,6 +166,7 @@
   function pageHref(pageId, sectionId = "") {
     const url = new URL(window.location.href);
     url.searchParams.set("page", pageId);
+    url.searchParams.delete("slide");
     if (state.advancedVisible) url.searchParams.set("view", "advanced");
     else url.searchParams.delete("view");
     url.hash = sectionId ? `#${encodeURIComponent(sectionId)}` : "";
@@ -174,7 +176,10 @@
   function requestedPageId() {
     const url = new URL(window.location.href);
     const candidate = url.searchParams.get("page");
-    const page = state.pageById.get(candidate);
+    const alias=state.book.page_aliases?.[candidate];
+    const routed=alias?(state.book.concept_pages?.[decodeURIComponent(url.hash.slice(1))]||alias):candidate;
+    const page = state.pageById.get(routed);
+    if(alias&&page){url.searchParams.set("page",page.id);history.replaceState({},"",url);}
     state.advancedVisible = url.searchParams.get("view") === "advanced" || page?.visibility === "advanced";
     return page ? page.id : standardPages()[0]?.id || state.book.pages[0].id;
   }
@@ -222,8 +227,7 @@
     $("[data-open-pet]").setAttribute("aria-label", t("ask_guide", "Ask guide"));
     $("[data-menu-label]").textContent = t("menu", "Menu");
     $("[data-toc-label]").textContent = t("on_this_page", "On this page");
-    $("[data-search-kicker]").textContent = t("coursebook_search", "Coursebook search");
-    $("[data-search-title]").textContent = t("search_title", "Find a feature, flow, command, or error");
+    $("[data-search-title]").textContent = t("search", "Search");
     $("[data-close-search]").textContent = t("close", "Close");
     $("[data-close-search]").setAttribute("aria-label", t("close_search", "Close search"));
     $("[data-search-field-label]").textContent = t("search_coursebook", "Search the coursebook");
@@ -263,8 +267,9 @@
       topLink.dataset.groupId = group.id;
       productNav.append(topLink);
 
-      const section = element("section", { className: "sidebar-group" });
-      section.append(element("h2", { text: groupLabel(group) }));
+      const section = element("details", { className: "sidebar-group" });
+      section.open = pageIds.includes(state.page?.id);
+      section.append(element("summary", { text: groupLabel(group) }));
       for (const pageId of pageIds) {
         const page = pageData(pageId);
         const link = makePageLink(pageId, page.title);
@@ -284,6 +289,9 @@
 
   function renderBlock(block, usedHeadingIds) {
     const kind = text(block?.kind);
+    if(kind === "course-index"){const index=window.LunaLecture.courseIndex(block.groups,state.locale,{onRead:item=>navigate(item.page_id,{sectionId:item.anchor||`concept-${item.id}`}),onPresent:item=>lectureController.open(item.page_id,item.slide_id||item.id).catch(()=>showToast(state.locale==="en"?"Unable to load the class.":"课程加载失败，请重试。"))});index.addEventListener("courseindexchange",()=>renderToc($$("h2[id], h3[id]",index)));index.setAttribute("aria-label",block.label);return index;}
+    if(kind === "references") {const details=element("details",{className:"course-references"});details.append(element("summary",{text:block.label}));const list=element("ul");for(const item of array(block.items)){if(!/^https:\/\//.test(item.url))continue;const li=element("li");li.append(element("a",{text:item.title,attrs:{href:item.url,target:"_blank",rel:"noopener noreferrer"}}));list.append(li);}details.append(list);return details;}
+    if (kind === "diagram") { const figure=window.LunaLecture.figure(block.visual,state.locale);if(usedHeadingIds.has(figure.id))figure.removeAttribute("id");return figure; }
     if (kind === "heading") {
       const level = Number(block.level) === 3 ? 3 : 2;
       const node = element(`h${level}`, { text: block.text });
@@ -310,7 +318,7 @@
     }
     if (kind === "steps") {
       const list = element("ol", { className: "step-list" });
-      for (const item of array(block.items)) {
+      for (const [index, item] of array(block.items).entries()) {
         const body = element("div");
         if (typeof item === "string") {
           body.append(element("p", { text: item }));
@@ -318,7 +326,7 @@
           body.append(element("strong", { text: item.title }), element("p", { text: item.text }));
         }
         const row = element("li");
-        row.append(body);
+        row.append(element("span", { className: "step-number", text: String(index + 1), attrs: { "aria-hidden": "true" } }), body);
         list.append(row);
       }
       return list;
@@ -428,6 +436,9 @@
 
   function renderToc(headings) {
     const toc = $("[data-toc]");
+    const hasToc = headings.length > 1;
+    toc.closest("aside").hidden = !hasToc;
+    $(".coursebook-layout").classList.toggle("without-toc", !hasToc);
     clear(toc);
     for (const heading of headings) {
       const link = element("a", { text: heading.textContent, attrs: { href: `#${encodeURIComponent(heading.id)}`, "data-level": heading.tagName === "H3" ? "3" : "2" } });
@@ -491,9 +502,16 @@
     status.textContent = t(`status_${text(page.status || "documented")}`, text(page.status || "documented"));
     status.dataset.status = text(page.status || "documented");
     $("[data-page-effort]").textContent = Number(page.estimated_minutes) > 0 ? `${Number(page.estimated_minutes)} ${t("minutes", "min")}` : "";
+    $("[data-page-effort]").hidden = !state.advancedVisible;
+    $(".article-status-row").hidden = !state.advancedVisible;
     $("[data-page-title]").textContent = page.title;
     $("[data-page-summary]").textContent = page.summary;
     $("[data-page-audience]").textContent = page.audience ? t("for_audience", `For ${page.audience}`).replace("{audience}", page.audience) : "";
+    $("[data-page-audience]").hidden = !state.advancedVisible || !page.audience;
+    $("[data-open-lecture]").hidden = !state.book.lecture?.page_ids?.includes(page.id);
+    $("[data-open-lecture]").textContent = state.locale === "en" ? "Start presentation" : "开始上课";
+    let directory=$("[data-course-directory]");if(!directory){directory=element("a",{attrs:{"data-course-directory":"",href:"?page=ai-course-map"}});directory.addEventListener("click",event=>{if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;event.preventDefault();navigate("ai-course-map");});$("[data-open-lecture]").after(directory);}directory.textContent=state.locale==="en"?"Course directory":"课程目录";directory.hidden=!page.id.startsWith("ai-")||page.id==="ai-course-map";
+    let manuscript=$("[data-course-manuscript]");if(!manuscript){manuscript=element("a",{attrs:{"data-course-manuscript":"",href:"./ai-speaker-script.html",target:"_blank",rel:"noopener"}});directory.after(manuscript);}manuscript.textContent=state.locale==="en"?"Chinese speaking script":"逐页讲稿";manuscript.hidden=!page.id.startsWith("ai-");
     const breadcrumbs = $("[data-breadcrumbs]");
     breadcrumbs.setAttribute("aria-label", t("breadcrumb", "Breadcrumb"));
     clear(breadcrumbs);
@@ -501,6 +519,7 @@
     breadcrumbs.append(element("span", { text: "›" }), element("span", { text: groupLabel(group) }));
 
     const body = $("[data-page-body]");
+    $$(".teaching-figure", body).forEach(figure => figure.stop?.());
     clear(body);
     const usedHeadingIds = new Set();
     for (const block of array(page.blocks).filter(blockIsVisible)) {
@@ -715,6 +734,7 @@
   }
 
   function wireEvents() {
+    $("[data-open-lecture]").addEventListener("click", () => lectureController.open(state.page.id).catch(() => showToast(state.locale === "en" ? "Unable to load the class. Please retry." : "课程加载失败，请重试。")));
     $("[data-open-search]").addEventListener("click", openSearch);
     $("[data-locale-select]").addEventListener("change", (event) => changeLocale(event.target.value));
     $("[data-search-input]").addEventListener("input", (event) => renderSearch(event.target.value));
@@ -727,7 +747,7 @@
     $("[data-pet-input]").addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); $("[data-pet-form]").requestSubmit(); }
     });
-    window.addEventListener("popstate", () => renderPage(requestedPageId()));
+    window.addEventListener("popstate", () => { if (!lectureController.handleLocation()) renderPage(requestedPageId()); });
     window.addEventListener("keydown", (event) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); openSearch(); }
       else if (event.key === "/" && !["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName)) { event.preventDefault(); openSearch(); }
@@ -738,11 +758,20 @@
   async function start() {
     try {
       await loadCoursebook();
+      lectureController = window.LunaLecture.createController({
+        getLocale: () => state.locale,
+        getPage: () => state.page?.id,
+        getIndexGroups: () => state.book.pages.find(page=>page.id==="ai-course-map")?.blocks.find(block=>block.kind==="course-index")?.groups,
+        renderPage: pageId => renderPage(pageId, true),
+        changeLocale: locale => { const href = window.location.href; changeLocale(locale); history.replaceState({}, "", href); },
+      });
       renderChrome();
       wireEvents();
       const pageId = requestedPageId();
-      history.replaceState({ page: pageId }, "", pageHref(pageId, window.location.hash.replace(/^#/, "")));
+      const requested = new URL(window.location.href);
+      if (requested.searchParams.get("view") !== "lecture") history.replaceState({ page: pageId }, "", pageHref(pageId, window.location.hash.replace(/^#/, "")));
       renderPage(pageId);
+      if (requested.searchParams.get("view") === "lecture") await lectureController.open(pageId, requested.searchParams.get("slide"), false);
     } catch (error) {
       $("[data-loading]").hidden = true;
       $("[data-error]").hidden = false;

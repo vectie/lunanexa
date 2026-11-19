@@ -1,0 +1,472 @@
+///|
+import { "moonbitlang/async@0.22.4", "moonbitlang/async@0.22.4/fs", "moonbitlang/core/json" }
+
+///|
+fn l(zh : String, en : String) -> Json { { "zh": zh, "en": en } }
+
+///|
+fn flow(items : Array[(String, String, String, String)], zh : String, en : String) -> Json {
+  { "type": "flow", "items": items.map(i => { "title": l(i.0, i.1), "detail": l(i.2, i.3) }), "steps": items.map(i => l(i.0, i.1)), "caption": l(zh, en) }
+}
+
+///|
+fn compare(cols : Array[(String, String, Array[(String, String)])], zh : String, en : String) -> Json {
+  { "type": "compare", "columns": cols.map(c => { "title": l(c.0, c.1), "lines": Json::array(c.2.map(v => l(v.0, v.1))) }), "steps": cols.map(c => l(c.0, c.1)), "caption": l(zh, en) }
+}
+
+///|
+fn n(id : String, x : Int, y : Int, w : Int, h : Int, zh : String, en : String, dzh : String, den : String, step : Int, tone~ : String = "green") -> Json {
+  { "id": id, "x": x, "y": y, "w": w, "h": h, "title": l(zh, en), "detail": l(dzh, den), "step": step, "tone": tone }
+}
+
+///|
+fn e(a : String, b : String, step : Int) -> Json { { "from": a, "to": b, "step": step } }
+
+///|
+fn graph(nodes : Array[Json], edges : Array[Json], steps : Array[(String, String)], zh : String, en : String) -> Json {
+  { "type": "graph", "nodes": nodes, "edges": edges, "steps": steps.map(v => l(v.0, v.1)), "caption": l(zh, en) }
+}
+
+///|
+fn s(id : String, minutes : Int, zh : String, en : String, leadzh : String, leaden : String, keyzh : String, keyen : String, visual : Json, noteszh : Array[String], notesen : Array[String]) -> Json {
+  if visual is Object(fields) { fields["scene"] = Json::string(id) }
+  { "id": id, "minutes": minutes, "title": l(zh, en), "lead": l(leadzh, leaden), "key": l(keyzh, keyen), "visual": visual, "notes": { "zh": noteszh, "en": notesen } }
+}
+
+///|
+fn lesson(page : String, zh : String, en : String, slides : Array[Json]) -> Json { { "page_id": page, "title": l(zh, en), "slides": slides } }
+
+///|
+async fn main {
+  let lessons : Array[Json] = []
+  lessons.push(lesson("ai-start", "01 模型在做什么", "01 What a model does", [
+    s("text-in-text-out", 2, "输入文字，生成文字", "Text in, text out", "翻译、总结、写代码，都可以写成一个输入与输出。", "Translation, summarization and code generation can all be expressed as an input and an output.", "大语言模型（LLM）：用训练得到的参数，计算接下来生成什么。", "A large language model uses learned parameters to compute what to generate next.", compare([
+      ("翻译", "Translate", [("输入：会议改到周三。", "Input: 会议改到周三。"), ("输出：The meeting", "Output: The meeting"), ("is moved to Wednesday.", "is moved to Wednesday.")]),
+      ("总结", "Summarize", [("输入：一段会议记录", "Input: meeting transcript"), ("输出：决定与待办", "Output: decisions and tasks")]),
+      ("代码", "Code", [("输入：将价格从小到大排", "Input: sort prices ascending"), ("输出：排序程序", "Output: sorting code")]),
+    ], "本课的例子从这些输入与输出展开。", "We will follow concrete inputs and outputs throughout the class."), [
+      "直接从左边读起：输入“会议改到周三”，要求翻译，得到右边的英文。再看总结和代码。任务不同，界面里发生的共同动作都是：把一段内容送入模型，再生成一段新内容。LLM 是 large language model，大语言模型。先把这个名字和动作对应起来。",
+      "今天的顺序就是拆开这件事：文字怎样进入模型，回答怎样一个个片段长出来，训练时发生了什么。然后把工具接进来，看它怎样从一次回答变成连续工作。后半场再打开计算机这一层，看芯片、集群和引擎。"
+    ], ["Read the translation example first, then the summary and code examples. Different tasks share a text-in, text-out interface. LLM means large language model. Associate the name with the operation before introducing more terminology.", "We will unpack text representation, generation and training, then add tools and ongoing work. After the break we will open the computing layer: chips, clusters and engines."]),
+    s("model-application-compute", 3, "一次回答背后的三层", "Three layers behind an answer", "用编程助手为例：界面、模型和运行模型的机器，各做一部分。", "A coding assistant combines an application, a model and the machines running it.", "先分清模型、围绕模型的软件、计算基础设施。", "Separate the model, the software around it and the computing infrastructure.", flow([
+      ("编程应用", "Coding app", "读文件、运行、展示修改", "Files, tools, edits"),
+      ("语言模型", "Language model", "根据上下文生成代码", "Generate from context"),
+      ("计算基础设施", "Infrastructure", "引擎、GPU、内存", "Engine, GPU, memory"),
+    ], "这里画的是组成关系；后面会展开实际的调用往返。", "These are components; later figures show the request and response paths."), [
+      "点出三层。第一层是你看见的编程应用，它知道项目在哪里，也会打开文件和运行程序。第二层是模型，它收到相关内容后生成代码或提出下一步。第三层让模型真正算起来，包括推理引擎和硬件。",
+      "假设你把同一个模型接到另一个应用，工具和使用体验可以不同；把同一个应用接到另一个模型，生成能力也可能改变。这样就能理解，讨论一个 AI 产品时，可以分别讨论模型、应用和基础设施，而不把它们混成一个黑箱。转到下一页：模型接到的文字究竟是什么形式？"
+    ], ["Point to each layer. The coding application reads files and runs programs. The model generates code or a proposed next step from supplied context. Engines and hardware execute the numerical computation.", "The same model can appear in different applications with different tools. The same application can connect to different models. This gives us three useful things to discuss separately. Next: what form does text take inside the model?"]),
+  ]))
+  lessons.push(lesson("ai-tokens", "02 Token", "02 Tokens", [
+    s("token-pieces", 3, "文字先变成 Token，再变成编号", "Text becomes tokens, then IDs", "Token 是模型处理的片段；片段可以小于一个词。", "Tokens are pieces processed by a model; a piece can be smaller than a word.", "Token 的切分由分词器决定。", "The tokenizer determines the pieces.", { "type": "tokens", "sentence": l("raincoat", "raincoat"), "pieces": [l("rain", "rain"), l("coat", "coat")], "ids": ["ID A", "ID B"], "result": l("片段 → 数字编号 → 模型计算", "Pieces → numeric IDs → computation"), "steps": [l("输入一个词", "Input a word"), l("第一个片段", "First piece"), l("第二个片段", "Second piece"), l("编号送入模型", "IDs enter the model")], "caption": l("切分与编号为示意，不是某个分词器的实测输出。", "Illustrative pieces and IDs, not output measured from a specific tokenizer.") }, [
+      "先只显示 raincoat。让观众看到，我们眼里是一个完整单词。推进一次，出现 rain；再推进一次，出现 coat。两个小块下面是各自的编号。模型处理的是这些编号以及从编号得到的数值表示。",
+      "Token 没有固定等于一个词或一个汉字。常见词可能是一个片段，较少见的词可能拆成多个，空格、标点和代码也会被编码。不同模型使用的分词器可能不同，所以相同文字的 Token 数也可能不同。这里用示意切分，是为了先看到单位是什么。"
+    ], ["Show the word first, then reveal each piece and its ID. Explain that the model processes numerical representations derived from these IDs.", "A token has no fixed equivalence to an English word or Chinese character. Punctuation, spaces and code are encoded too. Tokenizers can divide the same text differently; this diagram illustrates the idea rather than a specific measured split."]),
+    s("context-tokens", 2, "一次输入，包含你没在最后一句里重复的内容", "A call contains more than the last message", "问题、前面的对话、文件和工具结果，都会成为模型输入。", "The question, earlier conversation, documents and tool results can all contribute to the input.", "上下文窗口：这次计算可容纳的 Token 范围。", "The context window bounds the tokens available to a call.", compare([
+      ("输入 Token", "Input tokens", [("应用指令", "Instructions"), ("聊天与附带资料", "Conversation and documents"), ("“请总结这篇文章”", "'Summarize this article'")]),
+      ("输出 Token", "Output tokens", [("模型逐步生成", "Generated step by step"), ("摘要、代码、回答", "Summary, code, answer")]),
+    ], "这是内容组成图，方框面积不表示实际 Token 比例。", "Content categories; box area does not represent token proportions."), [
+      "读最后一句“请总结这篇文章”，只有几个字，但前面附带的文章可能很长。输入量主要取决于送进来的全部内容。聊天记录、应用说明和工具返回的资料也可能一起送进来。",
+      "输出是模型继续生成的片段。服务常用 Token 统计用量，模型的上下文长度也常用 Token 表示。先记住输入和输出两边都在使用这个单位。马上看右边这些片段是怎么一步步生成的。"
+    ], ["The request 'summarize this article' is short, but the attached article may dominate the input. Earlier messages, instructions and retrieved results may be included too.", "The model produces output pieces in the same token-based representation. This explains why usage and context lengths are frequently expressed in tokens. Now we can examine how output grows."]),
+  ]))
+  lessons.push(lesson("ai-next-token", "03 下一个 Token", "03 Next-token prediction", [
+    s("next-token-probabilities", 3, "每一步，先算候选的概率", "At each step, score possible continuations", "看到“The sky is”，下一步可能接什么？", "Given 'The sky is', what could come next?", "生成时，从下一 Token 的分布中选出一个，再继续。", "Select a next token from the distribution, append it, and continue.", { "type": "prediction", "context": l("The sky is", "The sky is"), "contextDetail": l("当前前文", "Current prefix"), "candidates": [{ "label": "blue", "value": 0.6 }, { "label": "gray", "value": 0.3 }, { "label": "dark", "value": 0.1 }], "result": l("这一步选中：blue", "Selected this step: blue"), "steps": [l("读取前文", "Read the prefix"), l("计算候选分布", "Compute the distribution"), l("选择并追加", "Select and append")], "caption": l("候选与概率为教学示意。", "Candidates and probabilities are illustrative.") }, [
+      "先停在 The sky is。问一句“你会怎么接”，给几秒就够。播放柱图，说明模型会对词表里的候选计算分数，再形成下一 Token 的概率分布。图里只画三个候选，用的是示意数字。",
+      "推进到选中 blue。生成并不总是固定挑最高项，选择策略和采样设置也会影响措辞。这里最重要的是一次只往后加一步。词只是便于读懂的例子，模型实际选择的是 Token。"
+    ], ["Pause on the prefix and allow a few seconds for a continuation. Reveal the bars: the model computes scores over its vocabulary and a probability distribution for the next token. Three candidates and invented numbers make that visible.", "Select blue. Decoding and sampling influence which token is chosen, so repeated requests can have different wording. The important operation is one appended token; readable words are used here to explain it."]),
+    s("autoregressive-feedback", 3, "新生成的内容，也成为下一步的输入", "New output becomes context for the next step", "不是一次写完一篇文章，而是把刚生成的内容接回去。", "A response grows by feeding the generated prefix into the next prediction step.", "读前文 → 预测 → 追加 → 再预测。", "Read → predict → append → predict again.", graph([
+      n("prefix", 30, 50, 320, 130, "The sky is", "The sky is", "已有前文", "Existing prefix", 1),
+      n("model", 435, 50, 250, 130, "模型", "Model", "计算下一 Token", "Next-token scores", 2),
+      n("token", 785, 50, 270, 130, "blue", "blue", "本次输出", "New output", 3, tone="gold"),
+      n("new-prefix", 320, 280, 480, 110, "The sky is blue", "The sky is blue", "下一轮使用更长的前文", "A longer prefix next time", 4),
+    ], [e("prefix", "model", 2), e("model", "token", 3), e("token", "new-prefix", 4), e("new-prefix", "prefix", 4)], [("前文", "Prefix"), ("计算", "Compute"), ("输出", "Output"), ("回到下一轮", "Feed the next round")], "箭头表示数据如何进入下一轮。", "Arrows show information feeding the next round."), [
+      "沿箭头讲完整一轮。前文进入模型，模型产生 blue，然后前文变成 The sky is blue。下一轮接着这个更长的序列计算，继续到句号或其他结束条件。动画里的反馈箭头就是 autoregressive，也就是自回归的关键。",
+      "同样的循环可以生成一行代码、解释步骤或长文章。界面按段流式显示，底层仍可按 Token 生成。一次输出的基本动作很简单，但模型内部利用大量参数进行的计算并不简单。"
+    ], ["Walk one complete circuit: prefix, model, new token, longer prefix. The feedback arrow is the central idea of autoregressive generation. The loop continues until a stop condition.", "The same mechanism can produce code, explanations or long articles. A UI can display chunks even while the underlying generation advances by tokens. A small repeated output operation can rest on substantial internal computation."]),
+    s("attention-context", 2, "注意力：按权重组合信息", "Attention: combine information using weights", "不同位置提供不同信息，当前计算按权重把它们组合起来。", "Different positions supply information that is combined using weights.", "注意力机制：在计算时组合上下文中不同位置的信息。", "Attention combines information from different context positions.", graph([
+      n("bike", 30, 60, 320, 110, "我买了一辆自行车", "I bought a bicycle", "前文的信息", "Earlier information", 1),
+      n("rain", 30, 250, 320, 110, "周末可能下雨", "It may rain", "另一条前文", "Another fact", 1),
+      n("attention", 460, 145, 250, 130, "注意力", "Attention", "建立关联", "Combine information", 2),
+      n("answer", 810, 145, 260, 130, "想骑它出门", "I want to ride it", "结合上下文继续", "Continue in context", 3),
+    ], [e("bike", "attention", 2), e("rain", "attention", 2), e("attention", "answer", 3)], [("示意数值", "Toy values"), ("分配权重", "Assign weights"), ("加权相加", "Weighted sum")], "两维数值与权重均为算例；真实注意力有更多维度、层和头。", "Toy two-dimensional values and weights; real attention has more dimensions, layers and heads."), [
+      "两组数值是[1,0]和[0,1]。本次权重0.8和0.2表示组合比例，得到[0.8,0.2]。交换权重后，数值组合也交换。真实模型中的数值由学习得到，这里把维度缩到二，是为了看见乘法与相加。",
+      "真实注意力还要根据当前查询与各位置的表示计算分数，再归一化成权重。这些组合在多层、多头中反复发生，参与形成下一步生成的表示。它不是只画一条从“它”指向自行车的线。"
+    ], ["The toy values are [1,0] and [0,1]. Weights 0.8 and 0.2 combine them into [0.8,0.2]. Swapping weights changes the combination. Two dimensions make multiplication and addition visible.", "Real attention computes scores from a query and position representations, then normalizes them into weights. Many layers and heads repeat such combinations to form representations used for generation."]),
+  ]))
+  lessons.push(lesson("ai-training-inference", "04 训练与推理", "04 Training and inference", [
+    s("training-update", 3, "训练：让参数朝更好的方向变化", "Training: move parameters toward a better fit", "用一条线说明：模型预测与例子之间的差距，怎样影响参数。", "Use a line to see how differences between predictions and examples change a parameter.", "训练算法根据预测差距，调整参数。", "Training uses prediction differences to adjust parameters.", { "type": "weights", "before": l("更新前的参数", "Parameters before"), "after": l("更新后的参数", "Parameters after"), "feedback": l("预测 → 比较 → 更新", "Predict → compare → update"), "result": l("下一批数据，继续调整", "Continue with the next batch"), "steps": [l("当前参数参与预测", "Use current parameters"), l("计算与目标的差距", "Compare with the target"), l("参数发生更新", "Update the parameter")], "caption": l("单参数教学例：y = w × x，训练例为 (1,2)、(2,4)、(3,6)。", "Single-parameter example: y = w × x; data (1,2), (2,4), (3,6).") }, [
+      "先看三个数据点。它们给出输入与希望得到的输出。用最简单的模型 y=w×x，参数 w 决定线的斜率。初值 w=0.5，三个预测是0.5、1、1.5，与目标2、4、6之间出现明显差距。红色虚线把差距画出来。",
+      "推进到更新，w 变为1.2，平均平方误差 MSE 从10.50降到约2.99。MSE可以先理解为把每个误差平方后取平均。点击“再训练一步”，会按同一梯度更新继续计算，线逐渐靠近数据点。语言模型有更多参数和不同任务，但训练中“预测、比较、更新”的联系就在这里。"
+    ], ["The three points provide inputs and desired outputs. In y=w×x, the parameter w controls the slope. Starting at 0.5 gives predictions 0.5, 1 and 1.5 instead of 2, 4 and 6; red residuals show the differences.", "One update changes w to 1.2 and mean squared error from 10.50 to about 2.99. MSE averages squared errors. 'Train one more step' repeats the same gradient update, bringing the line toward the data. Language models have many more parameters, but prediction, comparison and updating remain connected."]),
+    s("training-vs-inference", 2, "训练改本领，推理用本领", "Training develops the model; inference uses it", "同一个模型，桌上资料换了，回答就能围绕新资料展开。", "A trained model can answer about newly supplied material by using it as context.", "参数与当前上下文，是两种不同的东西。", "Learned parameters and current context are different things.", compare([
+      ("训练", "Training", [("许多学习例子", "Many examples"), ("参数持续更新", "Parameters updated"), ("产出一个模型版本", "A model version")]),
+      ("推理", "Inference", [("这次问题与资料", "Current input"), ("使用已有参数", "Use learned parameters"), ("产出一次结果", "A response")]),
+    ], "微调属于继续训练；贴入文件属于本次上下文。", "Fine-tuning continues training; supplied documents enter context."), [
+      "左边是训练，像学习阶段；右边是推理，像用已经学到的能力处理新问题。把一份新文件贴进去，模型本次能讨论它，是因为文件在当前输入里。",
+      "微调是基于已有模型继续训练，调整参数或适配器。应用记忆通常是把偏好存下来，以后检索回上下文。长对话、检索结果、缓存，以及多想一会儿，都可以发生在使用模型的过程中。"
+    ], ["Contrast the learning stage with using learned abilities. A new document is usable because it is supplied in the current input.", "Fine-tuning continues training, adjusting parameters or adapters. Application memory usually stores information and retrieves it into later context. Conversation, retrieval, caches and longer reasoning can all occur while using a trained model."]),
+    s("pre-post-test-time", 2, "预训练、后训练、推理时计算", "Pretraining, post-training and inference compute", "把训练阶段和使用阶段连起来，就能放下这几个常见词。", "Place these terms along the path from learning a model to using it.", "模型能力的形成，与一次任务花多少计算，发生在不同阶段。", "Learning model capabilities and spending compute on one task happen at different stages.", flow([
+      ("预训练", "Pretraining", "学习广泛数据中的模式", "Broad data patterns"),
+      ("后训练", "Post-training", "示范、偏好、奖励", "Examples and rewards"),
+      ("推理", "Inference", "回答、推理步骤、尝试", "Respond and reason"),
+    ], "概念分组；具体模型会采用不同训练配方。", "Conceptual stages; recipes differ between models."), [
+      "预训练通常提供广泛的语言和代码等模式。后训练可以用示范、偏好或奖励进一步塑造回答和解题方式。把训练好的模型放进服务后，用户调用就进入推理阶段。",
+      "推理时也可以多用计算：生成更多中间推理、比较几个候选、运行工具后再继续。这解释了为什么同一个模型在不同应用里，或者使用不同推理设置时，表现会有差别。到这里，我们把模型本身讲完，下面进入围绕模型的软件。"
+    ], ["Pretraining develops broad patterns. Post-training can shape responses and problem solving through examples, preferences or rewards. Serving the resulting model makes it available for inference.", "Inference can spend more compute on reasoning, alternatives or tool-assisted continuation. This helps explain different behavior from the same model under different applications or settings. We now move to the surrounding software."]),
+  ]))
+  lessons.push(lesson("ai-prompts", "05 提示词", "05 Prompts", [
+    s("prompt-before-after", 2, "同一个任务，把要求补具体", "Make the same request more specific", "以整理会议记录为例，指定要提取什么，以及输出长什么样。", "For meeting notes, specify what to extract and how to organize it.", "Prompt：给模型的任务说明。", "A prompt describes the task for the model.", compare([
+      ("笼统", "Vague", [("整理一下这段记录。", "Organize these notes.")]),
+      ("具体", "Specific", [("提取决定和待办", "Extract decisions and tasks"), ("每项写负责人和日期", "Include owner and date"), ("输出三列表格", "Return a three-column table")]),
+    ], "同一份输入材料，改变的是任务说明。", "The source material stays the same; the instructions change."), [
+      "先看左侧。整理可以指缩写、改写、分类，模型需要自己补很多意思。右侧直接说明要提取决定和待办，并指定字段和表格形式。改变问法，就是在改变模型接下来要完成的任务。",
+      "提示词工程可以从这几个朴素问题开始：要做什么，用什么材料，按什么形式输出。复杂任务还可以先列方向、再选一个展开。这里不需要背万能句式，而是看具体任务缺了什么信息。"
+    ], ["On the left, 'organize' could mean shorten, rewrite or classify. The right specifies extraction targets and fields. Changing the wording changes the task.", "Prompt engineering starts with the goal, material and output form. Larger tasks can be divided into choosing a direction and developing it. The useful question is what information this task needs."]),
+    s("prompt-worked-output", 2, "从原文，提取成一个结果", "From source text to a structured result", "原文：小李周四交初稿；小王周五补图；下周一评审。", "Source: Li submits a draft Thursday; Wang adds figures Friday; review Monday.", "说清输出结构，模型就有了更具体的生成目标。", "A clear output structure gives generation a concrete target.", compare([
+      ("输入", "Input", [("小李：周四交初稿", "Li: draft Thursday"), ("小王：周五补图", "Wang: figures Friday"), ("下周一：评审", "Monday: review")]),
+      ("输出", "Output", [("初稿｜小李｜周四", "Draft | Li | Thu"), ("补图｜小王｜周五", "Figures | Wang | Fri"), ("评审｜未提及｜下周一", "Review | unspecified | Mon")]),
+    ], "原创会议记录示例。", "An original teaching example."), [
+      "把刚才的要求落到具体材料上。模型把三条信息对应到事项、负责人、日期。原文没有写评审负责人，所以这一格就可以写未提及。用一个短输出示例，也能让模型更直接地看到你想要的形式。",
+      "现在任务说清楚了，下一步是材料本身：会议记录从哪里来，之前的对话要不要带上，公司术语放在哪里。这就是上下文工程要处理的部分。"
+    ], ["Map each source statement into task, owner and date. The review has no named owner, so the corresponding field says unspecified. A small example output can make the desired form explicit.", "Once the task is clear, we must assemble the material: transcript, prior conversation and company terminology. That leads into context engineering."]),
+  ]))
+  lessons.push(lesson("ai-context", "06 上下文", "06 Context", [
+    s("context-packet", 3, "模型这一次能看到什么？", "What can the model see in this call?", "上下文工程：为一次调用选择并组织信息。", "Context engineering selects and organizes information for a call.", "上下文是本次输入里的信息集合。", "Context is the information available in this call.", graph([
+      n("instruction", 20, 20, 300, 100, "任务说明", "Instructions", "提取决定和待办", "Extract decisions and tasks", 1),
+      n("history", 20, 150, 300, 100, "相关对话", "Conversation", "前面补充的条件", "Earlier conditions", 2),
+      n("docs", 20, 280, 300, 100, "文件与工具结果", "Files and tool results", "会议记录、术语表", "Transcript and glossary", 3),
+      n("context", 440, 130, 270, 150, "本次上下文", "Current context", "组织成模型输入", "Assemble the input", 4),
+      n("model", 825, 130, 250, 150, "模型", "Model", "生成结果", "Generate a response", 4),
+    ], [e("instruction", "context", 4), e("history", "context", 4), e("docs", "context", 4), e("context", "model", 4)], [("任务", "Task"), ("对话", "Conversation"), ("资料", "Material"), ("组装调用", "Assemble the call")], "只画本次调用的信息组成。", "The information assembled for one call."), [
+      "依次把三类信息摆出来。模型通常还会看到应用给的说明、相关聊天，以及本次需要的文件或工具返回值。应用负责把它们组装成一次输入。",
+      "上下文工程比写一句提示词多了一层：什么信息值得带进来，按什么顺序，哪些历史已经可以总结，工具查到的长资料要保留哪些部分。它很像为一个具体问题准备资料包，内容跟着任务变化。应用记忆也常在这里出现：先保存偏好，之后需要时再取出来。"
+    ], ["Reveal instructions, conversation and source material, then assemble them. The application combines these into one model input.", "Context engineering includes selection, ordering, summarizing older material and choosing useful tool results. The packet changes with the task. Application memory can store a preference and retrieve it into a later packet."]),
+    s("rag-retrieval", 3, "RAG：先检索，再放进上下文", "RAG: retrieve, then supply context", "例子：在公司文档中查找报销期限，再生成回答。", "Example: retrieve an expense deadline from company documents, then answer.", "检索把外部资料接到一次生成过程里。", "Retrieval connects external information to generation.", flow([
+      ("提问", "Question", "报销最晚什么时候交？", "When is the deadline?"),
+      ("检索", "Retrieve", "找到相关制度段落", "Find relevant passages"),
+      ("上下文", "Context", "问题 + 找到的段落", "Question + passages"),
+      ("回答", "Answer", "根据段落生成说明", "Respond using passages"),
+    ], "示例公司的资料问答流程。RAG = retrieval-augmented generation。", "A fictional company example. RAG means retrieval-augmented generation."), [
+      "让四个方框按顺序出现。检索可以用关键词，也可以用语义相似度等方法，先从文档里找出相关片段。应用把片段和问题放在一起，模型再生成回答。RAG 的全称就是 retrieval-augmented generation，检索增强生成。",
+      "这与训练的差别在位置上很直观：这里变的是放进上下文的内容。文档更新后，下次检索就可以拿到新材料。模型、文档库和应用是三个可分别变化的部分。下面把检索当作一种工具，继续看更一般的工具调用。"
+    ], ["Reveal question, retrieval, context and answer. Retrieval can use keywords or semantic similarity to locate passages; the application places them beside the question.", "The changing material enters context. Updating documents can change the passages retrieved next time. Model, document collection and application are separately changeable components. Retrieval is one kind of tool; now we will look at the general tool-call pattern."]),
+  ]))
+  lessons.push(lesson("ai-harness", "07 工具与 Agent", "07 Tools and agents", [
+    s("tool-roundtrip", 2, "模型提出调用，程序执行工具", "The model requests a tool; software runs it", "例子：查杭州周六天气。箭头走完一次，再继续回答。", "Example: look up Saturday's weather in Hangzhou, then continue the answer.", "工具调用是一次“提出请求—执行—返回”的往返。", "A tool call is a request-execution-result round trip.", graph([
+      n("model", 20, 145, 250, 130, "模型", "Model", "需要天气信息", "Needs weather data", 1),
+      n("call", 370, 35, 340, 130, "工具请求", "Tool request", "weather(city, date)", "weather(city, date)", 2),
+      n("tool", 825, 145, 250, 130, "天气工具", "Weather tool", "程序实际查询", "Runs the lookup", 3),
+      n("result", 370, 270, 340, 110, "查询结果", "Tool result", "降雨信息进入上下文", "Weather enters context", 4),
+    ], [e("model", "call", 2), e("call", "tool", 3), e("tool", "result", 4), e("result", "model", 4)], [("产生需求", "Need information"), ("生成调用参数", "Generate arguments"), ("程序调用", "Execute the tool"), ("带回结果", "Return the result")], "天气是流程示例，不显示实时预报。", "Weather illustrates the flow; no live forecast is shown."), [
+      "先看模型，再推进到工具请求。这个请求通常是结构化数据，里面有工具名和参数。程序据此调用天气服务，然后把返回内容放回模型上下文。模型才能结合天气调整计划。",
+      "模型不只可以请求天气。搜索、读文件、运行代码、查询业务系统，都可以用类似接口连接。把输入准备、工具执行和任务记录连在一起的外围软件，常叫 harness。这个词指的是一套程序组织方式。"
+    ], ["Follow the model to a structured tool request with a name and arguments. Software calls the weather service, then returns the result into context so the model can continue.", "Search, file reading, code execution and business queries can use the same pattern. The surrounding software that prepares calls, runs tools and carries task state is often called the harness."]),
+    s("agent-loop", 2, "Agent：根据当前结果决定下一步", "An agent chooses a next step from current results", "读到什么、还缺什么，会影响接下来调用哪个工具。", "What is known and what is missing influence the next tool or response.", "模型参与选择下一步，外围程序把这些步骤接起来。", "The model helps choose actions; surrounding software connects them.", graph([
+      n("observe", 40, 35, 280, 115, "读任务与结果", "Read task and results", "当前信息", "Current information", 1),
+      n("choose", 440, 35, 280, 115, "选择下一步", "Choose next step", "问、查、算或回答", "Ask, search, compute", 2),
+      n("act", 790, 245, 280, 115, "运行工具", "Run a tool", "取得新结果", "Obtain a result", 3),
+      n("continue", 350, 245, 300, 115, "更新任务状态", "Update task state", "继续或结束", "Continue or finish", 4),
+    ], [e("observe", "choose", 2), e("choose", "act", 3), e("act", "continue", 4), e("continue", "observe", 4)], [("观察", "Observe"), ("决定", "Choose"), ("行动", "Act"), ("接入下一轮", "Continue the loop")], "天气与工具返回均为示例；切换天气结果可查看另一条路径。", "Illustrative weather and tool results; switch the weather to see another path."), [
+      "任务是安排杭州周六的半天活动。天气工具先返回下雨，于是下一步是查询博物馆开放时间。把“天气结果”改成晴天，再看下一步变成公园路线。这里用两条准备好的示例路径，说明观察结果怎样影响后续动作，不连接真实模型或天气服务。",
+      "紫色外框是 harness：它准备本次上下文、执行工具，并保留结果。模型在框内参与选择下一步；工具返回后又进入上下文。Agent engineering 把这些部分接成一个持续工作的程序。"
+    ], ["Plan a half-day in Hangzhou. A rain result leads to a museum-hours lookup; changing it to clear leads to a park-route lookup. These two prepared paths illustrate result-dependent actions, without a live model or weather service.", "The surrounding harness prepares context, executes tools and retains results. The model proposes a next action; tool results return into context. Agent engineering connects these parts into continuing work."]),
+    s("workflow-vs-agent", 2, "固定流程，与动态选择", "Fixed workflow and dynamic choice", "两种方式都能组织工作，区别在于下一步由谁安排。", "Both organize work; they differ in how the next step is determined.", "工作流预先安排路径；Agent 根据当前结果选择后续动作。", "A workflow sets paths in advance; an agent chooses actions from current results.", compare([
+      ("固定工作流", "Fixed workflow", [("转录 → 总结 → 表格", "Transcribe → summarize"), ("程序预先排好顺序", "Order set in software"), ("重复处理相似任务", "Repeat similar tasks")]),
+      ("Agent", "Agent", [("先看现在缺什么", "Inspect what is missing"), ("模型选择下一步", "Model chooses a step"), ("工具结果影响后续", "Results guide continuation")]),
+    ], "固定与动态选择也可以组合在一个应用里。", "Fixed steps and dynamic choices can be combined."), [
+      "用会议处理说明左边：总是先转录，再总结，再生成表格。右边用研究助手说明：读完第一份资料后，可以决定接着搜索哪个问题。实际应用可以把固定步骤和动态选择混合起来。",
+      "把三个工程名字再对回具体动作：prompt 写任务说明；context 准备这次可见的资料；harness 把调用、工具和状态连接起来。接下来继续研究这条循环：有了反馈后，究竟什么东西在被改进？"
+    ], ["Meeting processing illustrates the left: transcribe, summarize, produce a table. Research can be dynamic: reading one source changes what to search next. Applications can combine both.", "Prompt engineering writes the task, context engineering assembles material, and harness engineering connects calls, tools and state. Next we examine what changes when feedback drives improvement."]),
+  ]))
+  lessons.push(lesson("ai-loops-rsi", "08 循环与 RSI", "08 Loops and RSI", [
+    s("task-revision-loop", 2, "任务循环：运行结果进入下一轮", "Task loop: use execution feedback", "排序例子：默认排序给了一个意外结果。", "A sorting example: default sorting produces a surprising order.", "一次调用生成候选，多次调用结合反馈完成任务。", "Calls generate candidates; feedback connects them into a task.", { "type": "code", "panels": [{ "title": l("第一版", "First version"), "lines": ["[20, 100, 3].sort()", "", "→ [100, 20, 3]"] }, { "title": l("读结果后修改", "After reading the result"), "lines": [".sort((a, b) => a - b)", "", "→ [3, 20, 100]"] }], "steps": [l("运行第一版", "Run the first version"), l("修改并再次运行", "Revise and run again")], "caption": l("JavaScript 数组排序：数字数组的默认排序按字符串顺序比较。", "JavaScript default array sorting compares string representations.") }, [
+      "第一版代码很短，却把 100 放在了 20 前面。JavaScript 默认排序按字符串比较，因此会出现这个结果。把运行输出交回模型，它可以加入数值比较函数，得到右边的升序结果。",
+      "这是一条具体的任务循环：生成代码、运行、读结果、修改。每次调用的上下文中多了新的观察。模型参数可以保持不变，改的是眼前的代码候选。后面讲 AI 编程时，还会把这个例子接回开发流程。"
+    ], ["Default JavaScript sorting compares string representations, putting 100 before 20 here. Feeding the result back allows the next attempt to use a numeric comparator.", "The loop generates code, runs it, reads the output and revises it. The current candidate changes while the model parameters can stay the same. We will reuse this example in the coding section."]),
+    s("three-improvement-loops", 2, "三个循环，改的对象不同", "Three loops change different objects", "改一次回答、改助手程序、训练模型，是不同层面的变化。", "Revising an answer, changing an assistant and training a model operate at different levels.", "讲“自我改进”时，先说清楚哪个东西发生了变化。", "When discussing improvement, identify the object that changes.", compare([
+      ("任务", "Task", [("修改一段代码", "Revise a code candidate"), ("结果再送回模型", "Feed results back")]),
+      ("助手", "Assistant", [("改提示词与工具", "Change prompts and tools"), ("改变后续工作方式", "Change future workflows")]),
+      ("模型", "Model", [("调整数据与训练", "Change data and training"), ("更新参数或适配器", "Update weights/adapters")]),
+    ], "三类循环可以相互配合。", "These kinds of improvement can work together."), [
+      "让三列逐一出现，避免把所有反馈都叫训练。修排序代码属于任务层；改进助手如何读取错误、如何选取文件，属于外围程序；调整模型参数则进入训练层。",
+      "循环工程关心把反馈接回哪里、下一轮保留什么，以及怎样组织多轮工作。它不是一个统一规定的行业层级名。这里借它把实际的软件循环讲清楚，再往下一步看 RSI 中“递归”指什么。"
+    ], ["Reveal the columns separately. Fixing sorting code changes a candidate. Changing error reading or file selection changes the assistant. Updating model weights is training.", "Loop engineering concerns where feedback returns and how work is carried forward. These terms describe overlapping engineering activities. The next slide focuses on the recursive part of RSI."]),
+    s("rsi-feedback", 2, "RSI：改进产生改进的能力", "RSI: improve the ability to improve", "递归自我改进讨论的是：能力提升后，进一步帮助下一轮能力改进。", "Recursive self-improvement concerns improved capabilities helping produce further capability improvements.", "递归的关键，是反馈回到产生改进的机制。", "The recursive link feeds back into the improvement mechanism.", graph([
+      n("system", 30, 45, 290, 130, "当前系统", "Current system", "生成改进方案", "Proposes improvements", 1),
+      n("change", 410, 45, 290, 130, "改进工具或方法", "Improve tools/methods", "影响改进能力", "Changes improvement ability", 2),
+      n("better", 785, 45, 290, 130, "改进后的系统", "Improved system", "用于下一轮改进", "Used in the next round", 3),
+      n("next", 360, 285, 380, 100, "下一轮改进", "Next improvement round", "能力成为新的输入", "Capability feeds back", 4, tone="gold"),
+    ], [e("system", "change", 2), e("change", "better", 3), e("better", "next", 4), e("next", "system", 4)], [("当前能力", "Current capability"), ("改进机制", "Improve a mechanism"), ("能力变化", "Capability changes"), ("递归反馈", "Recursive feedback")], "假设性的 RSI 概念例子，不是递归能力增长的实测记录。", "A hypothetical RSI example, not measured recursive capability growth."), [
+      "顺着三个版本看。假设一个研究助手要改进自己的研究方法，先给工具增加批量查询；改过的工具又帮助它为下一轮方法改进收集资料。反馈不只改眼前的一篇报告，还回到产生下一轮改进的方法。图中版本链是假设性的。",
+      "这说明 RSI 中递归指向哪里，并不意味着工具增加一个功能，就已经证明递归能力会持续增长。AlphaEvolve 展示了程序生成、运行评分、再搜索的具体研究循环；这种循环和持续的递归能力增长也需要分清。接下来把一个循环展开成多个工作者。"
+    ], ["Follow the hypothetical versions. A research assistant adds batch search to improve its research method; its improved tools help gather material for the next method change. The feedback changes how further improvements are produced, rather than only changing one report.", "Adding a tool does not demonstrate sustained recursive capability growth. AlphaEvolve is a concrete program-generation, scoring and search loop; that and continued recursive growth are distinct claims. Next we move from one loop to multiple workers."]),
+  ]))
+  lessons.push(lesson("ai-multi-agent", "09 多智能体", "09 Multiple agents", [
+    s("multi-agent-handoffs", 2, "多个上下文，分工后汇总", "Separate contexts, divided work, one synthesis", "调研三个产品：每个工作者研究一个，协调者做对比。", "Research three products separately, then combine the findings.", "多智能体把任务分配、信息交换和整合显式组织起来。", "Multi-agent systems organize task assignment, handoffs and synthesis.", graph([
+      n("coordinator", 20, 145, 250, 130, "协调者", "Coordinator", "拆分问题", "Divide the question", 1),
+      n("a", 410, 5, 290, 110, "工作者 A", "Worker A", "产品 A 的资料", "Product A context", 2),
+      n("b", 410, 155, 290, 110, "工作者 B", "Worker B", "产品 B 的资料", "Product B context", 2),
+      n("c", 410, 305, 290, 110, "工作者 C", "Worker C", "产品 C 的资料", "Product C context", 2),
+      n("merge", 825, 145, 250, 130, "汇总", "Synthesis", "做成一份对比", "One comparison", 3),
+    ], [e("coordinator", "a", 2), e("coordinator", "b", 2), e("coordinator", "c", 2), e("a", "merge", 3), e("b", "merge", 3), e("c", "merge", 3)], [("拆分", "Assign"), ("并行展开", "Explore in parallel"), ("交换与整合", "Integrate")], "产品及数值为虚构例子；工作者可使用同一个模型。", "Fictional products and values; workers can use the same model."), [
+      "先显示协调者。它把调研分成三个子任务，每个工作者有自己的上下文，避免每个人都带着全部材料。结果按约定的内容交回来，最后汇总成一份比较。",
+      "Agent swarm 是这类协作组织里常见的说法。这里最值得看的是分工和信息流，而不是模型名字。相似结构也可以用于几组文档、多个代码模块或独立研究方向。"
+    ], ["Start with the coordinator, then separate contexts and assignments. Workers return findings for a combined comparison.", "Agent swarm is another term used around collaborating agents. Focus on the division and information flow. Similar structures can cover document collections, code modules or research branches."]),
+    s("parallel-time", 1, "并行节省等待，整合仍需要时间", "Parallel work saves waiting; integration takes time", "三个各 4 分钟的子任务，加上 2 分钟汇总。", "Three four-minute subtasks followed by two minutes of synthesis.", "端到端耗时，要把汇总也算进来。", "Include synthesis in the end-to-end time.", { "type": "lanes", "max": 14, "unit": "min", "rows": [{ "label": l("串行", "Serial"), "value": 14, "parts": [{ "value": 4, "label": "A · 4" }, { "value": 4, "label": "B · 4" }, { "value": 4, "label": "C · 4" }, { "value": 2, "label": "2" }] }, { "label": l("并行 + 汇总", "Parallel + merge"), "value": 6, "parts": [{ "value": 4, "label": "A / B / C · 4" }, { "value": 2, "label": "2" }] }], "steps": [l("串行需 14 分钟", "Serial: 14 minutes"), l("并行后共 6 分钟", "Parallel: 6 minutes")], "caption": l("时间为教学示例。横向长度采用同一时间比例。", "Illustrative timings; both rows share the same scale.") }, [
+      "先读串行条：三项依次做十二分钟，汇总两分钟，总共十四。第二条把三项同时展开，等待四分钟后再汇总，总共六分钟。节省的是等待的日历时间。",
+      "总工作量仍包含多个工作者与整合。这里用一分钟收住多智能体，然后休息十分钟。回来从运行这些模型的硬件开始。"
+    ], ["Read the serial row: twelve minutes of tasks plus two for synthesis. Parallel tasks finish in four, followed by two minutes of synthesis: six overall.", "Elapsed time and total work are different. Close this section, then take the ten-minute break before moving to hardware."]),
+  ]))
+  lessons.push(lesson("ai-chips", "10 芯片与内存", "10 Chips and memory", [
+    s("gpu-compute-data", 3, "GPU：让大量相似计算一起进行", "GPU: many similar calculations in parallel", "模型大量使用矩阵运算。硬件需要计算、存储与数据搬运配合。", "Models use many matrix operations. Compute, storage and data movement work together.", "CPU、GPU、TPU 是不同硬件设计；GPU 广泛用于模型计算。", "CPUs, GPUs and TPUs are different hardware designs; GPUs are widely used for model computation.", graph([
+      n("memory", 35, 125, 300, 155, "设备内存 / 显存", "Device memory", "模型权重与工作数据", "Weights and working data", 1),
+      n("bandwidth", 430, 125, 260, 155, "内存带宽", "Memory bandwidth", "每秒能搬多少数据", "Data moved per second", 2),
+      n("compute", 790, 125, 280, 155, "计算单元", "Compute units", "大量运算并行执行", "Parallel arithmetic", 3),
+    ], [e("memory", "bandwidth", 2), e("bandwidth", "compute", 3)], [("先存数据", "Store the data"), ("搬运数据", "Move the data"), ("并行计算", "Compute in parallel")], "三个概念分别对应容量、带宽、计算能力。", "Capacity, bandwidth and compute describe different aspects."), [
+      "从存放数据讲起。模型参数要在内存里，运行时还会产生其他数据。计算单元每次要取到数据，才能进行矩阵等运算。GPU 提供了大量并行运算能力，CPU 则通常还承担程序逻辑、调度和准备工作。TPU 是另一类面向机器学习的加速器。",
+      "三个词分别有不同单位：容量常用 GB，带宽常用 GB/s，算术能力可用每秒运算量。可以短暂借厨房解释：台面大小、食材搬运速度、厨师的处理能力。但立刻回到图里的实际部件，后续讨论性能才有明确对象。"
+    ], ["Start with stored parameters and working data, then data movement, then matrix computations. GPUs offer extensive parallel arithmetic; CPUs also handle control and preparation. TPUs are another machine-learning accelerator design.", "Capacity, bandwidth and arithmetic have different units: GB, GB/s and operations per second. A kitchen analogy can help briefly, but return to these physical components before discussing performance."]),
+    s("weight-memory-arithmetic", 3, "80 亿参数，大约占多少空间？", "How much space for eight billion parameters?", "先算原始权重数值：参数个数 × 每个数占用的比特数。", "Start with raw parameter values: parameter count times bits per value.", "精度改变数据体积；运行内存还包括 KV 缓存等数据。", "Precision changes data size; runtime memory also includes data such as the KV cache.", compare([
+      ("FP16", "FP16", [("80 亿 × 16 bit ÷ 8", "8 billion × 16 bits ÷ 8"), ("约 16 GB", "About 16 GB"), ("原始权重数值", "Raw parameter values")]),
+      ("4 bit", "4 bit", [("80 亿 × 4 bit ÷ 8", "8 billion × 4 bits ÷ 8"), ("约 4 GB", "About 4 GB"), ("更紧凑的数值表示", "More compact values")]),
+      ("运行时还会用", "Also used at runtime", [("KV 缓存", "KV cache"), ("临时计算数据", "Temporary data"), ("运行时工作区", "Runtime workspace")]),
+    ], "十进制 GB；左两列计算原始数值体积。", "Decimal GB; the first two columns count raw values."), [
+      "带大家做一次简单算术：一个字节八比特，80 亿乘16再除8，得到160亿字节，即十进制16GB。改成四比特，同样算法得到4GB。这解释了量化为什么常和内存放在一起讨论。",
+      "量化用更紧凑的表示存储部分数值，会影响运行方式与模型输出。右列把运行时的其他内存项目画出来。尤其是 KV 缓存，和输入长度、活跃请求数有关。接下来，当一个设备不够或者用户更多时，就会把多块 GPU 组织起来。"
+    ], ["Work through the arithmetic: eight bits per byte. Eight billion times sixteen divided by eight yields sixteen decimal GB. At four bits the raw values occupy four GB. This makes the storage effect of quantization concrete.", "Quantization changes representation, execution and model output. The third column shows other runtime memory: KV caches, intermediate data and workspace. Context lengths and active requests affect cache use. Next, combine devices and machines."]),
+  ]))
+  lessons.push(lesson("ai-clusters-engines", "11 集群与推理引擎", "11 Clusters and engines", [
+    s("cluster-engine-path", 4, "Kubernetes 放置服务，引擎运行模型", "Kubernetes places services; engines execute models", "请求到达一个运行中的模型实例，再进入 GPU 计算。", "A request reaches a running model instance, then becomes GPU computation.", "集群是机器的组织；引擎是执行模型的程序。", "A cluster organizes machines; an engine executes a model.", graph([
+      n("k8s", 360, 5, 380, 95, "Kubernetes", "Kubernetes", "安排实例在哪台节点运行", "Place service instances", 1),
+      n("request", 20, 160, 250, 135, "应用请求", "App request", "输入与模型名", "Input and model name", 2),
+      n("engine", 410, 160, 290, 135, "推理引擎", "Inference engine", "加载模型、组织计算", "Load and execute", 3),
+      n("gpu", 825, 160, 250, 135, "GPU", "GPU", "计算与内存", "Compute and memory", 4),
+      n("node", 410, 325, 290, 75, "一个集群节点", "A cluster node", "", "", 1, tone="gray"),
+    ], [e("k8s", "engine", 1), e("request", "engine", 3), e("engine", "gpu", 4)], [("放置服务", "Place services"), ("收到请求", "Receive a request"), ("引擎组织计算", "Engine execution"), ("硬件执行", "Hardware computation")], "vLLM、SGLang 是推理引擎的具体例子。", "vLLM and SGLang are examples of inference engines."), [
+      "上面的 Kubernetes 管程序在哪里运行，是控制和放置这一层。中间的请求线经过运行中的模型实例，再由推理引擎组织实际计算。把控制安排与请求路径分开，就不会把编排程序当成生成模型的程序。",
+      "对于自回归文本模型，引擎先处理输入，这一段叫 prefill；接着逐 Token 生成，叫 decode。生成时，部分前文的注意力计算状态留在 KV cache 里，后面继续使用。引擎还会安排多个用户的请求如何一起计算。给两个名词后就回到图：它们都是模型执行里面的具体工作。",
+      "多台这样的节点联网管理，就形成集群。一个节点可能有多块 GPU，设备之间和机器之间还需要互连与网络。"
+    ], ["Kubernetes handles placement and reconciliation above the request path. The running model instance receives requests and its engine executes the model. Keep placement separate from generation.", "Autoregressive engines process input during prefill and generate tokens during decode. The KV cache reuses attention state. Engines also organize concurrent work. These terms describe execution within the diagram.", "Several connected nodes form a cluster. Nodes may contain multiple GPUs and communicate through device interconnects and networks."]),
+    s("parallel-vs-replicas", 3, "更多 GPU，可以分模型，也可以多开副本", "More GPUs can split a model or run replicas", "前一种让设备合作，后一种让服务同时接更多请求。", "One approach makes devices cooperate; the other serves different requests in parallel.", "模型并行与服务副本，解决的是两类问题。", "Model parallelism and service replicas address different needs.", compare([
+      ("模型并行", "Model parallelism", [("GPU 1：模型的一部分", "GPU 1: part of the model"), ("GPU 2：模型的另一部分", "GPU 2: another part"), ("中间需要交换数据", "Exchange intermediate data")]),
+      ("多个副本", "Multiple replicas", [("实例 A：一份模型", "Instance A: a model copy"), ("实例 B：一份模型", "Instance B: a model copy"), ("分开接用户请求", "Serve separate requests")]),
+    ], "示意两种组织方式，具体并行策略由引擎实现。", "Two arrangements; engines implement specific parallelism strategies."), [
+      "左列把一个模型分到多设备上。设备要合作完成计算，因此有通信。右列运行多份实例，用户甲可去A，用户乙可去B。两种组织可以结合：每个副本本身也可以使用多块GPU。",
+      "这样再问“多加卡会快多少”，就要先知道是想让一个大模型跑起来，还是想让更多请求同时运行。下一节会从用户的等待时间和系统总产出两个方向把“快”拆开。"
+    ], ["The left divides one model's computation or data across devices, with communication. The right runs separate model instances. Both can be combined: each replica may itself span several GPUs.", "Adding devices has different meanings depending on whether we are running a larger model or serving more requests. Next we separate speed into waiting time and overall output."]),
+  ]))
+  lessons.push(lesson("ai-metrics", "12 延迟与吞吐", "12 Latency and throughput", [
+    s("latency-timeline", 3, "一次回答的时间，画在同一条线上", "Put one response on a timeline", "先等到第一个 Token，再看后续 Token 逐步到达。", "Wait for the first token, then receive the remaining tokens over time.", "端到端延迟 = 首 Token 等待 + 首个之后的生成时间。", "End-to-end latency = first-token wait + generation after the first token.", { "type": "timeline", "wait": l("等待首个 Token", "Wait for first token"), "decode": l("后续生成 · 2.0 s", "Further generation · 2.0 s"), "result": l("0.8 + 2.0 = 2.8 秒", "0.8 + 2.0 = 2.8 seconds"), "steps": [l("发送请求", "Submit request"), l("0.8 秒，首个到达", "First token at 0.8 s"), l("继续生成", "Continue generating"), l("2.8 秒，回答结束", "Complete at 2.8 s")], "caption": l("教学时间线；点只表示到达过程，不逐个对应全部 Token。", "Illustrative timeline; dots depict arrivals rather than every token.") }, [
+      "先只显示时间轴。第二步出现0.8秒等待条，首Token到达。第三步显示后面的生成。最后整个回答在2.8秒结束。首Token等待常称TTFT，端到端则是从发送到结束。",
+      "让观众看同一条时间线，避免只背定义。首个之前可以包含网络、排队和输入处理。开始流式输出后，用户主要感受到后面生成得快不快。这里的两段颜色有明确时间边界。"
+    ], ["Reveal the axis, the first-token wait, subsequent generation and the final total. TTFT ends at the first received token; end-to-end timing ends when the response finishes.", "The first period may include network, queueing and input processing. After output starts, stream speed becomes visible. The colours show distinct timing boundaries."]),
+    s("token-interval-arithmetic", 2, "101 个 Token，中间有 100 个间隔", "101 tokens have 100 intervals", "假设首个之后，每隔 0.020 秒到一个 Token。", "Suppose tokens after the first arrive every 0.020 seconds.", "50 Token/s 的解码速率，与全程平均约 36 Token/s，是不同计时范围。", "50 tokens/s during decoding and about 36 tokens/s overall use different timing boundaries.", compare([
+      ("首个之后", "After the first token", [("100 × 0.020 s = 2 s", "100 × 0.020 s = 2 s"), ("1 ÷ 0.020 = 50", "1 ÷ 0.020 = 50"), ("每秒输出 Token", "Output tokens per second")]),
+      ("完整请求", "Whole request", [("0.8 + 2 = 2.8 s", "0.8 + 2 = 2.8 s"), ("101 ÷ 2.8 ≈ 36", "101 ÷ 2.8 ≈ 36"), ("全程平均输出速率", "Overall output rate")]),
+    ], "数字为同一个教学例子；平均 ITL 不含首 Token 等待。", "One illustrative example; average ITL here excludes the first-token wait."), [
+      "这一页只做一道算术。101个Token之间是100个间隔，每个0.020秒，合计2秒。倒数得到每秒50个Token，是首个之后的流出速度。",
+      "如果把前面0.8秒也算上，全程是2.8秒，101除以2.8约36。两个数都可以算出来，讲清计时范围就不矛盾。这也是读性能数字时，最基本的单位和边界意识；此处只讲指标含义。"
+    ], ["Work through the interval count: 101 tokens create 100 gaps. At 0.020 seconds each, generation after the first takes two seconds; the reciprocal interval is fifty tokens per second.", "Include the initial 0.8 seconds and the whole request lasts 2.8 seconds. Dividing 101 by 2.8 gives about 36. The two figures refer to different timing periods."]),
+    s("aggregate-throughput-batching", 3, "同样的请求，怎样组织批次？", "Same requests, different batching", "四个请求同时到达；输出分别需要 2、4、1、3 个 Token。", "Four ready requests need two, four, one and three output tokens.", "总吞吐 = 观察窗口内的总输出 Token ÷ 时间。", "Aggregate throughput = total output tokens divided by elapsed time.", { "type": "batch", "incoming": l("多个请求", "Requests"), "engine": l("引擎组织计算", "Engine"), "output": l("总输出", "Output"), "batch": l("两种批处理", "Two batching policies"), "batchDetail": l("相同请求与槽位", "Same requests and slots"), "result": "10 Token", "resultDetail": "7 rounds → 6 rounds", "steps": [l("相同请求", "Same requests"), l("逐轮计算两种调度", "Compute both schedules"), l("比较完成轮数", "Compare completion rounds")], "caption": l("仅示意 Decode：每轮每槽位生成 1 Token，忽略 Prefill 与调度开销；轮数不代表实测时间。", "Decode-only example: one token per slot per round; prefill and overhead omitted. Rounds are not measured time.") }, [
+      "先确认两行使用相同工作量：A、B、C、D 共十个输出 Token，两个计算槽位。按“计算一轮”一起推进。第三轮时，上面的 A 已完成，却必须等 B；下面已把 C 放进空位。两个策略分别在第七、第六轮完成。颜色保持请求身份，字母后的数字是该请求的第几个输出 Token。",
+      "这只是说明完成一个请求后如何补入新请求。真实推理还要处理 Prefill、内存和每轮不同的计算时间，所以不能拿七比六当实测加速比。统计总吞吐时，若十秒生成二十个各一百 Token 的回答，就是两千除以十，得到每秒二百 Token；这也不等于其中一个人的流式速度。"
+    ], ["Both schedules process the same ten output tokens in two slots. Advance them together with Compute one round. At round three, fixed batching leaves A's slot empty while B finishes; continuous batching has already admitted C. They finish in seven and six rounds. Colors identify requests; the digit is that request's output-token index.", "Real serving also includes prefill, memory and variable iteration times; this is not a measured speedup. If twenty responses of one hundred tokens finish in ten seconds, aggregate throughput is two hundred output tokens per second. This is different from one person's stream speed."]),
+  ]))
+  lessons.push(lesson("ai-token-factory", "13 Token 工厂", "13 Token factories", [
+    s("factory-input-output", 2, "把单卡视角，拉到整个机房", "Widen the view from a chip to a facility", "电力、散热、网络、模型与软件，共同支持持续推理。", "Power, cooling, networking, models and software support ongoing inference.", "“AI 工厂”是整个运行系统的比喻。", "'AI factory' is a metaphor for the whole operated system.", flow([
+      ("物理供给", "Facilities", "电力、散热、网络", "Power, cooling, network"),
+      ("计算设备", "Hardware", "芯片、内存、存储", "Chips, memory, storage"),
+      ("模型服务", "Model serving", "引擎、路由、运行", "Engine and routing"),
+      ("持续产出", "Outputs", "文字、代码等内容", "Text, code and more"),
+    ], "NVIDIA 等厂商使用 AI factory 这一系统性比喻。", "AI factory is a whole-system metaphor used by vendors including NVIDIA."), [
+      "把前面学过的部件连起来。单张GPU只是一项设备；持续提供服务还要有电、散热、存储、网络、引擎和运维人员。这个系统视角，是“工厂”比喻的来源。",
+      "Token 工厂更强调语言模型推理产出。训练也使用大规模基础设施，但产物是更新后的模型参数。推理则使用模型处理不断到来的输入。把这两个过程和前面的训练推理图对应起来。"
+    ], ["Connect the previously introduced components. A GPU is one device; sustained service also needs facilities, networks, engines and people. This explains the factory metaphor.", "Token factory emphasizes language-model inference output. Training also uses large infrastructure, but produces updated parameters; inference uses those models for incoming inputs."]),
+    s("request-through-factory", 2, "手机上的一句话，经过哪些地方？", "Where does a message from your phone go?", "从应用到运行中的模型，再沿响应路径返回。", "From the application to a running model and back along the response path.", "模型在远端运行，应用把结果接到你的工作里。", "The remote model computes; the application connects its result to your work.", flow([
+      ("手机 / 应用", "Phone / app", "组织输入与上下文", "Prepare context"),
+      ("模型服务", "Model service", "找到运行实例", "Route to an instance"),
+      ("引擎 + GPU", "Engine + GPU", "计算并生成输出", "Compute and generate"),
+      ("应用显示", "Display", "输出流回界面", "Stream results back"),
+    ], "接下来把同样的路径放进实际应用。", "Next, place this path inside real applications."), [
+      "让箭头从手机走到GPU，再显示输出回来。屏幕上逐渐出现的字，来自远端模型计算；应用还可以把它们放进文档、代码编辑器或其他工作界面。",
+      "到这里基础设施部分共25分钟。收住名词，不继续加机房细节，转入应用：先看一个能当场看懂的排序程序，再扩展到创作、科学和日常工作。"
+    ], ["Follow the message to the GPU and the streamed output back. The application can put the result into a document, editor or another work surface.", "Close the twenty-five-minute infrastructure section here. Move to a concrete sorting program, then creation, science and everyday work."]),
+  ]))
+  lessons.push(lesson("ai-work-coding", "14 AI 编程", "14 AI coding", [
+    s("coding-example", 3, "把一句要求，变成可运行的代码", "Turn a request into runnable code", "要求：把 [20, 100, 3] 按价格从小到大排列。", "Request: sort prices [20, 100, 3] from lowest to highest.", "自然语言说明目标，代码表达具体操作。", "Language describes the goal; code expresses the operation.", { "type": "code", "panels": [{ "title": l("任务与输入", "Task and input"), "lines": [l("价格升序", "Ascending prices"), "[20, 100, 3]"] }, { "title": l("代码与运行结果", "Code and result"), "lines": ["prices.sort(", "  (a, b) => a - b", ")", "→ [3, 20, 100]"] }], "steps": [l("描述任务", "Describe the task"), l("生成并运行", "Generate and run")], "caption": l("可直接观察输入、程序和输出之间的关系。", "Observe the relationship between input, program and output.") }, [
+      "重新使用前面出现的排序例子，这次把工作过程讲完整。自然语言告诉模型想做什么，生成的程序用比较函数表达数值顺序。运行得到结果，观众可以直接看出输入和输出的关系。",
+      "可以在现场让大家口头预测原始 .sort() 和带比较函数的输出，再逐步显示右侧。这里无需连接外部模型，也能清楚演示 AI 编程所处理的对象：需求、代码和运行结果。后面的应用工具让这些步骤自动衔接。"
+    ], ["Reuse the sorting example to connect the whole workflow: a language request, a numeric comparator and an observable output.", "Ask the room to predict default sorting versus a numeric comparator, then reveal the result. This prepared example explains requirements, code and execution without needing a live model call."]),
+    s("coding-agent-workflow", 3, "编程助手把编辑器、终端与模型接起来", "A coding assistant connects editor, terminal and model", "读项目 → 修改文件 → 运行 → 根据结果继续。", "Read a project, edit files, run the program and continue from the result.", "AI 编程同时用到了上下文、工具和任务循环。", "AI coding combines context, tools and a task loop.", graph([
+      n("files", 20, 45, 290, 125, "项目上下文", "Project context", "相关函数与需求", "Functions and requirements", 1),
+      n("model", 410, 45, 290, 125, "模型", "Model", "生成修改", "Generate an edit", 2),
+      n("edit", 800, 45, 280, 125, "编辑与运行工具", "Edit and run tools", "把程序运行起来", "Execute the program", 3),
+      n("result", 350, 285, 400, 110, "终端输出 / 页面效果", "Output / rendered page", "作为后续调用的资料", "Context for another call", 4),
+    ], [e("files", "model", 2), e("model", "edit", 3), e("edit", "result", 4), e("result", "model", 4)], [("读项目", "Read"), ("提出修改", "Generate"), ("修改与运行", "Execute"), ("读取反馈", "Use feedback")], "同样的组织可用于读代码、定位报错或实现一个小功能。", "The pattern also supports code reading, debugging and small features."), [
+      "模型需要看到相关代码，这对应上下文。它生成修改后，外围程序把内容写入文件，再通过终端或浏览器运行。运行输出和页面效果带回下一轮，就构成了实际工作的循环。",
+      "大家常见的代码补全只覆盖其中一小段。编程智能体把更多步骤连起来，所以你既可以问“这个函数是什么意思”，也可以要求做出一个页面并继续调整。重点在工作流组合，而不只是一次输出了多少行代码。"
+    ], ["Relevant files provide context. The surrounding program applies edits and runs tools. Terminal output or a rendered page returns to the next call.", "Code completion covers one small portion. A coding agent connects more of the process, supporting explanation, debugging and feature creation. The workflow is the useful unit to examine."]),
+  ]))
+  lessons.push(lesson("ai-work-creation", "15 AIGC 与多模态", "15 AIGC and multimodality", [
+    s("diffusion-steps", 3, "图像生成，也可以是逐步去噪", "Image generation can use iterative denoising", "从噪声开始，在条件引导下逐步形成画面。", "Start with noise and gradually form an image under conditioning.", "文本逐 Token 生成，只是生成模型中的一种方式。", "Token-by-token text generation is one approach among several.", { "type": "diffusion", "labels": [l("噪声", "Noise"), l("粗轮廓", "Coarse form"), l("结构", "Structure"), l("画面", "Image")], "steps": [l("从噪声出发", "Start with noise"), l("逐步得到轮廓", "Coarse form emerges"), l("继续形成结构", "Structure develops"), l("得到画面", "A resulting image")], "caption": l("扩散 / 去噪过程的图形示意，不是模型实际生成轨迹。", "A schematic denoising illustration, not an actual model trajectory.") }, [
+      "先看左侧噪声状态和上方文字条件。训练好的网络读取当前状态、步数与条件，预测更新；更新状态后进入下一轮。这里把循环画出来，而不是把一张已知图片擦干净。图形是原创示意，不是实际推理的轨迹。",
+      "这是帮助理解的一条示意过程，真实系统的表示可能在潜空间，步数和方法也不同。更大的概念是：AI 可以生成不同形式的数据，不都采用我们前面讲的文本自回归。多模态则描述同一个系统处理文字、图像、声音等多种形式。"
+    ], ["Follow noise and text into the trained update predictor, update the state, and feed it into another round. This is not cleaning an already-known image. The artwork illustrates the mechanism rather than an actual inference trajectory.", "Real systems may operate in latent representations with different algorithms and step counts. The wider lesson is that generated data can take different forms. Multimodal systems handle combinations of text, images and sound."]),
+    s("creative-workflow", 3, "一条短片，可以由多个模型接力完成", "Several models can contribute to one short film", "文案、画面、旁白和剪辑，成为一个工作流。", "Script, visuals, narration and editing become a connected workflow.", "AIGC = AI-generated content，AI 生成内容。", "AIGC means AI-generated content.", flow([
+      ("文案", "Script", "写一个 15 秒解说", "A 15-second narration"),
+      ("画面", "Visuals", "图像或视频模型", "Image / video model"),
+      ("声音", "Audio", "语音模型生成旁白", "Speech synthesis"),
+      ("编辑", "Editing", "工具对齐并导出", "Align and export"),
+    ], "有的模型跨多模态；有的应用组合多个专用模型。", "Some models are multimodal; applications can also combine specialized models."), [
+      "给一个具体任务：做一条15秒活动短片。语言模型写稿，图像或视频模型处理画面，语音模型把稿件转成声音，再由编辑工具组织时间。它们可以是独立模型，也可能有模型承担多个环节。",
+      "这里的harness可能是一张节点图，每个节点的输出接到下一个输入。这和前面工具循环是不同外观下的工作组织。视频还有时间上的连续画面，音频有发音和节奏，因此这些模型处理的数据结构也各有特点。"
+    ], ["Use a fifteen-second event film: a script, visual generation, synthesized speech and editing. Separate models or multimodal models can cover these stages.", "The harness may appear as a node graph connecting outputs to inputs. Video adds temporal sequences and audio adds pronunciation and rhythm. Different data forms create different model tasks."]),
+  ]))
+  lessons.push(lesson("ai-work-science", "16 AI4S", "16 AI for science", [
+    s("protein-structure", 2, "从氨基酸序列，预测蛋白质结构", "From amino-acid sequence to protein structure", "AlphaFold 把一类科学预测任务带到了很多人面前。", "AlphaFold made a scientific prediction task widely visible.", "AI4S：把模型用于科学研究中的预测、搜索与计算。", "AI4S applies models to scientific prediction, search and computation.", { "type": "protein", "sequence": l("氨基酸序列", "Amino-acid sequence"), "structure": l("预测三维结构", "Predicted 3D structure"), "steps": [l("输入序列", "Input sequence"), l("模型计算", "Model computation"), l("结构预测", "Structure prediction")], "caption": l("结构曲线为图形示意，不对应具体蛋白质。", "The ribbon is schematic and does not represent a specific protein." ) }, [
+      "先读一串字母，它表示氨基酸序列。蛋白质在空间怎样折叠，与功能有密切关系。AlphaFold 的一个核心任务，就是根据序列等输入预测三维结构。让结构曲线逐步画出来，给观众一个从序列到空间对象的直观变化。",
+      "这是一种预测任务。科学研究还会围绕结构继续设计问题、计算和实验。AI4S是AIforScience，它包含语言模型，也包含专门为分子、材料、气象等对象设计的模型。"
+    ], ["The letters represent an amino-acid sequence. Protein structure is closely related to function. AlphaFold predicts three-dimensional structure from inputs such as sequences; the ribbon animation makes the change of representation visible.", "Researchers build further questions, calculations and experiments around predictions. AI for science includes language models and specialized models for molecules, materials, weather and other scientific objects."]),
+    s("scientific-search-loop", 2, "先预测候选，再继续探索", "Predict candidates, then investigate further", "材料组合很多时，模型可以帮助挑选下一批研究方向。", "When many material combinations are possible, models can help select candidates for investigation.", "反馈来自科学计算与实验，进入下一轮搜索。", "Scientific calculations and experiments feed the next search round.", graph([
+      n("candidates", 20, 45, 280, 130, "候选空间", "Candidate space", "许多材料组合", "Many combinations", 1),
+      n("model", 410, 45, 280, 130, "模型预测", "Model prediction", "估计性质与排序", "Predict properties", 2),
+      n("experiment", 805, 45, 270, 130, "计算 / 实验", "Compute / experiment", "研究选中的候选", "Investigate candidates", 3),
+      n("data", 340, 285, 420, 110, "新的观察与数据", "New observations and data", "帮助下一轮探索", "Guide the next round", 4),
+    ], [e("candidates", "model", 2), e("model", "experiment", 3), e("experiment", "data", 4), e("data", "candidates", 4)], [("提出候选", "Candidates"), ("预测性质", "Predict"), ("进一步研究", "Investigate"), ("反馈到搜索", "Feedback")], "虚构的归一化性质值，仅说明候选筛选与观察反馈，不对应实际材料。", "Invented normalized property values illustrate selection and feedback; no actual material is represented."), [
+      "横轴是一个成分比例，纵轴是归一化后的性质值。蓝色点是模型预测。先挑出 F、G 进一步计算或实验，再看右边的观察值：F 从预测的0.79得到0.58，G 从0.71得到0.76。绿色点把新观察落回同一个图中。所有数值都是为讲解构造的，研究者会据此调整下一轮搜索。",
+      "这类机制有实际研究背景，例如 GNoME 用预测筛选候选，再用 DFT 计算得到新数据，进入主动学习循环。这里不展开物理细节，而是把预测、进一步研究和反馈这三件事区分开。AI4S 的对象与反馈不止文本；接下来回到普通办公室，看更日常的组合。"
+    ], ["The x-axis is composition fraction and the y-axis a normalized property. Blue points are predictions. Select F and G for computation or experiments: F's observation is 0.58 versus a 0.79 prediction; G's is 0.76 versus 0.71. Green points put the new observations on the same plot. All values are invented for teaching.", "A real research example is GNoME: candidate predictions are followed by DFT calculations whose results enter an active-learning loop. Keep prediction, investigation and feedback distinct. Scientific AI concerns more than text; next we return to everyday office work."]),
+  ]))
+  lessons.push(lesson("ai-work-business", "17 日常工作", "17 Everyday work", [
+    s("meeting-workflow", 2, "一个“生成纪要”按钮，背后有几步？", "What happens behind 'create meeting notes'?", "语音识别、语言整理和业务工具，可以连成一次操作。", "Speech recognition, language processing and work tools can be connected behind one action.", "一个 AI 应用，可以组合不同模型和普通软件。", "An AI application can combine different models and conventional software.", flow([
+      ("录音", "Recording", "一段会议音频", "Meeting audio"),
+      ("转录", "Transcription", "语音变文字", "Speech to text"),
+      ("整理", "Organization", "决定、负责人、日期", "Decisions and tasks"),
+      ("接到工作里", "Work tools", "日历、任务列表", "Calendar and task list"),
+    ], "用前面的会议例子，把模型与工具重新连起来。", "Reconnect models and tools using the earlier meeting example."), [
+      "回到前半场的会议记录例子，这次从音频开始。语音模型先转录，语言模型再提取决定和待办，普通软件把这些字段放进日历或任务系统。用户可能只看到一个按钮，实际由几类不同组件合作。",
+      "这样解释应用，比列一串“智能办公”名词更具体。观众现在能指出哪里在处理声音、哪里在生成文字、哪里在调用工具。"
+    ], ["Return to the meeting example, starting with audio. A speech model transcribes it, a language model extracts decisions, and software connects fields to calendars or task systems.", "This makes the application concrete: the audience can locate speech processing, text generation and tool execution behind one button."]),
+    s("different-ai-tasks", 2, "AI 也做分类、预测、感知与规划", "AI also classifies, predicts, perceives and plans", "生成文字，只是 AI 任务的一部分。", "Generating text is one part of a broader collection of AI tasks.", "从要完成的工作出发，再选择模型与工具。", "Start with the work, then choose models and tools.", compare([
+      ("识别与分类", "Recognition", [("图片里是什么？", "What is in this image?"), ("邮件属于哪一类？", "Which email category?")]),
+      ("预测与推荐", "Prediction", [("下周需求多少？", "Next week's demand?"), ("哪些内容更相关？", "Which items are relevant?")]),
+      ("感知与行动", "Perception / action", [("物体在哪里？", "Where is the object?"), ("机器人下一步怎么走？", "Where should a robot move?")]),
+    ], "按任务分组，不对应某个具体产品目录。", "Task categories rather than a specific product catalog."), [
+      "逐列举例。图片识别和邮件分类常输出类别；需求预测输出数值或分布；推荐系统组织相关性；机器人还要结合环境感知和行动规划。它们不一定都从聊天窗口进入。",
+      "以后看到AI产品，就可以问：它替哪段工作做了什么，背后需要哪种模型、资料和工具。最后十分钟，把这些工作放到产业分工里，再标出我们平台所在的位置。"
+    ], ["Reveal recognition, prediction and perception/action. These tasks can output classes, numbers, rankings or plans; they do not all begin in a chat window.", "Ask what part of a job the product handles, and what models, data and tools it combines. The final ten minutes map these roles into the industry and locate our platform."]),
+  ]))
+  lessons.push(lesson("ai-industry", "18 产业分工", "18 Industry roles", [
+    s("industry-value-map", 3, "产业里，谁提供什么？", "Who supplies what in the industry?", "计算、模型、工具和应用，形成相互连接的分工。", "Compute, models, tools and applications form connected industry roles.", "同一家公司可以跨多层，角色之间也会交叉。", "Organizations can span multiple, overlapping roles.", graph([
+      n("hardware", 20, 30, 290, 130, "硬件与设施", "Hardware / facilities", "芯片、电力、网络", "Chips, power, networks", 1),
+      n("cloud", 20, 260, 290, 130, "计算与模型服务", "Compute / serving", "运行机器和模型", "Operate compute/models", 2),
+      n("models", 410, 30, 300, 130, "模型开发", "Model development", "数据、训练、模型", "Data, training, models", 2),
+      n("tools", 410, 260, 300, 130, "引擎与开发工具", "Engines / dev tools", "连接与运行能力", "Execute and connect", 3),
+      n("apps", 820, 145, 250, 130, "领域应用", "Applications", "接入实际工作", "Connect to work", 4, tone="gold"),
+    ], [e("hardware", "cloud", 2), e("hardware", "models", 2), e("models", "apps", 4), e("cloud", "tools", 3), e("tools", "apps", 4)], [("物理基础", "Physical foundation"), ("模型与服务", "Models and services"), ("开发与运行工具", "Tools"), ("领域应用", "Applications")], "概念性分工图；数据、人才和领域知识贯穿多层。", "A role map; data, people and domain knowledge cross layers."), [
+      "先从芯片和设施出发，分别进入训练模型和运行服务。模型团队做训练与模型开发，服务方运营机器或模型API，工具方做引擎和开发工具，应用方把它们接进具体工作。箭头不是一条单向价值排名，而是供给与使用关系的简图。",
+      "一家公司可以同时提供云、模型API和应用。领域组织提供自己的知识、数据和流程，把通用能力接到制造、科研或企业工作里。因此产业不只需要训练模型的人，也需要熟悉具体工作的人。"
+    ], ["Start from hardware and facilities, then distinguish model development, operated services, tools and applications. Arrows show simplified supply/use relationships.", "A company can provide cloud, model APIs and applications. Domain organizations contribute knowledge, data and workflows. The industry includes people who understand real work as well as people developing models and machines."]),
+    s("api-vs-selfhosting", 3, "调用 API，与自己运行模型", "Call an API or operate a model", "两种方式都可以给同一个应用提供模型能力。", "Both approaches can supply model capability to the same application.", "开放权重描述参数的可获取性；开源还涉及发布内容和许可。", "Open weights concerns parameter availability; open source also concerns release contents and licensing.", compare([
+      ("模型 API", "Model API", [("应用发出请求", "App sends a request"), ("服务方运行模型", "Provider runs the model"), ("结果通过网络返回", "Response returns online")]),
+      ("自行运行", "Operate a model", [("取得模型权重", "Obtain model weights"), ("准备引擎与计算资源", "Set up engine and compute"), ("应用调用自己的服务", "App calls your service")]),
+    ], "应用也可以同时使用几种模型与交付方式。", "An application can combine models and delivery approaches."), [
+      "左侧是接入一个在线模型服务；右侧是取得模型权重，放到自己的计算资源上，通过推理引擎运行。两边最终都能提供一个供应用调用的接口。交付方式与模型能力是两个可分别讨论的话题。",
+      "再解释开放权重与开源：一个说参数是否提供，一个还涉及发布的其他组成和许可。这里先让听众知道词指向什么。模型目录会变化，理解这些角色和交付方式，比在入门课背一个排行榜更有用。最后把我们平台放进右侧运行服务这部分。"
+    ], ["The left connects to an operated online model service. The right obtains weights and runs an engine on compute resources. Either can expose an interface to an application.", "Open weights refers to supplied parameters; open source also concerns other released components and licensing. These terms help read product descriptions. Next place our platform in the operated-service part of this map."]),
+  ]))
+  lessons.push(lesson("ai-platform-place", "19 我们的平台", "19 Our platform", [
+    s("platform-location", 2, "LunaNexa 在模型服务与集群管理这一层", "LunaNexa sits in model serving and cluster management", "让应用找到模型，把模型服务与计算资源组织起来。", "Connect applications to model services and organize compute resources.", "这是整个 AI 图景里的一部分。", "This is one part of the larger AI landscape.", flow([
+      ("应用 / harness", "App / harness", "组织具体任务", "Organize the task"),
+      ("LunaNexa", "LunaNexa", "模型访问、路由、资源", "Model access and resources"),
+      ("集群与引擎", "Cluster / engine", "Kubernetes、GPU", "Kubernetes and GPUs"),
+    ], "平台的详细使用方式接在原有平台章节中。", "Detailed usage continues in the existing platform chapters."), [
+      "不重新介绍整个产品，只在刚才的地图上标出这一层。应用和harness负责具体任务，LunaNexa组织模型访问、服务路由和资源操作，Kubernetes与推理引擎把模型服务运行起来。",
+      "熟悉我们平台的人可以把模型目录、API、工作区和资源管理对应到这里。后续平台教程再进入具体操作，本课最后用一张总图把术语收回来。"
+    ], ["Locate the platform within the map: applications organize work, LunaNexa connects model services and resources, and Kubernetes plus engines run them.", "Existing users can connect the catalog, API, workspaces and resources to this layer. Detailed operation stays in the platform chapters. Finish with the complete path."]),
+    s("complete-request-map", 2, "把整条路径连起来", "Connect the whole path", "问题 → 上下文与工具 → 模型生成 → 引擎和芯片 → 应用结果。", "Question → context and tools → model generation → engine and chips → application result.", "遇到新名词，先定位它在这条路径中的作用。", "Place a new term by the role it plays in this path.", graph([
+      n("task", 15, 35, 235, 120, "任务", "Task", "总结、编程、创作", "Summarize, code, create", 1),
+      n("app", 320, 35, 340, 120, "上下文 / harness / agent", "Context / harness / agent", "资料、工具、循环、分工", "Information and workflow", 2),
+      n("model", 785, 35, 290, 120, "模型", "Model", "Token、参数、生成", "Tokens and parameters", 3),
+      n("infra", 785, 275, 290, 120, "基础设施", "Infrastructure", "引擎、集群、GPU", "Engine, cluster, GPU", 4),
+      n("work", 140, 275, 440, 120, "应用里的结果", "Result in an application", "程序、内容、研究与工作", "Software, content, research", 5, tone="gold"),
+    ], [e("task", "app", 2), e("app", "model", 3), e("model", "infra", 4), e("infra", "work", 5)], [("任务", "Task"), ("外围软件", "Surrounding software"), ("模型", "Model"), ("计算", "Computation"), ("接回工作", "Back to work")], "概念回顾图；实际请求与响应会在这些部分之间往返。", "A recap; actual requests and responses travel between these components."), [
+      "按五步完整讲一遍：先有任务，应用准备上下文与工具；模型用训练好的参数生成；推理引擎和硬件提供计算；结果回到应用，可以继续进入工具循环或形成作品。每推进一步，只点回这一层已经讲过的词。",
+      "到这里是115分钟。最后五分钟留给问题。回答时先把问题定位到图上，再切回对应的演示页。不要在结束前又堆一轮新术语。"
+    ], ["Walk all five steps: task, context and tools, trained model, computation, then the result in an application. Reuse the terms already taught rather than adding new ones.", "This reaches minute 115. Reserve five minutes for questions. Locate each question on the map and return to a relevant figure."]),
+  ]))
+  guard @json.parse(@fs.read_file("docs/ai-class-storyboard.json").text()) is { "scenes": Array(storyboards), .. } else { fail("Missing classroom storyboard") }
+  guard @json.parse(@fs.read_file("docs/ai-class-rehearsal.json").text()) is { "scenes": Array(rehearsals), .. } else { fail("Missing classroom rehearsal") }
+  let seen : Map[String, Bool] = Map([])
+  for lesson in lessons {
+    guard lesson is { "slides": Array(slides), .. } else { fail("Missing slides") }
+    for slide in slides {
+      guard slide is Object(fields) && fields["id"] is String(id) && fields["visual"] is Object(visual) && visual["steps"] is Array(steps) else { fail("Missing visual") }
+      guard storyboards.search_by(item => item is { "id": String(candidate), .. } && candidate == id) is Some(board_index) && storyboards[board_index] is { "beats": Array(beats), "bridge": [String(bridge_zh), String(bridge_en)], "motion": Array(motion), .. } else { fail("Missing storyboard: " + id) }
+      guard beats.length() == steps.length() && motion.length() == steps.length() && seen.get(id) == None else { fail("Invalid storyboard stage count: " + id) }
+      seen[id] = true
+      let captions : Array[Json] = []
+      let zh : Array[Json] = []
+      let en : Array[Json] = []
+      for beat in beats { guard beat is [String(a), String(b)] else { fail("Invalid beat") }; captions.push(l(a,b)); zh.push(Json::string(a)); en.push(Json::string(b)) }
+      fields["background_notes"] = fields["notes"]
+      visual["beats"] = Json::array(captions)
+      visual["motion"] = Json::array(motion)
+      if id == "cluster-engine-path" { visual["steps"] = [l("资源要求","Resource request"),l("放置服务实例","Place the instance"),l("引擎加载与执行","Load and execute"),l("Prefill / Decode 缓存","Prefill / decode cache")] }
+      if id == "diffusion-steps" { visual["steps"] = [l("噪声与文字条件","Noise and text"),l("网络预测更新","Predict an update"),l("更新与迭代反馈","Update and repeat"),l("解码为像素","Decode to pixels")] }
+      if id == "different-ai-tasks" { visual["steps"] = [l("图像分类","Image classification"),l("数值预测","Value prediction"),l("路线规划","Route planning")] }
+      guard storyboards[board_index] is Object(board) else { fail("Invalid storyboard") }
+      for name in ["title", "lead", "key", "caption"] {
+        if board.get(name) is Some(value) {
+          guard value is { "zh": String(zh), "en": String(en), .. } && zh != "" && en != "" else { fail("Invalid bilingual copy: " + id + "/" + name) }
+          if name == "caption" { visual[name] = value } else { fields[name] = value }
+        }
+      }
+      if board.get("steps") is Some(Array(labels)) {
+        guard labels.length() == steps.length() else { fail("Invalid novice stage count: " + id) }
+        for label in labels { guard label is { "zh": String(zh), "en": String(en), .. } && zh != "" && en != "" else { fail("Invalid stage label: " + id) } }
+        visual["steps"] = Json::array(labels)
+      }
+      fields["transition"] = l(bridge_zh,bridge_en)
+      zh.push(Json::string(bridge_zh)); en.push(Json::string(bridge_en))
+      fields["notes"] = { "zh": zh, "en": en }
+      guard rehearsals.search_by(item => item is { "id": String(candidate), .. } && candidate == id) is Some(rehearsal_index) && rehearsals[rehearsal_index] is Object(teaching) && teaching["minutes"] is Number(duration, ..) && duration > 0 && teaching["questions"] is Array(questions) && questions.length() == 3 else { fail("Missing three-question rehearsal: " + id) }
+      for question in questions { guard question is { "question": { "zh": String(qzh), "en": String(qen), .. }, "answer": { "zh": String(azh), "en": String(aen), .. }, .. } && qzh != "" && qen != "" && azh != "" && aen != "" else { fail("Unanswered classroom question: " + id) } }
+      fields["minutes"] = Json::number(duration)
+      fields["teaching"] = Json::object(teaching)
+    }
+  }
+  guard seen.length() == storyboards.length() else { fail("Unused storyboard entries") }
+  guard seen.length() == rehearsals.length() else { fail("Unused rehearsal entries") }
+  let sections : Array[Json] = [
+    { "id": "ai-basics", "title": l("模型怎样生成与学习", "How models generate and learn"), "page_ids": ["ai-start", "ai-tokens", "ai-next-token", "ai-training-inference"] },
+    { "id": "ai-agents", "title": l("把模型接成能工作的助手", "Connect models into working assistants"), "page_ids": ["ai-prompts", "ai-context", "ai-harness", "ai-loops-rsi", "ai-multi-agent"] },
+    { "id": "ai-infra", "title": l("运行模型的基础设施", "Infrastructure that runs models"), "page_ids": ["ai-chips", "ai-clusters-engines", "ai-metrics", "ai-token-factory"] },
+    { "id": "ai-work", "title": l("AI 怎样接进实际工作", "AI in actual work"), "page_ids": ["ai-work-coding", "ai-work-creation", "ai-work-science", "ai-work-business"] },
+    { "id": "ai-industry", "title": l("产业分工与平台位置", "Industry roles and our platform"), "page_ids": ["ai-industry", "ai-platform-place"] },
+  ]
+  let outline : Array[Json] = []
+  let mut elapsed = 0
+  for section in sections {
+    guard section is { "id": String(section_id), "title": title, "page_ids": Array(page_ids), .. } else { fail("Invalid section") }
+    let start = elapsed
+    let items : Array[Json] = []
+    for lesson in lessons {
+      guard lesson is { "page_id": String(page_id), "slides": Array(slides), .. } else { fail("Invalid outline lesson") }
+      if !page_ids.contains(Json::string(page_id)) { continue }
+      for slide in slides {
+        guard slide is { "id": String(id), "title": title, "minutes": Number(minutes, ..), "teaching": { "concepts": concepts, "takeaway": takeaway, .. }, .. } else { fail("Missing outline information") }
+        items.push({ "id": id, "page_id": page_id, "title": title, "concepts": concepts, "takeaway": takeaway, "start": elapsed, "minutes": minutes })
+        elapsed += minutes.to_int()
+      }
+    }
+    outline.push({ "id": section_id, "title": title, "start": start, "end": elapsed, "items": items })
+    if section_id == "ai-agents" { guard elapsed == 50 else { fail("Break must follow minute 50") }; elapsed += 10 }
+  }
+  guard elapsed == 115 else { fail("Content must finish at minute 115") }
+  let data : Json = { "contract_version": "lunanexa.ai-lecture.v1", "title": l("AI：模型、智能体与计算基础设施", "AI: models, agents and infrastructure"), "break_after": "ai-multi-agent", "break_minutes": 10, "questions_minutes": 5, "lessons": lessons, "outline": outline }
+  if !@fs.exists("output/ai-course-authoring") { @fs.mkdir("output/ai-course-authoring", recursive=true) }
+  @fs.write_file("output/ai-course-authoring/base.json", data.stringify(indent=2) + "\n")
+  println("Generated \{lessons.length()} classroom chapters")
+}

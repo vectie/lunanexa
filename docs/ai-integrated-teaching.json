@@ -1,0 +1,164 @@
+{
+  "_titles":{
+    "agent-loop":["观察、执行、反馈：自治循环怎样工作","Observation, action and feedback in an autonomous loop"],
+    "neural-computation":["从 y=ax+b 到一个神经元","From y=ax+b to a neuron"],
+    "training-corpus":["数据怎样进入训练，参数怎样计数","Training data and parameter counts"],
+    "training-stages":["预训练、中训练与后训练","Pretraining, mid-training and post-training"],
+    "learning-signals":["SFT 给示范，RL 看结果","SFT learns demonstrations; RL learns from outcomes"],
+    "weight-quantization":["从 FP16、FP8 到 4 位量化","From FP16 and FP8 to 4-bit quantization"],
+    "model-task-fit":["生态、装得下与业务匹配","Ecosystem, feasible size and task fit"],
+    "harness-model-pair":["模型与框架：分开读，也要配合","Separate and coordinate model and harness"],
+    "industry-value-map":["公司、模型版本与应用怎样分工","Companies, model versions and application roles"]
+  },
+  "_beats":{
+    "harness-responsibilities":[
+      ["先读相关文件，组成这次上下文。","Read relevant files into this context."],
+      ["模型提议修改，编辑工具实际写入。","The model proposes; an editor applies changes."],
+      ["运行程序，取得输出或报错。","Execute and observe output or errors."],
+      ["反馈回到模型，继续修订。","Return observations for another revision."]
+    ]
+  },
+  "_transitions":{
+    "text-in-text-out":["刚才看到了输出；把背后的应用、模型和计算机分开，才知道每一步是谁完成的。","We have seen outputs. Separate application, model and computer to identify who performs each step."],
+    "model-application-compute":["模型接收的文字怎样变成数值？先从 Token 和编号看输入。","How does text become numerical input? Start with tokens and IDs."],
+    "token-pieces":["有了数值输入，接着看一个新片段怎样接回前文，让回答继续增长。","With numerical input, see how a new piece feeds back into the prefix to grow a response."],
+    "autoregressive-feedback":["每轮计算还需要利用前文；注意力说明不同输入怎样共同影响这一步。","Each prediction uses prior context. Attention shows how input positions contribute to this step."],
+    "attention-context":["刚才在增加文字序列；视觉生成还可以反复修改一个噪声状态，两种更新对象不同。","We grew a text sequence. Visual generation can instead repeatedly update a noisy state."],
+    "diffusion-steps":["模型怎样更新已说明；生成作品还要把要求、候选和修改连成工作流程。","The generation mechanism is in place. A finished artifact also needs requirements, candidates and revision."],
+    "creative-workflow":["作品流程从要求开始；把“写文章”补成受众、结构和材料，就能看提示词具体改变什么。","A creative workflow starts with requirements. Make audience, structure and material explicit in an article prompt."],
+    "article-prompt-template":["两段结构已经清楚，但模板不会知道真实日期；把通知和相关信息送进这次上下文。","The structure is clear, but a template does not know the date. Supply the notice and relevant information in context."],
+    "context-packet":["材料可能不在聊天里；先检索相关段落，再放入本次输入，便得到 RAG。","Material may be outside the chat. Retrieve relevant passages and supply them in the current input: RAG."],
+    "rag-retrieval":["检索只是一个工具。把读取、写入、电脑操作都拆成调用与返回，就能理解实际执行。","Retrieval is one tool. Separate file and computer operations into calls and returned observations."],
+    "tool-roundtrip":["工具执行已接通；还要有人组织上下文、任务进度和下一轮，这些属于 Harness。","Tools can now execute. A harness organizes context, progress and the next round."],
+    "harness-structure":["知道外围程序有哪些部分后，沿一次观察、动作和反馈，看循环怎样真正推进任务。","After identifying harness components, follow observations, actions and feedback through one task."],
+    "agent-loop":["循环会改变外部状态；接着区分改文稿、改助手、改模型，避免把所有循环都叫自进化。","Loops change state. Distinguish artifact, assistant and model changes before calling something self-improvement."],
+    "three-improvement-loops":["说“改模型”之前，先看能力怎样进入系统：人工写规则，或从例子学习参数。","Before model improvement, examine how behavior enters a system: written rules or learned parameters."],
+    "rules-and-learning":["规则和学习已经分开；现在实际算一个线性关系与神经元，让参数不再只是名字。","Having separated rules and learning, compute a linear relationship and neuron so parameters become concrete."],
+    "neural-computation":["神经网络内部的计算模块，与多个完整 Agent 是不同层面；现在看系统怎样拆任务协作。","Neural computation modules differ from complete agents. Now examine task-level coordination."],
+    "multi-agent-handoffs":["任务拆开并不自动更快；用同一份工作比较串行、并行和协调时间。","Splitting tasks does not guarantee speed. Compare serial work, parallel work and coordination."],
+    "parallel-time":["前半场看系统怎样工作。休息十分钟后，从训练数据开始，解释这些参数怎样学来。","The first half examined working systems. After a ten-minute break, use training data to explain how their parameters are learned."],
+    "training-corpus":["数据与参数的计数清楚了，再看训练材料和信号怎样按阶段变化。","With data and parameter counts clear, examine how curricula and signals change across training stages."],
+    "training-stages":["这些阶段会更新参数；把它与使用已有参数回答本次问题区分开。","These stages update parameters. Distinguish them from using learned parameters on a current request."],
+    "training-vs-inference":["学过不等于会处理新题；保留评测任务，检查学到的能力能否迁移。","Learning examples does not prove transfer. Hold tasks out to check performance beyond training."],
+    "held-out-evaluation":["考试怎样评分已清楚；回到训练，拿真实后续与预测分布比较，计算一次损失。","After scoring evaluation tasks, return to training and compare observed continuations with predicted probabilities."],
+    "target-and-loss":["有了数值训练目标，再分清示范输出和结果奖励两种信号如何组织学习。","With a numerical objective in place, distinguish demonstrated outputs from outcome rewards."],
+    "learning-signals":["结果奖励还不是优化中的全部比较；减去基线能看出这次表现相对好在哪里。","Outcome reward is not the whole learning comparison. A baseline reveals relative performance."],
+    "reward-and-advantage":["现在知道一轮训练的信号，再把视角放大：数据、模型和总计算预算怎样共同分配？","Having explained one learning signal, widen the view to data, model size and total compute allocation."],
+    "training-budget":["训练预算决定形成怎样的模型；模型完成训练后，还能在单个任务上增加推理计算。","Training allocation forms the model. Afterwards, a single task can receive additional inference compute."],
+    "test-time-compute":["计算次数以外，参数本身也要存储；把模型规模换算成具体的字节数。","Beyond computation count, parameters must be stored. Convert model scale into bytes."],
+    "model-weight-size":["知道需要存多少数，再看芯片怎样存、搬和算，才能解释运行速度。","Knowing storage requirements, examine how chips store, move and compute values."],
+    "gpu-compute-data":["减少每个数的位数可以减少存储和搬运，但要实际观察数值近似产生的误差。","Reducing bits can save storage and movement. Observe the numerical approximation and its errors."],
+    "weight-quantization":["单卡还可能装不下完整模型；分到多卡以后，必须传递中间结果。","A model may still exceed one card. Splitting it requires communication of intermediate results."],
+    "gpu-interconnect":["物理通路已连好；集群放置服务，推理引擎才负责加载、生成与通信。","With physical paths available, the cluster places services and the inference engine loads, generates and communicates."],
+    "cluster-engine-path":["服务开始运行后，用一条请求的时间线看等待发生在哪里。","Once serving runs, trace one request's timeline to locate waiting."],
+    "latency-timeline":["一位用户的等待与所有请求的总产出不同；再比较批处理怎样影响吞吐。","One user's wait differs from aggregate production. Compare how batching affects throughput."],
+    "aggregate-throughput-batching":["把单次计算放回持续系统：电力、散热、网络、引擎一起支撑长期产出。","Place individual computation inside a sustained system of power, cooling, networking and engines."],
+    "factory-input-output":["资源和指标都已有含义，现在回到实际任务，决定怎样选模型和工具链。","With resources and metrics defined, return to a real task to choose a model and toolchain."],
+    "model-task-fit":["选型会遇到总参数与激活参数两个数字；打开 MoE 路由看它们为什么不同。","Selection involves total and active parameter counts. Open MoE routing to explain the distinction."],
+    "expert-routing":["规模读懂以后，还要确认输入输出模态；会看图与会画图不是同一规格。","After interpreting scale, check modalities: understanding an image differs from generating one."],
+    "model-modalities":["模型规格只描述一部分；实际工具工作还取决于它与框架的接口和反馈组织。","Model specifications are only part of the system. Tool work also depends on harness interfaces and feedback."],
+    "harness-model-pair":["配合不只是模型名称；再看不同框架究竟承担了哪些文件、工具和状态工作。","Coordination involves more than model names. Compare responsibility for files, tools and state."],
+    "harness-responsibilities":["承担的工作不同，测试也要看完整交付；保持条件一致，分开比较模型与框架。","Different responsibilities need complete-system evaluation. Hold conditions fixed to separate model and harness effects."],
+    "pair-comparison":["把比较方法落在真实代码上：生成修改后运行测试，观察字典序与数字排序的差别。","Apply the comparison to code: execute a sort and observe lexical versus numeric ordering."],
+    "coding-example":["代码能运行是计算机任务的反馈；科学预测还需要实验和测量提供另一类反馈。","Execution checks a computing task. Scientific predictions require experimental and measurement feedback."],
+    "protein-structure":["预测与验证形成工作环；同样的方法也能改变日常整理、写入和复核的分工。","Prediction and validation form a work loop. The same principle can change everyday extraction, writing and review."],
+    "meeting-workflow":["工作分工说明了应用价值；最后把模型、应用和算力供应放进产业图里。","Work allocation explains application value. Place models, applications and computing providers on an industry map."],
+    "industry-value-map":["产业图里有许多层，我们的平台只在模型服务和集群资源这一层。","The industry has many layers; our platform occupies model serving and cluster resources."],
+    "platform-location":["把问题定位到模型、应用或计算层，再回到对应的例子，最后五分钟用于讨论。","Locate each question in the model, application or compute layer and return to its example for the final discussion."]
+  },
+  "test-time-compute":{"demonstration":["先看未核对的教学候选 381，再用计算器得到 391，指出多做一步带回了什么信息。","Compare the unchecked toy proposal 381 with calculator result 391, identifying the useful new information."],"pause":["强调这是一个核对算例，不是所有“多想”都会更好的结论。","Emphasize that this is a checking example, not proof that more reasoning always helps."],"questions":[
+    [["这一步是在重新训练吗？","Is this retraining?"],["没有更新参数，增加的是当前任务里的计算与反馈。","No parameters update; the current task receives additional computation and feedback."]],
+    [["391 怎样算？","How is 391 obtained?"],["17×23=17×20+17×3=340+51=391。候选 381 因此被修正。","17×23=17×20+17×3=340+51=391, correcting the proposed 381."]],
+    [["为什么还要记延迟？","Why record latency too?"],["新增步骤要花时间和计算；要比较任务结果与这些代价。","Extra steps cost time and compute, which must be compared alongside outcomes."]]
+  ]},
+  "article-prompt-template":{"demonstration":["先读笼统要求，再展开两段模板，最后放入周四 14:00、报告厅的真实通知。","Read the vague request, reveal the two-paragraph template, then supply the Thursday 14:00 auditorium notice."],"pause":["问听众：模板能否凭空知道活动日期？","Ask whether a template can know an event date by itself."],"questions":[
+    [["为什么“写得专业”还不够？","Why isn't “write professionally” enough?"],["它没有说明受众、内容结构和事实材料。明确第一段背景、第二段活动信息，才能形成可检查要求。","It omits audience, structure and facts. Specify background first and event details second to make the request concrete."]],
+    [["模板里哪部分每次要换？","What changes between uses of a template?"],["主题和真实通知等材料要换；受众、段落结构与输出要求可以复用。","The subject and actual notice change; audience, structure and output requirements can be reused."]],
+    [["材料怎样交给模型？","How does material reach the model?"],["把真实通知与指令组织进这次上下文，不能只把模板写得更长。","Supply the real notice with instructions in the current context; longer template wording cannot replace it."]]
+  ]},
+  "rules-and-learning":{"demonstration":["先读散热规则，再读同义关系，最后用三条费用记录找 a、b。","Read the cooling rule, the explicit alias relation, then infer a and b from three fares."],"pause":["让听众指出：哪一种知识由人写明，哪一种数值从记录学习。","Ask which knowledge is written explicitly and which values are learned."],"questions":[
+    [["专家系统为什么不等于 LLM？","Why is an expert system different from an LLM?"],["前者显式编码领域知识与推理规则；后者从数据调整大量参数。应用可以组合二者。","Expert systems encode domain rules; LLMs learn many parameters from examples. Applications can combine them."]],
+    [["皇帝与皇上的关系怎样存？","How is the emperor/sovereign relation stored?"],["知识图谱可写成实体—别称—实体的连线；这条关系本身不能解决整句翻译的语序与指代。","A graph can store entity–alias–entity. One alias relation does not solve sentence ordering or reference in translation."]],
+    [["怎样从规则走到学习？","How do we move from rules to learning?"],["用样本约束可调整的数，下一步实际算一次加权和。","Use examples to constrain adjustable values, then compute a weighted sum."]]
+  ]},
+  "neural-computation":{"demonstration":["先算 a=2、b=3 的三条费用；再展开神经元，改第一个输入为 −2。","Check fares with a=2,b=3, then reveal the neuron and change its first input to −2."],"pause":["停在 −0.8→0，让听众说出 ReLU 做了什么。","Hold at −0.8→0 and ask what ReLU did."],"questions":[
+    [["为什么需要非线性？","Why add a nonlinearity?"],["单纯叠加线性变换仍可合成线性变换；非线性让多层组合表达更复杂关系。","Linear maps compose into another linear map. Nonlinearities let layers express richer relationships."]],
+    [["1.2 怎样算出来？","Where does 1.2 come from?"],["2×0.5+1×0.2+0=1.2；若第一个输入是 −2，则和为 −0.8，ReLU 输出 0。","2×0.5+1×0.2+0=1.2. With first input −2, the sum is −0.8 and ReLU outputs zero."]],
+    [["这怎样接到训练？","How does this lead to training?"],["先知道参数怎样影响输出，再用预测误差决定怎样调整参数。","First see how parameters affect outputs; then use prediction error to guide updates."]]
+  ]},
+  "training-corpus":{"demonstration":["把诗句切成教学 Token；分别读 Token 数、参数数量单位和 Byte。","Split the teaching sentence, then distinguish token counts, parameter units and bytes."],"pause":["让听众换算 35B 是多少个参数，不先算显存。","Ask how many parameters 35B counts before discussing memory."],"questions":[
+    [["为什么语料要变成 Token？","Why turn a corpus into tokens?"],["分词器把内容转成模型可处理的序列；Token 不固定等于一个汉字。","A tokenizer produces a sequence for the model. A token need not equal one Chinese character."]],
+    [["35B 是 35 GB 吗？","Does 35B mean 35 GB?"],["不是。B 表示十亿，35B 是 350 亿个参数；空间还要乘每个参数的表示大小。","No. B means billion: 35 billion parameters. Storage also depends on bytes per parameter."]],
+    [["样本怎样改变模型？","How do examples change a model?"],["根据前文预测真实后续，计算损失，再更新参数；训练材料可以分阶段安排。","Predict observed continuations, compute loss and update parameters; curricula can change across stages."]]
+  ]},
+  "training-stages":{"demonstration":["按广泛语料、集中材料、示范与反馈展开三列；把早读／精读的比喻落回数据。","Reveal broad data, focused material, then demonstrations and feedback; connect reading analogies to actual data."],"pause":["停在后训练列，让听众区分示范答案与偏好比较。","Hold on post-training and distinguish demonstrations from preference comparisons."],"questions":[
+    [["每个模型都必须有中训练吗？","Does every model require mid-training?"],["这个名称没有统一的必经定义，常指基础模型上的集中数据或目标训练。","It is not a universal required phase; it often refers to focused data or objectives after base training."]],
+    [["RLHF 怎样用人类反馈？","How does RLHF use human feedback?"],["反馈帮助形成奖励信号，再以强化学习塑造行为；不表示人逐字给每次更新打分。","Feedback helps form rewards for reinforcement learning; humans need not score every update word by word."]],
+    [["训练完以后怎样用？","What happens after training?"],["推理使用已有参数处理当前输入；参数更新与当前上下文变化要分清。","Inference uses learned parameters on the current input. Separate parameter changes from context changes."]]
+  ]},
+  "held-out-evaluation":{"demonstration":["先读三条评分条件，再运行，再逐项标出两项完成、一项未完成。","Read the three rubrics, run the candidate, then mark two completed tasks and one failure."],"pause":["在 2/3 处停住，指出这个数没有解释失败原因。","Hold at 2/3 and point out that the aggregate does not explain the failure."],"questions":[
+    [["为什么不只考训练过的原题？","Why not test only rehearsed examples?"],["那样难以区分记忆与迁移；保留题用于观察未参与这次训练的任务表现。","That confuses memorization with transfer. Held-out tasks examine behavior beyond the training examples."]],
+    [["完成率怎么算？","How is completion calculated?"],["按事先规定的条件逐项核对，三项里完成两项就是 2/3；仍保留失败项、时间和用量。","Score each task against the predefined rubric. Two of three is 2/3; retain failures, time and usage."]],
+    [["模型出题能直接当考试吗？","Can model-generated questions be used directly?"],["先核对参考答案与评分，再保留未用于调参的题；自动生成不能代替核对。","Check reference answers and scoring, and reserve untuned tasks. Automatic generation does not replace checking."]]
+  ]},
+  "target-and-loss":{"demonstration":["读真实后续“原”，对齐四个候选和 one-hot 目标，再播放概率与损失变化。","Read observed 原, align candidates with the one-hot target, then animate probability and loss."],"pause":["让听众先找到第三项，再读 −ln(0.2)。","Locate candidate three before reading −ln(0.2)."],"questions":[
+    [["目标为什么是 [0,0,1,0]？","Why is the target [0,0,1,0]?"],["本例真实出现第三个候选“原”；这个向量标记观察，不是另一组模型猜测。","The observed next item 原 is candidate three. The vector marks that observation, not another model guess."]],
+    [["1.609 怎样变成 0.511？","How does 1.609 become 0.511?"],["目标概率从 0.2 增到 0.6，−ln(0.2)≈1.609，−ln(0.6)≈0.511；其他概率同步调整，总和为 1。","The target probability rises from 0.2 to 0.6: −ln(0.2)≈1.609, −ln(0.6)≈0.511. Other probabilities adjust so the sum stays one."]],
+    [["为什么接着讲 SFT 与 RL？","Why discuss SFT and RL next?"],["它们以不同方式提供训练信号；先分清示范与结果评分，再谈优化方向。","They organize training signals differently. Distinguish demonstrations from outcome scores before discussing updates."]]
+  ]},
+  "learning-signals":{"demonstration":["左边给纪要及示范表；右边不给完整程序，只运行测试评分。","On the left provide a summary demonstration; on the right run tests without supplying the complete program."],"pause":["请听众指出：哪边直接给期望输出，哪边评价尝试的结果。","Ask which side supplies an output and which scores an attempt."],"questions":[
+    [["SFT 是否只适合有唯一答案的题？","Does SFT require one unique answer?"],["不需要；可以有多种合理示范。关键是训练样本给出期望输出，而非仅有结果分数。","No. Several demonstrations may be valid. The key is supplying demonstrated outputs rather than only outcome scores."]],
+    [["测试通过率怎样成为奖励？","How can test success become reward?"],["先运行生成的程序，再按通过比例或其他任务规则形成数值反馈；评分设计决定学到什么。","Execute the program, then form feedback from test results or another task rubric. Reward design shapes what is learned."]],
+    [["奖励高就直接等于低损失吗？","Is higher reward the same as lower loss?"],["二者不是同一个量；下一步把奖励与基线作比较，得到优势。","They are distinct quantities. Next compare reward to a baseline to obtain advantage."]]
+  ]},
+  "reward-and-advantage":{"demonstration":["对照保留日期和漏掉日期的回答，给 1、0 分，再减均值 0.5。","Compare retained and omitted deadlines, award 1/0 and subtract the 0.5 mean."],"pause":["先让听众算 1−0.5，再解释更新方向。","Have learners compute 1−0.5 before discussing learning direction."],"questions":[
+    [["为什么奖励还要减基线？","Why subtract a baseline from reward?"],["优势表达相对预期的好坏；本例用组均值作基线，真实方法也可采用其他基线。","Advantage expresses performance relative to expectation. The group mean is one illustrative baseline among several possibilities."]],
+    [["两个优势怎样算？","How are the two advantages computed?"],["均值 (1+0)/2=0.5，优势分别为 1−0.5=+0.5、0−0.5=−0.5。","Mean (1+0)/2=0.5; advantages are 1−0.5=+0.5 and 0−0.5=−0.5."]],
+    [["这里的分数能代表所有 RL 吗？","Do these scores define every RL method?"],["不能。奖励、基线、优势和优化目标依算法而变；这里解释它们的不同用途。","No. Rewards, baselines, advantages and objectives vary by algorithm. This example separates their roles."]]
+  ]},
+  "training-budget":{"demonstration":["固定 N×D=16，先选 N=4，再选 N=16，观察数据量与玩具损失。","Fix N×D=16, compare N=4 and N=16, then read data allocation and toy loss."],"pause":["在 N=16、D=1 处停下，解释大模型为什么没有免费增加预算。","Hold at N=16,D=1 and explain why size did not increase the budget."],"questions":[
+    [["为什么不能只把模型做大？","Why not maximize model size alone?"],["固定预算下，每个 Token 更贵会挤掉数据或其他计算；规模规律需要数据、模型和预算条件。","At fixed compute, higher cost per token leaves less data or other work. Scaling depends on model, data and budget together."]],
+    [["图里的最小值怎样得到？","Where does the toy minimum come from?"],["D=16/N，代入 N^−0.5+D^−0.5；本例 N=D=4 时损失为 1。它不是实测能力曲线。","Use D=16/N in N^−0.5+D^−0.5. At N=D=4 the toy loss is 1. This is not measured model capability."]],
+    [["推理时多想属于同一种扩展吗？","Is extra inference work the same scaling axis?"],["训练数据和参数规模形成模型；推理时计算用于一个当前任务，需要另看结果与延迟。","Training data and parameter scale form a model; inference compute is spent on the current task and needs separate outcome/latency measurement."]]
+  ]},
+  "model-weight-size":{"demonstration":["依次读 2.8T、16 bit=2 Byte、乘法和 5.6 TB，再指出缺少的运行内存。","Read 2.8T, 16 bits=2 bytes, the multiplication and 5.6 TB, then identify excluded runtime memory."],"pause":["让听众说出这里为什么还不能给出 GPU 张数。","Ask why this does not yet determine GPU count."],"questions":[
+    [["参数量为什么不能直接换成人的智力？","Why can't parameter count be converted to human intelligence?"],["参数只是在模型中可调整的数；质量还取决于数据、方法、任务和使用方式。","Parameters are adjustable numbers. Quality also depends on data, methods, tasks and use."]],
+    [["5.6 TB 怎样来？","Where does 5.6 TB come from?"],["2.8×10¹² 个值，每值 2 Byte，得到 5.6×10¹² Byte，即十进制 5.6 TB。","2.8×10¹² values times 2 bytes gives 5.6×10¹² bytes, or decimal 5.6 TB."]],
+    [["为什么还要讲芯片和带宽？","Why discuss chips and bandwidth next?"],["存得下不等于算得快；还需要搬运数据、执行运算，并存放缓存与工作区。","Fitting is not the same as running quickly. Data must move, arithmetic must execute, and caches/workspace also need memory."]]
+  ]},
+  "weight-quantization":{"demonstration":["先核对 8 bit=1 Byte；用步长 0.25 重建三个权重，再改 0.125 观察截断。","Check 8 bits=1 byte. Reconstruct three weights at step 0.25, then switch to 0.125 to expose clipping."],"pause":["停在 1.23→0.875，让听众解释为何步长更小反而有大误差。","Hold at 1.23→0.875 and explain why a smaller step produced more error."],"questions":[
+    [["4 bit 为什么能减少存储？","Why does 4-bit storage save space?"],["每个值只占 4 位，理想紧凑编码一 Byte 放两个值；实际还需要缩放信息及较高精度部分。","Each value uses four bits, ideally two per byte. Real formats also store scaling metadata and higher-precision parts."]],
+    [["步长 0.125 为什么截断？","Why does step 0.125 clip?"],["1.23/0.125≈9.84，取整为 10，超过有符号 4 位上限 7，只能重建为 7×0.125=0.875。","1.23/0.125≈9.84 rounds to 10, exceeding signed 4-bit maximum 7, so reconstruction is 7×0.125=0.875."]],
+    [["位数减半就一定快两倍吗？","Does halving bits guarantee twice the speed?"],["不保证。实际速度取决于硬件、内核、搬运与工作负载；质量还要回原任务比较。","No. Hardware, kernels, data movement and workload determine speed. Quality must be tested on the actual tasks."]]
+  ]},
+  "gpu-interconnect":{"demonstration":["先把四份权重放进不同卡，再显示连线，最后播放中间状态经过各卡。","Place four shards, reveal the links, then move intermediate state through the cards."],"pause":["停在连线出现而请求未移动时：有线还不等于有分片执行。","Pause after links appear: wires alone do not implement sharded execution."],"questions":[
+    [["为什么多卡需要交换数据？","Why must GPUs exchange data?"],["模型拆在多卡上，各卡计算自己负责的部分；后续计算需要前面产生的中间结果。","Each card computes its portion of a split model; later computation needs intermediate values from earlier work."]],
+    [["四张 24 GB 卡就等于一张 96 GB 卡吗？","Are four 24 GB cards automatically one 96 GB GPU?"],["不是。程序或引擎必须实现分片和通信；设备与拓扑也要支持相应并行方式。","No. Software must implement sharding and communication on supported devices and topology."]],
+    [["Kubernetes 和推理引擎分别做什么？","What do Kubernetes and an inference engine do?"],["集群放置服务；引擎加载模型、安排生成计算与通信。它们是不同层的工作。","The cluster places services; an engine loads weights and executes generation and communication at another layer."]]
+  ]},
+  "model-task-fit":{"demonstration":["用纪要、排序和检索三个任务，先定标准，再观察结果及未完成项。","Define rubrics for notes, sorting and retrieval, then inspect outcomes and the failed item."],"pause":["先问任务需要什么，再读品牌名和规模。","Ask what the task requires before discussing brand or size."],"questions":[
+    [["为什么最大模型未必最适合？","Why might the largest model be unsuitable?"],["权重能装下还不够；上下文、并发、延迟、工具链和稳定完成任务都需要比较。","Fitting weights is only a start. Compare context, concurrency, latency, toolchain support and consistent task completion."]],
+    [["怎样做一个公平的本地比较？","How can we compare locally?"],["固定输入、工具、评分和尝试次数，记录是否完成、关键错误、时间与用量。","Fix inputs, tools, scoring and attempts; record completion, errors, time and usage."]],
+    [["MoE 为什么要单独说明？","Why explain MoE separately?"],["它区分完整存储与本次激活计算，直接影响怎样读参数规模与设备需求。","It separates stored parameters from active computation, affecting how model size and device needs are interpreted."]]
+  ]},
+  "expert-routing":{"demonstration":["读四个专家的存储范围；先看 A 的路由，再切 B，比较专家和加权输出。","Show all stored experts, route A, then switch to B and compare selected experts and output."],"pause":["让听众先找到未选专家：它们仍在模型中。","Locate the unselected experts: they remain in the model."],"questions":[
+    [["MoE 专家是几个 Agent 吗？","Are MoE experts separate agents?"],["不是。专家是同一模型内的参数模块；Agent 是组织模型、工具与动作的系统。","No. Experts are parameter modules inside one model; an agent organizes model use, tools and actions."]],
+    [["A 的组合结果怎样算？","How is A's mixed output computed?"],["选分数 0.5 和 0.25，归一化成 2/3 和 1/3；乘专家输出 2、4，得到 8/3。","Select scores 0.5 and 0.25, normalize to 2/3 and 1/3, then mix outputs 2 and 4 to obtain 8/3."]],
+    [["A3B 为什么不表示 6 GB 总权重？","Why doesn't A3B imply 6 GB of total weights?"],["激活只数本次计算的参数，完整 35B 权重按统一 FP16 粗算约 70 GB，另有运行开销。","Active counts refer to one token's computation. All 35B weights at uniform FP16 would be about 70 GB, plus runtime overhead."]]
+  ]},
+  "model-modalities":{"demonstration":["分别指出三列的输入和输出，不以公司名称代替规格。","Identify each column's inputs and outputs; do not replace specifications with company names."],"pause":["请听众区分“看图写字”与“根据文字画图”。","Distinguish describing an image from generating one."],"questions":[
+    [["会看图片就一定能生成图片吗？","Does image understanding imply image generation?"],["不一定；前者输入图像输出文字，后者输出图像，具体接口和模型不同。","No. One consumes images and produces text; the other produces images, with different models and interfaces."]],
+    [["怎样给视频模型准备任务？","How is a video task specified?"],["先确认支持的文字、参考图片或其他输入，再明确视频输出要求。","Check supported text, reference-image or other inputs, then specify the required video output."]],
+    [["为什么还要看模型与框架配合？","Why examine the model-harness pair next?"],["任务还依赖材料、工具和反馈的组织，模型名称不能代表完整工作系统。","Task outcomes also depend on context, tools and feedback; a model name does not specify the complete working system."]]
+  ]},
+  "harness-model-pair":{"demonstration":["固定 A+X，先只换模型，再只换框架，读清每次变了哪一个因素。","Start at A+X, change only the model, then only the harness; identify each variable."],"pause":["明确图中没有伪造的性能分数，也没有声称具体产品可任意互换。","Note that no performance scores or universal product compatibility are implied."],"questions":[
+    [["Codex 与 GPT 是同一种名称吗？","Do Codex and GPT name the same kind of thing?"],["这里 Codex CLI 指组织编程工作的软件，GPT 指模型家族；应用和模型版本分别识别。","Here Codex CLI names coding-agent software, while GPT names a model family. Identify software and checkpoint separately."]],
+    [["为什么换一个工具名字也会影响工作？","Why can changing a tool name affect execution?"],["read_file(path) 与 open_document(file) 对程序不是同一接口，参数和结果需要正确适配。","read_file(path) and open_document(file) are distinct interfaces; arguments and observations need matching adapters."]],
+    [["Kimi Code→K2.5 是永久配对吗？","Is Kimi Code→K2.5 a permanent pairing?"],["不是；应用可更新服务模型。这里保留它作为具体版本例子，当前规格应查看官方来源。","No. An app can update its serving model. It remains a versioned example; check official sources for current specifications."]]
+  ]},
+  "pair-comparison":{"demonstration":["保持同一个排序修复任务，分别列 A+X、A+Y 和 B+X；逐项说明比较因素。","Keep the same sort-fix task and compare A+X, A+Y and B+X one variable at a time."],"pause":["先说哪些条件保持一致，再讨论谁完成了实际修改。","State the fixed conditions before comparing actual completed edits."],"questions":[
+    [["为什么不能只比较一段正确答案？","Why not compare only correct answer text?"],["写出代码与实际写回文件、运行测试是不同交付；完整系统要记录它真正完成了什么。","Returning code differs from applying edits and running tests. Evaluate what the complete system actually delivered."]],
+    [["怎样分开模型和框架的影响？","How can we separate model and harness effects?"],["固定 A 比较 X、Y；固定 X 比较 A、B，同时保留任务、工具和评分条件。","Compare X/Y under fixed A, then A/B under fixed X, holding task and scoring conditions comparable."]],
+    [["这怎样帮助实际工作？","How does this inform real work?"],["以真实交付、时间与返工更新分工，而不是根据一次惊艳演示推断普遍能力。","Update work allocation from delivered outcomes, time and rework rather than one impressive demonstration."]]
+  ]}
+}

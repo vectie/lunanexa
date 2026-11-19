@@ -1,0 +1,24 @@
+///|
+import { "moonbitlang/async@0.22.4", "moonbitlang/async@0.22.4/fs", "moonbitlang/async@0.22.4/shell", "moonbitlang/core/env", "moonbitlang/core/json" }
+
+///|
+async fn main {
+  guard @env.args() is [_, repo] else { fail("Usage: refresh-coursebook-digests.mbtx REPO") }
+  let path = repo + "/docs-site/coursebook-evidence.json"
+  let mut content = @fs.read_file(path).text()
+  guard @json.parse(content) is { "sources": Array(sources), .. } else { fail("Missing source ledger") }
+  let mut count = 0
+  for source in sources {
+    guard source is { "path": String(relative), "digest": String(prior), .. } else { fail("Missing source digest") }
+    guard !relative.has_prefix("/") && !relative.contains("..") else { fail("Invalid source path") }
+    let result = @shell.Cmd("shasum", ["-a", "256", repo + "/" + relative]).output()
+    result.check()
+    let digest = "sha256:" + result.stdout().split(" ").next().unwrap().to_owned()
+    if prior != digest {
+      content = content.replace(old=prior, new=digest)
+      count += 1
+    }
+  }
+  @fs.write_file(path, content)
+  println("Refreshed \{count} source digests; this does not certify deployment readiness.")
+}

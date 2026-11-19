@@ -21,7 +21,8 @@ trap cleanup EXIT HUP INT TERM
 mkdir -p "$build_context/images" "$build_context/docs-site/images"
 cp "$repository_root/images/nginx.docs.conf" "$build_context/images/"
 for source in \
-  index.html styles.css app.js \
+  index.html styles.css app.js lecture.js lecture.css lecture-studio.js lecture-studio.css whiteboard-studio.js ai-lecture.json \
+  ai-speaker-script.html ai-speaker-script.md speaker-script.css speaker-script.js \
   admin.html admin.js admin.css \
   coursebook.json coursebook.zh-CN.json coursebook-evidence.json; do
   cp "$repository_root/docs-site/$source" "$build_context/docs-site/$source"

@@ -26,7 +26,7 @@ const pageById = new Map(book.pages.map((page) => [page.id, page]));
 const sourceById = new Map(evidence.sources.map((source) => [source.id, source]));
 const allowedBlocks = new Set([
   "heading", "paragraph", "bullets", "steps", "callout", "code", "table",
-  "flow", "cards", "troubleshooting", "checkpoint", "image",
+  "flow", "cards", "troubleshooting", "checkpoint", "image", "diagram", "course-index", "references",
 ]);
 
 function invokeWithoutListener(server, { method = "GET", url = "/", host = "127.0.0.1:4390", body = "", headers: requestHeaders = {} } = {}) {
@@ -94,6 +94,41 @@ test("coursebook has a complete unique navigation graph", () => {
   }
 });
 
+test("AI classroom route keeps teaching prose separate from schedules and engineering hardening", () => {
+  assert.equal(book.pages[0].id, "ai-start");
+  const educationalGroups = book.navigation.filter((group) => group.id.startsWith("ai-"));
+  assert.equal(educationalGroups.length, 6);
+  const ids = educationalGroups.flatMap((group) => group.page_ids);
+  assert.equal(ids.length, 25);
+  assert.equal(evidence.content_review.curriculum_source_id, "ai-foundations");
+  for (const id of ids) {
+    const page = pageById.get(id);
+    assert.equal(page.status, "documented");
+    assert.ok(page.source_ids.includes("ai-foundations"));
+    for (const projection of [page, zhBook.pages[id]]) {
+      const visible = projection.blocks.filter((block) => block.visibility !== "advanced");
+      if (id === "ai-course-map") {
+        assert.ok(projection.summary.length > 0);
+        assert.equal(visible.length, 1);
+        assert.equal(visible[0].kind, "course-index");
+      } else assert.ok(visible.some((block) => block.kind === "paragraph"), `${id}: explanation`);
+      assert.ok(!visible.some((block) => ["steps", "checkpoint", "troubleshooting"].includes(block.kind)), `${id}: repeated workbook template`);
+      assert.doesNotMatch(JSON.stringify(visible), /\b(?:SLO|idempotenc\w*|hardening|reclaim|sanitiz\w*|rollback|permission|acceptance|credential|failover|SLA)\b|权限|验收|幂等|凭证|生产就绪|风险清单|边界|免责声明|几天后复习|换个场景|试一试/iu, id);
+    }
+    for (const card of page.blocks.flatMap((block) => block.kind === "cards" ? block.items : [])) {
+      if (card.href.startsWith("https://")) assert.ok(new URL(card.href).hostname);
+      else assert.ok(pageById.has(card.href), `${id}: broken lesson link ${card.href}`);
+    }
+  }
+  const schedule = pageById.get("ai-start").blocks.find((block) => block.kind === "table");
+  assert.equal(schedule.visibility, "advanced");
+  assert.ok(schedule.rows.some((row) => row[0].startsWith("115–120")));
+  assert.match(JSON.stringify(pageById.get("ai-start")), /25-minute/);
+  assert.equal(book.navigation.find((group) => group.id === "ai-industry").page_ids.at(-1), "ai-platform-place");
+  assert.equal(typeof zhBook.navigation["ai-industry"], "string");
+  assert.ok(pageById.get("ai-platform-place").source_ids.includes("product-contract"));
+});
+
 test("coursebook renderer shows both concise and titled procedure steps", async () => {
   const source = await readFile(resolve(siteRoot, "app.js"), "utf8");
   assert.match(source, /typeof item === "string"/);
@@ -135,10 +170,11 @@ test("current reader guides bind named actions to bilingual catalogs and actual 
         assert.ok(navigation?.includes("@html.button("), `${action.source}: route label is not wired to navigation`);
     }
     if (action.binding) {
-        const block = source.split("///|").find((candidate) => label.test(candidate));
-        const compact = (value) => value.replace(/\s+/g, "");
-        assert.ok(block?.includes("@html.button(") || block?.includes("@html.a("));
-        assert.ok(compact(block).includes(compact(action.binding)), `${action.source}: ${action.en} has no expected event binding`);
+        const blocks = source.split("///|").filter((candidate) => label.test(candidate));
+        const compact = (value) => value.replace(/\s+/g, "").replace(/,(?=\))/g, "");
+        assert.ok(blocks.some((block) =>
+          (block.includes("@html.button(") || block.includes("@html.a(")) &&
+          compact(block).includes(compact(action.binding))), `${action.source}: ${action.en} has no expected event binding`);
     }
     for (const id of action.page_ids) {
       assert.ok(pageById.has(id));
@@ -176,8 +212,8 @@ test("newcomer guidance does not invent renewal or conflate expiry authorities",
   }
   assert.match(JSON.stringify(pageById.get("exclusive-machine-basics")), /staged tenant-account\/container\/volume cleanup/);
   assert.match(JSON.stringify(pageById.get("exclusive-machine-basics")), /no self-service machine-renewal button/);
-  assert.match(JSON.stringify(pageById.get("comfyui-quickstart")), /retained volume data/);
-  assert.match(JSON.stringify(pageById.get("comfyui-quickstart")), /keyboard-only navigation, modal focus entry\/return/);
+  assert.match(JSON.stringify(pageById.get("comfyui-quickstart")), /Logout or a container restart does not delete the personal volume/);
+  assert.match(JSON.stringify(pageById.get("comfyui-quickstart")), /retention, expiry and explicit deletion/);
   assert.match(JSON.stringify(pageById.get("trial-quickstart")), /waiting for expiry does not create another trial/);
 });
 
@@ -359,7 +395,7 @@ test("GLM quickstart distinguishes client URL modes, safe output and record IDs"
     }
   }
   assert.match(JSON.stringify(page), /record ID/);
-  assert.match(JSON.stringify(page), /1 MiB/);
+  assert.match(JSON.stringify(page), /16 MiB/);
   assert.match(JSON.stringify(zhBook.pages["client-api"]), /记录编号/);
   assert.equal(pageById.has("qr-entry"), false);
   assert.match(JSON.stringify(page), /Connection QR/);
@@ -400,6 +436,43 @@ test("published source digests match the inspected repository bytes", async () =
     const digest = createHash("sha256").update(bytes).digest("hex");
     assert.equal(source.digest, `sha256:${digest}`, source.path);
   }
+});
+
+test("freshness represents one complete bilingual content review rather than only refreshed hashes", () => {
+  assert.equal(book.project.freshness, "current");
+  assert.equal(book.project.revision, evidence.repository.revision);
+  assert.equal(book.project.updated_at, evidence.repository.inspected_at);
+  const review = evidence.content_review;
+  assert.equal(review.reviewed_at, evidence.repository.inspected_at);
+  assert.ok(sourceById.has(review.report_source_id));
+  const reviewed = new Map(review.pages.map((page) => [page.page_id, page]));
+  assert.equal(reviewed.size, review.pages.length);
+  assert.deepEqual([...reviewed.keys()].sort(), [...pageById.keys()].sort());
+  for (const page of book.pages) {
+    assert.deepEqual(reviewed.get(page.id).locales, ["en", "zh-CN"]);
+    assert.deepEqual(reviewed.get(page.id).source_ids, page.source_ids);
+  }
+  for (const claim of evidence.claims) {
+    for (const id of claim.source_ids) assert.ok(sourceById.has(id), `${claim.id}: missing source ${id}`);
+  }
+  for (const id of ["production-ui-validation", "future-expansion"]) {
+    assert.equal(reviewed.get(id).classification, "dated-historical-evidence");
+    assert.equal(pageById.get(id).visibility, "advanced");
+    assert.match(JSON.stringify(pageById.get(id)), /2026-08-2[01]/);
+    assert.match(JSON.stringify(zhBook.pages[id]), /2026-08-2[01]/);
+  }
+});
+
+test("current guides preserve registration, model materialization and public versus personal workspace boundaries", () => {
+  assert.match(JSON.stringify(pageById.get("trial-quickstart")), /mobile number/);
+  assert.match(JSON.stringify(zhBook.pages["trial-quickstart"]), /手机号/);
+  for (const id of ["client-api", "dgx-runtimes", "readiness"]) {
+    assert.doesNotMatch(JSON.stringify(pageById.get(id)), /850000|1 MiB|Functional simulator only|no complete model service|publishes one verified artifact file/);
+  }
+  assert.match(JSON.stringify(pageById.get("dgx-runtimes")), /modelstore:\/\//);
+  assert.match(JSON.stringify(pageById.get("comfyui-quickstart")), /anonymous|Anonymous/);
+  assert.match(JSON.stringify(zhBook.pages["comfyui-quickstart"]), /匿名/);
+  assert.doesNotMatch(JSON.stringify(pageById.get("comfyui-next-steps")), /Expiry erases everything|entire machine is sanitized|git clone/);
 });
 
 test("public assets contain no unresolved template or secret material", async () => {
@@ -608,7 +681,7 @@ test("newcomer mode keeps repository process and readiness judgment opt-in", asy
   assert.deepEqual(advancedGroups.map((group) => group.id), ["advanced"]);
   assert.deepEqual(
     advancedPages.map((page) => page.id).sort(),
-    ["future-expansion", "readiness", "source-ledger"],
+    ["future-expansion", "production-ui-validation", "readiness", "source-ledger"],
   );
   assert.ok(book.navigation.find((group) => group.id === "overview")?.page_ids.includes("welcome"));
   assert.ok(book.navigation.find((group) => group.id === "quickstart")?.page_ids.includes("local-quickstart"));

@@ -1,0 +1,218 @@
+{
+  "id": "ai-board-models",
+  "download_rank": 7,
+  "order": 1,
+  "title": [
+    "01 · 模型怎样变成 AI 应用",
+    "01 · From a model to an AI application"
+  ],
+  "summary": [
+    "从下一 Token 的生成，走到提示词、上下文和围绕模型的软件。",
+    "Follow next-token generation into prompts, context and the software around a model."
+  ],
+  "sections": [
+    {
+      "id": "board-model-agent",
+      "title": [
+        "LLM、Agent 与应用，各指什么？",
+        "What are an LLM, an agent and an application?"
+      ],
+      "concepts": [
+        "LLM",
+        "large language model",
+        "Agent",
+        "AI 应用",
+        "大语言模型"
+      ],
+      "points": [
+        "Agent，AI 应用",
+        "LLM 模型"
+      ],
+      "paragraphs": [
+        [
+          "LLM 是 Large Language Model，大语言模型。它接收一段输入，用学到的参数计算输出。聊天网站、编程助手和办公助手是应用：应用负责接收文件、组织对话、调用模型和展示结果。Agent 指能够围绕目标，依据当前观察选择动作并继续工作的系统。一个应用可以只有一次模型调用，也可以组织一个或多个 Agent。",
+          "LLM means Large Language Model: a learned numerical model that computes output from input. An application handles files, conversation, model calls and presentation. An agent is a system that chooses actions from observations while pursuing a goal. An app may use one model call or organize several agents."
+        ],
+        [
+          "把“帮我写文章”交给模型，得到草稿，是一次生成。让程序搜集资料、把结果交给模型、再按缺失内容继续检索，是应用组织的一串动作。两者可以使用同一个模型。",
+          "Generating a draft from a request is one call. Searching for sources, returning them to the model and searching again for missing information is a sequence organized by software. Both can use the same model."
+        ]
+      ],
+      "reuse_scene": "model-application-compute"
+    },
+    {
+      "id": "board-ar-transformer",
+      "title": [
+        "Transformer 是结构，自回归是生成方式",
+        "Transformer is an architecture; autoregression is a generation scheme"
+      ],
+      "concepts": [
+        "Transformer",
+        "自回归",
+        "autoregressive",
+        "Next Token Prediction",
+        "下一个 Token",
+        "吃好了"
+      ],
+      "points": [
+        "Auto-regressive 自回归",
+        "Next Token Prediction 预测下一个 token",
+        "Transformer",
+        "LLM 输入→输出→接回输入的循环",
+        "例句：吃好了"
+      ],
+      "paragraphs": [
+        [
+          "Token 是分词器定义的片段，不固定等于一个字。模型先把片段编号变成数值表示，再经过 Transformer 的注意力和其他计算，得到下一片段的分布。Transformer 描述内部怎样组织计算；自回归描述把已有输出接回前文、继续生成的方式。两者不是同义词。",
+          "A token is a tokenizer-defined piece, not necessarily one character. Its ID selects a numerical representation, and Transformer computations produce a distribution for the next piece. Transformer describes the computation architecture; autoregression describes feeding previous output back into generation. They are different concepts."
+        ],
+        [
+          "以“吃好了”为例，假设本例分成“吃／好／了”：先有“吃”，生成“好”；再用“吃好”生成“了”。这里的分词是假设，真正切法由分词器决定。长回答是这个步骤反复进行，不是一次从库中取出整篇文章。",
+          "Assume the example 吃好了 is split into 吃 / 好 / 了. After 吃, generate 好; then use 吃好 to generate 了. The split is illustrative. A long response repeats a prediction operation rather than retrieving a complete stored article."
+        ]
+      ],
+      "reuse_scene": "autoregressive-feedback"
+    },
+    {
+      "id": "board-diffusion-contrast",
+      "title": [
+        "文字续写与扩散去噪，更新的对象不同",
+        "Autoregressive text and diffusion update different objects"
+      ],
+      "concepts": [
+        "Diffusion",
+        "扩散",
+        "视觉",
+        "去噪",
+        "visual generation"
+      ],
+      "points": [
+        "Diffusion",
+        "视觉生成",
+        "文章由片段接续，图像由状态迭代的对照"
+      ],
+      "paragraphs": [
+        [
+          "自回归通常把新的片段追加到序列末尾；扩散生成则从噪声状态开始，在多个时间步用模型预测更新，逐渐形成图像。前者增加序列，后者修改当前状态。视觉模型也可以采用自回归，扩散也能用于其他模态，因此“文字只能自回归、图片只能扩散”并不成立。",
+          "Autoregression appends pieces to a sequence. Diffusion starts from a noisy state and repeatedly predicts updates that lead toward an image. One grows a sequence; the other changes a state. Vision can also be autoregressive, and diffusion can serve other modalities: these are not exclusive text/image categories."
+        ],
+        [
+          "两个过程都使用训练好的模型。生成时让状态改变，与训练时调整参数，是不同层面的变化。先沿箭头看状态，再问参数有没有更新。",
+          "Both use a trained model. Changing the generated state differs from changing learned parameters during training. Track the state along the arrows before asking whether the model itself changed."
+        ]
+      ],
+      "reuse_scene": "diffusion-steps"
+    },
+    {
+      "id": "board-prompt-template",
+      "title": [
+        "提示词：把“写文章”拆成可执行的要求",
+        "Prompts: turn “write an article” into explicit conditions"
+      ],
+      "concepts": [
+        "Prompt Engineering",
+        "提示词工程",
+        "模板",
+        "写文章",
+        "背景",
+        "介绍"
+      ],
+      "points": [
+        "Prompt Engineering 提示词工程",
+        "模板",
+        "帮我写文章",
+        "第一段背景",
+        "第二段介绍"
+      ],
+      "paragraphs": [
+        [
+          "提示词是本次发给模型的任务说明。提示词工程是反复设计和比较说明方式：目标是什么、给谁看、必须用哪些材料、按什么结构交付。模板把经常重复的要求固定下来，再填入本次主题；模板本身不会补出缺失事实。",
+          "A prompt states the task for the current call. Prompt engineering develops and compares task instructions: the goal, audience, material and output structure. A template fixes recurring requirements and fills in the current subject. It cannot supply missing facts by itself."
+        ],
+        [
+          "具体写成：“面向第一次参加活动的读者，写 300 字介绍。第一段说明活动背景，第二段介绍时间、地点与参加方式。只使用下面通知中的事实。”这样，段落结构、篇幅、受众和资料范围都有了着落。模型仍需读取真正的通知，而不是只看到一句“请写得专业”。",
+          "For example: “Write a 300-character introduction for first-time attendees. Paragraph one explains the background; paragraph two gives time, location and how to join. Use the supplied notice.” The structure, length, audience and evidence are explicit. The actual notice must still be supplied."
+        ]
+      ],
+      "reuse_scene": "prompt-before-after"
+    },
+    {
+      "id": "board-context-material",
+      "title": [
+        "上下文：要求之外，还需要哪些信息？",
+        "Context: what information accompanies the instruction?"
+      ],
+      "concepts": [
+        "Context Engineering",
+        "上下文工程",
+        "背景知识",
+        "上下文窗口",
+        "资料",
+        "context window"
+      ],
+      "points": [
+        "Context Engineering",
+        "上下文",
+        "背景知识进入本次调用"
+      ],
+      "paragraphs": [
+        [
+          "上下文是这一次实际送入模型的内容：指令、相关对话、原始通知、检索片段、工具结果等。上下文工程决定哪些内容值得送入、怎样组织，以及空间不足时保留什么。模型参数中学到的知识、外部数据库与本次上下文是三回事；外部材料要被读取并送入，才成为这次可用的输入。",
+          "Context is what a call actually receives: instructions, relevant dialogue, the notice, retrieved passages and tool results. Context engineering selects and organizes that information within a finite window. Learned parameters, an external database and the current context are distinct. External material becomes available to a call only after it is supplied."
+        ],
+        [
+          "仍用活动介绍：提示词负责说“写两段”；上下文放入真实日期、地点、报名规则和受众背景。把“受众第一次参加”写得再多，也不能代替活动日期。检索增强生成 RAG 是先找相关资料，再把资料接入生成。",
+          "In the event example, the prompt asks for two paragraphs; context supplies the real date, venue, registration rules and audience background. Repeating the audience description does not replace a missing date. RAG retrieves material before including it in generation."
+        ]
+      ],
+      "reuse_scene": "context-packet"
+    },
+    {
+      "id": "board-harness-loop-engineering",
+      "title": [
+        "Harness 与 Loop：把一次生成接成连续工作",
+        "Harness and loops: connect calls into ongoing work"
+      ],
+      "concepts": [
+        "Harness Engineering",
+        "Agent Engineering",
+        "Loop Engineering",
+        "壳",
+        "驾驭",
+        "环境",
+        "循环工程"
+      ],
+      "points": [
+        "Harness Engineering",
+        "驾驭／壳的比喻",
+        "围绕模型的程序与环境",
+        "Loop Engineering（下一张板书续接）"
+      ],
+      "paragraphs": [
+        [
+          "Harness 原意是把力量接到任务上的一套装置；在这里指围绕模型的软件：准备输入，描述工具，执行调用，把结果送回，并保存任务进展。Agent engineering 强调把这些部件组织成能完成目标的系统。它既包括提示词，也包括文件、工具、状态和执行环境。",
+          "A harness connects model capability to a task. The software prepares input, describes tools, executes calls, returns observations and retains progress. Agent engineering organizes these parts into a goal-directed system: instructions, files, tools, state and an execution environment."
+        ],
+        [
+          "Loop engineering 进一步关注每一轮：根据什么继续、什么结果进入下一轮、什么时候结束，失败的尝试怎样影响后续选择。写文章时，可用“取材料→拟结构→写草稿→核对材料→修订”的循环；这里改变的是文稿和任务状态，不表示模型参数每轮都重训。下面把这个闭环拆开。",
+          "Loop engineering focuses on iteration: when to continue, what feedback to carry forward and when to stop. Writing can follow gather → outline → draft → compare with sources → revise. The draft and task state change; that does not imply retraining the model on each round. The next chapter opens this loop."
+        ]
+      ],
+      "reuse_scene": "tool-roundtrip"
+    }
+  ],
+  "references": [
+    {
+      "title": "Attention Is All You Need",
+      "url": "https://arxiv.org/abs/1706.03762"
+    },
+    {
+      "title": "Denoising Diffusion Probabilistic Models",
+      "url": "https://arxiv.org/abs/2006.11239"
+    },
+    {
+      "title": "Effective context engineering for AI agents",
+      "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+    }
+  ]
+}

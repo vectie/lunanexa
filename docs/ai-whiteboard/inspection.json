@@ -1,0 +1,22 @@
+{
+  "selection":"Seven newest top-level image files in Downloads, sorted by modification time including nanoseconds; originals left unchanged.",
+  "reading_order":"download rank 7 → 6 → 5 → 4 → 3 → 2 → 1",
+  "inspection":"All seven full images and all 28 native-resolution quadrants visually inspected. Textual uncertainty retained separately from conceptual explanation.",
+  "images":[
+    {"order":1,"download_rank":7,"sha256":"3472bb076e3815cd99af65414e3d0b0eb88e36dcc3aecd54d661ca6858bd83c3","subject":"LLM、自回归、扩散与三类工程"},
+    {"order":2,"download_rank":6,"sha256":"2050c2945f07600c1363dce14db7826cbd286668e155cb9901dd6086001d7c8f","subject":"Harness、Loop、工具、SFT、RL 与损失"},
+    {"order":3,"download_rank":5,"sha256":"16f603485d497cf97670857a2c1956a32ba2ec433f9de079b50b3d1e4f062a7e","subject":"规则、连接学习、自治与多 Agent"},
+    {"order":4,"download_rank":4,"sha256":"a7fa797a20c6844c3782a0f5f46f646a6f36b925a2b57bef16c6f9f1cd61fd6e","subject":"训练数据、参数单位、训练阶段与考试"},
+    {"order":5,"download_rank":3,"sha256":"0832eb79cab88ed577b68a4c66650a963dc8596b5f1626ec4a45577c2930d145","subject":"Scaling Law、规模、互联与模型分工"},
+    {"order":6,"download_rank":2,"sha256":"500d2f7cc5564476e92e1feb1bdf30835021c4e9c83323e1a46e3790fe7b5b25","subject":"选模型、MoE、Qwen3.6、精度与量化"},
+    {"order":7,"download_rank":1,"sha256":"5998f7785e816a7cd1487bf533d4da76ea9b406cce4f20f2529a6a611ac2a1c3","subject":"Agent 框架与模型配合、迭代与价值"}
+  ],
+  "uncertain_readings":[
+    {"id":"reading-opus-version","download_rank":1,"location":"Codex + Opus 右侧版本","concept_id":"board-harness-model-pair","status":"awaiting-transcription-confirmation","explanation":"Model family and pairing are explained; handwritten version is not asserted as a verified product specification."},
+    {"id":"reading-ecosystem-parenthesis","download_rank":2,"location":"生态好后的括号英文","concept_id":"board-ecosystem","status":"awaiting-transcription-confirmation","explanation":"Ecosystem is expanded explicitly; the uncertain parenthetical term is not silently replaced."},
+    {"id":"reading-npc","download_rank":5,"location":"自治系统下括号缩写","concept_id":"board-game-npc","status":"awaiting-transcription-confirmation","explanation":"NPC/game-character material is expanded, while the source abbreviation remains uncertain."},
+    {"id":"reading-kimi-number","download_rank":3,"location":"Kimi 旁 2.8T","concept_id":"board-size-memory","status":"awaiting-transcription-confirmation","explanation":"2.8T memory arithmetic and a separately verified Kimi K3 example are included without conflating K2.5 and K3."},
+    {"id":"reading-deepseek-comment","download_rank":3,"location":"DeepSeek 旁思维／前端／质量评语","concept_id":"board-model-families","status":"uncertain-handwriting","explanation":"Reasoning, frontend execution, visual quality and model choice are covered; unclear personal shorthand is not turned into a performance ranking."},
+    {"id":"reading-context-shorthand","download_rank":7,"location":"Context Engineering 右侧背景知识小字与 Harness 括号小字","concept_id":"board-context-material","status":"uncertain-handwriting","explanation":"Background knowledge, context organization, environment and prompt templates are all covered; unclear literal wording is retained as an open reading."}
+  ]
+}

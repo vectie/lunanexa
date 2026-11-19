@@ -1,0 +1,97 @@
+{
+  "version":"lunanexa.integrated-ai-course.v1",
+  "minutes":120,"break_after":"ai-multi-agent","break_minutes":10,"questions_minutes":5,
+  "groups":[
+    {"id":"ai-basics","title":["模型与生成","Models and generation"]},
+    {"id":"ai-agents","title":["提示、上下文与循环","Prompts, context and loops"]},
+    {"id":"ai-learning","title":["学习、训练与反馈","Learning, training and feedback"]},
+    {"id":"ai-infra","title":["规模、算力与选型","Scale, infrastructure and selection"]},
+    {"id":"ai-work","title":["系统配合与实际工作","Systems and actual work"]},
+    {"id":"ai-industry","title":["产业与平台","Industry and our platform"]}
+  ],
+  "lessons":[
+    {"id":"ai-start","group":"ai-basics","title":["01 模型、应用与 Agent","01 Models, applications and agents"],"frames":[
+      {"old":"text-in-text-out","minutes":2},
+      {"id":"model-application-compute","minutes":2,"visual":"model-application-compute","sections":["board-model-agent"],"key":["模型生成提议；应用组织输入、执行与结果。","The model proposes; the application organizes input, execution and results."]}
+    ]},
+    {"id":"ai-tokens","group":"ai-basics","title":["02 Token 与数值表示","02 Tokens and numerical representations"],"frames":[{"old":"token-pieces","minutes":2}]},
+    {"id":"ai-next-token","group":"ai-basics","title":["03 自回归与 Transformer","03 Autoregression and Transformers"],"frames":[
+      {"id":"autoregressive-feedback","minutes":3,"visual":"autoregressive-feedback","sections":["board-ar-transformer"],"key":["Transformer 组织内部计算；自回归把新片段接回已有序列。","Transformer organizes computation; autoregression feeds new pieces back into the sequence."]},
+      {"old":"attention-context","minutes":3}
+    ]},
+    {"id":"ai-work-creation","group":"ai-basics","title":["04 扩散生成与 AIGC","04 Diffusion generation and AIGC"],"frames":[
+      {"id":"diffusion-steps","minutes":2,"visual":"diffusion-steps","sections":["board-diffusion-contrast"],"key":["去噪更新当前状态；自回归追加序列，两者都使用训练好的参数。","Denoising updates a state; autoregression appends a sequence. Both use learned parameters."]},
+      {"old":"creative-workflow","minutes":2}
+    ]},
+    {"id":"ai-prompts","group":"ai-agents","title":["05 提示词：从要求到模板","05 Prompts: from instructions to templates"],"frames":[
+      {"id":"article-prompt-template","minutes":3,"visual":"$article","sections":["board-prompt-template"],"key":["写文章：先交代背景，再介绍时间、地点和参加方式。","An article needs a background paragraph, then time, place and how to join."]}
+    ]},
+    {"id":"ai-context","group":"ai-agents","title":["06 上下文：把材料送进这次调用","06 Context: supply the material for this call"],"frames":[
+      {"id":"context-packet","minutes":3,"visual":"context-packet","sections":["board-context-material"],"key":["提示词说明要做什么；上下文提供这一次真正能用的资料。","Instructions state the task; context supplies what this call can actually use."]},
+      {"old":"rag-retrieval","minutes":2}
+    ]},
+    {"id":"ai-harness","group":"ai-agents","title":["07 工具、环境与 Harness","07 Tools, environments and harnesses"],"frames":[
+      {"id":"tool-roundtrip","minutes":4,"visual":"tool-roundtrip","sections":["board-computer-tools","board-sandbox-tools"],"key":["读、写、搜索和查询由执行器完成；结果进入下一次模型调用。","An executor reads, writes, searches and queries; observations enter the next model call."]},
+      {"id":"harness-structure","minutes":3,"visual":"agent-loop","sections":["board-harness-loop-engineering"],"key":["Harness 连接上下文、工具、状态与循环，让一次回答接上持续工作。","A harness connects context, tools, state and loops into ongoing work."]}
+    ]},
+    {"id":"ai-loops-rsi","group":"ai-agents","title":["08 观察、自治与自我改进","08 Observation, autonomy and improvement"],"frames":[
+      {"id":"agent-loop","minutes":5,"visual":"agent-loop","sections":["board-observation-loop","board-autonomic-system","board-game-npc"],"key":["模型读观察、提出动作；软件执行，再把实际变化送回。","The model receives observations and proposes actions; software executes and returns actual changes."]},
+      {"id":"three-improvement-loops","minutes":3,"visual":"three-improvement-loops","sections":["board-self-improvement"],"key":["改文稿、改助手、改模型要分开；RSI 还要求改进能力反馈到改进机制。","Separate artifact, assistant and model changes; RSI feeds improved capability into the improvement mechanism."]}
+    ]},
+    {"id":"ai-rules-learning","group":"ai-learning","title":["09 从人工规则到神经网络","09 From written rules to neural networks"],"frames":[
+      {"id":"rules-and-learning","minutes":3,"visual":"$rules","sections":["board-symbolic-connectionist","board-knowledge-expert"],"key":["知识图谱显式写关系；学习系统从样本调整参数，两种方法可以组合。","Graphs encode explicit relations; learned systems adjust parameters from examples. They can be combined."]},
+      {"id":"neural-computation","minutes":3,"visual":"@neuron","visual_at":"board-neural-network","sections":["board-linear-learning","board-neural-network"],"key":["y=ax+b 先说明参数；加权和加非线性，再组合成更复杂的函数。","Use y=ax+b to introduce parameters, then weighted sums and nonlinearities for richer functions."]}
+    ]},
+    {"id":"ai-multi-agent","group":"ai-learning","title":["10 多 Agent：拆任务与交换结果","10 Multiple agents: split tasks and exchange results"],"frames":[
+      {"id":"multi-agent-handoffs","minutes":3,"visual":"multi-agent-handoffs","sections":["board-multi-agent-system"],"key":["多个 Agent 通过任务与结果协作；不是 MoE 内部的参数专家。","Agents coordinate through tasks and results; they are not parameter experts inside MoE."]},
+      {"old":"parallel-time","minutes":2}
+    ]},
+    {"id":"ai-training-inference","group":"ai-learning","title":["11 数据、参数与训练阶段","11 Data, parameters and training stages"],"frames":[
+      {"id":"training-corpus","minutes":2,"visual":"$corpus","sections":["board-corpus-tokens","board-parameter-units"],"key":["语料变成 Token 序列；K、M、B、T 数参数，Byte 数存储。","Corpora become token sequences. K/M/B/T count parameters; bytes measure storage."]},
+      {"id":"training-stages","minutes":3,"visual":"$stages","sections":["board-pre-mid-training","board-posttraining-rlhf"],"key":["广泛学习、集中学习和任务行为塑造，改变的是数据与训练信号。","Broad learning, focused curricula and task shaping change data and training signals."]},
+      {"old":"training-vs-inference","minutes":1},
+      {"id":"held-out-evaluation","minutes":2,"visual":"@evaluation","sections":["board-training-vs-exam"],"key":["训练题用来学习；保留题用来观察能否迁移，并核对参考答案。","Train on examples, evaluate transfer on held-out tasks and check reference answers."]}
+    ]},
+    {"id":"ai-feedback-learning","group":"ai-learning","title":["12 SFT、RL 与损失、奖励、优势","12 SFT, RL, loss, reward and advantage"],"frames":[
+      {"id":"target-and-loss","minutes":3,"visual":"@probability","sections":["board-probability-target"],"key":["真实后续是“原”：概率 0.2→0.6，负对数损失 1.609→0.511。","Observed next token 原: probability 0.2→0.6, negative log loss 1.609→0.511."]},
+      {"id":"learning-signals","minutes":3,"visual":"$signals","sections":["board-sft-engineering","board-rl-exploration"],"key":["SFT 学示范输出；RL 根据结果反馈学习，工程与科学都能组合使用。","SFT learns demonstrated outputs; RL learns from outcome feedback. Both can serve engineering and science."]},
+      {"id":"reward-and-advantage","minutes":3,"visual":"@reward","sections":["board-loss-reward-advantage"],"key":["奖励 1、0，基线 0.5，优势 +0.5、−0.5；奖励、优势、优化损失各有用途。","Rewards 1/0, baseline 0.5, advantages +0.5/−0.5: reward, advantage and loss have distinct roles."]}
+    ]},
+    {"id":"ai-model-scaling","group":"ai-infra","title":["13 Scaling Law：数据、参数与推理计算","13 Scaling laws: data, parameters and inference compute"],"frames":[
+      {"id":"training-budget","minutes":3,"visual":"@scaling","sections":["board-scaling-law"],"key":["固定预算时，模型规模 N 与数据 D 要一起分配；越大越好需要条件。","Under fixed compute, allocate model scale N and data D together; bigger requires conditions."]},
+      {"id":"test-time-compute","minutes":1,"visual":"$testtime","sections":["board-test-time-compute"],"key":["多想投入的是本次任务计算；有效推理与单纯等待需要用结果区分。","Extra reasoning spends inference compute; outcomes distinguish useful work from waiting."]},
+      {"id":"model-weight-size","minutes":2,"visual":"$size","sections":["board-size-memory"],"key":["2.8T×2 Byte≈5.6 TB 只是原始权重；运行与训练还需要额外内存。","2.8T×2 bytes≈5.6 TB counts raw weights only; inference and training require more memory."]}
+    ]},
+    {"id":"ai-chips","group":"ai-infra","title":["14 芯片、精度与量化","14 Chips, precision and quantization"],"frames":[
+      {"id":"gpu-compute-data","minutes":2,"visual":"gpu-compute-data","sections":["board-chip-compute-network"],"key":["容量决定存多少，带宽决定搬多快，计算单元执行运算。","Capacity stores, bandwidth moves data and compute units perform arithmetic."]},
+      {"id":"weight-quantization","minutes":2,"visual":"@quantization","visual_at":"board-quantization-error","sections":["board-bit-byte-precision","board-quantization-error"],"key":["FP16 每值 2 Byte；降低位数减少存储，但舍入、截断与任务表现都要比较。","FP16 uses two bytes per value. Fewer bits save storage; compare rounding, clipping and task outcomes."]}
+    ]},
+    {"id":"ai-clusters-engines","group":"ai-infra","title":["15 多卡互联、集群与推理引擎","15 GPU links, clusters and inference engines"],"frames":[
+      {"id":"gpu-interconnect","minutes":2,"visual":"@interconnect","sections":["board-nvlink-topology"],"key":["引擎安排分片和通信；NVLink 连线本身不会把多张卡变成同一块显存。","An engine implements sharding and communication; links alone do not create one transparent memory pool."]},
+      {"old":"cluster-engine-path","minutes":3}
+    ]},
+    {"id":"ai-metrics","group":"ai-infra","title":["16 延迟与吞吐怎样测","16 Measuring latency and throughput"],"frames":[{"old":"latency-timeline","minutes":2},{"old":"aggregate-throughput-batching","minutes":2}]},
+    {"id":"ai-token-factory","group":"ai-infra","title":["17 Token 工厂：持续运行的系统","17 A token factory: sustained operation"],"frames":[{"old":"factory-input-output","minutes":2}]},
+    {"id":"ai-model-selection","group":"ai-infra","title":["18 选模型：生态、任务与 MoE","18 Model choice: ecosystem, task and MoE"],"frames":[
+      {"id":"model-task-fit","minutes":2,"visual":"@evaluation","visual_at":"board-task-benchmark","sections":["board-ecosystem","board-feasible-size","board-task-benchmark"],"key":["先确定任务，再检查工具链、容量、并发、稳定性和实际完成结果。","Start from the task, then compare toolchains, capacity, concurrency, consistency and outcomes."]},
+      {"id":"expert-routing","minutes":3,"visual":"@moe","sections":["board-moe-routing","board-qwen-size-example"],"key":["35B 总参数、A3B 激活：少算一部分，不代表只需存 3B 权重。","35B total, A3B active: selective computation does not reduce storage to 3B weights."]},
+      {"id":"model-modalities","minutes":1,"visual":"$modalities","sections":["board-modalities"],"key":["识图输出文字、生成图像、生成视频，是三种不同的输入输出任务。","Image understanding, image generation and video generation are different input-output tasks."]}
+    ]},
+    {"id":"ai-agent-systems","group":"ai-work","title":["19 模型与框架怎样配合","19 Coordinating a model and its harness"],"frames":[
+      {"id":"harness-model-pair","minutes":2,"visual":"@pairing","sections":["board-harness-model-pair","board-coupled-training","board-kimi-deepseek-harness"],"key":["Codex、Kimi Code 是系统例子；模型版本、工具接口与训练环境要一起看。","Read agent software, model versions, tool interfaces and training environments together."]},
+      {"id":"harness-responsibilities","minutes":1,"visual":"coding-agent-workflow","sections":["board-harness-thickness"],"key":["壳的厚度描述承担多少工作：文件、工具、状态与持续循环。","Harness thickness describes responsibility for files, tools, state and ongoing work."]},
+      {"id":"pair-comparison","minutes":1,"visual":"@pairing","sections":["board-pair-evaluation"],"key":["固定任务，每次改变一个因素，再保留正确性、时间与用量。","Fix the task, vary one factor and retain correctness, time and usage."]}
+    ]},
+    {"id":"ai-work-coding","group":"ai-work","title":["20 AI 编程：修改、运行与反馈","20 AI coding: edit, run and observe"],"frames":[{"old":"coding-example","minutes":2}]},
+    {"id":"ai-work-science","group":"ai-work","title":["21 AI4S：预测怎样进入科学工作","21 AI4S: predictions in scientific work"],"frames":[{"old":"protein-structure","minutes":2}]},
+    {"id":"ai-work-business","group":"ai-work","title":["22 让工作习惯跟着能力更新","22 Update work habits from task outcomes"],"frames":[
+      {"id":"meeting-workflow","minutes":1,"visual":"meeting-workflow","sections":["board-expectation-workflow"],"key":["从复制回答，到核对已完成的工作；价值看总耗时、资源和返工。","Move from copying answers to checking completed work; value includes total time, resources and rework."]}
+    ]},
+    {"id":"ai-industry","group":"ai-industry","title":["23 AI 产业与模型分工","23 Industry roles and model families"],"frames":[
+      {"id":"industry-value-map","minutes":1,"visual":"industry-value-map","sections":["board-model-families"],"key":["区分公司、模型、版本和应用；具体任务与版本比品牌标签更有解释力。","Separate company, family, checkpoint and application; tasks and versions explain more than brand labels."]}
+    ]},
+    {"id":"ai-platform-place","group":"ai-industry","title":["24 平台在其中的哪一层","24 Where our platform fits"],"frames":[
+      {"id":"platform-location","minutes":1,"visual":"platform-location","sections":["board-role-platform"],"key":["LunaNexa 组织模型服务与集群资源，是整条 AI 工作链中的一层。","LunaNexa organizes model serving and cluster resources: one layer in the AI work chain."]}
+    ]}
+  ]
+}

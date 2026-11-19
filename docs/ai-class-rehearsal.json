@@ -1,0 +1,3415 @@
+{
+  "version": "lunanexa.class-rehearsal.v1",
+  "date": "2026-11-11",
+  "scenes": [
+    {
+      "id": "text-in-text-out",
+      "minutes": 2,
+      "opening": {
+        "zh": "先看三种输入输出：翻译换语言，会议整理成表格，编程生成可执行指令。它们共用文字接口，今天就从这个共同动作拆开讲。",
+        "en": "Compare three text interfaces: translation, a meeting table and a generated program. Start from this shared operation and unpack how it works."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么翻译、表格、代码放在一起？",
+            "en": "Why group translation, tables and code?"
+          },
+          "answer": {
+            "zh": "这些任务的输入和输出都能用文字表示；用途不同，生成接口可以共用。",
+            "en": "All can use text inputs and outputs, so different purposes can share a generation interface."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "右边的排序数字是模型直接算的吗？",
+            "en": "Did the model directly compute the sorted numbers?"
+          },
+          "answer": {
+            "zh": "图里省略了程序正文：模型先生成排序程序，程序运行才得到数字。后面会把两步拆开。",
+            "en": "The code body is abbreviated here: the model generates a program, and execution produces the numbers. Later we separate those operations."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "开场为什么直接看例子？",
+            "en": "Why start with examples?"
+          },
+          "answer": {
+            "zh": "先认出要解释的现象，下一页再找完成它的各个部分。",
+            "en": "Identify the phenomenon first; the next page separates the components that produce it."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "按翻译、会议、代码顺序展开三列；最后指一次“生成程序→运行”。",
+        "en": "Reveal translation, meeting and code in order; point once to generate code → run."
+      },
+      "pause": {
+        "zh": "停在翻译输出，让学生用自己的话说输入、任务、输出各是什么。",
+        "en": "Hold the translation result; let learners identify input, task and output."
+      },
+      "takeaway": {
+        "zh": "模型可以按要求生成不同形式的文字内容。",
+        "en": "A model can generate different forms of text from a request."
+      },
+      "recovery": {
+        "seconds": 0,
+        "instruction": {
+          "zh": "保留三个输入输出，只不延伸其他应用。",
+          "en": "Keep the three examples; add no extra applications."
+        }
+      },
+      "concepts": [
+        "LLM",
+        "大语言模型",
+        "输入输出",
+        "生成"
+      ],
+      "pacing": {
+        "speech_seconds": 55,
+        "demo_seconds": 15,
+        "processing_seconds": 12,
+        "question_seconds": 15,
+        "transition_seconds": 5,
+        "margin_seconds": 18,
+        "zh_units": 188,
+        "en_words": 91
+      }
+    },
+    {
+      "id": "model-application-compute",
+      "minutes": 2,
+      "opening": {
+        "zh": "刚才一个按钮背后有应用、模型和机器。这里分的是责任，不是三个先后思考的人；机器执行的就是模型这份计算。",
+        "en": "One button involves an app, a model and a machine. These are responsibilities, not three thinkers in sequence; the machine executes the model's computation."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么要拆三层？",
+            "en": "Why separate three layers?"
+          },
+          "answer": {
+            "zh": "同一个模型可以接到不同应用；同一个应用也能换模型。分开后才能说明能力从哪里来。",
+            "en": "One model can support different apps, and one app can use different models. Separation identifies where capabilities come from."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "是模型先算完，再给机器算一次吗？",
+            "en": "Does the machine compute again after the model finishes?"
+          },
+          "answer": {
+            "zh": "不是。图中机器执行的就是模型这份数字运算；这里画组成关系，不画时间先后。",
+            "en": "No. The machine executes the model's computation; this figure shows components rather than chronological stages."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "和刚才的代码例子怎么接？",
+            "en": "How does this connect to the coding example?"
+          },
+          "answer": {
+            "zh": "应用收集文件和执行代码，模型生成代码，机器运行模型。刚才一个按钮包含这些分工。",
+            "en": "The app gathers files and runs code, the model generates code, and hardware executes the model. One button can involve all three roles."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "展开应用、模型、机器；指着模型和机器说明“同一份计算”。",
+        "en": "Reveal app, model and machine; identify the same computation across model and hardware."
+      },
+      "pause": {
+        "zh": "停一下，让学生把“读取文件”归到应用，把“生成文字”归到模型。",
+        "en": "Pause to assign file reading to the app and generation to the model."
+      },
+      "takeaway": {
+        "zh": "应用组织任务，模型生成，机器执行模型运算。",
+        "en": "The app organizes work; the model generates; machines execute it."
+      },
+      "recovery": {
+        "seconds": 15,
+        "instruction": {
+          "zh": "不再扩展换应用、换模型的第二个例子。",
+          "en": "Omit the additional swap-the-app/model example."
+        }
+      },
+      "concepts": [
+        "应用",
+        "模型",
+        "硬件",
+        "基础设施"
+      ],
+      "pacing": {
+        "speech_seconds": 50,
+        "demo_seconds": 15,
+        "processing_seconds": 12,
+        "question_seconds": 15,
+        "transition_seconds": 5,
+        "margin_seconds": 23,
+        "zh_units": 167,
+        "en_words": 81
+      }
+    },
+    {
+      "id": "token-pieces",
+      "minutes": 3,
+      "opening": {
+        "zh": "文字要变成机器能处理的输入。先别把 Token 想成一个新概念体系，只把它当作一块文字。raincoat 在英语里是一个词，但可以拆成 rain 和 coat。分词器负责切分和查编号，模型再从编号查出数值列表。编号像目录号，数值列表才进入后面的计算。这里的四个数不是四条人工写好的词义，而是训练时学到的表示。",
+        "en": "Text must become numerical input. Treat a token simply as a piece of text. Raincoat is one English word, but our illustration splits it into rain and coat. A tokenizer divides text and assigns IDs; the model looks up a numerical vector for each ID. An ID is a catalog reference. The vector is a learned representation, not a list of hand-written definitions."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么不直接一个词配一个编号？",
+            "en": "Why not assign one ID to every whole word?"
+          },
+          "answer": {
+            "zh": "固定词表要处理常见词、少见词、代码和不同语言。允许片段组合，能用有限词表表示更多文字。",
+            "en": "A finite vocabulary must represent common and rare words, code and many languages. Reusable pieces can compose more text."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "编号和这四个数是怎么来的？",
+            "en": "Where do the IDs and four numbers come from?"
+          },
+          "answer": {
+            "zh": "分词器词表固定片段与编号的对应；模型的查表参数给出向量，训练时会调整这些数。图中数值是算例。",
+            "en": "The tokenizer vocabulary defines IDs; the model's embedding parameters supply vectors and are adjusted during training. These values are illustrative."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "为什么三层之后先讲 Token？",
+            "en": "Why teach tokens after the three layers?"
+          },
+          "answer": {
+            "zh": "上一页说模型收到文字；这一页解释这份文字如何成为模型实际处理的单位。",
+            "en": "The previous page said the model receives text. This page identifies the units it actually processes."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "逐块展开 rain、coat、编号、数值；用手指沿同一块文字追到底。",
+        "en": "Trace rain and coat separately through pieces, IDs and values."
+      },
+      "pause": {
+        "zh": "停在两块片段，让学生回答：一个单词在这里是几个 Token？",
+        "en": "Hold the two pieces and ask how many tokens this one word has."
+      },
+      "takeaway": {
+        "zh": "Token 是文字片段；编号查出数值表示参与计算。",
+        "en": "Tokens are text pieces; IDs look up numerical representations."
+      },
+      "recovery": {
+        "seconds": 20,
+        "instruction": {
+          "zh": "保留切分和查表，不展开不同语言的切分差异。",
+          "en": "Keep splitting and lookup; shorten discussion of language differences."
+        }
+      },
+      "concepts": [
+        "Token",
+        "分词器",
+        "词表",
+        "编号",
+        "向量",
+        "embedding"
+      ],
+      "pacing": {
+        "speech_seconds": 85,
+        "demo_seconds": 25,
+        "processing_seconds": 20,
+        "question_seconds": 20,
+        "transition_seconds": 5,
+        "margin_seconds": 25,
+        "zh_units": 288,
+        "en_words": 164
+      }
+    },
+    {
+      "id": "context-tokens",
+      "minutes": 2,
+      "opening": {
+        "zh": "已经知道怎么数文字片段，再问到底数哪段文字。用户最后一句可能只有“总结这篇文章”，但应用实际还送了整篇文章、处理要求和选入的历史。屏幕上看得到一份文件，不等于本次已经把内容发给模型。每次调用都要看实际输入包。回答生成后也接到这条序列后面，因此上下文容量不能全部拿来塞资料。",
+        "en": "Now decide which text to count. 'Summarize this article' is short, but the call may also contain the article, instructions and selected history. A file visible in the app is not automatically supplied to the model. Inspect the input for this call. Generated output extends the sequence, so the context limit must also leave room for the continuation."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么聊天久了仍可能忘前面？",
+            "en": "Why can a long chat lose earlier details?"
+          },
+          "answer": {
+            "zh": "应用会选择、压缩或省略历史；模型这次只能使用实际送入的信息。界面存储和本次上下文不同。",
+            "en": "The app may select, compress or omit history. Stored UI history and the information supplied to this call are different."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "窗口里的输入和输出怎样相加？",
+            "en": "How do input and output share a window?"
+          },
+          "answer": {
+            "zh": "假设总窗口1000个Token，已放800个，就只剩约200个位置给继续生成；实际服务还可能有独立输出限制。",
+            "en": "In a toy 1,000-token window, an 800-token input leaves about 200 positions for continuation. A service can impose additional output limits."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "这和分词页有什么关系？",
+            "en": "How does this use the token page?"
+          },
+          "answer": {
+            "zh": "上下文的所有部分都用刚才的Token单位计数，不只数最后一句。",
+            "en": "All parts of context use the token unit just introduced, not merely the last message."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "先指短问题，再指整篇文章；最后把输入与输出括在同一个容量范围内。",
+        "en": "Contrast the short question with the article, then show input and continuation sharing capacity."
+      },
+      "pause": {
+        "zh": "让学生指出本例哪部分可能占最多输入。",
+        "en": "Let learners identify the likely largest input component."
+      },
+      "takeaway": {
+        "zh": "上下文是本次实际送入的信息，窗口限制整条序列。",
+        "en": "Context is supplied information; the window bounds the sequence."
+      },
+      "recovery": {
+        "seconds": 10,
+        "instruction": {
+          "zh": "口头容量算例只算一次，不追加第二组数字。",
+          "en": "Use the capacity arithmetic once, without a second example."
+        }
+      },
+      "concepts": [
+        "上下文",
+        "context",
+        "上下文窗口",
+        "历史",
+        "输入输出Token"
+      ],
+      "pacing": {
+        "speech_seconds": 70,
+        "demo_seconds": 10,
+        "processing_seconds": 12,
+        "question_seconds": 15,
+        "transition_seconds": 5,
+        "margin_seconds": 8,
+        "zh_units": 237,
+        "en_words": 111
+      }
+    },
+    {
+      "id": "next-token-probabilities",
+      "minutes": 3,
+      "opening": {
+        "zh": "输入已经有了，模型怎样开始写？看 The sky is，它还没有选出后面的词。学好的参数把这段前文的数值表示变成候选分数，再变成概率。图中的60、30、10是为了讲抽样而预设的比例，不是从这三个英语词现场算出来的。抽样以后只新增一个片段。温度改变这些比例的集中程度，并不把一个答案变成百分之百的事实。",
+        "en": "With the input prepared, how does writing start? Given The sky is, learned parameters turn its representation into candidate scores and probabilities. The 60/30/10 proportions are preset for this sampling demonstration, not derived live from these words. Sampling adds one piece. Temperature changes concentration, not the factual correctness of an answer."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么同样的问题会有不同回答？",
+            "en": "Why can the same question get different wording?"
+          },
+          "answer": {
+            "zh": "候选并不总只有一个，按概率抽样可以抽到不同Token；之后的前文也随之不同。",
+            "en": "Sampling can select different tokens, which then change the prefix used for later steps."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "60%到底怎么算来的？",
+            "en": "Where does 60% come from?"
+          },
+          "answer": {
+            "zh": "真实模型用训练参数计算词表分数，再归一化成概率；本图人工设60/30/10，专门演示后面的抽样。",
+            "en": "A real model computes vocabulary scores from learned parameters and normalizes them. Here 60/30/10 is deliberately preset to isolate sampling."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "为什么先讲上下文，再看概率？",
+            "en": "Why teach context before probabilities?"
+          },
+          "answer": {
+            "zh": "这些概率是以本次全部前文为条件的；输入不同，候选分数和比例也可能不同。",
+            "en": "These probabilities are conditioned on the supplied prefix. Different input can change candidate scores and proportions."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "先播候选，再把温度从1调到2，读出比例变化；抽样两次即可。",
+        "en": "Reveal candidates, change temperature from one to two, and sample twice."
+      },
+      "pause": {
+        "zh": "先让学生预测调高温度后，最长的柱会更突出还是更接近其他柱。",
+        "en": "Before changing temperature, ask whether the tallest bar will stand out more or become less dominant."
+      },
+      "takeaway": {
+        "zh": "模型给候选概率，抽样决定本步新增哪个Token。",
+        "en": "The model supplies probabilities; sampling selects the next token."
+      },
+      "recovery": {
+        "seconds": 20,
+        "instruction": {
+          "zh": "只调一次温度、抽一次，保留分布与抽样的区别。",
+          "en": "Use one temperature change and one draw, preserving the distribution/selection distinction."
+        }
+      },
+      "concepts": [
+        "下一个Token",
+        "概率",
+        "抽样",
+        "temperature",
+        "温度"
+      ],
+      "pacing": {
+        "speech_seconds": 80,
+        "demo_seconds": 35,
+        "processing_seconds": 20,
+        "question_seconds": 25,
+        "transition_seconds": 5,
+        "margin_seconds": 15,
+        "zh_units": 274,
+        "en_words": 131
+      }
+    },
+    {
+      "id": "autoregressive-feedback",
+      "minutes": 2,
+      "opening": {
+        "zh": "上一页只选了一块；这里固定用blue，沿一圈看新输出怎样成为下一步条件。",
+        "en": "Fix blue as the example and trace how one newly selected piece becomes context for the next step."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "只预测下一个片段，怎么会写文章？",
+            "en": "How can one-token prediction write an article?"
+          },
+          "answer": {
+            "zh": "把这个操作连续做很多次；每次已写出的内容都加入下一次条件，逐渐形成长输出。",
+            "en": "Repeat it many times, including generated text in subsequent conditioning."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "怎样知道可以停了？",
+            "en": "How does generation stop?"
+          },
+          "answer": {
+            "zh": "生成结束标记或达到应用设定的停止条件，循环结束。不是每次都预先知道文章长度。",
+            "en": "An end token or an application stop condition ends the loop; length need not be fixed in advance."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "这和上一页的抽样有什么关系？",
+            "en": "How does this extend sampling?"
+          },
+          "answer": {
+            "zh": "图中每一圈都包含上一页的概率计算和一次选择；多了一条把输出接回输入的路径。",
+            "en": "Every circuit contains the previous page's probability calculation and selection, plus feedback into the prefix."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "沿一圈指出已有前文、blue和更长前文；不重复调温度。",
+        "en": "Trace one complete circuit without repeating the temperature experiment."
+      },
+      "pause": {
+        "zh": "停在回箭头：下一轮读取的是三块还是四块？",
+        "en": "Hold the feedback arrow: does the next round read three pieces or four?"
+      },
+      "takeaway": {
+        "zh": "输出追加到前文，再重复预测，形成长回答。",
+        "en": "Appending output to the prefix enables repeated prediction."
+      },
+      "recovery": {
+        "seconds": 10,
+        "instruction": {
+          "zh": "只走完整一圈，不增加第二个句子。",
+          "en": "Trace one full circuit only."
+        }
+      },
+      "concepts": [
+        "自回归",
+        "autoregressive",
+        "反馈",
+        "逐Token生成"
+      ],
+      "pacing": {
+        "speech_seconds": 60,
+        "demo_seconds": 20,
+        "processing_seconds": 12,
+        "question_seconds": 15,
+        "transition_seconds": 5,
+        "margin_seconds": 8,
+        "zh_units": 199,
+        "en_words": 98
+      }
+    },
+    {
+      "id": "attention-context",
+      "minutes": 3,
+      "opening": {
+        "zh": "前文不只是排在一起的数字。当前要继续计算时，需要组合不同位置的信息。“骑它”涉及前面的自行车，也处在天气这段语境中。注意力先比较当前位置和前文位置的数值表示，得到组合比例，再把信息按比例相加。我们只演示后面的乘加，80%和20%是给定算例。不要把这两个数当成模型对句子的固定语法规则。",
+        "en": "Earlier tokens are not merely a row of unrelated numbers. A position combines information from context. 'Ride it' relates to the bicycle within weather context. Attention compares position representations to compute mixing weights, then combines values. We isolate the multiplication and addition using preset 80/20 weights, not a fixed grammatical rule."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么不把前文所有信息平均一下？",
+            "en": "Why not average all earlier information?"
+          },
+          "answer": {
+            "zh": "当前位置需要的信息不同，可以给不同位置不同组合比例；平均只是所有比例相同的一种特殊情况。",
+            "en": "Different positions can matter differently. An average is the special case of equal mixing weights."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "80%和20%怎么决定？",
+            "en": "How are 80/20 weights obtained?"
+          },
+          "answer": {
+            "zh": "真实注意力根据当前查询与各位置的数值表示算分数，再变成比例。本图给定比例，只展示加权运算。",
+            "en": "Real attention computes scores from the current query and position representations, then normalizes them. This illustration supplies weights to isolate mixing."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "它怎样帮到上一页的续写？",
+            "en": "How does this help continuation?"
+          },
+          "answer": {
+            "zh": "加权结果进入模型后续运算，参与形成下一Token分数；注意力本身并不直接选出一个词。",
+            "en": "The mixed representation feeds later computation of next-token scores. Attention itself does not directly select a word."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "先指出句中的“它”，再走两行乘法与相加；交换一次权重，按对应项核对。",
+        "en": "Point to it, trace both products and their sum, then swap weights once."
+      },
+      "pause": {
+        "zh": "在结果出现前，让学生只计算第一项：0.8×1加0.2×0。",
+        "en": "Before showing the result, compute only its first entry: 0.8×1 + 0.2×0."
+      },
+      "takeaway": {
+        "zh": "注意力算出组合比例，加权结果再参与生成。",
+        "en": "Attention computes mixing weights whose result feeds generation."
+      },
+      "recovery": {
+        "seconds": 35,
+        "instruction": {
+          "zh": "只算第一项；第二项直接读结果，仍保留先乘后加。",
+          "en": "Calculate only the first entry and read the second, keeping multiplication before addition."
+        }
+      },
+      "concepts": [
+        "注意力",
+        "attention",
+        "加权和",
+        "向量",
+        "权重"
+      ],
+      "pacing": {
+        "speech_seconds": 85,
+        "demo_seconds": 30,
+        "processing_seconds": 20,
+        "question_seconds": 25,
+        "transition_seconds": 5,
+        "margin_seconds": 15,
+        "zh_units": 295,
+        "en_words": 137
+      }
+    },
+    {
+      "id": "training-update",
+      "minutes": 4,
+      "opening": {
+        "zh": "刚才说这些运算由参数决定，现在看一个参数怎样改变。先不用语言，用件数和总价。已知三次购买记录，模型只暂存一个单价估计w。我们能写出所有预测，也能画出每个误差。训练关心的是许多例子上的整体差距，不是背下一次回答。本例用固定的梯度更新规则：先判断增减方向，再按给定步长调一点。语言模型也做预测、比较、更新，只是比较的目标将换成真实后续文字。",
+        "en": "We have referred to learned parameters; now change one. Use purchase quantity and total price before language. Three known purchases let us calculate every prediction and error from a unit-price estimate w. Training reduces error over examples rather than memorizing this response. Our example uses a fixed gradient update: choose a direction and take a step. Language training also predicts, compares and updates, but its target will be the actual continuation."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么还要训练，直接把单价写成2不就行了？",
+            "en": "Why train when we could simply write unit price two?"
+          },
+          "answer": {
+            "zh": "这个规律故意简单，方便看清训练过程。复杂模型里大量参数的合适值无法逐个手写，要从许多例子调整。",
+            "en": "This deliberately simple rule exposes the mechanism. The many suitable values in a complex model cannot all be written by hand."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "为什么恰好从0.5到1.2？",
+            "en": "Why exactly 0.5 to 1.2?"
+          },
+          "answer": {
+            "zh": "本例梯度为−14，学习率取0.05，更新规则w减去学习率乘梯度，所以0.5−0.05×(−14)=1.2。课堂只要求理解方向和小步调整。",
+            "en": "The example's gradient is −14 and learning rate 0.05, so w−rate×gradient gives 0.5−0.05×(−14)=1.2. The core lesson is direction and incremental change."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "单价和刚才的模型参数是什么关系？",
+            "en": "How does unit price relate to model parameters?"
+          },
+          "answer": {
+            "zh": "都是参与运算的可调整数；单价例子的平方误差只是教学模型，下一页会区分训练与使用，再把目标接到文字。",
+            "en": "Both are adjustable numbers in computation. Squared error belongs to this toy model; we next distinguish use from training and reconnect targets to text."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "先算3件预测1.5元，再看4.5元误差；更新一次，核对三项预测和整体误差。",
+        "en": "Calculate the three-item prediction and error, then update and inspect all predictions and total loss."
+      },
+      "pause": {
+        "zh": "先停住问：三次都偏低，单价应该上调还是下调？答完才更新。",
+        "en": "Ask whether the consistently low predictions call for a higher or lower price, then update."
+      },
+      "takeaway": {
+        "zh": "训练用例子比较预测，按规则调整参数。",
+        "en": "Training compares predictions with examples and adjusts parameters by a rule."
+      },
+      "recovery": {
+        "seconds": 40,
+        "instruction": {
+          "zh": "不展开梯度算式，也不做第二次更新；保留预测、误差、方向。",
+          "en": "Skip the gradient derivation and second update; retain prediction, error and direction."
+        }
+      },
+      "concepts": [
+        "训练",
+        "参数",
+        "梯度",
+        "学习率",
+        "均方误差",
+        "MSE"
+      ],
+      "pacing": {
+        "speech_seconds": 95,
+        "demo_seconds": 55,
+        "processing_seconds": 25,
+        "question_seconds": 50,
+        "transition_seconds": 5,
+        "margin_seconds": 10,
+        "zh_units": 319,
+        "en_words": 154
+      }
+    },
+    {
+      "id": "training-vs-inference",
+      "minutes": 2,
+      "opening": {
+        "zh": "把学好的 a、b 保存，就能估算新路程的费用。训练调整参数；推理使用已有参数处理这次输入。",
+        "en": "Save learned a and b to estimate a new journey's fare. Training changes parameters; inference uses learned parameters on the current input."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么贴了新文件就能答，却不是训练？",
+            "en": "Why can a new file help without training?"
+          },
+          "answer": {
+            "zh": "已有能力处理了这次输入，参数版本未因此更新；就像会算乘法的人读到一张新订单。",
+            "en": "Existing capabilities process new input without changing the model version, like applying multiplication to a new order."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "微调和检索分别改变哪里？",
+            "en": "What do fine-tuning and retrieval change?"
+          },
+          "answer": {
+            "zh": "微调继续调整模型参数；检索把找到的材料加入本次输入。两条路径可以配合，但不是同一步。",
+            "en": "Fine-tuning changes parameters; retrieval supplies material to context. They can combine but are different operations."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "刚才的更新发生在这张图哪边？",
+            "en": "Where does the preceding update belong?"
+          },
+          "answer": {
+            "zh": "w从0.5到1.2属于训练一侧；保存后用w预测新输入，属于推理一侧。",
+            "en": "Changing w belongs to training; using the saved w on new input belongs to inference."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "先指训练列的参数更新，再指推理列的新输入；用刚讲过的路程与费用接回 a、b。",
+        "en": "Point to parameter updates, then new input; reconnect to the journey/fare example with a and b."
+      },
+      "pause": {
+        "zh": "让听众把“贴新文件”和“重新调参数”分别放进两列。",
+        "en": "Place supplying a file and updating parameters in the appropriate columns."
+      },
+      "takeaway": {
+        "zh": "换输入和改参数是两种不同变化。",
+        "en": "Changing input and changing parameters are different."
+      },
+      "recovery": {
+        "seconds": 10,
+        "instruction": {
+          "zh": "不延伸应用长期记忆的存储方式。",
+          "en": "Do not expand into long-term memory storage."
+        }
+      },
+      "concepts": [
+        "训练与推理",
+        "inference",
+        "微调",
+        "上下文"
+      ],
+      "pacing": {
+        "speech_seconds": 50,
+        "demo_seconds": 10,
+        "processing_seconds": 12,
+        "question_seconds": 15,
+        "transition_seconds": 5,
+        "margin_seconds": 28,
+        "zh_units": 169,
+        "en_words": 75
+      }
+    },
+    {
+      "id": "pre-post-test-time",
+      "minutes": 3,
+      "opening": {
+        "zh": "现在把单价例子真正接回语言。文本里原本就有接下来的片段，我们把它当目标：前文是The sky is，真实后续是blue。模型给blue的概率偏低时，训练会用这个差距调整参数。预训练从大量序列学习这样的模式。后训练再给任务示范和反馈，塑造怎样按指令回答。使用时仍逐Token生成，只是任务说明也在前文里；多想几步或比较候选是在这一次调用多花计算，并不等于又学了一遍参数。",
+        "en": "Reconnect the price example to language: existing text supplies a target continuation. Given The sky is, the target is blue. Training adjusts parameters using how the predicted distribution treats that target. Pretraining learns from many sequences; post-training adds demonstrations and feedback about tasks. Inference still generates tokens, conditioned also on instructions. Longer reasoning or candidate comparison spends compute on this call rather than necessarily changing parameters."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "预测下一个词，怎么变成会遵守任务要求？",
+            "en": "How does next-token prediction become instruction following?"
+          },
+          "answer": {
+            "zh": "任务说明、材料和好回答可以组成训练序列；后训练塑造按指令回答的行为。使用时指令仍作为上下文影响后续概率。",
+            "en": "Instructions, material and demonstrations form training sequences; post-training shapes responses. At use time instructions condition continuation probabilities."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "语言训练也把每个Token编号做平方误差吗？",
+            "en": "Does language training square errors between token IDs?"
+          },
+          "answer": {
+            "zh": "不是把编号当数值回归。常见语言训练比较真实下一Token在预测分布中的概率，用相应损失更新；编号只是类别标识。",
+            "en": "No. Token IDs identify categories. Common language training evaluates the probability of the actual next token and updates with an appropriate loss."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "这和上一页训练/推理的划分冲突吗？",
+            "en": "Does this conflict with training versus inference?"
+          },
+          "answer": {
+            "zh": "前两列都改参数，属于训练；第三列多做本次生成、搜索或比较，属于使用阶段的计算。",
+            "en": "The first two stages update parameters; the third spends computation while using the trained model."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "在真实目标blue下面显示20%→60%的示意，再指任务示范和本次计算；不推导语言损失公式。",
+        "en": "Show the illustrative rise in target blue probability, then contrast demonstrations and per-call compute."
+      },
+      "pause": {
+        "zh": "停在三列：让学生指出哪两列参数会变化。",
+        "en": "Hold all three columns and identify the two that change parameters."
+      },
+      "takeaway": {
+        "zh": "语言训练比较真实后续的概率；任务指令也能成为生成条件。",
+        "en": "Language training evaluates target continuations; instructions also condition generation."
+      },
+      "recovery": {
+        "seconds": 30,
+        "instruction": {
+          "zh": "只举会议表格一种后训练示范，不延伸奖励训练配方。",
+          "en": "Keep the meeting-table demonstration; omit training-recipe variants."
+        }
+      },
+      "concepts": [
+        "预训练",
+        "后训练",
+        "指令遵循",
+        "推理时计算",
+        "next-token training"
+      ],
+      "pacing": {
+        "speech_seconds": 95,
+        "demo_seconds": 25,
+        "processing_seconds": 20,
+        "question_seconds": 20,
+        "transition_seconds": 5,
+        "margin_seconds": 15,
+        "zh_units": 331,
+        "en_words": 143
+      }
+    },
+    {
+      "id": "prompt-before-after",
+      "minutes": 2,
+      "opening": {
+        "zh": "从这里开始先固定模型版本。刚才已经说明，任务要求本来就在模型的输入里，所以改变要求就能改变它接下来生成什么。“整理一下”同时允许摘要、改写或待办；如果工作需要待办表，就把提取对象和列名直接说出来。好的提示词不是神奇口令，而是把我们原本知道、模型却还没收到的任务条件补齐。",
+        "en": "Keep the model version fixed. Instructions are part of its input, so changing them changes what continuation is requested. 'Organize this' permits a summary, rewrite or task list. If the work needs a task table, specify extraction targets and columns. Prompting supplies task conditions the user knows but the model has not yet received."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么多写几句话会改变结果？",
+            "en": "Why can a few extra words change the output?"
+          },
+          "answer": {
+            "zh": "这几句话加入了生成条件，减少“整理”这个词留下的选择。",
+            "en": "They add conditioning information and narrow the choices left by organize."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "怎样判断该补什么？",
+            "en": "How do we decide what to add?"
+          },
+          "answer": {
+            "zh": "从要使用的结果倒推：做什么、根据哪份材料、需要哪些字段和形式。",
+            "en": "Work backward from use: operation, source material, fields and output form."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "这跟后训练不是一回事吗？",
+            "en": "Is this the same as post-training?"
+          },
+          "answer": {
+            "zh": "后训练改参数；这里参数不变，只把具体任务要求放进当前输入。",
+            "en": "Post-training changes parameters; this supplies task instructions to a fixed model."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "并排比较宽泛要求和三列表格要求，只圈出新增条件。",
+        "en": "Compare the two requests and identify the added conditions."
+      },
+      "pause": {
+        "zh": "先说清用户究竟要摘要还是待办，再显示右列。",
+        "en": "Identify whether the user needs a summary or tasks before revealing the specific request."
+      },
+      "takeaway": {
+        "zh": "提示词把任务条件说清楚。",
+        "en": "A prompt makes task conditions explicit."
+      },
+      "recovery": {
+        "seconds": 15,
+        "instruction": {
+          "zh": "只讨论任务与格式，不展开提示词技巧分类。",
+          "en": "Keep task and format; omit technique taxonomies."
+        }
+      },
+      "concepts": [
+        "Prompt",
+        "提示词",
+        "提示词工程",
+        "任务说明"
+      ],
+      "pacing": {
+        "speech_seconds": 70,
+        "demo_seconds": 10,
+        "processing_seconds": 12,
+        "question_seconds": 15,
+        "transition_seconds": 5,
+        "margin_seconds": 8,
+        "zh_units": 241,
+        "en_words": 104
+      }
+    },
+    {
+      "id": "prompt-worked-output",
+      "minutes": 1,
+      "opening": {
+        "zh": "现在只追踪一行，核对原文的信息落到哪三列。",
+        "en": "Trace one source sentence into the three columns."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么评审负责人留空？",
+            "en": "Why is the review owner absent?"
+          },
+          "answer": {
+            "zh": "第三句没有给负责人，格式要求不会自动创造这个事实。",
+            "en": "The source never supplied one; a format instruction does not create the fact."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "小李这一行怎么来的？",
+            "en": "How is Li's row obtained?"
+          },
+          "answer": {
+            "zh": "从“小李周四交初稿”分别取事项初稿、负责人小李、日期周四。",
+            "en": "The sentence supplies draft, Li and Thursday for the three columns."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "上一页已经说了格式，这页补什么？",
+            "en": "What does this add after specifying format?"
+          },
+          "answer": {
+            "zh": "把任务说明落到实际证据，区分需要的字段和已经提供的信息。",
+            "en": "It connects requested fields to information actually supplied."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "只追踪第一行，再指第三行的缺失格。",
+        "en": "Trace the first row and the missing owner in the third."
+      },
+      "pause": {
+        "zh": "让学生指出“未提及”对应原文缺哪项。",
+        "en": "Identify which source information is absent."
+      },
+      "takeaway": {
+        "zh": "结果字段必须能对应输入材料。",
+        "en": "Result fields should map to supplied material."
+      },
+      "recovery": {
+        "seconds": 10,
+        "instruction": {
+          "zh": "不重复逐行朗读，追踪一行即可。",
+          "en": "Trace one row instead of reading all rows."
+        }
+      },
+      "concepts": [
+        "结构化输出",
+        "表格",
+        "字段提取",
+        "会议记录"
+      ],
+      "pacing": {
+        "speech_seconds": 25,
+        "demo_seconds": 8,
+        "processing_seconds": 5,
+        "question_seconds": 5,
+        "transition_seconds": 5,
+        "margin_seconds": 12,
+        "zh_units": 80,
+        "en_words": 40
+      }
+    },
+    {
+      "id": "context-packet",
+      "minutes": 2,
+      "opening": {
+        "zh": "格式不能替代资料。应用还要选择并实际发送文件与历史，模型这次才有材料可用。",
+        "en": "Formatting does not supply facts. The app must select and send files and history for this call to use."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么模型不知道我电脑上已有的资料？",
+            "en": "Why does it not know material on my computer?"
+          },
+          "answer": {
+            "zh": "只有应用读出并实际发送的内容才进入本次输入；本地文件存在是另一件事。",
+            "en": "Only contents read and supplied by the app enter this input. Merely existing locally is different."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "怎样把三部分合起来？",
+            "en": "How are the parts assembled?"
+          },
+          "answer": {
+            "zh": "把任务说明、相关对话、实际文件内容组织成一份请求；图里的颜色只是来源标识。",
+            "en": "Combine instructions, relevant conversation and actual file content into one request; colors identify their sources."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "它和提示词工程的关系是什么？",
+            "en": "How does this relate to prompt engineering?"
+          },
+          "answer": {
+            "zh": "任务说明是输入的一部分；上下文工程还选择资料、历史和工具结果等其余内容。",
+            "en": "Instructions are one component; context engineering also selects material, history and observations."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "逐项指出信息来源，再跟三条箭头进入同一输入包。",
+        "en": "Trace each source into one assembled input."
+      },
+      "pause": {
+        "zh": "遮住原文，问只剩列名能否提取负责人。",
+        "en": "Hide the source and ask whether column names alone supply owners."
+      },
+      "takeaway": {
+        "zh": "上下文工程选择并组织这次实际可用的信息。",
+        "en": "Context engineering selects and organizes available information."
+      },
+      "recovery": {
+        "seconds": 15,
+        "instruction": {
+          "zh": "不讨论多种压缩策略，只保留组装一次调用。",
+          "en": "Keep one assembled call; omit compression strategies."
+        }
+      },
+      "concepts": [
+        "上下文工程",
+        "context engineering",
+        "文件",
+        "历史",
+        "调用"
+      ],
+      "pacing": {
+        "speech_seconds": 50,
+        "demo_seconds": 20,
+        "processing_seconds": 12,
+        "question_seconds": 15,
+        "transition_seconds": 5,
+        "margin_seconds": 18,
+        "zh_units": 162,
+        "en_words": 78
+      }
+    },
+    {
+      "id": "rag-retrieval",
+      "minutes": 3,
+      "opening": {
+        "zh": "公司制度可能有几百页，但这个问题只问报销期限。把全部文件塞入输入并不是唯一方法。先让检索程序找到相关段落，再把问题和段落交给模型。检索负责找，生成负责组织成回答。这里次月5日来自左边的制度文字；换一条制度，模型本次依据的材料就会变。这个过程没有要求先把新制度重新训练进参数。",
+        "en": "A policy collection may span hundreds of pages while the question asks only for an expense deadline. Retrieve relevant passages before supplying the question and evidence. Retrieval finds; generation phrases an answer. The fifth of next month comes from the policy passage. A changed passage can inform a new answer without retraining it into the model."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么还需要模型，搜索不就找到了？",
+            "en": "Why use a model after search?"
+          },
+          "answer": {
+            "zh": "检索返回片段；模型可以把片段结合问题组织成直接回答。若只需打开原文，普通搜索也能完成。",
+            "en": "Retrieval returns passages; generation can compose a direct answer. Plain search is sufficient when opening the source is the task."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "检索怎么知道哪段相关？",
+            "en": "How does retrieval identify relevant passages?"
+          },
+          "answer": {
+            "zh": "检索程序可比较关键词或数值表示的相似程度，再返回段落；本课不展开检索算法。",
+            "en": "Software can compare keywords or numerical representations and return passages. The retrieval algorithm is outside this introductory mechanism."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "为什么上下文之后讲RAG？",
+            "en": "Why teach RAG after context?"
+          },
+          "answer": {
+            "zh": "RAG是在组装输入之前，增加一个从大量外部材料中选择相关部分的动作。",
+            "en": "It adds retrieval of relevant external material before assembling the input."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "依次指出问题、原文“5日”、本次输入、生成答案；用手沿答案日期追溯到原文。",
+        "en": "Trace the question through retrieval and context, then trace the answer's date back to the passage."
+      },
+      "pause": {
+        "zh": "停在检索片段：此时得到的是原文还是已经生成的回答？",
+        "en": "At the passage, ask whether it is source text or the generated answer."
+      },
+      "takeaway": {
+        "zh": "检索找材料，模型带着材料生成回答。",
+        "en": "Retrieval finds material; generation answers with it."
+      },
+      "recovery": {
+        "seconds": 20,
+        "instruction": {
+          "zh": "只追踪日期这一条依据，不展开检索算法。",
+          "en": "Trace the date only; omit retrieval algorithms."
+        }
+      },
+      "concepts": [
+        "RAG",
+        "检索增强生成",
+        "检索",
+        "资料问答"
+      ],
+      "pacing": {
+        "speech_seconds": 90,
+        "demo_seconds": 25,
+        "processing_seconds": 20,
+        "question_seconds": 20,
+        "transition_seconds": 5,
+        "margin_seconds": 20,
+        "zh_units": 302,
+        "en_words": 142
+      }
+    },
+    {
+      "id": "tool-roundtrip",
+      "minutes": 3,
+      "opening": {
+        "zh": "上页检索已经是一种工具。现在换成查天气，把往返拆开。应用先把可用工具的说明交给模型：天气工具需要城市和日期。模型根据目标填这些信息，生成一个调用请求；程序读到请求后才执行网络查询。返回的rain是新观察，再作为下一次输入。模型输出一段看似代码的文字，和真实运行工具之间，有明确的软件执行步骤。",
+        "en": "Retrieval was already a tool; now isolate a weather-tool round trip. The app supplies available tool descriptions, including required city and day. The model fills those inputs and requests a call. Software performs the network query and returns rain as a new observation for the next input. Generated call text and actual execution are distinct operations."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "模型怎么知道有weather这个工具？",
+            "en": "How does it know the weather tool exists?"
+          },
+          "answer": {
+            "zh": "应用把工具名、用途和需要的输入说明放进调用环境；模型按这些说明提出请求。",
+            "en": "The app supplies its name, purpose and required inputs, which the model uses to request a call."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "city和day怎么填出来？",
+            "en": "How are city and day filled?"
+          },
+          "answer": {
+            "zh": "城市和日期来自用户目标与当前上下文，再按工具要求的字段组织；外围程序执行这一组参数。",
+            "en": "They come from the task and context and are arranged into the tool's input fields for software to execute."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "和RAG相比增加了什么？",
+            "en": "What is added beyond RAG?"
+          },
+          "answer": {
+            "zh": "RAG展示找资料后生成；这里把任何工具的请求、执行和结果返回完整拆开，后面能重复这条往返。",
+            "en": "This generalizes the request, execution and return pattern so it can be repeated with other tools."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "先指可用工具说明，再指请求参数；停在这里后才展开天气结果。",
+        "en": "Identify the available-tool description and request fields before showing results."
+      },
+      "pause": {
+        "zh": "在结果出来前，问生成weather请求是否已经知道天气。",
+        "en": "Before the result, ask whether writing a weather request already provides the forecast."
+      },
+      "takeaway": {
+        "zh": "模型提出调用，程序执行，新观察再送回模型。",
+        "en": "A model requests; software executes; observations return."
+      },
+      "recovery": {
+        "seconds": 20,
+        "instruction": {
+          "zh": "不逐字符读代码，只解释城市、日期、请求与结果。",
+          "en": "Do not read code character by character; keep request fields and returned result."
+        }
+      },
+      "concepts": [
+        "工具调用",
+        "tool calling",
+        "调用参数",
+        "Harness"
+      ],
+      "pacing": {
+        "speech_seconds": 95,
+        "demo_seconds": 25,
+        "processing_seconds": 20,
+        "question_seconds": 20,
+        "transition_seconds": 5,
+        "margin_seconds": 15,
+        "zh_units": 331,
+        "en_words": 156
+      }
+    },
+    {
+      "id": "agent-loop",
+      "minutes": 3,
+      "opening": {
+        "zh": "刚才只查了一次天气，但安排活动还需要继续行动。外围程序保留目标和结果，模型读到新观察后再提议下一个工具。雨天查场馆，晴天查公园，只是两条便于追踪的示意路径。判断是不是Agent，关键不是图上有没有分支，而是下一步工具由模型运行时提出，还是所有路径都由程序事先写死。",
+        "en": "Planning activities takes more than one weather query. A harness retains the goal and observations while the model proposes a next tool. Rain-to-museum and clear-to-park are prepared illustrative paths. Branching alone does not establish an agent: the distinction is whether a model proposes actions at runtime or code predefined every path."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "这不就是下雨就去室内的if/else吗？",
+            "en": "Is this just an if/else rule?"
+          },
+          "answer": {
+            "zh": "单看这两条路径确实也能写成固定流程；Agent的区别是运行中由模型根据目标和观察提出工具，而不只照固定分支走。",
+            "en": "These two paths could indeed be coded as a workflow. An agent instead lets the model propose actions from goals and observations at runtime."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "新结果怎样影响下一步？",
+            "en": "How does the observation affect the next action?"
+          },
+          "answer": {
+            "zh": "天气文字进入下一次输入，模型据此生成不同工具请求；程序执行后再把开放时间或路线送回。",
+            "en": "Weather enters the next input, affecting the proposed tool. Software returns hours or a route for further continuation."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "和上一页工具调用差在哪？",
+            "en": "How does this extend tool calling?"
+          },
+          "answer": {
+            "zh": "工具往返是一个动作；Harness把多次往返接起来，Agent在这些往返之间参与选下一步。",
+            "en": "A round trip is one action. The harness connects rounds, and the agent selects actions between them."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "切换一次晴天，指天气、计划、下一工具三处同步变化。",
+        "en": "Switch to clear weather and identify changes to observation, plan and next tool."
+      },
+      "pause": {
+        "zh": "先预测晴天后该查场馆时间还是公园路线。",
+        "en": "Predict whether clear weather leads to opening hours or a park route."
+      },
+      "takeaway": {
+        "zh": "看谁决定下一步，不能只看有没有分支。",
+        "en": "Identify who chooses the action, not merely whether a branch exists."
+      },
+      "recovery": {
+        "seconds": 15,
+        "instruction": {
+          "zh": "只切换一次天气，不展开更多工具。",
+          "en": "Switch weather once; add no further tools."
+        }
+      },
+      "concepts": [
+        "Agent",
+        "智能体",
+        "Harness",
+        "agent engineering",
+        "harness engineering"
+      ],
+      "pacing": {
+        "speech_seconds": 95,
+        "demo_seconds": 20,
+        "processing_seconds": 20,
+        "question_seconds": 20,
+        "transition_seconds": 5,
+        "margin_seconds": 20,
+        "zh_units": 326,
+        "en_words": 154
+      }
+    },
+    {
+      "id": "workflow-vs-agent",
+      "minutes": 2,
+      "opening": {
+        "zh": "刚才的质疑很好：有分支不一定是Agent。固定流程也可以写条件，只是路径由程序预先定义。会议转录、整理、导出，可以按同样顺序重复；研究任务则可能读到一半发现缺数字，临时改用计算工具。我们按控制下一步的方式来区分，而不是按它看起来聪不聪明。实际应用可以把两种方式放在一起。",
+        "en": "A branch is not enough to identify an agent. Workflows can have conditions, but software defines the paths. Meeting transcription and summarization can follow a repeated sequence; research may discover missing numbers and choose a computation tool. Distinguish control of the next step rather than perceived intelligence. An app can combine both patterns."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "固定流程有分支后算Agent吗？",
+            "en": "Does a branching workflow become an agent?"
+          },
+          "answer": {
+            "zh": "不一定。预先写好的条件分支仍是工作流；这里的Agent强调模型运行时提出动作。",
+            "en": "Not necessarily. Predefined conditions remain a workflow; the agent distinction is runtime model-directed action."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "缺来源和缺数值两条路怎么来？",
+            "en": "How are source-search and computation paths chosen?"
+          },
+          "answer": {
+            "zh": "图中表示模型根据当前任务缺口提出搜索或计算，外围程序负责实际调用。",
+            "en": "They represent model proposals based on information gaps, executed by surrounding software."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "为什么紧跟天气例子？",
+            "en": "Why follow the weather example?"
+          },
+          "answer": {
+            "zh": "用这张对照图解决天气分支与普通if/else的混淆，再讨论多轮反馈。",
+            "en": "It resolves the if/else ambiguity before introducing feedback across rounds."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "先读固定顺序，再指研究任务的两个信息缺口；明确分支本身不是判据。",
+        "en": "Compare fixed ordering with two research gaps, emphasizing that branching is not the criterion."
+      },
+      "pause": {
+        "zh": "让学生说出区别是“有没有分支”还是“谁提议下一步”。",
+        "en": "Ask whether the criterion is branching or who proposes the next step."
+      },
+      "takeaway": {
+        "zh": "工作流预设路径，Agent由模型参与运行时选择。",
+        "en": "Workflows predefine paths; agents involve model-directed runtime choices."
+      },
+      "recovery": {
+        "seconds": 15,
+        "instruction": {
+          "zh": "不增加新的研究场景。",
+          "en": "Do not add another research scenario."
+        }
+      },
+      "concepts": [
+        "工作流",
+        "workflow",
+        "动态选择",
+        "Agent"
+      ],
+      "pacing": {
+        "speech_seconds": 70,
+        "demo_seconds": 10,
+        "processing_seconds": 12,
+        "question_seconds": 15,
+        "transition_seconds": 5,
+        "margin_seconds": 8,
+        "zh_units": 234,
+        "en_words": 108
+      }
+    },
+    {
+      "id": "task-revision-loop",
+      "minutes": 2,
+      "opening": {
+        "zh": "有了执行工具，还要知道执行结果怎样帮助任务。价格排序第一次得到100、20、3，和数值从小到大的目标冲突。这是可以直接观察的差距，不需要先给模型上一轮新训练。把目标和错误结果放回输入，模型生成新的比较规则，再执行。这样改好的是当前程序，而不是语言模型的参数。",
+        "en": "Execution results can guide the task. The first price order conflicts with the numeric goal, providing observable feedback without retraining the language model. Put the goal and result into the next input, generate a numeric comparison rule and run again. The artifact changes while model parameters can remain fixed."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么100反而排在20前面？",
+            "en": "Why does 100 come before 20?"
+          },
+          "answer": {
+            "zh": "默认按文字比较先看首字符，1先于2；数值排序需要指定不同规则。",
+            "en": "Default text ordering compares leading characters; numeric ordering requires another rule."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "第二次是怎样改对的？",
+            "en": "How is the second attempt improved?"
+          },
+          "answer": {
+            "zh": "新输入带上数值目标和实际错误结果，生成按数值比较的代码，再由程序执行核对。",
+            "en": "The goal and observed error condition a numeric comparator, whose execution reveals the result."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "它怎样接回Agent和训练？",
+            "en": "How does this relate to agents and training?"
+          },
+          "answer": {
+            "zh": "工具反馈连接多次调用，属于任务循环；只修改代码不等于重新训练模型。",
+            "en": "Tool feedback connects calls into a task loop; revising code is not itself model training."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "执行一次默认排序和数值排序，明确反馈从运行输出返回。",
+        "en": "Run both sorts and trace execution output back as feedback."
+      },
+      "pause": {
+        "zh": "先让学生判断结果是否符合数值升序，而非是否像一段合法代码。",
+        "en": "Judge numeric correctness rather than whether code looks valid."
+      },
+      "takeaway": {
+        "zh": "任务循环把可观察结果交回下一次调用。",
+        "en": "A task loop supplies observable results to the next call."
+      },
+      "recovery": {
+        "seconds": 15,
+        "instruction": {
+          "zh": "不讲比较函数语法，保留输入、错误、修改和结果。",
+          "en": "Omit comparator syntax; keep input, error, revision and result."
+        }
+      },
+      "concepts": [
+        "反馈循环",
+        "代码修订",
+        "运行结果",
+        "loop engineering"
+      ],
+      "pacing": {
+        "speech_seconds": 75,
+        "demo_seconds": 10,
+        "processing_seconds": 12,
+        "question_seconds": 15,
+        "transition_seconds": 5,
+        "margin_seconds": 3,
+        "zh_units": 250,
+        "en_words": 113
+      }
+    },
+    {
+      "id": "three-improvement-loops",
+      "minutes": 1,
+      "opening": {
+        "zh": "只问哪个对象变了：当前成果、助手程序，还是模型参数？",
+        "en": "Identify the changed object: artifact, assistant or model parameters."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么都叫改进还要分开？",
+            "en": "Why distinguish improvements?"
+          },
+          "answer": {
+            "zh": "三者改变的对象不同，决定了改善只影响这次结果，还是后续工具能力，或者模型版本。",
+            "en": "The changed object determines whether the effect concerns this artifact, future tools or a model version."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "怎样识别变化发生在哪里？",
+            "en": "How do we identify the level?"
+          },
+          "answer": {
+            "zh": "看最终保存的是什么：新代码、助手程序配置，还是一套新模型参数。",
+            "en": "Inspect what is saved: a code artifact, assistant software configuration or model parameters."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "为什么放在代码反馈之后？",
+            "en": "Why follow code feedback?"
+          },
+          "answer": {
+            "zh": "上页给了可见的任务层变化，这里用同一个例子与另外两层对照。",
+            "en": "The prior page supplies a visible artifact-level change to compare with the other two levels."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "按代码、工具、参数各点一次，停止在三列对照。",
+        "en": "Point once each to artifact, tools and parameters."
+      },
+      "pause": {
+        "zh": "问改排序代码属于哪一列。",
+        "en": "Ask which column contains a sorting-code revision."
+      },
+      "takeaway": {
+        "zh": "先说清改进的对象，再讨论循环。",
+        "en": "Identify the changed object before discussing its loop."
+      },
+      "recovery": {
+        "seconds": 10,
+        "instruction": {
+          "zh": "用一句话对照三列，不追加示例。",
+          "en": "Contrast the three columns without further examples."
+        }
+      },
+      "concepts": [
+        "循环工程",
+        "任务循环",
+        "助手改进",
+        "模型训练"
+      ],
+      "pacing": {
+        "speech_seconds": 30,
+        "demo_seconds": 8,
+        "processing_seconds": 5,
+        "question_seconds": 5,
+        "transition_seconds": 5,
+        "margin_seconds": 7,
+        "zh_units": 103,
+        "en_words": 47
+      }
+    },
+    {
+      "id": "rsi-feedback",
+      "minutes": 2,
+      "opening": {
+        "zh": "刚才改结果、工具、参数；这里再问：新工具能不能用于下一轮改进工具自身？",
+        "en": "After distinguishing changed objects, ask whether an improved tool can help improve the tool again."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么这不是普通任务循环？",
+            "en": "Why is this not an ordinary task loop?"
+          },
+          "answer": {
+            "zh": "普通循环修改眼前成果；这里修改的工具或方法又参与产生下一轮自身改进。",
+            "en": "An ordinary loop revises an artifact; here changed tools or methods help produce subsequent changes to the system itself."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "怎样知道v2真的更好？",
+            "en": "How do we know v2 is better?"
+          },
+          "answer": {
+            "zh": "对同样的问题比较使用的时间或得到的结果。图是假设机制，不从版本号推出效果。",
+            "en": "Compare the same task's time or results. The diagram illustrates a mechanism rather than inferring gains from a version label."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "和刚才三列循环是什么关系？",
+            "en": "How does this relate to the three loops?"
+          },
+          "answer": {
+            "zh": "本例改外围助手的方法，模型参数可以不变；“自我改进”不自动等于模型训练。",
+            "en": "This example changes the assistant's method while model parameters can stay fixed; self-improvement does not automatically mean training."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "沿v1到v2再回改进方法；指明回箭头改变的是方法而非报告。",
+        "en": "Trace versions and feedback into the improvement method, not the report."
+      },
+      "pause": {
+        "zh": "停在回箭头，让学生指出被改的对象。",
+        "en": "Hold the return arrow and identify what is being changed."
+      },
+      "takeaway": {
+        "zh": "RSI的关键是新能力回到产生改进的机制。",
+        "en": "RSI feeds new capability back into the improvement mechanism."
+      },
+      "recovery": {
+        "seconds": 20,
+        "instruction": {
+          "zh": "只讲一个假设工具改进，不展开增长速度。",
+          "en": "Keep one hypothetical tool change; omit growth-rate discussion."
+        }
+      },
+      "concepts": [
+        "RSI",
+        "递归自我改进",
+        "recursive self-improvement"
+      ],
+      "pacing": {
+        "speech_seconds": 50,
+        "demo_seconds": 20,
+        "processing_seconds": 12,
+        "question_seconds": 15,
+        "transition_seconds": 5,
+        "margin_seconds": 18,
+        "zh_units": 161,
+        "en_words": 78
+      }
+    },
+    {
+      "id": "multi-agent-handoffs",
+      "minutes": 2,
+      "opening": {
+        "zh": "多轮工作是时间上的循环，多Agent是工作者之间的分工；两者可以组合。",
+        "en": "Rounds divide work over time; multiple agents divide it across workers. Both structures can combine."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么不用一个助手顺序做完？",
+            "en": "Why not use one assistant sequentially?"
+          },
+          "answer": {
+            "zh": "独立问题可以分开准备和同时展开；但仍需要整合，分工的价值要看任务是否适合拆开。",
+            "en": "Independent questions can be prepared separately and run concurrently, while still requiring synthesis."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "同一个模型怎样成为三个工作者？",
+            "en": "How can one model support three workers?"
+          },
+          "answer": {
+            "zh": "应用建立三份独立任务上下文，分别调用模型，再收集各自返回的摘要。",
+            "en": "The app creates three task contexts, invokes the model separately and gathers their returned summaries."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "这和上一页的循环有什么关系？",
+            "en": "How does this relate to the previous loop?"
+          },
+          "answer": {
+            "zh": "一个讲同一工作者多轮改进，一个讲多个工作者之间分工交换；两种结构可以组合。",
+            "en": "One concerns improvement across rounds; this concerns division and exchange across workers. Both can combine."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "追踪A的一份资料到A摘要再到总表；B/C只指同样的结构。",
+        "en": "Trace product A through worker and summary into the comparison; indicate the same structure for B/C."
+      },
+      "pause": {
+        "zh": "问协调者能否自动读到工作者没有交回的内容。",
+        "en": "Ask whether a coordinator knows findings a worker never returned."
+      },
+      "takeaway": {
+        "zh": "多Agent依靠独立任务和显式结果交换协作。",
+        "en": "Multiple agents collaborate through separate tasks and explicit handoffs."
+      },
+      "recovery": {
+        "seconds": 15,
+        "instruction": {
+          "zh": "只追踪A，不逐个朗读三款参数。",
+          "en": "Trace A only rather than reading all product values."
+        }
+      },
+      "concepts": [
+        "多智能体",
+        "multi-agent",
+        "agent swarm",
+        "分工",
+        "上下文隔离"
+      ],
+      "pacing": {
+        "speech_seconds": 40,
+        "demo_seconds": 15,
+        "processing_seconds": 12,
+        "question_seconds": 15,
+        "transition_seconds": 5,
+        "margin_seconds": 33,
+        "zh_units": 136,
+        "en_words": 69
+      }
+    },
+    {
+      "id": "parallel-time",
+      "minutes": 1,
+      "opening": {
+        "zh": "分工之后只算等待多久，先不讨论模型名字。",
+        "en": "After assigning work, count elapsed waiting rather than model names."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么14分钟会变6分钟？",
+            "en": "Why does fourteen become six?"
+          },
+          "answer": {
+            "zh": "原来三个任务的时间相加；同时开始后只等最长任务，再加整合。",
+            "en": "Serial task times add; concurrent execution waits for the longest task, then synthesis."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "总工作量怎么算？",
+            "en": "What is total effort?"
+          },
+          "answer": {
+            "zh": "仍有三项各4分钟和汇总2分钟，合计14分钟工作，只是日历上重叠。",
+            "en": "Three four-minute tasks plus two-minute synthesis still require fourteen worker-minutes; they overlap in elapsed time."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "为什么接着多Agent算时间？",
+            "en": "Why calculate time after multiple agents?"
+          },
+          "answer": {
+            "zh": "分工结构只有在可以并发时才缩短这部分等待；下半场会看承载并发的资源。",
+            "en": "The division reduces this wait when tasks can execute concurrently; the next half examines the supporting resources."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "沿同一刻度读14和6，手指同时起点与汇总段。",
+        "en": "Compare fourteen and six on one scale, identifying shared starts and synthesis."
+      },
+      "pause": {
+        "zh": "让学生指出并行条里的2分钟为什么还在。",
+        "en": "Ask why the two-minute synthesis remains."
+      },
+      "takeaway": {
+        "zh": "并行重叠独立工作，整合仍要时间。",
+        "en": "Parallel work overlaps independent tasks; synthesis still takes time."
+      },
+      "recovery": {
+        "seconds": 10,
+        "instruction": {
+          "zh": "直接读两条算式，不重讲分工。",
+          "en": "Read both sums without reteaching task assignment."
+        }
+      },
+      "concepts": [
+        "串行",
+        "并行",
+        "耗时",
+        "总工作量"
+      ],
+      "pacing": {
+        "speech_seconds": 25,
+        "demo_seconds": 8,
+        "processing_seconds": 5,
+        "question_seconds": 5,
+        "transition_seconds": 5,
+        "margin_seconds": 12,
+        "zh_units": 82,
+        "en_words": 39
+      }
+    },
+    {
+      "id": "gpu-compute-data",
+      "minutes": 3,
+      "opening": {
+        "zh": "回来先接休息前的问题：多个助手想同时工作，计算能力从哪里来？把模型内部的数值运算打开一点。图里两行输入共用参数5和4，一行算22，另一行算21，彼此不必等结果。GPU擅长同时做大量这类相似计算，但前提是数字先放得下、搬得到。显存容量、搬运带宽、运算能力是三个不同环节，不能用一个“快”字代替。",
+        "en": "Return to the pre-break question: what supports concurrent assistants? Two rows use shared parameters five and four to compute independent results. GPUs execute many similar operations, but data must fit in memory and reach compute units. Capacity, transfer bandwidth and arithmetic are distinct aspects rather than one generic measure of speed."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么AI经常用GPU，不只用CPU？",
+            "en": "Why use GPUs rather than only CPUs?"
+          },
+          "answer": {
+            "zh": "模型有大量可重复、可并行的乘加运算，GPU适合这类组织；CPU仍负责很多控制和准备工作。",
+            "en": "Models contain many similar parallel multiply-add operations; CPUs still handle control and preparation."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "图里的22和21怎么来？",
+            "en": "How are twenty-two and twenty-one obtained?"
+          },
+          "answer": {
+            "zh": "两行输入分别为[2,3]和[1,4]，都与参数[5,4]对应相乘后相加，得到22和21。",
+            "en": "Inputs [2,3] and [1,4] each multiply corresponding entries of parameters [5,4] and sum the products."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "为什么并行任务之后看芯片？",
+            "en": "Why follow parallel tasks with chips?"
+          },
+          "answer": {
+            "zh": "软件可以提出并行工作，但真实运算还需要可用设备、内存和数据通道。",
+            "en": "Software can propose concurrent work, but physical execution needs devices, memory and data movement."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "指输入两行与共用参数，再看两行结果一起出现；沿显存、数据通道、计算单元走一次。",
+        "en": "Trace both input rows and shared parameters, then memory, transfer and simultaneous arithmetic."
+      },
+      "pause": {
+        "zh": "停在两个结果前：一行是否需要等另一行算完？",
+        "en": "Before the results, ask whether either row needs the other's answer."
+      },
+      "takeaway": {
+        "zh": "GPU并行做相似运算，显存与搬运必须配合。",
+        "en": "Parallel arithmetic needs memory capacity and data movement."
+      },
+      "recovery": {
+        "seconds": 20,
+        "instruction": {
+          "zh": "不展开CPU/TPU设计，只保留GPU的三环节。",
+          "en": "Skip CPU/TPU architecture details; retain the three GPU aspects."
+        }
+      },
+      "concepts": [
+        "GPU",
+        "CPU",
+        "TPU",
+        "显存",
+        "带宽",
+        "并行计算"
+      ],
+      "pacing": {
+        "speech_seconds": 85,
+        "demo_seconds": 25,
+        "processing_seconds": 20,
+        "question_seconds": 30,
+        "transition_seconds": 5,
+        "margin_seconds": 15,
+        "zh_units": 288,
+        "en_words": 128
+      }
+    },
+    {
+      "id": "weight-memory-arithmetic",
+      "minutes": 3,
+      "opening": {
+        "zh": "先只算能放多少数字，不急着比较运算速度。所谓80亿参数，就是80亿个要存的数。用16bit存一个数等于2字节，乘起来得到16GB。改成平均4bit，并没有把参数数量减成四分之一，只是每个数占得更少。右边那些缓存和中间结果是使用时另占的空间，所以权重文件大小不等于整台服务运行时的全部显存。",
+        "en": "First count stored values rather than speed. Eight billion parameters means eight billion numbers. Sixteen bits is two bytes per value, giving sixteen GB. Four-bit storage reduces size per value, not parameter count. Caches and intermediate results need additional runtime memory, so weight-file size is not total serving memory."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么4bit会更省，却可能影响效果？",
+            "en": "Why can fewer bits save space and affect results?"
+          },
+          "answer": {
+            "zh": "更少的位能表示的不同数值更少，原数值要映射到较粗的表示；并不是无损地删除空白。",
+            "en": "Fewer bits represent fewer possible values, requiring a coarser mapping rather than simply removing empty space."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "16GB和4GB怎样算？",
+            "en": "How are sixteen and four GB calculated?"
+          },
+          "answer": {
+            "zh": "80亿乘16再除8得160亿字节，即16GB；乘4再除8得40亿字节，即4GB。",
+            "en": "Multiply eight billion by sixteen or four bits and divide by eight bits per byte, using decimal GB."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "和上一页的带宽是一回事吗？",
+            "en": "Is this the same as bandwidth?"
+          },
+          "answer": {
+            "zh": "GB算能存多少；GB每秒算搬多快。容量满足后，搬运仍可能限制计算速度。",
+            "en": "GB measures capacity; GB/s measures movement rate. Adequate capacity does not remove transfer limits."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "保留参数数量不变，只改每个数的位数；最后再展开运行时其他内存。",
+        "en": "Hold parameter count fixed, change bits per value, then add other runtime memory."
+      },
+      "pause": {
+        "zh": "让学生指出缩小的是每个数的体积还是数的个数。",
+        "en": "Ask whether each value or the number of values shrank."
+      },
+      "takeaway": {
+        "zh": "权重体积等于参数数量乘表示大小，运行还有额外数据。",
+        "en": "Weight size combines count and representation; runtime stores more data."
+      },
+      "recovery": {
+        "seconds": 25,
+        "instruction": {
+          "zh": "只算16bit的一次乘法，4bit直接按四分之一面积对照。",
+          "en": "Calculate sixteen-bit size once and compare four-bit area as a quarter."
+        }
+      },
+      "concepts": [
+        "参数量",
+        "FP16",
+        "4bit",
+        "量化",
+        "bit",
+        "字节",
+        "GB"
+      ],
+      "pacing": {
+        "speech_seconds": 85,
+        "demo_seconds": 25,
+        "processing_seconds": 20,
+        "question_seconds": 30,
+        "transition_seconds": 5,
+        "margin_seconds": 15,
+        "zh_units": 296,
+        "en_words": 138
+      }
+    },
+    {
+      "id": "cluster-engine-path",
+      "minutes": 5,
+      "opening": {
+        "zh": "现在把能存会算的设备组织成服务。先找位置：一台机器叫节点，联网管理起来叫集群，Kubernetes安排一份服务放在哪里。然后才看服务里运行的推理引擎。不要把放置服务和生成每个Token混在一起。输入A/B/C算过的注意力记录可以保留：这些位置不会回看后来新生成的D，所以追加D不必重算旧记录。但生成E仍要读取A/B/C的缓存并计算D的新记录，缓存省的是重复计算，不是把前文丢掉。",
+        "en": "Organize devices into services. A node is a machine in a managed cluster; Kubernetes places a service, while its inference engine performs model execution. Placement is not repeated per token. Earlier positions do not attend to later generated tokens, so their attention states can be retained. Generating E still reads cached A/B/C states and computes the new D state. A cache avoids recomputation without discarding context."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么KV缓存能复用，旧内容不会变吗？",
+            "en": "Why can old KV states be reused?"
+          },
+          "answer": {
+            "zh": "这里讲因果生成模型：旧位置只依赖它及之前的内容，不看之后新生成的Token，所以其键和值记录可复用。",
+            "en": "In this causal generation model, an earlier position depends only on itself and preceding content, not later generated tokens."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "生成E时到底算什么、读什么？",
+            "en": "What is read and computed to generate E?"
+          },
+          "answer": {
+            "zh": "引擎读A/B/C已有记录，处理新输入D并追加D记录，结合这些信息预测E；D不是上一步已经处理过的输入。",
+            "en": "Read cached A/B/C, process D and append its states, then predict E. D was produced by the previous step rather than already processed as its input."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "为什么内存之后马上讲缓存和引擎？",
+            "en": "Why teach caches and engines after memory?"
+          },
+          "answer": {
+            "zh": "上一页右列的额外内存需要具体用途；本页展示它在生成循环里保存什么，以及谁管理执行。",
+            "en": "This explains the runtime memory items from the previous page and the software that manages their use."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "先放置服务，再在引擎内按时间展开Prefill与Decode；指A/B/C同色复用、D新增，最后指出E是新输出。",
+        "en": "Place the service, then unfold prefill and decode; distinguish reused A/B/C, newly stored D and output E."
+      },
+      "pause": {
+        "zh": "先问生成E是否还需要A/B/C，确认需要后才显示“读缓存+新D”。",
+        "en": "Ask whether E still needs A/B/C before showing cached states plus D."
+      },
+      "takeaway": {
+        "zh": "K8s放服务；引擎读取缓存、计算新位置并生成。",
+        "en": "Kubernetes places services; engines read caches and compute new positions."
+      },
+      "recovery": {
+        "seconds": 40,
+        "instruction": {
+          "zh": "Pod、键/值的全称留备答，主线只讲放置、执行、旧记录复用。",
+          "en": "Leave pod and key/value terminology to follow-up answers; retain placement, execution and reuse."
+        }
+      },
+      "concepts": [
+        "Kubernetes",
+        "K8s",
+        "集群",
+        "节点",
+        "推理引擎",
+        "KV cache",
+        "Prefill",
+        "Decode"
+      ],
+      "pacing": {
+        "speech_seconds": 110,
+        "demo_seconds": 75,
+        "processing_seconds": 30,
+        "question_seconds": 65,
+        "transition_seconds": 5,
+        "margin_seconds": 15,
+        "zh_units": 369,
+        "en_words": 172
+      }
+    },
+    {
+      "id": "parallel-vs-replicas",
+      "minutes": 2,
+      "opening": {
+        "zh": "一份服务已经能运行，再问增加设备能做什么。左边让两块设备合作运行同一模型，适合把放不下的参数或运算分开，但需要交换数据。右边各放完整模型，两个用户分别调用；这样增加的是同时服务的能力。多一个完整副本，不会自动让同一个回答快一倍。后面讲延迟和吞吐，就是要把这两种收益分开量。",
+        "en": "Once one service runs, additional devices can play different roles. Split one model across cooperating devices, with communication, or run complete replicas for separate requests. Replicas increase concurrent serving capacity without automatically halving one response's time. Latency and throughput will measure these different effects."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么两块GPU不一定快一倍？",
+            "en": "Why are two GPUs not automatically twice as fast?"
+          },
+          "answer": {
+            "zh": "分模型需要通信且有不能完全并行的部分；开副本主要让不同请求分开处理。",
+            "en": "Model splitting introduces communication and nonparallel work; replicas primarily separate requests."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "两个副本怎样接请求？",
+            "en": "How do replicas receive requests?"
+          },
+          "answer": {
+            "zh": "路由或引擎把请求A送到一份完整实例，请求B送到另一份，各自执行生成。",
+            "en": "Routing or serving software assigns requests to complete instances that execute independently."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "它和前面的多Agent有什么关系？",
+            "en": "How does this relate to multiple agents?"
+          },
+          "answer": {
+            "zh": "独立助手可以产生多个模型请求；是否并发完成取决于这里的实例和引擎如何组织资源。",
+            "en": "Separate assistants can create multiple model requests; concurrency depends on instances and engine resources."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "比较左边半份模型交换与右边两个请求；只跟踪一个用户的回答。",
+        "en": "Contrast split-model communication and independent replica requests."
+      },
+      "pause": {
+        "zh": "问增加完整副本后，优先改善同时服务人数还是单个回答速度。",
+        "en": "Ask whether replicas primarily improve concurrency or one response's speed."
+      },
+      "takeaway": {
+        "zh": "拆模型与开副本解决不同问题。",
+        "en": "Model splitting and replication solve different problems."
+      },
+      "recovery": {
+        "seconds": 15,
+        "instruction": {
+          "zh": "不展开多种并行策略，只保留这两种分工。",
+          "en": "Keep the two roles without a taxonomy of parallelism."
+        }
+      },
+      "concepts": [
+        "模型并行",
+        "服务副本",
+        "replica",
+        "多GPU",
+        "并发"
+      ],
+      "pacing": {
+        "speech_seconds": 75,
+        "demo_seconds": 10,
+        "processing_seconds": 12,
+        "question_seconds": 15,
+        "transition_seconds": 5,
+        "margin_seconds": 3,
+        "zh_units": 253,
+        "en_words": 108
+      }
+    },
+    {
+      "id": "latency-timeline",
+      "minutes": 3,
+      "opening": {
+        "zh": "现在换成一个用户的视角：我点发送，要等多久？先等到首个Token，再等后续内容到齐，这是两种不同体验。0.8秒不是纯粹“模型想了多久”，还可能包含网络、排队和输入处理。图中后续生成又花2秒，所以全程2.8秒。同一服务可能很快开始出字，却还要很久才能写完；先把计时边界指出来，再讨论快慢。",
+        "en": "Take one user's perspective: how long after sending? Time to first token and time to finish capture different experiences. The initial 0.8 seconds can include network, queueing and input processing, not just model computation. Two further seconds give 2.8 seconds total. Fast first output and fast completion are different; identify timing boundaries before comparing speed."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么首字快，不等于整段快？",
+            "en": "Why does fast first output not imply fast completion?"
+          },
+          "answer": {
+            "zh": "首字之前和后续生成是两段时间；后面输出多或生成慢，全程仍可能很长。",
+            "en": "The initial wait and later generation are separate; long output or slow continuation can extend total time."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "2.8秒怎么来，计时从哪里开始？",
+            "en": "Where does 2.8 seconds come from?"
+          },
+          "answer": {
+            "zh": "从应用发出请求到完成，先等0.8秒首Token，再生成2秒，相加2.8秒。",
+            "en": "The interval from sending to completion contains 0.8 seconds to the first token plus two seconds of continuation."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "它和副本/模型并行的关系是什么？",
+            "en": "How does this relate to device organization?"
+          },
+          "answer": {
+            "zh": "资源组织可能影响排队和执行；延迟是我们用来观察单个请求实际等待的结果指标。",
+            "en": "Organization affects queueing and execution; latency observes the resulting wait for one request."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "按发送、首个、后续、结束四步计时；每次只读对应的区间。",
+        "en": "Trace sending, first token, continuation and completion on one timeline."
+      },
+      "pause": {
+        "zh": "先让学生指TTFT的终点，再指整段回答的终点。",
+        "en": "Identify the end of TTFT and the end of the whole response."
+      },
+      "takeaway": {
+        "zh": "先区分首字等待与全部完成，再说延迟。",
+        "en": "Distinguish first-token waiting from full completion."
+      },
+      "recovery": {
+        "seconds": 20,
+        "instruction": {
+          "zh": "不列其他延迟分位数，只保留两个终点。",
+          "en": "Omit latency percentiles; retain the two endpoints."
+        }
+      },
+      "concepts": [
+        "延迟",
+        "latency",
+        "TTFT",
+        "首Token",
+        "端到端"
+      ],
+      "pacing": {
+        "speech_seconds": 85,
+        "demo_seconds": 25,
+        "processing_seconds": 20,
+        "question_seconds": 25,
+        "transition_seconds": 5,
+        "margin_seconds": 20,
+        "zh_units": 286,
+        "en_words": 140
+      }
+    },
+    {
+      "id": "token-interval-arithmetic",
+      "minutes": 2,
+      "opening": {
+        "zh": "再把同一个回答放大。Token数量是到达点，生成时间发生在相邻点之间；3个点只有2个间隔，所以101个点有100个。首个之后的2秒产生100个新Token，得到50每秒；如果把首个前等的0.8秒也算进去，就用101除以2.8。两个数字都可以正确，前提是说清分子、分母和范围。",
+        "en": "Zoom into the same response. Tokens are arrival points; time lies between them. Three points have two gaps, so 101 have 100. After the first arrival, two seconds produce 100 additional tokens, fifty per second. Including the initial wait uses 101 divided by 2.8. Both rates can be correct when their counting ranges are explicit."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么不是101乘20毫秒？",
+            "en": "Why not multiply 101 by twenty milliseconds?"
+          },
+          "answer": {
+            "zh": "第一个点已经在起点，后面只有100次间隔；否则把一段不存在的间隔也算进去了。",
+            "en": "The first arrival is the starting point, leaving only one hundred gaps."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "50和36哪个才是真实速度？",
+            "en": "Which rate is the real speed?"
+          },
+          "answer": {
+            "zh": "50统计首个之后，36统计整个请求；先选要回答的问题，再用匹配的范围。",
+            "en": "Fifty describes continuation; thirty-six describes the whole request. Choose the question and matching range."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "为什么还用上一页0.8和2.8？",
+            "en": "Why retain 0.8 and 2.8 from the previous page?"
+          },
+          "answer": {
+            "zh": "这是同一条时间线的放大，不是换了一个更快或更慢的服务。",
+            "en": "This is a zoom into the same response, not a different service."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "先数3点2间隔，再直接对应101/100；计算两种范围各一次。",
+        "en": "Count three points and two gaps, then map to 101/100 and calculate each range once."
+      },
+      "pause": {
+        "zh": "让学生先指出要不要包含首字前0.8秒。",
+        "en": "Decide whether the initial 0.8 seconds belongs in the rate."
+      },
+      "takeaway": {
+        "zh": "速度比较必须使用一致的计时范围。",
+        "en": "Compare rates using matching timing ranges."
+      },
+      "recovery": {
+        "seconds": 25,
+        "instruction": {
+          "zh": "保留3点2间隔和50每秒，全程36每秒只读结论。",
+          "en": "Keep the three-point explanation and fifty-per-second calculation; read the whole-request result directly."
+        }
+      },
+      "concepts": [
+        "ITL",
+        "Token/s",
+        "生成速率",
+        "毫秒",
+        "计时范围"
+      ],
+      "pacing": {
+        "speech_seconds": 65,
+        "demo_seconds": 10,
+        "processing_seconds": 12,
+        "question_seconds": 15,
+        "transition_seconds": 5,
+        "margin_seconds": 13,
+        "zh_units": 220,
+        "en_words": 105
+      }
+    },
+    {
+      "id": "aggregate-throughput-batching",
+      "minutes": 4,
+      "opening": {
+        "zh": "上一页只数一人的输出，现在把四名用户合起来。A要2个、B要4个、C要1个、D要3个，总工作量相同。两个槽位让每轮最多推进两人，每人每轮一个Token。关键看第3轮：A已经结束，固定批次还等B，连续批处理让C补入。后者更早完成总工作，但B在两种方式下仍都是第4轮结束。系统吞吐和每个人的延迟不是同一个数字。",
+        "en": "Move from one user's output to four requests totaling ten tokens. Two slots each advance one token per active request per round. By round three A has finished: a fixed batch waits for B, while continuous batching inserts C. Total work finishes earlier, yet B still finishes in round four under both policies. Aggregate throughput and individual latency are different measures."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么补空位能提高总吞吐？",
+            "en": "Why does refilling improve throughput?"
+          },
+          "answer": {
+            "zh": "相同工作和资源下减少空等，更多轮次用足槽位，总任务完成得更早。",
+            "en": "It reduces idle slots under the same work and resources, completing the workload earlier."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "第3轮究竟不同在哪？",
+            "en": "What differs in round three?"
+          },
+          "answer": {
+            "zh": "固定批次只有B3在算，另一槽为空；连续批处理同时算C1与B3，累计输出从5变6。",
+            "en": "Fixed batching computes B3 with an idle slot; continuous batching computes C1 and B3, giving six cumulative tokens instead of five."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "总吞吐提高，每个人都更快了吗？",
+            "en": "Does higher throughput make every request faster?"
+          },
+          "answer": {
+            "zh": "不一定。图中B两种方式都第4轮结束，而C从第5轮提前到第3轮；上一页的单请求计时仍要分别看。",
+            "en": "Not necessarily: B finishes in round four in both, while C moves from round five to three. Individual timing remains separate."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "单轮推进到第3轮就停，核对两个槽和5/6累计值；解释后再播到完成。",
+        "en": "Advance manually to round three, compare slots and five/six tokens, then finish the schedule."
+      },
+      "pause": {
+        "zh": "把空槽指给学生，先预测谁能补进来，再推进。",
+        "en": "Point to the idle slot and predict who can fill it before advancing."
+      },
+      "takeaway": {
+        "zh": "连续批处理减少空等；总吞吐与个人等待分开统计。",
+        "en": "Continuous batching reduces idle work; throughput and individual wait remain distinct."
+      },
+      "recovery": {
+        "seconds": 35,
+        "instruction": {
+          "zh": "只手动看第3轮，直接跳完成，不逐轮朗读全部格子。",
+          "en": "Inspect round three manually, then show completion without reading every cell."
+        }
+      },
+      "concepts": [
+        "吞吐",
+        "throughput",
+        "批处理",
+        "continuous batching",
+        "连续批处理",
+        "并发"
+      ],
+      "pacing": {
+        "speech_seconds": 90,
+        "demo_seconds": 65,
+        "processing_seconds": 25,
+        "question_seconds": 45,
+        "transition_seconds": 5,
+        "margin_seconds": 10,
+        "zh_units": 312,
+        "en_words": 153
+      }
+    },
+    {
+      "id": "factory-input-output",
+      "minutes": 2,
+      "opening": {
+        "zh": "引擎组织一批请求，机房让这种计算能持续运行。现在把视角从设备拉到整个系统。",
+        "en": "Engines organize requests; facilities support continuous execution. Zoom from devices to the whole system."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么芯片之外还要电力和散热？",
+            "en": "Why discuss power and cooling?"
+          },
+          "answer": {
+            "zh": "持续计算消耗能源并发热；这些物理条件让设备能持续运行，而不是只做一次算术。",
+            "en": "Continuous computation consumes energy and releases heat, requiring facilities beyond one arithmetic operation."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "工厂输入和输出分别是什么？",
+            "en": "What enters and leaves this factory?"
+          },
+          "answer": {
+            "zh": "用户输入请求与资料，系统用模型和计算资源生成结果；Token是文本结果的一种计量单位。",
+            "en": "Requests and material enter; model computation produces results, with tokens measuring text output."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "为什么批处理之后拉到机房？",
+            "en": "Why follow batching with facilities?"
+          },
+          "answer": {
+            "zh": "前页看引擎怎样组织一批工作；本页补持续运行所需的整个物理系统。",
+            "en": "The previous page organized engine work; this adds the physical system supporting continuous operation."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "沿供电散热、机器、模型服务、持续输出四层走一次。",
+        "en": "Trace facilities, machines, model services and sustained output."
+      },
+      "pause": {
+        "zh": "问只买芯片是否就得到一个可调用的聊天服务。",
+        "en": "Ask whether buying chips alone creates a callable chat service."
+      },
+      "takeaway": {
+        "zh": "Token工厂指持续提供模型计算的整个系统。",
+        "en": "A token factory describes the whole sustained serving system."
+      },
+      "recovery": {
+        "seconds": 15,
+        "instruction": {
+          "zh": "不讲厂商案例，只保留部件间的依赖。",
+          "en": "Omit vendor examples and retain component dependencies."
+        }
+      },
+      "concepts": [
+        "Token工厂",
+        "AI factory",
+        "机房",
+        "电力",
+        "散热",
+        "网络"
+      ],
+      "pacing": {
+        "speech_seconds": 45,
+        "demo_seconds": 20,
+        "processing_seconds": 12,
+        "question_seconds": 15,
+        "transition_seconds": 5,
+        "margin_seconds": 23,
+        "zh_units": 143,
+        "en_words": 75
+      }
+    },
+    {
+      "id": "request-through-factory",
+      "minutes": 3,
+      "opening": {
+        "zh": "把机房重新接回用户手上的手机。手机应用准备输入，经网络发往模型服务；服务中的引擎在设备上执行模型计算，再把结果流送回来。界面在本地不代表大模型也装在手机里，这里展示远端服务的例子。沿去程说问题和资料，沿回程说新生成Token，就能看出应用、模型和硬件不是三份互相独立的答案。",
+        "en": "Connect the facility back to a phone. Its app prepares input and sends it to a remote model service. An engine executes model computation on devices and streams output back. A local interface does not imply local model execution. Distinguish outgoing questions and material from returning generated tokens to connect app, model and hardware roles."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "手机这么小，为什么也能用大模型？",
+            "en": "How can a small phone use a large model?"
+          },
+          "answer": {
+            "zh": "本例的大模型在远端机器运行，手机只负责请求、显示和应用动作；也存在本地模型，运行位置是另一选择。",
+            "en": "In this example remote machines execute it while the phone sends, displays and acts. Local models are another deployment choice."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "回答到底沿哪条路回手机？",
+            "en": "How does the answer return?"
+          },
+          "answer": {
+            "zh": "引擎产出的Token经模型服务和网络返回应用；回程不是再把所有层重新训练一遍。",
+            "en": "Generated tokens return through the service and network into the app without retraining those components."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "它和开场三层图有什么不同？",
+            "en": "How does this differ from the opening layers?"
+          },
+          "answer": {
+            "zh": "开场是组成关系；这里把同样的组成放进一次远程请求的去程和回程。",
+            "en": "The opening showed roles; this traces a remote request and response through them."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "完整走一次去程和回程，用不同颜色指问题与结果。",
+        "en": "Trace one outgoing request and returning result, distinguishing them by color."
+      },
+      "pause": {
+        "zh": "在右端停住，问生成的文字接下来要回到谁的界面。",
+        "en": "At the device, ask which interface receives the generated text."
+      },
+      "takeaway": {
+        "zh": "远端模型执行计算，应用接收结果并接回任务。",
+        "en": "Remote computation returns results to the application task."
+      },
+      "recovery": {
+        "seconds": 20,
+        "instruction": {
+          "zh": "只追踪一次请求，不追加本地部署路径。",
+          "en": "Trace one request and omit local-deployment variants."
+        }
+      },
+      "concepts": [
+        "远程调用",
+        "模型服务",
+        "请求响应",
+        "流式输出"
+      ],
+      "pacing": {
+        "speech_seconds": 95,
+        "demo_seconds": 25,
+        "processing_seconds": 20,
+        "question_seconds": 20,
+        "transition_seconds": 5,
+        "margin_seconds": 15,
+        "zh_units": 317,
+        "en_words": 153
+      }
+    },
+    {
+      "id": "coding-example",
+      "minutes": 1,
+      "opening": {
+        "zh": "排序本身不需要AI；这里看人提要求、模型写程序、普通计算机执行的分工。",
+        "en": "Sorting itself needs no AI; distinguish the request, generated program and ordinary execution."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "排序一行代码就行，为什么还要AI？",
+            "en": "Why use AI for a one-line sort?"
+          },
+          "answer": {
+            "zh": "AI的角色是帮助人把需求翻译成程序；排序本身仍由普通算法执行，这只是小而可核对的例子。",
+            "en": "Its role is translating a human request into a program; ordinary algorithms perform the sort. The tiny example makes the roles inspectable."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "正确输出是谁产生的？",
+            "en": "Who produces the sorted result?"
+          },
+          "answer": {
+            "zh": "模型给出数值比较代码，运行环境执行该代码后输出3、20、100。",
+            "en": "The model generates a comparator and an execution environment runs it to return the numbers."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "为什么又回到同一个例子？",
+            "en": "Why reuse this example?"
+          },
+          "answer": {
+            "zh": "复用已熟悉的内容，腾出注意力理解应用如何把生成和执行接起来。",
+            "en": "Familiar content leaves attention for connecting generation and execution."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "只指出自然语言、代码、运行结果三个对象。",
+        "en": "Identify the request, program and execution result."
+      },
+      "pause": {
+        "zh": "问哪个动作是模型生成，哪个是程序运行。",
+        "en": "Identify generation and execution separately."
+      },
+      "takeaway": {
+        "zh": "AI编程连接人的目标与可执行程序。",
+        "en": "AI coding connects a human goal with an executable program."
+      },
+      "recovery": {
+        "seconds": 10,
+        "instruction": {
+          "zh": "一句话带过已学排序结果。",
+          "en": "Refer to the familiar output in one sentence."
+        }
+      },
+      "concepts": [
+        "AI编程",
+        "代码生成",
+        "程序执行",
+        "自然语言编程"
+      ],
+      "pacing": {
+        "speech_seconds": 30,
+        "demo_seconds": 8,
+        "processing_seconds": 5,
+        "question_seconds": 5,
+        "transition_seconds": 5,
+        "margin_seconds": 7,
+        "zh_units": 94,
+        "en_words": 41
+      }
+    },
+    {
+      "id": "coding-agent-workflow",
+      "minutes": 3,
+      "opening": {
+        "zh": "实际编程不只有生成一段独立代码。助手要把相关文件读进输入，模型才能知道已有函数和当前报错；工具把建议写进文件，终端才能运行新版。泳道把三种责任分开：项目提供材料，模型提出修改，编辑器与终端执行动作。箭头返回的不是掌声，而是具体输出或报错，它会进入下一次调用，帮助修改同一个项目。",
+        "en": "Real coding involves existing files and observed errors, not just isolated generation. The assistant supplies relevant code; editing tools write proposed changes and a terminal runs them. The swimlanes separate project material, model proposals and execution. Returned output or errors enter the next call and guide another revision of the same project."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么模型不能只听一句需求就改好项目？",
+            "en": "Why is a short request not always enough?"
+          },
+          "answer": {
+            "zh": "已有接口、文件和错误现场也是任务条件，需要由应用选入上下文。",
+            "en": "Existing interfaces, files and failures are task conditions that must be supplied."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "修改建议怎样变成磁盘上的文件？",
+            "en": "How does a proposed edit become a file?"
+          },
+          "answer": {
+            "zh": "模型生成编辑请求，编辑工具按请求写入；随后运行工具执行文件并返回输出。",
+            "en": "An editing tool applies the request; execution tools then run the changed file and return output."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "它怎样接回前半场的概念？",
+            "en": "How does this reuse earlier concepts?"
+          },
+          "answer": {
+            "zh": "读文件是上下文准备，写入和运行是工具，多次读结果再改是任务循环。",
+            "en": "Reading files prepares context, editing and running use tools, and revisions from observations form a task loop."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "沿一条完整往返读：文件→建议→执行→输出→修改；不逐字符读JavaScript。",
+        "en": "Trace files, proposal, execution, observation and revision without reading code syntax."
+      },
+      "pause": {
+        "zh": "在第一次报错回箭头停住，让学生说它应该放进下一次的哪里。",
+        "en": "Hold the first returned error and ask where it belongs in the next call."
+      },
+      "takeaway": {
+        "zh": "编程助手把上下文、工具和反馈组织到同一项目。",
+        "en": "A coding assistant connects context, tools and feedback in one project."
+      },
+      "recovery": {
+        "seconds": 20,
+        "instruction": {
+          "zh": "只走一次修改和一次反馈，第二次运行直接读结果。",
+          "en": "Trace one edit and feedback; read the second execution result directly."
+        }
+      },
+      "concepts": [
+        "编程Agent",
+        "编辑器",
+        "终端",
+        "文件",
+        "代码反馈"
+      ],
+      "pacing": {
+        "speech_seconds": 95,
+        "demo_seconds": 25,
+        "processing_seconds": 20,
+        "question_seconds": 20,
+        "transition_seconds": 5,
+        "margin_seconds": 15,
+        "zh_units": 317,
+        "en_words": 153
+      }
+    },
+    {
+      "id": "diffusion-steps",
+      "minutes": 4,
+      "opening": {
+        "zh": "前面的模型生成文字，图像生成不必照搬逐词续写。训练时，可以给已有图像加入已知噪声，让模型学习估计噪声或怎样更新。生成时用新的随机状态和文字条件，反复调用学好的模型。黄框只跟踪其中一个数：0.60按本步示意更新减0.20变0.40；它不是擦掉一张藏好的照片。许多这样的数一起变化，经过多轮后，压缩表示再由解码器转成像素。",
+        "en": "Image generation need not copy text's token-by-token mechanism. Training can add known noise to images and teach a model to estimate noise or updates. Generation starts from a new random state and text condition, repeatedly using that learned model. Track one toy cell from 0.60 to 0.40; it is not uncovering a hidden photograph. Many values evolve together, then a decoder converts the final compressed representation into pixels."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么随机噪声最后能变成咖啡店？",
+            "en": "Why can random noise become a café?"
+          },
+          "answer": {
+            "zh": "训练让模型学到图像与噪声状态、文字条件之间的关系；多轮更新利用这些学到的规律。不是噪声本身带有指定照片。",
+            "en": "Training learns relationships among images, noisy states and conditions; iterative updates use those learned patterns, not a photograph hidden in noise."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "−0.20这个更新怎么来？",
+            "en": "Where does −0.20 come from?"
+          },
+          "answer": {
+            "zh": "真实生成由模型根据当前状态、时间步和条件预测更新；本图给定−0.20只演示如何应用更新，不冒充模型实测值。",
+            "en": "A real model predicts from state, timestep and condition. This preset value isolates the arithmetic of applying an update."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "这和语言模型的循环相同吗？",
+            "en": "Is this the same loop as text generation?"
+          },
+          "answer": {
+            "zh": "都反复使用学好的模型，但文本循环追加Token，扩散循环更新一份数值状态，输出表示不同。",
+            "en": "Both reuse a trained model, but text appends tokens while diffusion updates a numerical state."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "先指出训练加噪小图，再跟黄框更新0.60→0.40，沿回箭头走一轮，最后才解码。",
+        "en": "Show the training-noise relation, follow the gold cell through one update and return, then decode."
+      },
+      "pause": {
+        "zh": "更新前先问：这里变的是模型参数还是本次图像状态？",
+        "en": "Before updating, ask whether model parameters or the current image state changes."
+      },
+      "takeaway": {
+        "zh": "扩散用学好的模型反复更新状态，再得到图像。",
+        "en": "Diffusion repeatedly updates a state using a trained model."
+      },
+      "recovery": {
+        "seconds": 30,
+        "instruction": {
+          "zh": "只跟踪黄框一格，不展开潜空间编码器结构。",
+          "en": "Track one cell; omit latent encoder architecture."
+        }
+      },
+      "concepts": [
+        "扩散模型",
+        "diffusion",
+        "去噪",
+        "随机噪声",
+        "潜空间",
+        "解码"
+      ],
+      "pacing": {
+        "speech_seconds": 100,
+        "demo_seconds": 55,
+        "processing_seconds": 25,
+        "question_seconds": 45,
+        "transition_seconds": 5,
+        "margin_seconds": 10,
+        "zh_units": 347,
+        "en_words": 167
+      }
+    },
+    {
+      "id": "creative-workflow",
+      "minutes": 3,
+      "opening": {
+        "zh": "单张图只是创作中的一环。做15秒短片，先有场景和旁白，才知道要生成什么画面；再把画面按时间组织，声音对齐到相应片段。图中的0、5、10秒是同一场景的镜头示意，不是三个无关图片。多模态说的是信息形式有文字、画面、声音，工作流则决定这些形式之间怎样传递材料并形成作品。",
+        "en": "A single image is one part of making a fifteen-second film. A script specifies scenes and narration; visuals and audio are organized in time. The three views illustrate one scene rather than unrelated images. Multimodality concerns text, images and sound; workflow connects them into a finished artifact."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么有了生成图像还需要剪辑？",
+            "en": "Why edit after generating images?"
+          },
+          "answer": {
+            "zh": "完整作品还需要镜头顺序、时长、声音位置和导出；生成模型提供素材或序列，软件组织最终作品。",
+            "en": "A film also needs order, duration, audio alignment and export. Models supply material or sequences; software organizes the artifact."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "视频怎样和几张独立图不同？",
+            "en": "How does video differ from independent pictures?"
+          },
+          "answer": {
+            "zh": "视频需要在时间上关联的画面和运动；生成过程要建模帧间关系，剪辑也要保持镜头连贯。",
+            "en": "Video needs temporally related frames and motion; generation and editing both involve continuity."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "和刚才扩散的关系是什么？",
+            "en": "How does this follow diffusion?"
+          },
+          "answer": {
+            "zh": "扩散说明一类生成机制，本页拉回应用工作流，把不同模型产物与普通编辑软件连接。",
+            "en": "Diffusion described one generation mechanism; this connects model outputs with ordinary editing software."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "沿文稿、画面时间点、旁白波形和导出走一遍，指同一条时间线。",
+        "en": "Trace script, visual times, narration waveform and export on one timeline."
+      },
+      "pause": {
+        "zh": "让学生指出旁白应与哪个画面区间对齐。",
+        "en": "Identify the visual interval to align with narration."
+      },
+      "takeaway": {
+        "zh": "多模态生成提供材料，工作流把材料变成作品。",
+        "en": "Multimodal generation supplies material; workflow forms the artifact."
+      },
+      "recovery": {
+        "seconds": 20,
+        "instruction": {
+          "zh": "只保留一条镜头与旁白，不扩展模型产品列表。",
+          "en": "Keep one shot and narration; omit product lists."
+        }
+      },
+      "concepts": [
+        "AIGC",
+        "多模态",
+        "视频生成",
+        "声音",
+        "创作工作流"
+      ],
+      "pacing": {
+        "speech_seconds": 95,
+        "demo_seconds": 25,
+        "processing_seconds": 20,
+        "question_seconds": 20,
+        "transition_seconds": 5,
+        "margin_seconds": 15,
+        "zh_units": 318,
+        "en_words": 138
+      }
+    },
+    {
+      "id": "protein-structure",
+      "minutes": 3,
+      "opening": {
+        "zh": "AI不一定输出文章或图片。蛋白质是一条氨基酸链，字母表示链上材料的种类与顺序；不同顺序带来不同相互作用，空间形状对功能很重要。结构预测系统从已知序列和结构等资料学习关系，再对新输入预测形状。左边的一串符号到右边的空间结构，是另一种输入输出任务。我们看的是结构预测，不把画曲线的动画当成真实分子折叠的物理过程。",
+        "en": "AI can predict scientific objects rather than prose. A protein is an amino-acid chain whose sequence affects interactions and spatial shape. Structure-prediction systems learn from known sequences and structures and related information. Symbols-to-structure is another input/output task. The curve illustrates a prediction, not a physical simulation of molecular folding."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么氨基酸顺序和空间形状有关？",
+            "en": "Why does sequence relate to spatial shape?"
+          },
+          "answer": {
+            "zh": "链上不同材料有不同相互作用，排列改变会影响空间组织；形状又关系到功能。",
+            "en": "Different amino acids interact differently, so their order affects spatial organization and function."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "AlphaFold怎么从字母得到结构？",
+            "en": "How does AlphaFold map letters to structure?"
+          },
+          "answer": {
+            "zh": "它用学到的参数处理序列及相关输入，预测残基间和空间几何关系；不是把每个字母按固定图形替换。",
+            "en": "Learned computation uses sequence and related inputs to predict geometric relationships, rather than replacing each letter with a fixed shape."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "和语言、图像生成有什么共同点？",
+            "en": "What is shared with language and image tasks?"
+          },
+          "answer": {
+            "zh": "都用数据训练参数再用于新输入，但目标和输出表示不同；这里目标是空间结构。",
+            "en": "All train parameters from data and apply them to new inputs, but targets and output representations differ."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "把序列称为一条链，沿右侧单条曲线指空间排列，明确这是另一种预测目标。",
+        "en": "Identify one chain and its spatial arrangement as a different prediction target."
+      },
+      "pause": {
+        "zh": "让学生说右边输出是新文章、分子运动视频，还是结构预测。",
+        "en": "Identify the output as predicted structure rather than text or a molecular-motion video."
+      },
+      "takeaway": {
+        "zh": "AI4S把学习到的关系用于科学预测。",
+        "en": "AI for Science applies learned relationships to scientific prediction."
+      },
+      "recovery": {
+        "seconds": 20,
+        "instruction": {
+          "zh": "不展开实验结构测量技术，只保留序列到结构。",
+          "en": "Keep sequence-to-structure; omit experimental measurement techniques."
+        }
+      },
+      "concepts": [
+        "AI4S",
+        "AI for Science",
+        "AlphaFold",
+        "蛋白质",
+        "结构预测"
+      ],
+      "pacing": {
+        "speech_seconds": 90,
+        "demo_seconds": 25,
+        "processing_seconds": 20,
+        "question_seconds": 25,
+        "transition_seconds": 5,
+        "margin_seconds": 15,
+        "zh_units": 305,
+        "en_words": 124
+      }
+    },
+    {
+      "id": "scientific-search-loop",
+      "minutes": 3,
+      "opening": {
+        "zh": "有了预测，还要决定下一步研究谁。这里把任务说得具体一点：找耐热指标更高的配方。模型预测F和G较高，于是先研究这两个；进一步计算或实验却发现F没有原来预测得那么高。把新观察放回图里，下一轮就有不同依据。反馈先改变我们掌握的材料；可以用于下一次选点，也可以进入再训练，但两者不是自动等同。",
+        "en": "Prediction also guides what to investigate. Search for recipes with a higher heat-resistance score. High predictions select F and G, but further calculation or experiment finds F below expectation. New observations change the evidence for the next selection. They can guide choices or support retraining, which are distinct operations."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么挑F、G，不挑其他点？",
+            "en": "Why choose F and G?"
+          },
+          "answer": {
+            "zh": "这次目标是找更高的耐热指标，而F、G的预测较高；这是本算例的选择规则。",
+            "en": "The objective is a higher heat-resistance score and their predictions are high, under this example's selection rule."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "绿色点怎么来的，为什么不与蓝点重合？",
+            "en": "Where do green points come from?"
+          },
+          "answer": {
+            "zh": "蓝点是模型预测；绿色来自进一步计算或实验，可能与预测有差距，这正是新信息。",
+            "en": "They are new observations from calculation or experiment and may differ from predictions, providing new information."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "这又是训练循环吗？",
+            "en": "Is this necessarily another training loop?"
+          },
+          "answer": {
+            "zh": "不一定。新观察先回到研究决策；是否用它更新模型参数，是前面三类循环中的另一层选择。",
+            "en": "No. Observations first inform research decisions; updating model parameters is a separate level of change."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "先找高预测，再读F/G表格，最后把观察点放回同一坐标比较。",
+        "en": "Select high predictions, read F/G observations, then compare both on the same axes."
+      },
+      "pause": {
+        "zh": "在绿点出现前，让学生区分预测值与新观察从哪里来。",
+        "en": "Before green points appear, distinguish predictions from observations."
+      },
+      "takeaway": {
+        "zh": "预测帮助选候选，新观察改变下一轮依据。",
+        "en": "Predictions guide candidates; observations update the evidence."
+      },
+      "recovery": {
+        "seconds": 20,
+        "instruction": {
+          "zh": "只追踪F一次预测偏差，G直接读观察值。",
+          "en": "Trace F's discrepancy; read G's observation directly."
+        }
+      },
+      "concepts": [
+        "科学搜索",
+        "候选筛选",
+        "预测与实验",
+        "观察反馈",
+        "材料"
+      ],
+      "pacing": {
+        "speech_seconds": 95,
+        "demo_seconds": 25,
+        "processing_seconds": 20,
+        "question_seconds": 20,
+        "transition_seconds": 5,
+        "margin_seconds": 15,
+        "zh_units": 328,
+        "en_words": 148
+      }
+    },
+    {
+      "id": "meeting-workflow",
+      "minutes": 2,
+      "opening": {
+        "zh": "回到熟悉的会议材料，只看声音、文字、字段、软件动作之间的四次交接。",
+        "en": "Return to familiar meeting material and follow audio, text, fields and software handoffs."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么不是一个模型直接从声音做到日历？",
+            "en": "Why not show one model going directly from sound to calendar?"
+          },
+          "answer": {
+            "zh": "应用可以用不同模型和普通软件分工；图里拆开每步输入输出，便于理解谁做识别、谁做整理、谁执行写入。",
+            "en": "Different models and ordinary software can cooperate. Separation makes recognition, extraction and writing explicit."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "周四怎样变成具体日期？",
+            "en": "How does Thursday become a calendar date?"
+          },
+          "answer": {
+            "zh": "应用提供会议日期等参照，再按日历规则解析；提取出“周四”还没有自动完成日期定位和写入。",
+            "en": "The app supplies a reference date and resolves it using calendar rules. Extracting the word is not the same as resolving and writing it."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "为什么再次出现原来的表格？",
+            "en": "Why reuse the original table?"
+          },
+          "answer": {
+            "zh": "同一材料让我们把早先的提示词与提取，接到识别模型、工具和实际软件动作。",
+            "en": "Familiar material links prompting and extraction with recognition, tools and software actions."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "只读声音→原文→表格→任务系统四个交接，不重复每行内容。",
+        "en": "Trace the four handoffs without rereading the rows."
+      },
+      "pause": {
+        "zh": "问表格生成和日历写入是否是同一个动作。",
+        "en": "Distinguish table generation from calendar writing."
+      },
+      "takeaway": {
+        "zh": "一个按钮可连接多种模型与软件动作。",
+        "en": "One button can connect multiple models and software actions."
+      },
+      "recovery": {
+        "seconds": 15,
+        "instruction": {
+          "zh": "不重复逐项提取，直接指四次交接。",
+          "en": "Point to the four handoffs rather than repeating extraction."
+        }
+      },
+      "concepts": [
+        "会议纪要",
+        "语音识别",
+        "转录",
+        "业务工具",
+        "日历"
+      ],
+      "pacing": {
+        "speech_seconds": 45,
+        "demo_seconds": 20,
+        "processing_seconds": 12,
+        "question_seconds": 15,
+        "transition_seconds": 5,
+        "margin_seconds": 23,
+        "zh_units": 142,
+        "en_words": 62
+      }
+    },
+    {
+      "id": "different-ai-tasks",
+      "minutes": 2,
+      "opening": {
+        "zh": "生成只是AI的一部分。换一种任务，输出也可能是类别、数值或动作。",
+        "en": "Generation is one AI task; other tasks produce categories, values or actions."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么这些也叫AI，却不写文章？",
+            "en": "Why call these AI if they do not write?"
+          },
+          "answer": {
+            "zh": "AI涵盖多种识别、预测与规划任务，语言生成只是其中一种输出形式。",
+            "en": "AI includes recognition, prediction and planning; language generation is one output form."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "路线怎么绕开深色格？",
+            "en": "How does a route avoid dark cells?"
+          },
+          "answer": {
+            "zh": "位置和障碍形成可用空间，规划方法搜索能到终点的动作序列；本图给出一条示意路线。",
+            "en": "Positions and obstacles define available space; a planning method searches for an action sequence to the goal."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "它和前面工作流有什么关系？",
+            "en": "How does this fit earlier workflows?"
+          },
+          "answer": {
+            "zh": "这些模块都可以作为一个步骤或工具接进应用，不必每步都由语言模型完成。",
+            "en": "These modules can serve as workflow steps or tools; a language model need not perform every operation."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "分别指出类别、未来数值、动作顺序三种输出，再沿路线绕障碍。",
+        "en": "Identify each output form and trace the route around obstacles."
+      },
+      "pause": {
+        "zh": "让学生指出哪张图在输出类别，哪张图在输出动作。",
+        "en": "Distinguish category output from action output."
+      },
+      "takeaway": {
+        "zh": "先认任务和输出，再谈模型与工具。",
+        "en": "Identify task and output before choosing models and tools."
+      },
+      "recovery": {
+        "seconds": 15,
+        "instruction": {
+          "zh": "不展开具体算法名称，只对比三种输出。",
+          "en": "Compare outputs without listing algorithms."
+        }
+      },
+      "concepts": [
+        "分类",
+        "预测",
+        "感知",
+        "规划",
+        "机器人",
+        "AI任务"
+      ],
+      "pacing": {
+        "speech_seconds": 40,
+        "demo_seconds": 15,
+        "processing_seconds": 12,
+        "question_seconds": 15,
+        "transition_seconds": 5,
+        "margin_seconds": 33,
+        "zh_units": 124,
+        "en_words": 61
+      }
+    },
+    {
+      "id": "industry-value-map",
+      "minutes": 2,
+      "opening": {
+        "zh": "先认出模块做什么，再看谁提供它。这里分工作角色，一家公司可以跨几层。",
+        "en": "After identifying functions, identify who supplies them. These are roles that one company can span."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么模型公司和应用公司可能是同一家？",
+            "en": "Why can one company be both model and app provider?"
+          },
+          "answer": {
+            "zh": "图分的是工作角色；一家公司可以同时训练模型、运营接口并做应用。",
+            "en": "The map separates roles; an organization can train, serve and build applications."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "API在这些层之间做什么？",
+            "en": "What does an API do between roles?"
+          },
+          "answer": {
+            "zh": "它是程序调用接口，应用用固定输入输出与服务交互，而不需要代替用户点击服务网页。",
+            "en": "It lets programs exchange defined inputs and outputs without using a provider's web interface manually."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "为什么在应用之后讲产业？",
+            "en": "Why teach industry after applications?"
+          },
+          "answer": {
+            "zh": "先知道每个模块实际做什么，再看谁提供它，不需要先背厂商名单。",
+            "en": "Understanding module functions gives meaning to provider roles before any vendor list."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "沿硬件→模型服务→工具→应用指出供给关系，不加厂商排名。",
+        "en": "Trace supply relationships without vendor rankings."
+      },
+      "pause": {
+        "zh": "问同一家公司是否可以出现在两个位置。",
+        "en": "Ask whether one organization can occupy multiple positions."
+      },
+      "takeaway": {
+        "zh": "产业是围绕计算、模型、工具和应用的分工。",
+        "en": "Industry roles organize compute, models, tools and applications."
+      },
+      "recovery": {
+        "seconds": 20,
+        "instruction": {
+          "zh": "只读角色，不延伸公司和市场份额。",
+          "en": "Keep roles; omit companies and market shares."
+        }
+      },
+      "concepts": [
+        "AI产业",
+        "硬件",
+        "模型开发",
+        "API",
+        "服务运营",
+        "领域应用"
+      ],
+      "pacing": {
+        "speech_seconds": 45,
+        "demo_seconds": 20,
+        "processing_seconds": 12,
+        "question_seconds": 15,
+        "transition_seconds": 5,
+        "margin_seconds": 23,
+        "zh_units": 155,
+        "en_words": 68
+      }
+    },
+    {
+      "id": "api-vs-selfhosting",
+      "minutes": 2,
+      "opening": {
+        "zh": "两条路径都能给同一个应用提供模型能力；区别在谁运营权重、引擎和机器。",
+        "en": "Both paths serve the same application; operation of weights, engines and machines differs."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "用了API就不能算自己的AI应用吗？",
+            "en": "Can an API-based app still be our application?"
+          },
+          "answer": {
+            "zh": "应用的任务、资料、工具和流程仍可以由自己组织；模型执行由服务方提供。",
+            "en": "Yes. Its tasks, context, tools and workflow can be yours while a provider supplies model execution."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "自己运行模型具体多了哪些东西？",
+            "en": "What does self-hosting add?"
+          },
+          "answer": {
+            "zh": "权重文件、推理引擎、计算设备和服务运行；应用随后调用自己的服务接口。",
+            "en": "Weights, an inference engine, compute and service operation; the app then calls that service."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "这怎样接回产业分工？",
+            "en": "How does this connect to industry roles?"
+          },
+          "answer": {
+            "zh": "上一页的模型服务角色可以由外部服务方承担，也可以由自己组织。",
+            "en": "The operated-service role may belong to an external provider or your own organization."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "逐条指两行各自的运行方，最后强调应用侧请求方式相似。",
+        "en": "Identify the operator on both paths and their similar app-facing request interface."
+      },
+      "pause": {
+        "zh": "问两边最终是否都能供同一个应用调用。",
+        "en": "Ask whether both can serve the same app."
+      },
+      "takeaway": {
+        "zh": "API与自运行主要区别在模型服务由谁运营。",
+        "en": "API use and self-hosting differ chiefly in service operation."
+      },
+      "recovery": {
+        "seconds": 25,
+        "instruction": {
+          "zh": "开放权重/开源只做词义区分，不延伸许可案例。",
+          "en": "Name the open-weight/open-source distinction without licensing examples."
+        }
+      },
+      "concepts": [
+        "API调用",
+        "自部署",
+        "self-hosting",
+        "开放权重",
+        "开源"
+      ],
+      "pacing": {
+        "speech_seconds": 40,
+        "demo_seconds": 10,
+        "processing_seconds": 12,
+        "question_seconds": 15,
+        "transition_seconds": 5,
+        "margin_seconds": 38,
+        "zh_units": 131,
+        "en_words": 61
+      }
+    },
+    {
+      "id": "platform-location",
+      "minutes": 1,
+      "opening": {
+        "zh": "只把LunaNexa放回模型服务与资源这一层。",
+        "en": "Place LunaNexa in the service-and-resource layer."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么平台不是整个AI系统？",
+            "en": "Why is the platform not the whole AI system?"
+          },
+          "answer": {
+            "zh": "它主要连接模型服务和资源，上面的业务任务、资料与工具由应用组织。",
+            "en": "It connects services and resources; applications organize domain tasks, material and tools."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "在图上怎么找到它负责的部分？",
+            "en": "How do we locate its responsibility?"
+          },
+          "answer": {
+            "zh": "看中间的模型访问与资源管理，再接到下面实际运行的集群与引擎。",
+            "en": "Identify service access and resource organization between applications and running infrastructure."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "为什么现在才讲我们的平台？",
+            "en": "Why introduce it only now?"
+          },
+          "answer": {
+            "zh": "先理解通用AI链条，才能知道平台在其中做哪一小部分。",
+            "en": "The general chain makes its specific contribution understandable."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "只指中间平台框和上下两层，不展开控制台按钮。",
+        "en": "Identify the platform and adjacent roles without console operations."
+      },
+      "pause": {
+        "zh": "让学生指出模型训练、业务任务是否都在这个框里。",
+        "en": "Ask whether model training and domain tasks all belong inside this box."
+      },
+      "takeaway": {
+        "zh": "LunaNexa主要组织模型服务与计算资源。",
+        "en": "LunaNexa organizes model services and compute resources."
+      },
+      "recovery": {
+        "seconds": 5,
+        "instruction": {
+          "zh": "只保留一句定位。",
+          "en": "Keep a one-sentence placement."
+        }
+      },
+      "concepts": [
+        "LunaNexa",
+        "平台定位",
+        "模型服务",
+        "K8s集群"
+      ],
+      "pacing": {
+        "speech_seconds": 25,
+        "demo_seconds": 8,
+        "processing_seconds": 5,
+        "question_seconds": 5,
+        "transition_seconds": 5,
+        "margin_seconds": 12,
+        "zh_units": 77,
+        "en_words": 35
+      }
+    },
+    {
+      "id": "complete-request-map",
+      "minutes": 2,
+      "opening": {
+        "zh": "最后回到同一个会议任务，把已学分工沿请求和返回连起来。",
+        "en": "Reconnect the same meeting task along its request and response path."
+      },
+      "questions": [
+        {
+          "kind": "why",
+          "question": {
+            "zh": "为什么模型下面还有硬件，是否又算一次？",
+            "en": "Why is hardware below the model?"
+          },
+          "answer": {
+            "zh": "虚线表示执行支撑：同一模型运算就在引擎和芯片上发生，不是先算完再交给硬件。",
+            "en": "The dashed link means execution support: the same model computation occurs there rather than being repeated afterward."
+          }
+        },
+        {
+          "kind": "how",
+          "question": {
+            "zh": "一份会议记录怎样真正变成待办？",
+            "en": "How do meeting notes become tasks?"
+          },
+          "answer": {
+            "zh": "应用准备要求和原文，模型生成字段，程序读取结果并调用任务工具；需要时返回结果继续循环。",
+            "en": "The app supplies instructions and text, the model generates fields, and software calls task tools with them, continuing from results if needed."
+          }
+        },
+        {
+          "kind": "link",
+          "question": {
+            "zh": "这和刚才的平台框怎么接？",
+            "en": "How does the platform fit this complete path?"
+          },
+          "answer": {
+            "zh": "平台组织服务和资源，帮助运行链条中的模型计算；它不是替代整条链。",
+            "en": "It organizes services and resources that execute the model, without replacing the whole chain."
+          }
+        }
+      ],
+      "demonstration": {
+        "zh": "沿一条完整请求与返回讲完，再指一次硬件虚线表示的支撑。",
+        "en": "Trace a full request and return, then identify hardware execution support."
+      },
+      "pause": {
+        "zh": "留一个整体追问：新文件、改工具、加GPU分别改变图中哪部分？",
+        "en": "Use one whole-system question: where do a new file, a new tool and another GPU act?"
+      },
+      "takeaway": {
+        "zh": "把输入、模型计算、软件执行与结果接成一条任务。",
+        "en": "Connect input, model computation, software actions and results."
+      },
+      "recovery": {
+        "seconds": 15,
+        "instruction": {
+          "zh": "只沿会议任务走一遍，不再逐项复述全部术语。",
+          "en": "Trace the meeting task once without reciting every term."
+        }
+      },
+      "concepts": [
+        "AI全景",
+        "完整请求",
+        "模型应用基础设施",
+        "课程回顾"
+      ],
+      "pacing": {
+        "speech_seconds": 45,
+        "demo_seconds": 25,
+        "processing_seconds": 12,
+        "question_seconds": 15,
+        "transition_seconds": 5,
+        "margin_seconds": 18,
+        "zh_units": 155,
+        "en_words": 88
+      }
+    }
+  ],
+  "pace_model": {
+    "kind": "author-simulation-not-timed-class",
+    "zh_units_per_minute": 210,
+    "en_words_per_minute": 135,
+    "speech_seconds": 2920,
+    "margin_seconds": 692,
+    "recovery_seconds": 800,
+    "slower_pace": {
+      "zh_units_per_minute": 180,
+      "en_words_per_minute": 115,
+      "per_slide_recovery_sufficient": true
+    },
+    "question_heavy": {
+      "added_seconds": 360,
+      "checkpoints_recovered": true
+    }
+  }
+}

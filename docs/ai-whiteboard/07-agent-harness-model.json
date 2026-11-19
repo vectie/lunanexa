@@ -1,0 +1,223 @@
+{
+  "id": "ai-board-harness",
+  "download_rank": 1,
+  "order": 7,
+  "title": [
+    "07 · Agent 框架与模型怎样配合",
+    "07 · How an agent harness works with a model"
+  ],
+  "summary": [
+    "同一个任务，更换模型或更换框架会改变什么；怎样判断整套系统是否真的更好。",
+    "See what changes when either a model or harness changes, and compare the complete system on a real task."
+  ],
+  "sections": [
+    {
+      "id": "board-harness-model-pair",
+      "title": [
+        "Codex 与 GPT／Opus：框架名和模型名分开读",
+        "Codex and GPT/Opus: separate the harness name from the model name"
+      ],
+      "concepts": [
+        "Agent 框架",
+        "Codex",
+        "GPT",
+        "Opus",
+        "harness model pairing",
+        "外壳",
+        "模型"
+      ],
+      "points": [
+        "Agent 框架",
+        "Codex + GPT",
+        "Codex + Opus（手写版本待核对）",
+        "框架与模型的绑定"
+      ],
+      "paragraphs": [
+        [
+          "这里把 Codex CLI 当作编程 Agent 软件的例子，GPT 和 Opus 是不同模型家族的名称。前者组织项目、工具和循环，后者生成回答或动作提议。“框架＋模型”表示要比较的一整套组合，不表示任意产品都已经支持直接替换成任意模型。",
+          "Here Codex CLI illustrates coding-agent software, while GPT and Opus name different model families. The harness organizes project work, tools and iteration; the model generates responses or action proposals. A harness–model pair is a comparison unit, not a claim that every product accepts every model interchangeably."
+        ],
+        [
+          "保持同一个框架换模型，可以观察生成、规划和工具使用有什么变化；保持模型换框架，可以观察上下文整理、执行和反馈组织的变化。模型和框架同时变化时，即使任务更快完成，也不能把全部提升只归给模型。",
+          "Holding the harness fixed while changing the model tests different generation and action behavior. Holding the model fixed while changing the harness tests context and execution organization. If both change, an improvement cannot be attributed solely to the model."
+        ]
+      ],
+      "graphic": "pairing"
+    },
+    {
+      "id": "board-coupled-training",
+      "title": [
+        "为什么模型与框架会越来越需要配合？",
+        "Why does model–harness coordination matter?"
+      ],
+      "concepts": [
+        "绑定",
+        "训练环境",
+        "工具协议",
+        "tool schema",
+        "chat template",
+        "模型框架协同"
+      ],
+      "points": [
+        "越来越绑定",
+        "壳↔模型双向关系",
+        "模型适应工具与环境，环境组织模型使用"
+      ],
+      "paragraphs": [
+        [
+          "训练和评测可能让模型习惯某种工具描述、返回格式、工作流程和上下文组织。框架也会根据模型怎样表达思考与调用，设计消息模板、工具适配器和状态处理。双方在接口和行为上配合，可能比单纯把一个模型名称改掉更重要。",
+          "Training and evaluation can familiarize a model with particular tool descriptions, return formats and workflows. A harness also designs templates, adapters and state handling around model behavior. Coordination can matter more than changing a model name alone."
+        ],
+        [
+          "例如工具说明要求 read_file(path)，而模型输出的是 open_document(file)。两个名字想做类似的事，程序却不能靠猜测自动认同。工具适配要把参数和结果接好；成功执行后的观察才能回到下一轮。这个例子解释接口匹配，并不要求学生先学习 API 配置。",
+          "A model may propose open_document(file) while the available tool is read_file(path). Similar intent does not make the calls identical to software. An adapter must connect arguments and results before the observation can feed the next round."
+        ]
+      ]
+    },
+    {
+      "id": "board-kimi-deepseek-harness",
+      "title": [
+        "Kimi Code、K2.5 与 DeepSeek harness 的例子",
+        "Read the Kimi Code, K2.5 and DeepSeek harness examples"
+      ],
+      "concepts": [
+        "Kimi Code",
+        "Kimi K2.5",
+        "DeepSeek harness",
+        "coding agent",
+        "模型版本",
+        "协同"
+      ],
+      "points": [
+        "Kimi Code → K2.5",
+        "DeepSeek harness",
+        "同一品牌应用与模型版本不可混同"
+      ],
+      "paragraphs": [
+        [
+          "用“Kimi Code→K2.5”和“DeepSeek harness”这两个例子看系统配合：要把一个模型放回它使用的编程工具链与环境中看。K2.5 是模型版本，Kimi Code 是应用／Agent 产品；同一产品的服务模型可以随版本变化，不能把照片中的配对当成永久规格。当前 Kimi Code 官网已展示其他版本，因此本课把 K2.5 留作具体历史例子。",
+          "The Kimi Code → K2.5 and DeepSeek harness examples place models back into their working toolchains. K2.5 is a checkpoint; Kimi Code is an agent product. A product's serving model can change. Its current site advertises other versions, so K2.5 remains a concrete historical example rather than a permanent product specification."
+        ],
+        [
+          "阅读一个 harness 时，先找输入从哪里来、有哪些工具、执行结果怎样返回、进度存在哪里，以及何时继续。DeepSeek 这个名字既可能指模型，也可能出现在某套应用或实验用框架的配置里；只写品牌名不足以复现系统行为。",
+          "To read a harness, locate its inputs, tools, result handling, retained progress and continuation rule. DeepSeek may name a model or appear in an application's configuration. A brand name alone does not specify the complete system behavior."
+        ]
+      ]
+    },
+    {
+      "id": "board-harness-thickness",
+      "title": [
+        "“壳的厚度”不同，工作组织也不同",
+        "Harnesses differ in how much work they organize"
+      ],
+      "concepts": [
+        "壳的厚度",
+        "harness thickness",
+        "工具路由",
+        "任务状态",
+        "记忆",
+        "恢复上下文",
+        "长任务"
+      ],
+      "points": [
+        "壳的厚度也不一样",
+        "薄封装与包含状态／工具／循环的系统"
+      ],
+      "paragraphs": [
+        [
+          "薄封装可能只是把文字送到模型并显示回答。更完整的 harness 还会选择相关文件、运行工具、保存任务状态、整理历史、接续较长工作。厚不厚描述承担了多少工作，不是质量评分；有些简单任务只需要一次调用，有些任务则离不开文件与反馈循环。",
+          "A thin wrapper may send text and display a response. A fuller harness selects files, runs tools, retains state and organizes longer work across contexts. Thickness describes responsibility, not quality: some tasks need one call, while others require files and feedback."
+        ],
+        [
+          "用整理会议纪要对照：薄封装给一段摘要；完整流程读取录音转录、对照人名表、生成事项、写入任务工具，再呈现新增结果。增加的是可观察的工作步骤，应逐项解释它为任务提供了什么，而不是增加几个装饰性的 Agent 名称。",
+          "For meeting notes, one wrapper returns a summary; a fuller workflow reads a transcript, checks names, extracts tasks, writes them through a tool and presents the result. Each added step should contribute observable work, rather than merely adding agent labels."
+        ]
+      ],
+      "reuse_scene": "coding-agent-workflow"
+    },
+    {
+      "id": "board-pair-evaluation",
+      "title": [
+        "比较整对组合，怎样避免混淆原因？",
+        "Compare the pair without confusing the cause"
+      ],
+      "concepts": [
+        "同条件比较",
+        "harness evaluation",
+        "模型评测",
+        "2×2",
+        "任务结果",
+        "质量",
+        "时间",
+        "成本"
+      ],
+      "points": [
+        "比较 Codex+GPT 与其他组合",
+        "组合表现与单模型能力的区别",
+        "成本、完成结果与时间"
+      ],
+      "paragraphs": [
+        [
+          "选一个明确任务，例如把价格排序程序的错误改掉，运行已有测试并说明修改。先固定任务输入与评分，再比较“框架 A＋模型 X”“框架 A＋模型 Y”；如果还要比较框架，就加入“框架 B＋模型 X”。这是把变化的因素分开，不是预先指定哪一个品牌赢。",
+          "Use a specific task, such as fixing a price-sort bug, running tests and explaining the edit. Fix the input and scoring, then compare harness A with models X and Y. Add harness B with X to study the harness. This separates variables rather than predetermining a brand winner."
+        ],
+        [
+          "保留完整结果：程序是否正确、测试是否通过、是否完成了真正的编辑，以及耗时和调用用量。同一个程序答案正确但没有写回文件，与已经完成编辑并运行，是不同交付。多次运行也要说明次数，才能判断稳定性而不是挑一段最好看的演示。",
+          "Retain whether the code is correct, tests pass and actual edits were made, along with time and usage. Returning correct code differs from applying and running it. State repeated-run counts so consistency is visible rather than selecting the prettiest demonstration."
+        ]
+      ]
+    },
+    {
+      "id": "board-expectation-workflow",
+      "title": [
+        "能力变了，工作习惯怎样跟着变？",
+        "How should work habits respond to changing capability?"
+      ],
+      "concepts": [
+        "认知",
+        "习惯",
+        "同步迭代",
+        "超出预期",
+        "价值",
+        "贵",
+        "工作方式",
+        "交付物"
+      ],
+      "points": [
+        "改变认知／习惯",
+        "同步迭代",
+        "超出预期的重要性",
+        "贵／投入与结果的关系"
+      ],
+      "paragraphs": [
+        [
+          "如果一直只把 AI 当作续写框，就可能忽略它已经能接工具、执行和整理交付物；反过来，如果把一次成功演示当成普遍能力，也会把不合适的工作交出去。更新认知应从实际任务结果来：原来要人手复制的步骤，是否真的已由系统完成，结果怎样检查。",
+          "Treating AI only as autocomplete can miss tool use and complete artifacts; treating one successful demo as universal capability overstates it. Update expectations from task results: which formerly manual steps were actually completed, and how can their outputs be checked?"
+        ],
+        [
+          "例如从“让模型写纪要，我再复制到任务表”，变为“系统整理并写入草稿任务，我核对负责人和日期”。变化的是分工与交付方式。“超出预期”要具体到新增完成了哪一步；“贵不贵”则比较完成任务的总时间、资源与后续返工，不能只按一次回答字数或惊艳程度判断。",
+          "A workflow may move from copying a generated summary into a task table to reviewing draft tasks already written by software. Specify which additional step exceeded expectations. Judge expense by total task time, resources and rework rather than response length or surprise."
+        ]
+      ],
+      "reuse_scene": "meeting-workflow"
+    }
+  ],
+  "references": [
+    {
+      "title": "OpenAI Codex CLI repository",
+      "url": "https://github.com/openai/codex"
+    },
+    {
+      "title": "Kimi Code",
+      "url": "https://www.kimi.com/code"
+    },
+    {
+      "title": "Kimi K2.5 model card",
+      "url": "https://huggingface.co/moonshotai/Kimi-K2.5"
+    },
+    {
+      "title": "Effective harnesses for long-running agents",
+      "url": "https://www.anthropic.com/research/effective-harnesses-for-long-running-agents"
+    }
+  ]
+}

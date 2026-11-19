@@ -1,0 +1,7 @@
+///| Build the complete integrated course; retain the old command as a safe entry.
+import { "moonbitlang/async@0.22.4", "moonbitlang/async@0.22.4/shell" }
+async fn main {
+  @shell.Cmd("moon", ["run", "scripts/build-ai-lecture.mbtx"]).run()
+  @shell.Cmd("moon", ["run", "scripts/integrate-ai-course.mbtx"]).run()
+  @shell.Cmd("moon", ["run", "scripts/build-ai-speaker.mbtx"]).run()
+}

@@ -1,0 +1,97 @@
+///|
+import { "moonbitlang/async@0.22.4", "moonbitlang/async@0.22.4/fs", "moonbitlang/core/json" }
+
+///|
+fn escape(text : String) -> String {
+  text.replace_all(old="&",new="&amp;").replace_all(old="<",new="&lt;").replace_all(old=">",new="&gt;").replace_all(old="\"",new="&quot;")
+}
+
+///|
+fn chinese(value : Json) -> String raise {
+  guard value is {"zh":String(text),..} else { fail("Chinese label") }
+  text
+}
+
+///|
+fn p(text : String) -> String { "<p class=spoken>"+escape(text)+"</p>\n" }
+
+///|
+async fn main {
+  guard @json.parse(@fs.read_file("docs-site/ai-lecture.json").text()) is Object(deck) && deck.get("lessons") is Some(Array(lessons)) else { fail("Build integrated deck first") }
+  let source : Map[String,Json]=Map([])
+  for file in ["01-generation-context.json","02-agents-learning.json","03-training-infrastructure.json","04-selection-work.json"] {
+    guard @json.parse(@fs.read_file("docs/ai-speaking/"+file).text()) is {"pages":Array(pages),..} else { fail("Speaking source") }
+    for page in pages { guard page is {"id":String(id),..} && !source.contains(id) else { fail("Duplicate speaking page") };source[id]=page }
+  }
+  let frames : Array[Json]=[]
+  for lesson in lessons {
+    guard lesson is {"page_id":String(page_id),"title":chapter,"slides":Array(slides),..} else { fail("Lesson") }
+    for slide in slides {
+      guard slide is Object(fields) else { fail("Slide") }
+      let frame : Map[String,Json]=Map([])
+      for k,v in fields { frame[k]=v }
+      frame["chapter"]=chapter;frame["page_id"]=Json::string(page_id);frames.push(Json::object(frame))
+    }
+    if page_id=="ai-multi-agent" { frames.push({"id":"class-break","page_id":page_id,"title":{"zh":"休息 10 分钟","en":"10-minute break"},"minutes":10,"chapter":chapter}) }
+  }
+  frames.push({"id":"class-questions","page_id":"ai-platform-place","title":{"zh":"问题与讨论","en":"Questions and discussion"},"minutes":5,"chapter":{"zh":"问题与讨论","en":"Questions and discussion"}})
+  guard frames.length()==48 && source.length()==48 else { fail("All 48 pages need a complete speaking script") }
+  let scripts : Map[String,Json]=Map([])
+  let rows : Array[Json]=[]
+  let mut elapsed=0
+  let mut total_characters=0
+  let mut total_steps=0
+  let mut toc=""
+  let mut articles=""
+  let mut markdown="# AI 入门课 · 逐页中文讲解稿\n\n48 页：46 页内容、10 分钟休息、5 分钟讨论，总课时 120 分钟。正文可直接讲，方括号里的操作提示不朗读。讲稿与当前课件按页面 ID 绑定。\n\n"
+  for index,frame in frames {
+    guard frame is Object(fields) && fields.get("id") is Some(String(id)) && fields.get("page_id") is Some(String(page_id)) && fields.get("title") is Some(title) && fields.get("minutes") is Some(Number(minutes,..)) && source.get(id) is Some(Object(script)) && script.get("opening") is Some(String(opening)) && script.get("closing") is Some(String(closing)) && script.get("steps") is Some(Array(steps)) else { fail("Missing full script") }
+    let expected=if fields.get("visual") is Some({"steps":Array(labels),..}) { labels } else { [] }
+    guard steps.length()==expected.length() && opening.length()>0 && closing.length()>0 else { fail("Script/animation mismatch: "+id) }
+    let number=index+1
+    let heading=chinese(title)
+    let times=elapsed.to_string()+"–"+(elapsed+minutes.to_int()).to_string()+" 分钟"
+    let href="./?page="+page_id+"&view=lecture&slide="+id
+    let compiled_steps : Array[Json]=[]
+    let mut characters=opening.length()+closing.length()
+    toc+="<li><a href=\"#"+id+"\"><span>"+number.to_string()+"</span> "+escape(heading)+"</a></li>\n"
+    let mut article="<section class=script-page id=\""+id+"\"><header><p class=page-meta>第 "+number.to_string()+" / 48 页 · "+times+"</p><h2>"+escape(heading)+"</h2><a class=slide-link href=\""+escape(href)+"\">打开这一页课件</a></header>\n"+p(opening)
+    markdown+="## 第 "+number.to_string()+" 页 · "+heading+"\n\n"+times+" · [打开课件](https://suanli.kechuangfuwu.com:8443/docs/?page="+page_id+"&view=lecture&slide="+id+")\n\n"+opening+"\n\n"
+    for n,step in steps {
+      guard step is [String(action),String(spoken)] && action.length()>0 && spoken.length()>0 else { fail("Empty spoken step: "+id) }
+      let label=chinese(expected[n])
+      compiled_steps.push({"step":n+1,"label":label,"action":action,"text":spoken})
+      characters+=spoken.length();total_steps+=1
+      article+="<h3>"+(n+1).to_string()+" · "+escape(label)+"</h3><p class=direction>"+escape(action)+"</p>\n"+p(spoken)
+      markdown+="### "+(n+1).to_string()+" · "+label+"\n\n["+action+"]\n\n"+spoken+"\n\n"
+    }
+    let guidance : Array[Json]=[]
+    if script.get("guidance") is Some(Array(items)) {
+      for item in items { guard item is [String(action),String(spoken)] else { fail("Discussion guidance") };guidance.push({"action":action,"text":spoken});article+="<p class=direction>"+escape(action)+"</p>\n"+p(spoken);markdown+="["+action+"]\n\n"+spoken+"\n\n" }
+    }
+    article+="<h3>收束与衔接</h3>"+p(closing)+"</section>\n";articles+=article;markdown+="### 收束与衔接\n\n"+closing+"\n\n"
+    // Narration accompanies the animation. Demo time budgets the cursor/control
+    // actions and silent observation rather than charging animation time twice.
+    let available=if fields.get("teaching") is Some(Object(teaching)) {
+      let pacing : Json=if minutes==1 { {"speech_seconds":35,"demo_seconds":10,"processing_seconds":5,"question_seconds":0,"transition_seconds":5,"margin_seconds":5} } else if minutes==2 { {"speech_seconds":85,"demo_seconds":12,"processing_seconds":8,"question_seconds":5,"transition_seconds":5,"margin_seconds":5} } else if minutes==3 { {"speech_seconds":120,"demo_seconds":25,"processing_seconds":15,"question_seconds":10,"transition_seconds":5,"margin_seconds":5} } else if minutes==4 { {"speech_seconds":160,"demo_seconds":35,"processing_seconds":20,"question_seconds":15,"transition_seconds":5,"margin_seconds":5} } else { {"speech_seconds":210,"demo_seconds":40,"processing_seconds":25,"question_seconds":15,"transition_seconds":5,"margin_seconds":5} }
+      teaching["pacing"]=pacing
+      guard pacing is {"speech_seconds":Number(speech,..),"transition_seconds":Number(transition,..),..} else { fail("Pacing") };speech+transition
+    } else { 0.0 }
+    let estimated=characters.to_double()/220.0*60.0
+    let compiled : Json={"id":id,"number":number,"title":heading,"page_id":page_id,"start":elapsed,"minutes":minutes,"opening":opening,"steps":compiled_steps,"closing":closing,"guidance":guidance,"spoken_characters":characters,"estimated_speech_seconds":estimated,"language":"zh-CN"}
+    scripts[id]=compiled
+    rows.push({"id":id,"page":number,"minutes":minutes,"steps":steps.length(),"spoken_characters":characters,"estimated_speech_seconds":estimated,"speech_and_transition_budget":available,"over_budget":available>0 && estimated>available})
+    if available>0 && estimated>available { println("Review speaking pace: "+id+" "+characters.to_string()+" chars, "+estimated.to_int().to_string()+"s / "+available.to_int().to_string()+"s") }
+    total_characters+=characters;elapsed+=minutes.to_int()
+  }
+  guard elapsed==120 else { fail("Course duration changed") }
+  deck["speaking_pages"]=Json::object(scripts);deck["speaking_script"]={"language":"zh-CN","page_count":48,"spoken_characters":total_characters,"animation_steps":total_steps,"html":"./ai-speaker-script.html","markdown":"./ai-speaker-script.md"}
+  @fs.write_file("docs-site/ai-lecture.json",Json::object(deck).stringify(indent=2)+"\n")
+  let html="<!doctype html><html lang=zh-CN><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>AI 入门课 · 逐页中文讲解稿</title><link rel=stylesheet href=\"./speaker-script.css?v=20261116-script1\"><script defer src=\"./speaker-script.js?v=20261116-script1\"></script></head><body><a class=skip-link href=#manuscript>跳到讲稿正文</a><header class=script-toolbar><a href=\"./?page=ai-course-map\">课程目录</a><a href=\"./ai-speaker-script.md\" download>下载 Markdown</a><button type=button data-print-script>打印讲稿</button></header><div class=manuscript-layout><nav aria-label=逐页目录><h1>逐页中文讲解稿</h1><p>48 页 · 两小时课</p><ol>"+toc+"</ol></nav><main id=manuscript><div class=manuscript-intro><h1>AI：从模型到实际工作</h1><p>逐页中文讲解稿 · 46 页内容、10 分钟休息、5 分钟讨论</p><p>正文可直接讲。灰色操作提示不朗读；每个步骤对应课件动画，给现场观察和追问留出时间。</p></div>"+articles+"</main></div></body></html>\n"
+  @fs.write_file("docs-site/ai-speaker-script.html",html)
+  @fs.write_file("docs-site/ai-speaker-script.md",markdown)
+  @fs.write_file("docs/AI_PAGE_SPEAKER_SCRIPT_20261116.md",markdown)
+  let audit : Json={"pages":48,"content_pages":46,"animation_steps":total_steps,"spoken_characters":total_characters,"rate_assumption":"220 Chinese characters per minute; actions, observation and questions have separate classroom budgets; this is an estimate, not an audience trial.","pages_detail":rows}
+  @fs.write_file("docs/ai-speaking-audit.json",audit.stringify(indent=2)+"\n")
+  println("Built 48 complete Chinese speaking scripts, "+total_steps.to_string()+" animation steps, "+total_characters.to_string()+" spoken characters")
+}

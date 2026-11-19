@@ -1,0 +1,264 @@
+{
+  "id": "ai-board-agents",
+  "download_rank": 6,
+  "order": 2,
+  "title": [
+    "02 · 工具、闭环与自我改进",
+    "02 · Tools, feedback loops and improvement"
+  ],
+  "summary": [
+    "模型看到什么、程序做了什么、结果怎样成为下一轮依据。",
+    "Follow what the model sees, what software executes and how results feed the next round."
+  ],
+  "sections": [
+    {
+      "id": "board-observation-loop",
+      "title": [
+        "有限上下文，怎样跟上外部环境？",
+        "How does a finite context follow an external environment?"
+      ],
+      "concepts": [
+        "Loop Engineering",
+        "闭环",
+        "观察",
+        "上下文",
+        "环境感知",
+        "feedback"
+      ],
+      "points": [
+        "Loop engineering 循环",
+        "小环境／上下文",
+        "对环境的感知",
+        "LLM 与外层循环",
+        "闭环"
+      ],
+      "paragraphs": [
+        [
+          "模型不会自动看到整台电脑。它只读取应用交给它的消息和观察。闭环是：目标进入输入，模型提出动作，软件在环境执行，执行后的观察回到下一轮。新文件、命令返回和应用状态都要通过这个入口。这里的“感知”指获得可用的观察信息。",
+          "The model does not automatically see the entire computer. It reads messages and observations supplied by software. A closed loop sends in a goal, obtains a proposed action, executes it and returns the observation. Files, command output and application state enter through that route. Perception here means receiving usable observations."
+        ],
+        [
+          "假设目标是整理一份 Word 会议记录。第一轮只知道文件名；读文件后才有正文；提取待办后，再把写入结果送回。不能在尚未读文件时假定模型已经掌握里面的事实。上下文窗口有限，较长工作还需要把进度保存在文件或任务状态中，再有选择地读回。",
+          "Suppose the goal is to organize a Word meeting document. Initially there is only a filename; reading it provides the text; extracting tasks and saving them produces another observation. Longer work stores progress outside the finite context and selects what to bring back."
+        ]
+      ],
+      "reuse_scene": "agent-loop"
+    },
+    {
+      "id": "board-computer-tools",
+      "title": [
+        "调用 Word、电脑指令与 Linux，是什么意思？",
+        "What does calling Word or a Linux command mean?"
+      ],
+      "concepts": [
+        "Word",
+        "电脑指令",
+        "Linux",
+        "tool calling",
+        "工具说明"
+      ],
+      "points": [
+        "调用 Word",
+        "电脑指令",
+        "Linux",
+        "工具调用把模型接到实际软件"
+      ],
+      "paragraphs": [
+        [
+          "模型输出“把标题改成会议纪要”只是文字。要真正修改文件，应用须提供一个工具，例如 document.set_title；也可以提供终端工具，在 Linux 中运行已有命令。工具说明告诉模型名称、参数和用途，执行器把请求翻译成实际软件操作。工具结果随后回到模型。",
+          "The text “change the title” does not edit a file. Software must expose a tool such as document.set_title, or a terminal tool that executes a command on Linux. Tool descriptions specify names, arguments and purpose. An executor performs the operation and returns its result."
+        ],
+        [
+          "同样的整理目标，Word 工具可能使用文档对象；Linux 工具可能读取文件、运行转换器或搜索文本。模型需要适应实际提供的接口。会说出命令，与命令已经执行成功，是两个不同事件。",
+          "A Word tool may manipulate document objects, while a Linux tool may read files, search text or run a converter. The model must use the interface it is actually given. Producing a command and successfully executing it are separate events."
+        ]
+      ],
+      "reuse_scene": "tool-roundtrip"
+    },
+    {
+      "id": "board-sandbox-tools",
+      "title": [
+        "Sandbox：动作发生在哪里？",
+        "Sandbox: where do actions happen?"
+      ],
+      "concepts": [
+        "Sandbox",
+        "沙箱",
+        "read",
+        "write",
+        "search",
+        "query database",
+        "读",
+        "写",
+        "搜索",
+        "查询数据库"
+      ],
+      "points": [
+        "设计围栏 Sandbox",
+        "给指令",
+        "read 读",
+        "write 写",
+        "search 搜索",
+        "query database 查询数据库"
+      ],
+      "paragraphs": [
+        [
+          "Sandbox 是程序执行和保存工作状态的具体环境，例如一个工作目录或隔离容器。模型可以被告知“在这个项目里完成任务”，但目录、工具和执行器由软件提供。把它想成工作台更直观：有材料、有可用操作，也有每次操作产生的结果。",
+          "A sandbox is a concrete environment where programs execute and work is stored, such as a project directory or isolated container. Software supplies the directory, tools and executor. Think of a workbench with material, available operations and observable results."
+        ],
+        [
+          "读文件返回原文；写文件改变工作材料；搜索从很多文件里挑出相关片段；查询数据库按条件返回记录。例如找本周待办，先 search 找到会议记录，再 read 读取上下文，最后 query database 查已有事项，write 写入整理结果。四种操作目的不同，不能用“联网”一个词全部代替。",
+          "Reading returns source text; writing changes material; search selects relevant passages; a database query returns records matching conditions. To find this week's tasks, search for notes, read their context, query existing tasks and write the result. These operations serve different purposes."
+        ]
+      ]
+    },
+    {
+      "id": "board-self-improvement",
+      "title": [
+        "自进化：先看究竟改了什么",
+        "Self-improvement: identify what changed"
+      ],
+      "concepts": [
+        "自进化",
+        "目标",
+        "识别",
+        "计划",
+        "执行",
+        "迭代",
+        "RSI",
+        "self improvement"
+      ],
+      "points": [
+        "自进化 Agent",
+        "目标",
+        "识别／计划",
+        "执行",
+        "迭代",
+        "改答案、改系统与改模型的区别"
+      ],
+      "paragraphs": [
+        [
+          "一次任务循环包含目标、识别现状、制定下一步、执行和观察。下一轮可以修正文稿，也可以修改任务计划。若系统改了提示词、工具或记忆组织，是在改助手；若从训练数据更新参数，是在改模型。先明确改进对象，才能判断一次循环带来了什么。",
+          "A task loop identifies the situation, plans an action, executes and observes under a goal. It may revise an artifact or plan. Changing prompts, tools or memory organization changes the assistant; updating learned parameters changes the model. Identify the object before evaluating improvement."
+        ],
+        [
+          "RSI 是 recursive self-improvement：改进后的能力又参与改进产生改进的机制。例如更好的代码搜索器帮助改进下一代搜索器。它比“自己改了一次稿”要求更多，不能把重复调用、自动运行或改一个配置都叫递归自我改进。",
+          "RSI means recursive self-improvement: improved capability feeds back into improving the improvement mechanism. For example, a better code-search system helps improve its successor. Repeated calls or a single draft revision do not by themselves establish that feedback."
+        ]
+      ],
+      "reuse_scene": "three-improvement-loops"
+    },
+    {
+      "id": "board-sft-engineering",
+      "title": [
+        "SFT：从示范答案学习怎么做",
+        "SFT: learn behavior from demonstrations"
+      ],
+      "concepts": [
+        "SFT",
+        "supervised fine-tuning",
+        "监督微调",
+        "标准答案",
+        "工程"
+      ],
+      "points": [
+        "SFT",
+        "标答案",
+        "工程中的有明确目标的学习"
+      ],
+      "paragraphs": [
+        [
+          "SFT 是 supervised fine-tuning，监督微调。数据包含输入和希望模型给出的示范输出；训练增加这类输出在相应输入下的概率。例如把会议原文与正确的事项表组成样本，模型学习按指定字段整理。示范可以有多种合理写法，并非所有任务都只有唯一一句标准答案。",
+          "SFT is supervised fine-tuning. Training pairs an input with a demonstrated output and increases the probability of that behavior under the input. Meeting text paired with a correct task table teaches the desired fields. A task may have several valid demonstrations, not one unique sentence."
+        ],
+        [
+          "把 SFT 比作“工程、标答案”，是因为训练信号比较明确。真正训练仍需大量样本、损失计算和参数更新；在对话里贴一份正确答案，只是让它成为上下文示例，不能直接等同于完成 SFT。",
+          "The engineering analogy highlights a relatively explicit target. Training still requires examples, loss computation and parameter updates. Pasting one good answer into a conversation supplies an in-context example; it is not itself SFT."
+        ]
+      ]
+    },
+    {
+      "id": "board-rl-exploration",
+      "title": [
+        "RL：答案未知，也能用结果反馈学习",
+        "RL: learn from outcomes without a demonstrated answer"
+      ],
+      "concepts": [
+        "RL",
+        "reinforcement learning",
+        "强化学习",
+        "科学",
+        "参考答案",
+        "奖励",
+        "reward"
+      ],
+      "points": [
+        "RL",
+        "科学／探索",
+        "参考答案与结果评分",
+        "正负反馈、百分比式评分"
+      ],
+      "paragraphs": [
+        [
+          "RL 是 reinforcement learning，强化学习。系统尝试动作或生成完整回答，再根据结果得到奖励信号，用它改变以后行为的倾向。例如一道编程题，不先提供整份程序，只运行测试：通过多少测试可作为奖励的一部分。百分比是评分的一个可能形式，具体奖励如何定义取决于任务。",
+          "RL is reinforcement learning. The system tries actions or generates an answer, receives an outcome score and learns to favor more successful behavior. For a programming task, tests can score a generated program without first supplying the complete solution. A percentage is one possible scoring scheme, not the definition of RL."
+        ],
+        [
+          "把 RL 比作“科学探索”，是因为没有现成的完整解法，但可以观察结果。这不表示 SFT 只用于工程、RL 只用于科学；两者是训练信号的不同组织方式，实际系统经常组合使用。",
+          "The science analogy emphasizes exploration with observable outcomes rather than a complete prescribed solution. SFT is not restricted to engineering, nor RL to science; practical systems can combine both kinds of signal."
+        ]
+      ]
+    },
+    {
+      "id": "board-loss-reward-advantage",
+      "title": [
+        "Loss、Reward、Advantage，分别在比较什么？",
+        "What do loss, reward and advantage compare?"
+      ],
+      "concepts": [
+        "Loss",
+        "损失",
+        "Reward",
+        "奖励",
+        "Advantage",
+        "优势",
+        "policy",
+        "策略"
+      ],
+      "points": [
+        "Loss 损失",
+        "Advantage",
+        "policy／策略更新的关系"
+      ],
+      "paragraphs": [
+        [
+          "Loss 是优化时要降低的数值目标。语言预测常用目标 Token 的负对数概率：预测越不支持真实后续，损失越大。Reward 是任务或偏好给出的结果评价，通常希望更高。二者用途不同，不能看到一个分数下降就认定任务做得更好。",
+          "Loss is a numerical objective minimized during optimization. Next-token training can use negative log probability of the actual continuation. Reward evaluates an outcome and is generally maximized. A lower arbitrary score does not automatically mean better task performance."
+        ],
+        [
+          "Advantage 比较某次结果与基线预期。教学例子：两个回答奖励是 1 和 0，以组内均值 0.5 作基线，优势就是 +0.5 和 −0.5。策略更新可提高相对较好回答的倾向，降低相对较差的倾向；实际算法还包含其他项。这里的组均值是一个示例基线，不是所有 RL 方法的唯一公式。",
+          "Advantage compares an outcome with a baseline. In a toy group with rewards 1 and 0, mean 0.5 gives advantages +0.5 and −0.5. A policy update can favor relatively better behavior, with further terms in real algorithms. The group mean is one illustrative baseline, not the universal RL definition."
+        ]
+      ],
+      "graphic": "reward"
+    }
+  ],
+  "references": [
+    {
+      "title": "Building effective agents",
+      "url": "https://www.anthropic.com/research/building-effective-agents"
+    },
+    {
+      "title": "Effective harnesses for long-running agents",
+      "url": "https://www.anthropic.com/research/effective-harnesses-for-long-running-agents"
+    },
+    {
+      "title": "Training language models to follow instructions with human feedback",
+      "url": "https://arxiv.org/abs/2203.02155"
+    },
+    {
+      "title": "DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models",
+      "url": "https://arxiv.org/abs/2402.03300"
+    }
+  ]
+}

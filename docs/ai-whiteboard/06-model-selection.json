@@ -1,0 +1,312 @@
+{
+  "id": "ai-board-selection",
+  "download_rank": 2,
+  "order": 6,
+  "title": [
+    "06 · 怎样选模型：任务、体积与证据",
+    "06 · Choose a model by task, footprint and evidence"
+  ],
+  "summary": [
+    "把生态、能否运行和业务匹配拆开，再读懂 MoE、精度、量化与评测。",
+    "Separate ecosystem, feasibility and task fit, then understand MoE, precision, quantization and evaluation."
+  ],
+  "sections": [
+    {
+      "id": "board-ecosystem",
+      "title": [
+        "生态好，具体好在哪里？",
+        "What makes an ecosystem useful?"
+      ],
+      "concepts": [
+        "生态",
+        "模型选择",
+        "推理引擎支持",
+        "工具链",
+        "模板",
+        "生态好"
+      ],
+      "points": [
+        "选模型",
+        "生态好",
+        "生态旁括号英文（反光待核对）"
+      ],
+      "paragraphs": [
+        [
+          "生态指让模型被实际使用的一整套支持：分词器、对话模板、推理引擎、客户端、工具调用格式、示例和维护。相同权重如果缺少引擎支持，可能很难在现有设备上高效运行；如果工具格式没有接好，模型提出的动作也不能顺利执行。",
+          "An ecosystem includes tokenizers, chat templates, inference engines, clients, tool-call formats, examples and maintenance. Weights without suitable engine support may be difficult to run efficiently; unsupported tool formats prevent proposed actions from being executed correctly."
+        ],
+        [
+          "比较两个方案时，可以先完成一个最小但完整的任务：读一份文件、回答一个能核对的问题、再调用一个真实工具。这样测试的是模型与工具链的结合，不只是网页聊天是否能打开。生态让接入和使用更顺，不等于保证每个任务的答案质量。",
+          "Compare a complete small task: read a document, answer a checkable question and use one actual tool. That tests the model-toolchain combination rather than whether a chat page opens. Ecosystem fit improves usability but does not guarantee answer quality."
+        ]
+      ]
+    },
+    {
+      "id": "board-feasible-size",
+      "title": [
+        "选能装下的模型，再比较任务表现",
+        "Fit the deployment, then compare the task"
+      ],
+      "concepts": [
+        "选大小",
+        "模型大小",
+        "显存",
+        "并发",
+        "上下文长度",
+        "能跑起来的最大模型"
+      ],
+      "points": [
+        "选大小",
+        "能跑起来的最大模型",
+        "并发",
+        "稳定性",
+        "硬件条件影响选择"
+      ],
+      "paragraphs": [
+        [
+          "先计算权重、缓存和工作空间，再考虑实际上下文长度与同时请求数。装下权重只是起点：长文章和多并发会增加 KV 缓存，较慢设备可能让用户长时间等待。API 调用把模型运行交给服务方，但仍要比较服务延迟、配额和使用成本。",
+          "Estimate weights, caches and working space for the intended context and concurrency. Fitting weights is only the start: long inputs and simultaneous requests grow cache use, and slow execution increases waiting. An API moves operation to a provider, while service latency, quotas and usage cost still matter."
+        ],
+        [
+          "“选择能跑的最大模型”是候选筛选思路，不是最终答案。若较小模型已经能稳定完成字段提取，较大模型却让响应显著变慢，就应比较完成质量与资源代价。设备条件相同、任务输入相同，比较结果才有解释力。",
+          "The largest runnable model is a candidate, not automatically the winner. If a smaller model reliably extracts the required fields while a larger one is much slower, compare quality against resources. Keep device and task conditions comparable."
+        ]
+      ]
+    },
+    {
+      "id": "board-task-benchmark",
+      "title": [
+        "业务匹配：先有自己的任务，再看榜单",
+        "Task fit: start with your work, then consult benchmarks"
+      ],
+      "concepts": [
+        "业务匹配",
+        "自动评测",
+        "指标",
+        "Benchmark",
+        "实际业务",
+        "成本",
+        "完成率"
+      ],
+      "points": [
+        "业务匹配",
+        "DeepSeek 与 Qwen 作为候选",
+        "实际业务",
+        "自动评测指标",
+        "Benchmark",
+        "自己的评测",
+        "同一业务条件下比较"
+      ],
+      "paragraphs": [
+        [
+          "选一组真实输入并写清什么算完成。例如纪要任务可以核对事项、负责人、日期是否与原文一致；代码任务可以运行测试；图像任务要看对象、构图与文字是否满足要求。DeepSeek、Qwen 等模型家族可以进候选，但名字本身不是评分。",
+          "Use representative inputs and define completion. Meeting notes can be checked for correct tasks, owners and dates; code can run tests; images need subject, composition and text criteria. Families such as DeepSeek and Qwen are candidates, not scores."
+        ],
+        [
+          "自动评测适合能精确检查的部分；开放写作或视觉质量需要明确的人类判断标准。Benchmark 提供其他任务上的参考，自己的任务集解释本地适配程度。记录具体版本、提示词、工具、输入长度和尝试次数，避免把不同条件的分数拼成一个排名。",
+          "Automatic grading suits precisely checkable outcomes; open writing and visual quality need explicit human criteria. Public benchmarks provide context, while local tasks test your fit. Record checkpoint, prompt, tools, input length and attempts rather than combining incomparable scores."
+        ],
+        [
+          "一个可复用的比较表至少保留：任务是否完成、关键字段或测试结果、首个输出等待、总完成时间、用量和失败类型。课程中这些字段是测量方法，没有填入虚构的产品胜负数据。",
+          "A useful comparison records task completion, fields or tests, first-output wait, total time, usage and failure categories. These are measurement fields; the course does not fill them with invented product results."
+        ]
+      ],
+      "graphic": "evaluation"
+    },
+    {
+      "id": "board-modalities",
+      "title": [
+        "图像、文字与视频，先看输入输出模态",
+        "Images, text and video: identify the modalities first"
+      ],
+      "concepts": [
+        "图像",
+        "文字",
+        "多模态",
+        "MiniMax",
+        "DeepSeek",
+        "图像理解",
+        "图像生成",
+        "视频生成"
+      ],
+      "points": [
+        "图像→MiniMax 的板书例子",
+        "文字→DeepSeek 的板书例子",
+        "模态与业务匹配"
+      ],
+      "paragraphs": [
+        [
+          "看懂图片并输出文字，叫图像理解；从文字生成图片，叫图像生成；生成视频又是另一种输出任务。一个公司可以提供多个系列，所以“MiniMax 做图像、DeepSeek 做文字”只能作为粗略举例，不能代替查看具体模型的输入输出规格。",
+          "Image understanding produces an interpretation of an image; image generation creates one; video generation is another output task. A company may offer several families, so the board's MiniMax/image and DeepSeek/text examples do not replace a checkpoint's actual input-output specification."
+        ],
+        [
+          "例如用 MiniMax-H3 做视频，要关注视频生成接口；用 MiniMax-M2.7 整理文本，是另一套模型任务。需要比较图片理解时，要把同一张图和同一个问题交给支持图像输入的模型，而不是只比较两段文字回答。",
+          "MiniMax-H3 video generation and MiniMax-M2.7 text work are different model tasks. For image understanding, compare the same image and question using models that actually accept image input."
+        ]
+      ]
+    },
+    {
+      "id": "board-moe-routing",
+      "title": [
+        "MoE：每个 Token 只走部分专家",
+        "MoE: a token uses selected expert modules"
+      ],
+      "concepts": [
+        "MoE",
+        "Mixture of Experts",
+        "混合专家",
+        "路由",
+        "expert",
+        "激活参数",
+        "total parameters",
+        "active parameters"
+      ],
+      "points": [
+        "MoE",
+        "Mixture of Experts（英文拼写规范化）",
+        "总参数与激活参数",
+        "专家选择与激活"
+      ],
+      "paragraphs": [
+        [
+          "MoE 是 Mixture of Experts，混合专家。这里的专家是模型内部的计算模块，不是几个独立聊天机器人。路由器根据当前 Token 的表示选择一部分专家计算，再组合结果；不同 Token 可以选择不同路径。模型通常还有注意力等共享计算，不能把全部计算都理解为只选两个专家。",
+          "MoE means Mixture of Experts. Experts are internal computation modules, not independent chatbots. A router selects some modules for a token representation and combines their results; another token may take another route. Shared attention and other computation still exist."
+        ],
+        [
+          "总参数数的是模型保存的全部可调整数；激活参数数的是某次 Token 计算使用的那部分。因此“大体积、较少激活”可以同时成立。未被这一步选中的专家并没有从模型中消失，下一个 Token 还可能用到它们。",
+          "Total parameters count the model's adjustable values; active parameters describe the subset used for a token. A large model with sparse activation is therefore possible. Unselected experts remain part of the model and may be needed for later tokens."
+        ]
+      ],
+      "graphic": "moe"
+    },
+    {
+      "id": "board-qwen-size-example",
+      "title": [
+        "读懂 Qwen3.6-35B-A3B",
+        "Read Qwen3.6-35B-A3B correctly"
+      ],
+      "concepts": [
+        "Qwen3.6",
+        "35B",
+        "A3B",
+        "350亿",
+        "30亿",
+        "70 GB",
+        "FP16",
+        "激活"
+      ],
+      "points": [
+        "Qwen 3.6",
+        "35B",
+        "A3B",
+        "激活参数 activation",
+        "总量大于本次激活量"
+      ],
+      "paragraphs": [
+        [
+          "以官方 Qwen3.6-35B-A3B 为例，名称中的 35B 表示约 350 亿总参数，A3B 表示约 30 亿激活参数。A 是 activated 的提示，不是把 35B 模型直接压缩成 3B 文件。路由节省部分计算，存储仍要考虑完整权重或实际采用的分片、卸载方案。",
+          "In the official Qwen3.6-35B-A3B example, 35B denotes about 35 billion total parameters and A3B about 3 billion active parameters. A indicates activation, not a 3B-sized checkpoint. Routing saves some computation while storage still depends on full weights or an actual sharding/offloading scheme."
+        ],
+        [
+          "用统一 16 位做粗算：35×10⁹×2 Byte≈70 GB 原始权重；不能拿 3B×2=6 GB 当作整个模型的显存需求。真实占用还取决于发布精度、额外模块、缓存和引擎实现。这正是“参数活跃得少”与“设备装得下”需要分别判断的原因。",
+          "At a uniform 16 bits, raw weights are roughly 35×10⁹×2≈70 GB. Using 3B×2=6 GB as the whole model's requirement is incorrect. Released precision, extra modules, caches and engine implementation also matter."
+        ]
+      ]
+    },
+    {
+      "id": "board-bit-byte-precision",
+      "title": [
+        "FP16、FP8 与 4 bit，怎样换成空间？",
+        "Convert FP16, FP8 and 4-bit values into storage"
+      ],
+      "concepts": [
+        "FP16",
+        "FP8",
+        "INT4",
+        "FP4",
+        "bit",
+        "Byte",
+        "2 Byte",
+        "精度",
+        "precision"
+      ],
+      "points": [
+        "FP16→2 Byte",
+        "FP8",
+        "4 bit",
+        "8 bit",
+        "位数决定每个参数的原始大小"
+      ],
+      "paragraphs": [
+        [
+          "8 bit 等于 1 Byte。FP16 每个值占 16 bit，即 2 Byte；FP8 通常每个值占 1 Byte；4 bit 的紧凑编码理论上每 Byte 可放两个值。FP 指浮点格式；INT4 与 FP4 都可以是 4 位，但数值编码不同，不能把它们当成同一种格式。",
+          "Eight bits equal one byte. FP16 uses two bytes per value; FP8 uses one; tightly packed 4-bit values allow two per byte. FP denotes floating point. INT4 and FP4 both use four bits but have different numerical encodings."
+        ],
+        [
+          "对 35B 个权重，原始位数粗算分别是 70 GB、35 GB 和 17.5 GB，采用十进制 GB。量化文件还可能附带缩放系数、分组信息与较高精度部分，所以实际文件不是只按这一行乘法；运行内存还要再加缓存和工作空间。",
+          "For 35B weights, decimal raw sizes are about 70 GB, 35 GB and 17.5 GB. Quantized files may also contain scales, grouping metadata and higher-precision components. Runtime memory adds caches and workspace."
+        ]
+      ]
+    },
+    {
+      "id": "board-quantization-error",
+      "title": [
+        "量化：省空间时，数值发生了什么？",
+        "Quantization: what changes when representation shrinks?"
+      ],
+      "concepts": [
+        "量化",
+        "quantization",
+        "FP16",
+        "FP8",
+        "scale",
+        "误差",
+        "1.234",
+        "精度"
+      ],
+      "points": [
+        "数字精度逐步缩短的箭头",
+        "FP16→FP8／更低位表示",
+        "量化与近似误差",
+        "体积、速度与质量的取舍"
+      ],
+      "paragraphs": [
+        [
+          "量化把原来较精细的数映射到有限档位。教学例子用步长 0.25，把 [1.23,−0.78,0.41] 四舍五入到整数码 [5,−3,2]，再乘 0.25 重建为 [1.25,−0.75,0.50]。三个误差分别为 +0.02、+0.03、+0.09。实际方法可按组选择不同缩放系数，这里只看映射与误差怎样出现。",
+          "Quantization maps fine-grained values onto a finite set. With toy step 0.25, [1.23,−0.78,0.41] becomes integer codes [5,−3,2] and reconstructs to [1.25,−0.75,0.50]. Errors are +0.02,+0.03,+0.09. Real methods can use group-specific scales; this example exposes the mapping."
+        ],
+        [
+          "把小数写短可以帮助理解“表示更粗”，但量化不等于把所有小数统一截掉几位。它减少存储与搬运需求，是否更快还取决于硬件和内核，是否影响结果则要回到原任务集测。不能从“位数减半”直接推出“答案质量不变且速度翻倍”。",
+          "Shorter decimals illustrate coarser representation, but quantization is not simply trimming a fixed number of decimal places. It reduces storage and movement; speed depends on hardware and kernels, while quality must be checked on tasks. Half the bits does not guarantee twice the speed with unchanged answers."
+        ]
+      ],
+      "graphic": "quantization"
+    }
+  ],
+  "references": [
+    {
+      "title": "Qwen3.6-35B-A3B model card",
+      "url": "https://huggingface.co/Qwen/Qwen3.6-35B-A3B"
+    },
+    {
+      "title": "Switch Transformers",
+      "url": "https://arxiv.org/abs/2101.03961"
+    },
+    {
+      "title": "GPTQ: Accurate Post-Training Quantization",
+      "url": "https://arxiv.org/abs/2210.17323"
+    },
+    {
+      "title": "LLM.int8()",
+      "url": "https://arxiv.org/abs/2208.07339"
+    },
+    {
+      "title": "HELM",
+      "url": "https://arxiv.org/abs/2211.09110"
+    },
+    {
+      "title": "MiniMax video generation",
+      "url": "https://platform.minimax.io/docs/guides/video-generation"
+    }
+  ]
+}

@@ -2,8 +2,39 @@
 
 This is a separate, source-grounded documentation site generated with
 MoonBook's `wiki-course` repository-coursebook skill and reusable site asset.
-It teaches LunaNexa's features, architecture, data flows, use, operation, and
-debugging. It is not the source of truth: the repository documents and typed
+It opens with 24 bilingual classroom lessons: LLMs, harnesses and agents,
+learning and feedback, infrastructure, real work, and industry. **Start presentation** opens 46 content
+slides, a break and questions, with a 120-minute speaking plan. It begins
+directly with text inputs and outputs. Each screen separates its animated
+figure and conclusion from expandable speaker notes. Animations support play,
+pause, steps and restart; playback finishes the current step and holds its
+explanation until the learner advances. Future objects stay hidden. Arrow keys navigate, Space
+advances the figure, and Escape returns to the book. A 25-minute route remains
+in technical notes.
+The introduction omits engineering hardening and repeated workbook templates
+at the user's explicit request.
+The user's seven source photographs now form the main curriculum: all 186
+identifiable entries are integrated as 47 sections within normal chapters and
+linked to the main presentation. Their explanations occupy 78 of 105 content
+minutes; supporting examples occupy 27. No separate board route remains.
+Numerical SVG controls include neurons, probability loss, rewards, scaling,
+expert routing and quantization. Model/harness comparison is a regular chapter.
+All 48 presentation screens also have a complete Chinese speaking manuscript,
+including the break and discussion. The **讲稿** panel separates spoken prose
+from directions and provides a button for each of the 149 animation stages;
+that button restores the example's initial values before showing the stage.
+The **逐页讲稿** link opens `ai-speaker-script.html`, with a 48-item directory,
+print layout and an editable Markdown download. English teaching notes remain
+available; the complete new manuscript is Chinese. Sources live in
+`docs/ai-speaking/`; `scripts/build-ai-speaker.mbtx` runs as the final build
+step. Timing is estimated at 220 Chinese characters/minute, with separate
+allowances for controls, observation and questions, rather than an audience trial.
+Read `docs/AI_WHITEBOARD_COVERAGE_20261114.md` for the point-by-point crosswalk
+and explicitly unresolved handwriting. Build with `moon run
+scripts/build-ai-whiteboard.mbtx`, then run `scripts/sync-ai-coursebook.mbtx`
+with the actual review timestamp. Original photos stay local and are not shipped.
+The remaining 41 pages teach LunaNexa's features, architecture, data flows,
+use, operation, and debugging. The repository documents and typed
 contracts referenced by `coursebook-evidence.json` remain authoritative.
 
 The Operations section also publishes a 50-scenario production UI validation
@@ -11,7 +42,7 @@ page. Its atomic source ledger is
 `docs/UI_PRODUCTION_VALIDATION_50_SCENARIOS.md`; demo-scoped checks and blocked
 external dependencies remain visibly distinct from real production evidence.
 
-The published default is newcomer-first: overview, quickstart, concepts,
+The published default begins with the AI landscape, followed by platform overview, quickstart, concepts,
 deployment, operations, troubleshooting, and public reference. Implementation
 status, readiness judgment, repository revision, source provenance, and the
 generation process appear only after the reader explicitly selects **Show
@@ -41,19 +72,56 @@ paths, protocol IDs, model names, and other copy-sensitive technical values.
 Real product screenshots live below `images/` and state exactly which live UI
 condition was captured.
 
-The current reviewed repository projection records commit
-`254542461543727721ff8f6c8863687f757c9ae3`, including the human-account, OIDC
-browser sign-in, API key, and guided WebIDE onboarding work. This freshness
-label covers the published source ledger and local acceptance evidence only;
-it does not replace tomorrow's physical-cluster, external-adapter, legal,
-finance, security, or named-human acceptance.
+The 2026-11-10 platform content review covers the original 41 pages and both
+language projections. The [AI foundations guide](../docs/AI_FOUNDATIONS.md)
+records the classroom rewrite, narrative examples and primary references.
+The combined coursebook contains 66 pages in both languages: 24 AI chapters,
+a searchable course directory, and 41 platform pages. Open
+`?page=ai-course-map` for all 60 concepts grouped by topic. Each
+entry links to its explanation and exact presentation slide; related concepts
+can share one worked scene. The same directory
+is available inside the classroom. Search matches Chinese and English names
+and related concepts without an external service.
+The exact inspected revision, dirty snapshot, per-page review coverage and
+source digests are in `coursebook-evidence.json`; do not maintain another
+revision or current-health assertion here. See the
+[content audit](../docs/COURSEBOOK_CONTENT_AUDIT_20261110.md) for corrections,
+command prerequisites and the remaining independent acceptance work.
 
 ## Validate
+
+`docs/ai-integrated-course.json` owns the chapter sequence, primary-section
+placement and time budgets. `docs/ai-integrated-teaching.json` owns the new
+worked questions and all 46 causal transitions. `scripts/integrate-ai-course.mbtx`
+combines the seven detailed sources with selected supporting artwork from
+`scripts/build-ai-lecture.mbtx`, `docs/ai-class-storyboard.json` and
+`docs/ai-class-rehearsal.json`. Those older sources and dated walkthroughs
+document the supporting artwork's origin; their 43-page totals are historical.
+Speaker notes follow the current diagram stage, with primary explanations
+expanded in the teacher's panel. Each scene includes three answered student
+questions and a budget that includes demonstration and processing time.
+This remains a teaching plan, not a measured audience trial. Regenerate the
+complete deck and book projection
+from the repository root, using the actual content-review time:
+
+```sh
+moon run scripts/build-ai-whiteboard.mbtx
+moon run scripts/sync-ai-coursebook.mbtx -- REVIEW_TIME_RFC3339
+```
+
+The projection retains existing platform pages and localizations. No model
+connection is needed for the prepared classroom animations. Original technical
+art and calculated teaching experiments live in `lecture-studio.js`, loaded
+before `lecture.js`; presentation styling is in `lecture-studio.css`.
+The [design research](../docs/AI_TEACHING_DESIGN_REFERENCES_20261110.md) records
+the public lectures inspected and the specific design choices derived from them.
 
 ```sh
 node --check docs-site/app.js
 node --check docs-site/server.mjs
 node --test docs-site/coursebook.test.mjs
+moon run scripts/audit-coursebook.mbtx /ABSOLUTE/REPOSITORY drift
+moon run scripts/audit-coursebook.mbtx /ABSOLUTE/REPOSITORY recipes
 ```
 
 The test verifies the coursebook, localization and evidence contracts,

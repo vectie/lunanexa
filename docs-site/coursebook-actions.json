@@ -1,6 +1,6 @@
 {
   "contract_version": "lunanexa.coursebook-ui-actions.v1",
-  "scope": "All current reader guides audited for explicitly named clickable UI actions. Historical acceptance SOP and production observation pages are separately dated evidence records, excluded from current-button claims. API operations, lifecycle milestones and generic prose are not button labels.",
+  "scope": "Current platform guides audited for explicitly named clickable UI actions. General AI education, API operations, lifecycle milestones and generic prose are not platform button claims. Historical acceptance/observation pages remain dated evidence.",
   "excluded_evidence_pages": [
     "ui-end-to-end-sop",
     "production-ui-validation"
@@ -36,7 +36,32 @@
     "planned-elastic-batch",
     "planned-storage-registry",
     "planned-commerce-identity",
-    "planned-chat-playground"
+    "planned-chat-playground",
+    "ai-start",
+    "ai-tokens",
+    "ai-next-token",
+    "ai-training-inference",
+    "ai-prompts",
+    "ai-context",
+    "ai-harness",
+    "ai-loops-rsi",
+    "ai-multi-agent",
+    "ai-chips",
+    "ai-clusters-engines",
+    "ai-metrics",
+    "ai-token-factory",
+    "ai-work-coding",
+    "ai-work-creation",
+    "ai-work-science",
+    "ai-work-business",
+    "ai-industry",
+    "ai-platform-place",
+    "ai-course-map",
+    "ai-rules-learning",
+    "ai-feedback-learning",
+    "ai-model-scaling",
+    "ai-model-selection",
+    "ai-agent-systems"
   ],
   "site_actions": [
     {
@@ -52,7 +77,9 @@
   ],
   "actions": [
     {
-      "page_ids": ["client-api"],
+      "page_ids": [
+        "client-api"
+      ],
       "source": "ui/enterprise/delivery.mbt",
       "binding": "on_click=command(emit, CreateModelApiKey(service.model_alias))",
       "en": "Create API key",

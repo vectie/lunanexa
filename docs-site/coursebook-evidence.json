@@ -2,36 +2,186 @@
   "contract_version": "moonbook.repository-coursebook-evidence.v1",
   "repository": {
     "name": "lunanexa",
-    "revision": "9012d154031e62c553fb7a78d3834dfaaf87d22e",
-    "working_tree": "dirty-deployment-candidate",
-    "inspected_at": "2026-09-16T07:08:05Z"
+    "revision": "d255f4f3479fc15dce693b9ac6c3dea98eed5775",
+    "working_tree": "dirty",
+    "inspected_at": "2026-11-16T11:39:32Z"
   },
   "sources": [
-    {"id":"glm-api","path":"docs/GLM_API_QUICKSTART.md","digest":"sha256:a7484309962b8076da72d39869510e2056dccad852afd180f7f8952756d960d2","kind":"client-guide","public":true},
-    {"id":"readme","path":"README.mbt.md","digest":"sha256:8acfad00775f8416931b8c49104d6b1ad59d5975a8ab45f0fb1f953657d74933","kind":"overview","public":true},
-    {"id":"product-contract","path":"docs/PRODUCT_CONTRACT.md","digest":"sha256:53b1461ffc6a7b154e6fec084fc8988b49261824e4279c652604c2446b9b4aeb","kind":"product-contract","public":true},
-    {"id":"architecture","path":"docs/ARCHITECTURE.md","digest":"sha256:96c9bdbfc0d98e3bf78669c40d90044321005ee9df4065f786272c529ce6b149","kind":"architecture","public":true},
-    {"id":"implementation-status","path":"docs/IMPLEMENTATION_STATUS.md","digest":"sha256:021f063d755f11d19c8f2974a9c92e94e9ca5c6b821f6a9a7bd1a66ea1cdc29b","kind":"readiness","public":true},
-    {"id":"deployment","path":"docs/DEPLOYMENT.md","digest":"sha256:946a69f8faac2f76d8e57402d7feb65cb86fe9ce74caa15cb7b85d5ca8bff88e","kind":"deployment","public":true},
-    {"id":"platform-identity","path":"docs/PLATFORM_IDENTITY.md","digest":"sha256:8d46fb1218fe1e2a7847fe5a0ef00b5f3e58969ef644a7f2e6dee6816293a3a9","kind":"identity-deployment","public":true},
-    {"id":"operations","path":"docs/OPERATIONS.md","digest":"sha256:11fa522d84849679b3670d6649cfcf62df77b10c892fb97e5555dff2f017f92b","kind":"operations","public":true},
-    {"id":"operations-commerce-guide","path":"docs/OPERATIONS_COMMERCE_ACCESS_AND_GUIDE.md","digest":"sha256:e57d600c72cc34805f9562d235560bcdcb6faf5e74b38fc3c27459edfa4bc2b6","kind":"operations-and-guide-contract","public":true},
-    {"id":"recovery","path":"docs/RECOVERY_RUNBOOK.md","digest":"sha256:0d25533d813fa1b5303e9e500528ecc523e391b83851dae4db1600d8da65d361","kind":"recovery","public":true},
-    {"id":"security","path":"docs/SECURITY_OPERATIONS.md","digest":"sha256:6446246bd965f4994adad4c5197813dfe1fc44ee509eaa93db3a8c580b42d73f","kind":"security","public":true},
-    {"id":"management-plane","path":"docs/MANAGEMENT_PLANE.md","digest":"sha256:36758773c79f133159c0f03e7278f4bdbb01ef6db1faf48ba083e11b895bcd02","kind":"model-service-management","public":true},
-    {"id":"workspaces","path":"docs/WORKSPACES.md","digest":"sha256:c88addb1c7ce7456519192ec23d621f6df7531fdac04f5ea148707dd81891925","kind":"workspace-authority","public":true},
-    {"id":"client-integration","path":"docs/CLIENT_INTEGRATION.md","digest":"sha256:88fb17fe09de180c3721ebf17038b7293bd46bf1d678ee8491d67edbbb95fc21","kind":"client-contract","public":true},
-    {"id":"database","path":"docs/DATABASE.md","digest":"sha256:215c92c13e305c7ef49812d259a2e57cc777f6feceb00c87ef5ad184cd029722","kind":"database","public":true},
-    {"id":"production-readiness","path":"docs/PRODUCTION_READINESS.md","digest":"sha256:559222db322567ce914e328c78b50a8b58a65952503d4a5a19643e95b448d2d1","kind":"production-readiness","public":true},
-    {"id":"ui-production-validation","path":"docs/UI_PRODUCTION_VALIDATION_50_SCENARIOS.md","digest":"sha256:e851b4a5d6ba1abeca90d28a092547c0b9614976dd4856de37e69a324b2c4a8b","kind":"ui-acceptance-ledger","public":true},
-    {"id":"future-expansion","path":"docs/FUTURE_EXPANSION_PLAN.md","digest":"sha256:e933e64a713d185a530c3388bd6b85c44d32fd80f8899651b5e9fbc772824484","kind":"product-roadmap","public":true},
-    {"id":"simulation","path":"docs/SIMULATION.md","digest":"sha256:c3a0f1f6bdc9be1d3c1ee22efffe6d29ab1b14617b990531c35f991b1a83e045","kind":"simulation","public":true},
-    {"id":"workspace-http","path":"api/workspace_http.mbt","digest":"sha256:d3f5f3ec1dec31ddc86bb2a14df68c6ec671eca983f0220bbfaa8c1520c665f6","kind":"implementation","public":true},
-    {"id":"api-server","path":"api/server.mbt","digest":"sha256:95245a533bccd1d4e6e545af0449e6d4e567a5d5cd91d8fc89a183a8f1649a72","kind":"implementation","public":true},
-    {"id":"release-gate","path":"scripts/release-gate.sh","digest":"sha256:bdbaedd29b092fd6bc08a1631752135068902f619d2688872d9518d515da8220","kind":"acceptance-script","public":true},
-    {"id":"ascend-temporary-compute","path":"docs/ASCEND_310P3_TEMPORARY_COMPUTE.md","digest":"sha256:e1cba097d1620b79479d59e290f03b6bf0218f253ccadbab6c85535696ab0e38","kind":"hardware-qualification","public":true},
-    {"id":"lunaflux-qualification","path":"docs/LUNAFLUX_RUNTIME_QUALIFICATION.md","digest":"sha256:de88fca9c2fd749b3142da0dc1ab7e94dd50a5da88b44a04423a107c184c9a4b","kind":"runtime-qualification","public":true},
-    {"id":"dgx-qualification","path":"deploy/dgx-spark/README.md","digest":"sha256:9e5b7f81e3455c066f4f7f8e6385b859b6e226a150d6cc41a57c4f04c5913512","kind":"runtime-qualification","public":true},
+    {
+      "id": "glm-api",
+      "path": "docs/GLM_API_QUICKSTART.md",
+      "digest": "sha256:0e1474c5a65fe9b1e237464d4c7f486518632ea4ec7bd79a89c55a1aafb4967c",
+      "kind": "client-guide",
+      "public": true
+    },
+    {
+      "id": "readme",
+      "path": "README.mbt.md",
+      "digest": "sha256:376defa6ca0545192e12a69298a57aa7f020acf5adb54036c22e8c3925708498",
+      "kind": "overview",
+      "public": true
+    },
+    {
+      "id": "product-contract",
+      "path": "docs/PRODUCT_CONTRACT.md",
+      "digest": "sha256:8e9abf140845e4170c8098146f61400177577ca24b36a8d1b7a12469f9547d4b",
+      "kind": "product-contract",
+      "public": true
+    },
+    {
+      "id": "architecture",
+      "path": "docs/ARCHITECTURE.md",
+      "digest": "sha256:fadba9f0f05a86198e8ef0ef449bf0fded8932cc0e43b1a36da7319a013abdec",
+      "kind": "architecture",
+      "public": true
+    },
+    {
+      "id": "implementation-status",
+      "path": "docs/IMPLEMENTATION_STATUS.md",
+      "digest": "sha256:021f063d755f11d19c8f2974a9c92e94e9ca5c6b821f6a9a7bd1a66ea1cdc29b",
+      "kind": "readiness",
+      "public": true
+    },
+    {
+      "id": "deployment",
+      "path": "docs/DEPLOYMENT.md",
+      "digest": "sha256:946a69f8faac2f76d8e57402d7feb65cb86fe9ce74caa15cb7b85d5ca8bff88e",
+      "kind": "deployment",
+      "public": true
+    },
+    {
+      "id": "platform-identity",
+      "path": "docs/PLATFORM_IDENTITY.md",
+      "digest": "sha256:9f1ff8aae6ad170698e13076ee9a3dbfa86c65dc458a6510418bd8ddf2c849f2",
+      "kind": "identity-deployment",
+      "public": true
+    },
+    {
+      "id": "operations",
+      "path": "docs/OPERATIONS.md",
+      "digest": "sha256:11fa522d84849679b3670d6649cfcf62df77b10c892fb97e5555dff2f017f92b",
+      "kind": "operations",
+      "public": true
+    },
+    {
+      "id": "operations-commerce-guide",
+      "path": "docs/OPERATIONS_COMMERCE_ACCESS_AND_GUIDE.md",
+      "digest": "sha256:e57d600c72cc34805f9562d235560bcdcb6faf5e74b38fc3c27459edfa4bc2b6",
+      "kind": "operations-and-guide-contract",
+      "public": true
+    },
+    {
+      "id": "recovery",
+      "path": "docs/RECOVERY_RUNBOOK.md",
+      "digest": "sha256:0d25533d813fa1b5303e9e500528ecc523e391b83851dae4db1600d8da65d361",
+      "kind": "recovery",
+      "public": true
+    },
+    {
+      "id": "security",
+      "path": "docs/SECURITY_OPERATIONS.md",
+      "digest": "sha256:6446246bd965f4994adad4c5197813dfe1fc44ee509eaa93db3a8c580b42d73f",
+      "kind": "security",
+      "public": true
+    },
+    {
+      "id": "management-plane",
+      "path": "docs/MANAGEMENT_PLANE.md",
+      "digest": "sha256:36758773c79f133159c0f03e7278f4bdbb01ef6db1faf48ba083e11b895bcd02",
+      "kind": "model-service-management",
+      "public": true
+    },
+    {
+      "id": "workspaces",
+      "path": "docs/WORKSPACES.md",
+      "digest": "sha256:c88addb1c7ce7456519192ec23d621f6df7531fdac04f5ea148707dd81891925",
+      "kind": "workspace-authority",
+      "public": true
+    },
+    {
+      "id": "client-integration",
+      "path": "docs/CLIENT_INTEGRATION.md",
+      "digest": "sha256:88fb17fe09de180c3721ebf17038b7293bd46bf1d678ee8491d67edbbb95fc21",
+      "kind": "client-contract",
+      "public": true
+    },
+    {
+      "id": "database",
+      "path": "docs/DATABASE.md",
+      "digest": "sha256:e0efd9f807352cc5ba8ee67762073acff1bdce10c18270329d8e7a76f133bacc",
+      "kind": "database",
+      "public": true
+    },
+    {
+      "id": "production-readiness",
+      "path": "docs/PRODUCTION_READINESS.md",
+      "digest": "sha256:559222db322567ce914e328c78b50a8b58a65952503d4a5a19643e95b448d2d1",
+      "kind": "production-readiness",
+      "public": true
+    },
+    {
+      "id": "ui-production-validation",
+      "path": "docs/UI_PRODUCTION_VALIDATION_50_SCENARIOS.md",
+      "digest": "sha256:e851b4a5d6ba1abeca90d28a092547c0b9614976dd4856de37e69a324b2c4a8b",
+      "kind": "ui-acceptance-ledger",
+      "public": true
+    },
+    {
+      "id": "future-expansion",
+      "path": "docs/FUTURE_EXPANSION_PLAN.md",
+      "digest": "sha256:de9e8c4e8f2a0c881c784bf7529dd0b6ade24735acb93b5e2063628d293c9127",
+      "kind": "product-roadmap",
+      "public": true
+    },
+    {
+      "id": "simulation",
+      "path": "docs/SIMULATION.md",
+      "digest": "sha256:c3a0f1f6bdc9be1d3c1ee22efffe6d29ab1b14617b990531c35f991b1a83e045",
+      "kind": "simulation",
+      "public": true
+    },
+    {
+      "id": "workspace-http",
+      "path": "api/workspace_http.mbt",
+      "digest": "sha256:2032bba57e2022274f2b128f3396981321dedaf5b329c3cffc0246a7261f3e33",
+      "kind": "implementation",
+      "public": true
+    },
+    {
+      "id": "api-server",
+      "path": "api/server.mbt",
+      "digest": "sha256:42f451c406c1d0cc3a91819b654850fbda89f599117bed6e131ab53941ebeb7a",
+      "kind": "implementation",
+      "public": true
+    },
+    {
+      "id": "release-gate",
+      "path": "scripts/release-gate.sh",
+      "digest": "sha256:bdbaedd29b092fd6bc08a1631752135068902f619d2688872d9518d515da8220",
+      "kind": "acceptance-script",
+      "public": true
+    },
+    {
+      "id": "ascend-temporary-compute",
+      "path": "docs/ASCEND_310P3_TEMPORARY_COMPUTE.md",
+      "digest": "sha256:e1cba097d1620b79479d59e290f03b6bf0218f253ccadbab6c85535696ab0e38",
+      "kind": "hardware-qualification",
+      "public": true
+    },
+    {
+      "id": "lunaflux-qualification",
+      "path": "docs/LUNAFLUX_RUNTIME_QUALIFICATION.md",
+      "digest": "sha256:de88fca9c2fd749b3142da0dc1ab7e94dd50a5da88b44a04423a107c184c9a4b",
+      "kind": "runtime-qualification",
+      "public": true
+    },
+    {
+      "id": "dgx-qualification",
+      "path": "deploy/dgx-spark/README.md",
+      "digest": "sha256:1d2c2fc764f88050932b14a9486eca7f48282a304e808d7939d3e98d5a2aa7bc",
+      "kind": "runtime-qualification",
+      "public": true
+    },
     {
       "id": "exclusive-node-leases",
       "path": "docs/EXCLUSIVE_NODE_LEASES.md",
@@ -45,31 +195,1865 @@
       "digest": "sha256:a00459aeabc145ff23734acc8c989637b546682cb9ef637e075ef17a6d09f535",
       "kind": "exclusive-lease-acceptance",
       "public": true
+    },
+    {
+      "id": "portal-plan",
+      "path": "docs/PLAN.md",
+      "digest": "sha256:5e350a1c1402b8d34f15db728a5d46ae384003d9a39ee57f935b1021c482b2aa",
+      "kind": "content-review-source",
+      "public": true
+    },
+    {
+      "id": "unified-model-services",
+      "path": "docs/UNIFIED_MODEL_SERVICES.md",
+      "digest": "sha256:5931ee69528ef4a315404874feb2cbf952b27d94bd9263e69b63e5d941b35d7f",
+      "kind": "content-review-source",
+      "public": true
+    },
+    {
+      "id": "glm-startup",
+      "path": "docs/GLM_STARTUP.md",
+      "digest": "sha256:56631dc1a560294fd4afb2a37a684d7e25fc615c8357d7357ed2197d68992430",
+      "kind": "content-review-source",
+      "public": true
+    },
+    {
+      "id": "glm-cutover",
+      "path": "docs/GLM_LUNAFLUX_CUTOVER.md",
+      "digest": "sha256:a6bd0a9c4a7091c30baf4bd214fe36d551d2e7e25e65283b56382833ec39b9af",
+      "kind": "content-review-source",
+      "public": true
+    },
+    {
+      "id": "settings-authority",
+      "path": "docs/SETTINGS_AUTHORITY.md",
+      "digest": "sha256:95b2023daefc82dd98ba4ffe938d7f5c7c6c5647f45796ec4705883da1ac1fe5",
+      "kind": "content-review-source",
+      "public": true
+    },
+    {
+      "id": "public-native-video",
+      "path": "docs/deploy/comfyui-public-h3-demo.md",
+      "digest": "sha256:38e1454f55c836dc8f4b8ee1adede4acf5ce1ff1da57a137546466cf0b87a609",
+      "kind": "content-review-source",
+      "public": true
+    },
+    {
+      "id": "personal-video-workflow",
+      "path": "docs/deploy/comfyui-h3-workflow.md",
+      "digest": "sha256:4cf0b3e130b79858af033863b21aadbc5f28de8e0d74ca155dc90a624a62b044",
+      "kind": "content-review-source",
+      "public": true
+    },
+    {
+      "id": "shared-workspace-storage",
+      "path": "docs/deploy/shared-workspace-storage.md",
+      "digest": "sha256:52ab99d65057f07857b65b4a6b656d485c94d87f5fa3cf13a978882b4dd5bfde",
+      "kind": "content-review-source",
+      "public": true
+    },
+    {
+      "id": "workspace-storage-authority",
+      "path": "docs/deploy/workspace-shared-storage.md",
+      "digest": "sha256:b251588c2eab561ea5545a8c99e34624c993335b1e0e0d0452bbc3a0bc4678c4",
+      "kind": "content-review-source",
+      "public": true
+    },
+    {
+      "id": "contact-registration",
+      "path": "cmd/identity-gateway/registration.mbt",
+      "digest": "sha256:17b68dc18e01d7b5218fba97e4b7065799b6f78d17fb6e8ee96d9d1644f4eadf",
+      "kind": "content-review-source",
+      "public": true
+    },
+    {
+      "id": "contact-registration-tests",
+      "path": "cmd/identity-gateway/contact_registration_wbtest.mbt",
+      "digest": "sha256:a0e473cef275a205455ed9f43e1ce00d8cd9e35133390f93bbb3da04a6a9d8de",
+      "kind": "content-review-source",
+      "public": true
+    },
+    {
+      "id": "phone-controller-tests",
+      "path": "api/phone_registration_wbtest.mbt",
+      "digest": "sha256:9b9e09c9d99ab25fbf70e06fa5c2fa11b7e1555e889f08c59c01ce4f971075b3",
+      "kind": "content-review-source",
+      "public": true
+    },
+    {
+      "id": "shared-session-tests",
+      "path": "cmd/identity-gateway/shared_session_wbtest.mbt",
+      "digest": "sha256:56788631bd459f8c415dc424d1b4b4ef2ecde9b8980d5f009f07db3c90b9d22d",
+      "kind": "content-review-source",
+      "public": true
+    },
+    {
+      "id": "portal-applications",
+      "path": "ui/enterprise/applications.mbt",
+      "digest": "sha256:877cce7d0b2030d388979a0b2b0a3159e159e930ccdcbc64aaac8d47e31bf01a",
+      "kind": "content-review-source",
+      "public": true
+    },
+    {
+      "id": "portal-navigation",
+      "path": "ui/enterprise/enterprise.mbt",
+      "digest": "sha256:cf30eafd9c268cc5ab5b7dede3c61fabb5e0f738e898ab8c084bd5e8a6c61765",
+      "kind": "content-review-source",
+      "public": true
+    },
+    {
+      "id": "console-ui",
+      "path": "ui/console.mbt",
+      "digest": "sha256:8fe786669dfb76bc282e365036fb41e9d1c7edc83e01e9f4076c0ca62d1be95d",
+      "kind": "content-review-source",
+      "public": true
+    },
+    {
+      "id": "model-services-api",
+      "path": "api/model_services.mbt",
+      "digest": "sha256:b575926c9d52f5bd46d536b9cb2fbe99f654f9b76ace1cb88a774671be9e7996",
+      "kind": "content-review-source",
+      "public": true
+    },
+    {
+      "id": "model-service-readiness-tests",
+      "path": "api/model_service_readiness_wbtest.mbt",
+      "digest": "sha256:4c2b936c40b3710d3ac0fcd0376f06ef058d5e5c4a020bc34f1dd5179ed2e15a",
+      "kind": "content-review-source",
+      "public": true
+    },
+    {
+      "id": "artifact-materializer",
+      "path": "node/artifact_materializer.mbt",
+      "digest": "sha256:ac619649808e0dbad07bcaa9a07b918707c7dbc8f8836ac82cd138fbb3cf957b",
+      "kind": "content-review-source",
+      "public": true
+    },
+    {
+      "id": "managed-revision-tests",
+      "path": "node/managed_revision_test.mbt",
+      "digest": "sha256:d216ebc71ce15ac3f19083645a5380a7325e7cecbf7fa9bb41ca9a9492380394",
+      "kind": "content-review-source",
+      "public": true
+    },
+    {
+      "id": "cache-retention-tests",
+      "path": "node/cache_retention_test.mbt",
+      "digest": "sha256:c6f5167fb6e81c7407b2eea2917b21d2cf9a12610efaee750ffcda1d5cfd0742",
+      "kind": "content-review-source",
+      "public": true
+    },
+    {
+      "id": "content-audit",
+      "path": "docs/COURSEBOOK_CONTENT_AUDIT_20261110.md",
+      "digest": "sha256:71dc142a83d4aacec37c89780d5a24b98bd8fac2ca20e06c51994b23a33213ec",
+      "kind": "content-review-source",
+      "public": true
+    },
+    {
+      "id": "ui-action-ledger",
+      "path": "docs-site/coursebook-actions.json",
+      "digest": "sha256:a68ca535e290696fedd3699b5756dab3742de9517edad2672a0cf2a6ce0b0133",
+      "kind": "content-review-source",
+      "public": true
+    },
+    {
+      "id": "ai-foundations",
+      "path": "docs/AI_FOUNDATIONS.md",
+      "kind": "educational-curriculum",
+      "public": true,
+      "digest": "sha256:6ec3d007df1af1dc8786248af7faa43075c24a0588e6578f8570fb3668afe110"
+    },
+    {
+      "id": "lecture-authoring",
+      "path": "scripts/build-ai-lecture.mbtx",
+      "kind": "classroom-authoring",
+      "public": true,
+      "digest": "sha256:812f2e09843166159646644ff2e3500a7e982cb40d08519c31244fb6bed8df3e"
+    },
+    {
+      "id": "lecture-design",
+      "path": "docs/AI_TEACHING_DESIGN_REFERENCES_20261110.md",
+      "kind": "classroom-design",
+      "public": true,
+      "digest": "sha256:14a48c82e1b54444c929ad5ef7e347885cea38e3f7de3b7ab8f8b0d9de6a1486"
+    },
+    {
+      "id": "lecture-studio",
+      "path": "docs-site/lecture-studio.js",
+      "kind": "classroom-design",
+      "public": true,
+      "digest": "sha256:bfc1ed84dd4c2d9a12294192621d1d01bf354f2c94df673cb4348d7dd3b4ec88"
+    },
+    {
+      "id": "lecture-storyboard",
+      "path": "docs/ai-class-storyboard.json",
+      "kind": "classroom-design",
+      "public": true,
+      "digest": "sha256:cf93968df0da2136f9fe67df5215e801cd495262dbd48a53756876894ca51bc2"
+    },
+    {
+      "id": "lecture-playback",
+      "path": "docs-site/lecture.js",
+      "kind": "classroom-design",
+      "public": true,
+      "digest": "sha256:6515f8f8370b6175d89065ae9e541ba3d1809b940c8a17f168eafc3583c58be4"
+    },
+    {
+      "id": "lecture-beginner-review",
+      "path": "docs/AI_BEGINNER_WALKTHROUGH_20261111.md",
+      "kind": "classroom-design",
+      "public": true,
+      "digest": "sha256:a113d5e840755c7625bd69297794383f812eb1152eaddf69d40fd8ef953a37e9"
+    },
+    {
+      "id": "lecture-rehearsal",
+      "path": "docs/ai-class-rehearsal.json",
+      "kind": "classroom-design",
+      "public": true,
+      "digest": "sha256:12aee699f402a348acba351a4aa4ca6f21e0ad964499137079b715fc47c0b2e5"
+    },
+    {
+      "id": "whiteboard-authoring",
+      "path": "scripts/build-ai-whiteboard.mbtx",
+      "kind": "classroom-design",
+      "public": true,
+      "digest": "sha256:da3babc05a557723cfe5074c738ed1016f34ea254ea315ba01f210597102e6f5"
+    },
+    {
+      "id": "whiteboard-inspection",
+      "path": "docs/ai-whiteboard/inspection.json",
+      "kind": "classroom-design",
+      "public": true,
+      "digest": "sha256:131b5044532729265fdd28492ece1bc6baa38a2113aa2154ce655f74e6256528"
+    },
+    {
+      "id": "whiteboard-figures",
+      "path": "docs/ai-whiteboard/figures.json",
+      "kind": "classroom-design",
+      "public": true,
+      "digest": "sha256:6f0b5fdab6a0028e92ac90e8b23aa2210bc19c82f5782b270278b2571c61b9a1"
+    },
+    {
+      "id": "whiteboard-studio",
+      "path": "docs-site/whiteboard-studio.js",
+      "kind": "classroom-design",
+      "public": true,
+      "digest": "sha256:f6dfa840201c442521272ac7b195cf4da852b1cac16ab7636f1e7922ce2f69f2"
+    },
+    {
+      "id": "whiteboard-coverage",
+      "path": "docs/ai-whiteboard-coverage.json",
+      "kind": "classroom-design",
+      "public": true,
+      "digest": "sha256:9b2f4f8c1902f8d61b1b978ee5960b32405aa3be060e863ce9004f60106582a8"
+    },
+    {
+      "id": "whiteboard-1",
+      "path": "docs/ai-whiteboard/01-models-and-engineering.json",
+      "kind": "classroom-design",
+      "public": true,
+      "digest": "sha256:7a18c0b2dbd170d2dcc7d6d1499bb2a8821927d62dcaf149ebd0086d7b7c2199"
+    },
+    {
+      "id": "whiteboard-2",
+      "path": "docs/ai-whiteboard/02-agent-feedback.json",
+      "kind": "classroom-design",
+      "public": true,
+      "digest": "sha256:3df5283e7d4cc6e1ae7a41eb96101982accb9633212e267875f0c83cbb1e9d42"
+    },
+    {
+      "id": "whiteboard-3",
+      "path": "docs/ai-whiteboard/03-rules-learning-systems.json",
+      "kind": "classroom-design",
+      "public": true,
+      "digest": "sha256:1aeef8af9cfd88c67811faa169a81483f82ef819861c1c62f8392876c45201e8"
+    },
+    {
+      "id": "whiteboard-4",
+      "path": "docs/ai-whiteboard/04-training-and-evaluation.json",
+      "kind": "classroom-design",
+      "public": true,
+      "digest": "sha256:170cfdd1880c0fd693641266671a6d6b35b42026c5a7524d668a9fdfd45c4c94"
+    },
+    {
+      "id": "whiteboard-5",
+      "path": "docs/ai-whiteboard/05-scaling-and-infrastructure.json",
+      "kind": "classroom-design",
+      "public": true,
+      "digest": "sha256:9234c373b4e746510286b623662ad8ceadead84746c2e5f6ebb8d069ea3e9f5c"
+    },
+    {
+      "id": "whiteboard-6",
+      "path": "docs/ai-whiteboard/06-model-selection.json",
+      "kind": "classroom-design",
+      "public": true,
+      "digest": "sha256:8cb9cf7f8199171e53b727754e6709d0cd7b1e2859dd8741680f2c7996e30a84"
+    },
+    {
+      "id": "whiteboard-7",
+      "path": "docs/ai-whiteboard/07-agent-harness-model.json",
+      "kind": "classroom-design",
+      "public": true,
+      "digest": "sha256:1fba8bf77f84658d1d10360cc665151f221f6041a0b20c18e74c9b79c1788f5f"
+    },
+    {
+      "id": "integrated-authoring",
+      "path": "scripts/integrate-ai-course.mbtx",
+      "kind": "classroom-authoring",
+      "public": true,
+      "digest": "sha256:079fe81d1052ac6a459d5915aed3702e6925cac7e5f9be275eb43d503d7fe9c3"
+    },
+    {
+      "id": "integrated-plan",
+      "path": "docs/ai-integrated-course.json",
+      "kind": "classroom-authoring",
+      "public": true,
+      "digest": "sha256:8b036d0212568717d7e6c3f498102101d73c1f1819fc8a148121ab158ae97b1d"
+    },
+    {
+      "id": "integrated-teaching",
+      "path": "docs/ai-integrated-teaching.json",
+      "kind": "classroom-authoring",
+      "public": true,
+      "digest": "sha256:aeaa0aceee7cf19f9a0c544f85117a8814250fcb282b478958d0992a9be9055c"
+    },
+    {
+      "id": "speaker-authoring",
+      "path": "scripts/build-ai-speaker.mbtx",
+      "kind": "classroom-authoring",
+      "public": true,
+      "digest": "sha256:a03f6deb6b172f435da2b40fde7c564d7a0129e43a475abd440a19fb7fd55b3e"
+    },
+    {
+      "id": "speaker-source-1",
+      "path": "docs/ai-speaking/01-generation-context.json",
+      "kind": "classroom-authoring",
+      "public": true,
+      "digest": "sha256:80c396d3521dc4c66574c67d65a6900ce0de2aecd76597a0b2afb331ddd3a778"
+    },
+    {
+      "id": "speaker-source-2",
+      "path": "docs/ai-speaking/02-agents-learning.json",
+      "kind": "classroom-authoring",
+      "public": true,
+      "digest": "sha256:eb00f33a0cf7d0411fb4ac17bca521d236efcc238dc418bd9f9cee02d1304404"
+    },
+    {
+      "id": "speaker-source-3",
+      "path": "docs/ai-speaking/03-training-infrastructure.json",
+      "kind": "classroom-authoring",
+      "public": true,
+      "digest": "sha256:3871d6a58d3cf64bd8eb380b3e375e4d18960828fa904be264bb88d89a395199"
+    },
+    {
+      "id": "speaker-source-4",
+      "path": "docs/ai-speaking/04-selection-work.json",
+      "kind": "classroom-authoring",
+      "public": true,
+      "digest": "sha256:d57967593c99577c894c136c60564e2c1e7d8109b34d9c8f4fc9fdf6c6e1ac7b"
+    },
+    {
+      "id": "speaker-audit",
+      "path": "docs/ai-speaking-audit.json",
+      "kind": "classroom-authoring",
+      "public": true,
+      "digest": "sha256:f07b34e5bcacb13b83d299782bf1e8e653722b2f8852e68fc6c41238aafba7f2"
+    },
+    {
+      "id": "speaker-print-layout",
+      "path": "docs-site/speaker-script.css",
+      "kind": "classroom-authoring",
+      "public": true,
+      "digest": "sha256:f65328f463de493dee1ee2f554f927b14e73200234d896f70440d4f4f385c027"
+    },
+    {
+      "id": "speaker-print-action",
+      "path": "docs-site/speaker-script.js",
+      "kind": "classroom-authoring",
+      "public": true,
+      "digest": "sha256:f399d9ca14af91406e2719bb5610d818c9d05215e95864c7899b3e390e7ee4ea"
     }
   ],
   "claims": [
-    {"id":"claim-provider-neutral-plane","statement":"能源谷“创未来”生态街区 is a provider-neutral model and GPU-cluster control plane, not a MoonSuite application or agent runtime.","status":"implemented","source_ids":["product-contract","architecture"],"limitations":[]},
-    {"id":"claim-managed-node-boundary","statement":"Managed GPU nodes receive the 能源谷“创未来”生态街区 node agent, approved runtime containers, signed model artifacts, and bounded telemetry—not application repositories or product credentials.","status":"implemented","source_ids":["product-contract","security"],"limitations":["Live image and runtime-environment scans remain part of physical-cluster acceptance."]},
-    {"id":"claim-control-baseline","statement":"The repository implements controller, scheduling, enrollment, registry, workspace authority, deployment operations, Rabbita sites, client transport, and recovery evidence baselines.","status":"implemented","source_ids":["implementation-status"],"limitations":["Implementation is not equivalent to real four-node production acceptance."]},
-    {"id":"claim-four-node-production","statement":"The four physical DGX Spark fleet has passed complete production acceptance.","status":"planned","source_ids":["implementation-status","production-readiness"],"limitations":["Physical enrollment, real serving, measured performance, live security scans, and named human acceptance are still required."]},
-    {"id":"claim-simulation","statement":"The local four-node simulator exercises placement, routing, drain, queueing, restart, and leak-check behavior.","status":"simulated","source_ids":["simulation","implementation-status"],"limitations":["It does not validate NVIDIA hardware, thermal behavior, network topology, container runtime, or service objectives."]},
-    {"id":"claim-postgres","statement":"PostgreSQL is the production system of record for management authority, including control, registry, enrollment, scheduler, telemetry and deployment snapshots; one elected controller serves while standby processes wait.","status":"implemented","source_ids":["database","architecture"],"limitations":["The reference PostgreSQL StatefulSet is development-only and single-instance. Production requires an external HA database; configuration and leadership fencing do not prove deployed replication, failover, backup recovery or zero interruption."]},
-    {"id":"claim-workbench","statement":"The workbench and VS Code extension invoke generic model workloads under scoped workspace authority without granting a DGX shell.","status":"implemented","source_ids":["workspaces","client-integration"],"limitations":["Third-party editor handoffs are typed integration points, not bundled vendor runtimes."]},
-    {"id":"claim-one-click","statement":"A signed catalog template can produce a deterministic plan and durable model-service operation without bypassing preflight policy.","status":"implemented","source_ids":["management-plane","implementation-status"],"limitations":["Real runtime images, model artifacts, routes, and capacity must be qualified on the physical cluster."]},
-    {"id":"claim-vllm-sglang","statement":"The repository contains secret-free single-node DGX Spark qualification manifests for vLLM and SGLang.","status":"documented","source_ids":["dgx-qualification","deployment"],"limitations":["They require real ARM64 image digests, a verified model directory, NVIDIA runtime support, and a production packaging adapter before promotion."]},
-    {"id":"claim-notifications-observability","statement":"The repository implements durable tenant notifications, actionable operator alerts, bounded structured operational events, low-cardinality metrics and receipt-based audit correlation.","status":"implemented","source_ids":["operations-commerce-guide","operations"],"limitations":["External email, SMS, webhook, metrics, log and paging destinations remain deployment-owned integrations."]},
-    {"id":"claim-offline-commerce","statement":"The repository implements a generation-fenced hybrid online/offline order, document, evidence-review and fulfillment workflow with MoonLeaf OOXML verification and renderer-bound release evidence.","status":"implemented","source_ids":["operations-commerce-guide","deployment"],"limitations":["Legal templates, object storage, malware scanning, rendering authority, payment, invoice, seal and retention procedures require named external owners before production use."]},
-    {"id":"claim-machine-access","statement":"The enterprise portal exposes a tenant-safe exclusive-machine lifecycle with opaque credential handoff, coarse reachability, automatic expiry and explicit early termination without exposing physical topology or raw credentials.","status":"implemented","source_ids":["operations-commerce-guide","security"],"limitations":["Production IdP, trusted ingress, SSH certificate authority or broker, node-local watchdog and sanitization rehearsal remain required."]},
-    {"id":"claim-platform-identity","statement":"The repository includes a 能源谷“创未来”生态街区-operated Keycloak public identity profile with open registration, verified email, TOTP, exact PKCE clients, digest-pinned images and restricted ingress.","status":"implemented","source_ids":["platform-identity","deployment","release-gate"],"limitations":["Real DNS, TLS, SMTP, PostgreSQL failover, identity-gateway image and browser smoke acceptance remain deployment evidence."]},
-    {"id":"claim-guide-admin-diagnostics","statement":"The separate coursebook implements a role-protected, read-only administrator diagnostics projection with a versioned skill inventory, bounded live aggregates, stale-index detection, bilingual runbook links and redacted audit evidence.","status":"implemented","source_ids":["operations-commerce-guide","operations"],"limitations":["Production activation requires the approved identity proxy, matching HMAC secret, internal HTTPS diagnostics gateway and secret-backed controller authority."]},
-    {"id":"claim-two-offering-roadmap","statement":"The next major-version roadmap separates managed inference from dedicated GPU workspace access and assigns each an independent evidence-based launch gate.","status":"planned","source_ids":["future-expansion","product-contract","production-readiness"],"limitations":["Neither offering is production-ready until its physical and external acceptance gates pass."]}
+    {
+      "id": "claim-provider-neutral-plane",
+      "statement": "能源谷“创未来”生态街区 is a provider-neutral model and GPU-cluster control plane, not a MoonSuite application or agent runtime.",
+      "status": "implemented",
+      "source_ids": [
+        "product-contract",
+        "architecture"
+      ],
+      "limitations": []
+    },
+    {
+      "id": "claim-managed-node-boundary",
+      "statement": "Managed GPU nodes receive the 能源谷“创未来”生态街区 node agent, approved runtime containers, signed model artifacts, and bounded telemetry—not application repositories or product credentials.",
+      "status": "implemented",
+      "source_ids": [
+        "product-contract",
+        "security"
+      ],
+      "limitations": [
+        "Live image and runtime-environment scans remain part of physical-cluster acceptance."
+      ]
+    },
+    {
+      "id": "claim-control-baseline",
+      "statement": "The repository implements controller, scheduling, enrollment, registry, workspace authority, deployment operations, Rabbita sites, client transport, and recovery evidence baselines.",
+      "status": "implemented",
+      "source_ids": [
+        "implementation-status",
+        "unified-model-services",
+        "portal-plan"
+      ],
+      "limitations": [
+        "Implementation is not equivalent to real four-node production acceptance."
+      ]
+    },
+    {
+      "id": "claim-four-node-production",
+      "statement": "The four physical DGX Spark fleet has passed complete production acceptance.",
+      "status": "unknown",
+      "source_ids": [
+        "unified-model-services",
+        "glm-startup",
+        "content-audit"
+      ],
+      "limitations": [
+        "Physical deployment, adoption and bounded serving evidence exist. Complete HA, sustained performance, destructive reclaim and named offering launch acceptance are not established by this content review."
+      ]
+    },
+    {
+      "id": "claim-simulation",
+      "statement": "The local four-node simulator exercises placement, routing, drain, queueing, restart, and leak-check behavior.",
+      "status": "simulated",
+      "source_ids": [
+        "simulation",
+        "implementation-status"
+      ],
+      "limitations": [
+        "It does not validate NVIDIA hardware, thermal behavior, network topology, container runtime, or service objectives."
+      ]
+    },
+    {
+      "id": "claim-postgres",
+      "statement": "PostgreSQL is the production system of record for management authority, including control, registry, enrollment, scheduler, telemetry and deployment snapshots; one elected controller serves while standby processes wait.",
+      "status": "implemented",
+      "source_ids": [
+        "database",
+        "architecture"
+      ],
+      "limitations": [
+        "The reference PostgreSQL StatefulSet is development-only and single-instance. Production requires an external HA database; configuration and leadership fencing do not prove deployed replication, failover, backup recovery or zero interruption."
+      ]
+    },
+    {
+      "id": "claim-workbench",
+      "statement": "The workbench and VS Code extension invoke generic model workloads under scoped workspace authority without granting a DGX shell.",
+      "status": "implemented",
+      "source_ids": [
+        "workspaces",
+        "client-integration"
+      ],
+      "limitations": [
+        "Third-party editor handoffs are typed integration points, not bundled vendor runtimes."
+      ]
+    },
+    {
+      "id": "claim-one-click",
+      "statement": "A signed catalog template can produce a deterministic plan and durable model-service operation without bypassing preflight policy.",
+      "status": "implemented",
+      "source_ids": [
+        "management-plane",
+        "implementation-status"
+      ],
+      "limitations": [
+        "Real runtime images, model artifacts, routes, and capacity must be qualified on the physical cluster."
+      ]
+    },
+    {
+      "id": "claim-vllm-sglang",
+      "statement": "The repository contains secret-free single-node DGX Spark qualification manifests for vLLM and SGLang.",
+      "status": "documented",
+      "source_ids": [
+        "dgx-qualification",
+        "artifact-materializer",
+        "managed-revision-tests"
+      ],
+      "limitations": [
+        "Standalone templates require exact qualified images and model mounts. Multi-file managed-revision support is implemented; it does not qualify every runtime/model or arbitrary archive extraction."
+      ]
+    },
+    {
+      "id": "claim-notifications-observability",
+      "statement": "The repository implements durable tenant notifications, actionable operator alerts, bounded structured operational events, low-cardinality metrics and receipt-based audit correlation.",
+      "status": "implemented",
+      "source_ids": [
+        "operations-commerce-guide",
+        "operations"
+      ],
+      "limitations": [
+        "External email, SMS, webhook, metrics, log and paging destinations remain deployment-owned integrations."
+      ]
+    },
+    {
+      "id": "claim-offline-commerce",
+      "statement": "The repository implements a generation-fenced hybrid online/offline order, document, evidence-review and fulfillment workflow with MoonLeaf OOXML verification and renderer-bound release evidence.",
+      "status": "implemented",
+      "source_ids": [
+        "operations-commerce-guide",
+        "deployment"
+      ],
+      "limitations": [
+        "Legal templates, object storage, malware scanning, rendering authority, payment, invoice, seal and retention procedures require named external owners before production use."
+      ]
+    },
+    {
+      "id": "claim-machine-access",
+      "statement": "The enterprise portal exposes a tenant-safe exclusive-machine lifecycle with opaque credential handoff, coarse reachability, automatic expiry and explicit early termination without exposing physical topology or raw credentials.",
+      "status": "implemented",
+      "source_ids": [
+        "operations-commerce-guide",
+        "security"
+      ],
+      "limitations": [
+        "Production IdP, trusted ingress, SSH certificate authority or broker, node-local watchdog and sanitization rehearsal remain required."
+      ]
+    },
+    {
+      "id": "claim-platform-identity",
+      "statement": "The repository includes a stricter OIDC/email-verification/TOTP reference profile and a deployed provider-owned email-or-phone contact-registration flow. The two profiles must not be conflated.",
+      "status": "implemented",
+      "source_ids": [
+        "platform-identity",
+        "contact-registration",
+        "contact-registration-tests",
+        "shared-session-tests"
+      ],
+      "limitations": [
+        "Contact registration is not proof of email or SMS ownership. Verification, MFA, recovery and HA require profile-specific acceptance; passwords remain with the identity provider."
+      ]
+    },
+    {
+      "id": "claim-guide-admin-diagnostics",
+      "statement": "The separate coursebook implements a role-protected, read-only administrator diagnostics projection with a versioned skill inventory, bounded live aggregates, stale-index detection, bilingual runbook links and redacted audit evidence.",
+      "status": "implemented",
+      "source_ids": [
+        "operations-commerce-guide",
+        "operations"
+      ],
+      "limitations": [
+        "Production activation requires the approved identity proxy, matching HMAC secret, internal HTTPS diagnostics gateway and secret-backed controller authority."
+      ]
+    },
+    {
+      "id": "claim-two-offering-roadmap",
+      "statement": "The dated expansion plan separates managed inference and dedicated workspace offering gates; later implementation and retained deployment evidence supersede its August current-status inventory.",
+      "status": "planned",
+      "source_ids": [
+        "future-expansion",
+        "unified-model-services",
+        "content-audit"
+      ],
+      "limitations": [
+        "Neither offering is production-ready until its physical and external acceptance gates pass."
+      ]
+    },
+    {
+      "id": "claim-ai-education",
+      "statement": "The integrated AI course has 24 bilingual chapters and 46 animated content scenes. All 186 identifiable board entries form 47 primary sections inside normal chapters, mapped to the main presentation. Primary teaching occupies 78 of 105 content minutes; the full route is 120 minutes including a break and questions.",
+      "status": "documented",
+      "source_ids": [
+        "ai-foundations",
+        "integrated-authoring",
+        "integrated-plan",
+        "whiteboard-coverage",
+        "product-contract",
+        "architecture"
+      ],
+      "limitations": [
+        "The classroom rewrite has not been delivered in a live audience trial."
+      ]
+    }
   ],
   "open_gaps": [
-    "Source digests identify the current working-tree bytes, not a fresh comprehensive audit of every historical coursebook claim. The 2026-09-22 OFL undertaking template now has real renderer, dispatcher, object delivery and customer-download evidence under docs/evidence/. The isolated technical-acceptance waiver is not evidence of real customer signing, payment, invoicing or finance approval. Broader production acceptance remains separate.",
-    "No physical DGX Spark node has been exercised by this documentation generation run.",
-    "The vLLM/SGLang qualification path uses a separate multi-file model directory; production assignment-bound extraction/packaging still needs review.",
-    "Production CA/mTLS, identity-gateway image, platform-identity DNS/TLS/SMTP/PostgreSQL, OCI registry, metrics, secret provider, model license, and named human acceptors remain external deployment inputs.",
-    "The optional documentation pet is implemented and locally testable, but a live MoonClaw model route is not claimed until configured and exercised.",
-    "Administrator guide diagnostics are implemented and locally contract-tested, but remain disabled until a trusted identity proxy and internal HTTPS diagnostics gateway are configured."
-  ]
+    "This review covers all coursebook pages and both locales at the recorded dirty snapshot. It combines source inspection, current non-secret settings and website checks with explicitly dated retained deployment evidence. It is not exhaustive equivalence with every production behavior.",
+    "No model was started, no new video or inference job submitted, no grant issued, no payment/signature executed and no machine sanitized by this content review. Dated bounded runtime evidence does not establish current availability or a customer SLA.",
+    "Complete HA/failover, measured backup restoration, sustained load/thermal performance, destructive reclaim and named operations/security/license/customer acceptance still require independent retained evidence.",
+    "Historical offline-document and technical-waiver evidence applies only to its exact approved scope. Current signed readiness and legal/finance/provider inputs must be requalified before commercial activation; timestamps are not renewed by documentation edits.",
+    "The multi-file managed-revision path is implemented and tested; arbitrary archive packaging and each exact runtime/model mount still require qualification. Shared-storage scratch tests do not migrate all existing PVCs or prove HA.",
+    "The two disconnected product screenshots are historical access-boundary illustrations. Current authenticated customer/member workflows, external delivery and optional guide success remain separate acceptance.",
+    "The introductory lessons were rewritten following explicit user feedback to remove hardening, checklists and repeated practice/revisit templates. No live teaching trial has been performed."
+  ],
+  "content_review": {
+    "reviewed_at": "2026-11-16T11:39:32Z",
+    "report_source_id": "content-audit",
+    "pages": [
+      {
+        "page_id": "ai-start",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "ai-foundations",
+          "lecture-authoring",
+          "lecture-studio",
+          "lecture-storyboard",
+          "lecture-playback",
+          "integrated-authoring",
+          "integrated-plan",
+          "integrated-teaching",
+          "whiteboard-authoring",
+          "whiteboard-inspection",
+          "whiteboard-figures",
+          "whiteboard-studio",
+          "whiteboard-coverage",
+          "whiteboard-1"
+        ],
+        "classification": "educational-concept"
+      },
+      {
+        "page_id": "ai-tokens",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "ai-foundations",
+          "lecture-authoring",
+          "lecture-studio",
+          "lecture-storyboard",
+          "lecture-playback",
+          "integrated-authoring",
+          "integrated-plan",
+          "integrated-teaching",
+          "whiteboard-authoring",
+          "whiteboard-inspection",
+          "whiteboard-figures",
+          "whiteboard-studio",
+          "whiteboard-coverage"
+        ],
+        "classification": "educational-concept"
+      },
+      {
+        "page_id": "ai-next-token",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "ai-foundations",
+          "lecture-authoring",
+          "lecture-studio",
+          "lecture-storyboard",
+          "lecture-playback",
+          "integrated-authoring",
+          "integrated-plan",
+          "integrated-teaching",
+          "whiteboard-authoring",
+          "whiteboard-inspection",
+          "whiteboard-figures",
+          "whiteboard-studio",
+          "whiteboard-coverage",
+          "whiteboard-1"
+        ],
+        "classification": "educational-concept"
+      },
+      {
+        "page_id": "ai-work-creation",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "ai-foundations",
+          "lecture-authoring",
+          "lecture-studio",
+          "lecture-storyboard",
+          "lecture-playback",
+          "integrated-authoring",
+          "integrated-plan",
+          "integrated-teaching",
+          "whiteboard-authoring",
+          "whiteboard-inspection",
+          "whiteboard-figures",
+          "whiteboard-studio",
+          "whiteboard-coverage",
+          "whiteboard-1"
+        ],
+        "classification": "educational-concept"
+      },
+      {
+        "page_id": "ai-prompts",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "ai-foundations",
+          "lecture-authoring",
+          "lecture-studio",
+          "lecture-storyboard",
+          "lecture-playback",
+          "integrated-authoring",
+          "integrated-plan",
+          "integrated-teaching",
+          "whiteboard-authoring",
+          "whiteboard-inspection",
+          "whiteboard-figures",
+          "whiteboard-studio",
+          "whiteboard-coverage",
+          "whiteboard-1"
+        ],
+        "classification": "educational-concept"
+      },
+      {
+        "page_id": "ai-context",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "ai-foundations",
+          "lecture-authoring",
+          "lecture-studio",
+          "lecture-storyboard",
+          "lecture-playback",
+          "integrated-authoring",
+          "integrated-plan",
+          "integrated-teaching",
+          "whiteboard-authoring",
+          "whiteboard-inspection",
+          "whiteboard-figures",
+          "whiteboard-studio",
+          "whiteboard-coverage",
+          "whiteboard-1"
+        ],
+        "classification": "educational-concept"
+      },
+      {
+        "page_id": "ai-harness",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "ai-foundations",
+          "lecture-authoring",
+          "lecture-studio",
+          "lecture-storyboard",
+          "lecture-playback",
+          "integrated-authoring",
+          "integrated-plan",
+          "integrated-teaching",
+          "whiteboard-authoring",
+          "whiteboard-inspection",
+          "whiteboard-figures",
+          "whiteboard-studio",
+          "whiteboard-coverage",
+          "whiteboard-2",
+          "whiteboard-1"
+        ],
+        "classification": "educational-concept"
+      },
+      {
+        "page_id": "ai-loops-rsi",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "ai-foundations",
+          "lecture-authoring",
+          "lecture-studio",
+          "lecture-storyboard",
+          "lecture-playback",
+          "integrated-authoring",
+          "integrated-plan",
+          "integrated-teaching",
+          "whiteboard-authoring",
+          "whiteboard-inspection",
+          "whiteboard-figures",
+          "whiteboard-studio",
+          "whiteboard-coverage",
+          "whiteboard-2",
+          "whiteboard-3"
+        ],
+        "classification": "educational-concept"
+      },
+      {
+        "page_id": "ai-rules-learning",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "ai-foundations",
+          "lecture-authoring",
+          "lecture-studio",
+          "lecture-storyboard",
+          "lecture-playback",
+          "integrated-authoring",
+          "integrated-plan",
+          "integrated-teaching",
+          "whiteboard-authoring",
+          "whiteboard-inspection",
+          "whiteboard-figures",
+          "whiteboard-studio",
+          "whiteboard-coverage",
+          "whiteboard-3"
+        ],
+        "classification": "educational-concept"
+      },
+      {
+        "page_id": "ai-multi-agent",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "ai-foundations",
+          "lecture-authoring",
+          "lecture-studio",
+          "lecture-storyboard",
+          "lecture-playback",
+          "integrated-authoring",
+          "integrated-plan",
+          "integrated-teaching",
+          "whiteboard-authoring",
+          "whiteboard-inspection",
+          "whiteboard-figures",
+          "whiteboard-studio",
+          "whiteboard-coverage",
+          "whiteboard-3"
+        ],
+        "classification": "educational-concept"
+      },
+      {
+        "page_id": "ai-training-inference",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "ai-foundations",
+          "lecture-authoring",
+          "lecture-studio",
+          "lecture-storyboard",
+          "lecture-playback",
+          "integrated-authoring",
+          "integrated-plan",
+          "integrated-teaching",
+          "whiteboard-authoring",
+          "whiteboard-inspection",
+          "whiteboard-figures",
+          "whiteboard-studio",
+          "whiteboard-coverage",
+          "whiteboard-4"
+        ],
+        "classification": "educational-concept"
+      },
+      {
+        "page_id": "ai-feedback-learning",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "ai-foundations",
+          "lecture-authoring",
+          "lecture-studio",
+          "lecture-storyboard",
+          "lecture-playback",
+          "integrated-authoring",
+          "integrated-plan",
+          "integrated-teaching",
+          "whiteboard-authoring",
+          "whiteboard-inspection",
+          "whiteboard-figures",
+          "whiteboard-studio",
+          "whiteboard-coverage",
+          "whiteboard-4",
+          "whiteboard-2"
+        ],
+        "classification": "educational-concept"
+      },
+      {
+        "page_id": "ai-model-scaling",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "ai-foundations",
+          "lecture-authoring",
+          "lecture-studio",
+          "lecture-storyboard",
+          "lecture-playback",
+          "integrated-authoring",
+          "integrated-plan",
+          "integrated-teaching",
+          "whiteboard-authoring",
+          "whiteboard-inspection",
+          "whiteboard-figures",
+          "whiteboard-studio",
+          "whiteboard-coverage",
+          "whiteboard-5"
+        ],
+        "classification": "educational-concept"
+      },
+      {
+        "page_id": "ai-chips",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "ai-foundations",
+          "lecture-authoring",
+          "lecture-studio",
+          "lecture-storyboard",
+          "lecture-playback",
+          "integrated-authoring",
+          "integrated-plan",
+          "integrated-teaching",
+          "whiteboard-authoring",
+          "whiteboard-inspection",
+          "whiteboard-figures",
+          "whiteboard-studio",
+          "whiteboard-coverage",
+          "whiteboard-5",
+          "whiteboard-6"
+        ],
+        "classification": "educational-concept"
+      },
+      {
+        "page_id": "ai-clusters-engines",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "ai-foundations",
+          "lecture-authoring",
+          "lecture-studio",
+          "lecture-storyboard",
+          "lecture-playback",
+          "integrated-authoring",
+          "integrated-plan",
+          "integrated-teaching",
+          "whiteboard-authoring",
+          "whiteboard-inspection",
+          "whiteboard-figures",
+          "whiteboard-studio",
+          "whiteboard-coverage",
+          "whiteboard-5"
+        ],
+        "classification": "educational-concept"
+      },
+      {
+        "page_id": "ai-metrics",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "ai-foundations",
+          "lecture-authoring",
+          "lecture-studio",
+          "lecture-storyboard",
+          "lecture-playback",
+          "integrated-authoring",
+          "integrated-plan",
+          "integrated-teaching",
+          "whiteboard-authoring",
+          "whiteboard-inspection",
+          "whiteboard-figures",
+          "whiteboard-studio",
+          "whiteboard-coverage"
+        ],
+        "classification": "educational-concept"
+      },
+      {
+        "page_id": "ai-token-factory",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "ai-foundations",
+          "lecture-authoring",
+          "lecture-studio",
+          "lecture-storyboard",
+          "lecture-playback",
+          "integrated-authoring",
+          "integrated-plan",
+          "integrated-teaching",
+          "whiteboard-authoring",
+          "whiteboard-inspection",
+          "whiteboard-figures",
+          "whiteboard-studio",
+          "whiteboard-coverage"
+        ],
+        "classification": "educational-concept"
+      },
+      {
+        "page_id": "ai-model-selection",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "ai-foundations",
+          "lecture-authoring",
+          "lecture-studio",
+          "lecture-storyboard",
+          "lecture-playback",
+          "integrated-authoring",
+          "integrated-plan",
+          "integrated-teaching",
+          "whiteboard-authoring",
+          "whiteboard-inspection",
+          "whiteboard-figures",
+          "whiteboard-studio",
+          "whiteboard-coverage",
+          "whiteboard-6"
+        ],
+        "classification": "educational-concept"
+      },
+      {
+        "page_id": "ai-agent-systems",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "ai-foundations",
+          "lecture-authoring",
+          "lecture-studio",
+          "lecture-storyboard",
+          "lecture-playback",
+          "integrated-authoring",
+          "integrated-plan",
+          "integrated-teaching",
+          "whiteboard-authoring",
+          "whiteboard-inspection",
+          "whiteboard-figures",
+          "whiteboard-studio",
+          "whiteboard-coverage",
+          "whiteboard-7"
+        ],
+        "classification": "educational-concept"
+      },
+      {
+        "page_id": "ai-work-coding",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "ai-foundations",
+          "lecture-authoring",
+          "lecture-studio",
+          "lecture-storyboard",
+          "lecture-playback",
+          "integrated-authoring",
+          "integrated-plan",
+          "integrated-teaching",
+          "whiteboard-authoring",
+          "whiteboard-inspection",
+          "whiteboard-figures",
+          "whiteboard-studio",
+          "whiteboard-coverage"
+        ],
+        "classification": "educational-concept"
+      },
+      {
+        "page_id": "ai-work-science",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "ai-foundations",
+          "lecture-authoring",
+          "lecture-studio",
+          "lecture-storyboard",
+          "lecture-playback",
+          "integrated-authoring",
+          "integrated-plan",
+          "integrated-teaching",
+          "whiteboard-authoring",
+          "whiteboard-inspection",
+          "whiteboard-figures",
+          "whiteboard-studio",
+          "whiteboard-coverage"
+        ],
+        "classification": "educational-concept"
+      },
+      {
+        "page_id": "ai-work-business",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "ai-foundations",
+          "lecture-authoring",
+          "lecture-studio",
+          "lecture-storyboard",
+          "lecture-playback",
+          "integrated-authoring",
+          "integrated-plan",
+          "integrated-teaching",
+          "whiteboard-authoring",
+          "whiteboard-inspection",
+          "whiteboard-figures",
+          "whiteboard-studio",
+          "whiteboard-coverage",
+          "whiteboard-7"
+        ],
+        "classification": "educational-concept"
+      },
+      {
+        "page_id": "ai-industry",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "ai-foundations",
+          "lecture-authoring",
+          "lecture-studio",
+          "lecture-storyboard",
+          "lecture-playback",
+          "integrated-authoring",
+          "integrated-plan",
+          "integrated-teaching",
+          "whiteboard-authoring",
+          "whiteboard-inspection",
+          "whiteboard-figures",
+          "whiteboard-studio",
+          "whiteboard-coverage",
+          "whiteboard-5"
+        ],
+        "classification": "educational-concept"
+      },
+      {
+        "page_id": "ai-platform-place",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "ai-foundations",
+          "lecture-authoring",
+          "lecture-studio",
+          "lecture-storyboard",
+          "lecture-playback",
+          "integrated-authoring",
+          "integrated-plan",
+          "integrated-teaching",
+          "whiteboard-authoring",
+          "whiteboard-inspection",
+          "whiteboard-figures",
+          "whiteboard-studio",
+          "whiteboard-coverage",
+          "whiteboard-5",
+          "product-contract",
+          "architecture"
+        ],
+        "classification": "educational-concept"
+      },
+      {
+        "page_id": "ai-course-map",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "ai-foundations",
+          "integrated-authoring",
+          "integrated-plan",
+          "lecture-playback"
+        ],
+        "classification": "educational-concept"
+      },
+      {
+        "page_id": "trial-quickstart",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "product-contract",
+          "platform-identity",
+          "workspaces",
+          "contact-registration",
+          "contact-registration-tests"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "enterprise-portal-day-one",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "product-contract",
+          "workspaces",
+          "operations-commerce-guide",
+          "portal-plan",
+          "portal-applications",
+          "shared-session-tests"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "exclusive-machine-basics",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "product-contract",
+          "operations-commerce-guide",
+          "security"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "comfyui-quickstart",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "product-contract",
+          "workspaces",
+          "security",
+          "personal-video-workflow",
+          "public-native-video",
+          "portal-applications"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "welcome",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "readme",
+          "product-contract",
+          "implementation-status",
+          "unified-model-services",
+          "public-native-video"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "readiness",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "implementation-status",
+          "production-readiness",
+          "simulation",
+          "release-gate",
+          "unified-model-services",
+          "glm-startup",
+          "portal-plan",
+          "public-native-video",
+          "content-audit"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "boundaries",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "product-contract",
+          "architecture",
+          "security",
+          "workspaces"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "feature-map",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "product-contract",
+          "implementation-status",
+          "management-plane",
+          "workspaces",
+          "unified-model-services",
+          "portal-applications"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "architecture",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "architecture",
+          "product-contract",
+          "unified-model-services",
+          "glm-startup"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "state-ownership",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "architecture",
+          "database",
+          "operations",
+          "recovery",
+          "unified-model-services",
+          "shared-workspace-storage"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "request-flow",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "product-contract",
+          "architecture",
+          "client-integration",
+          "workspace-http",
+          "api-server"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "deployment-flow",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "management-plane",
+          "product-contract",
+          "implementation-status",
+          "deployment",
+          "unified-model-services",
+          "model-services-api",
+          "artifact-materializer",
+          "managed-revision-tests",
+          "cache-retention-tests"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "enrollment-flow",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "deployment",
+          "operations",
+          "product-contract"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "access-flow",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "workspaces",
+          "product-contract",
+          "implementation-status",
+          "security",
+          "platform-identity",
+          "contact-registration",
+          "shared-session-tests",
+          "public-native-video"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "local-quickstart",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "readme",
+          "simulation",
+          "operations",
+          "release-gate"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "operator-console",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "implementation-status",
+          "product-contract",
+          "operations",
+          "workspaces",
+          "management-plane",
+          "unified-model-services",
+          "portal-plan"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "developer-workbench",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "workspaces",
+          "implementation-status",
+          "client-integration",
+          "portal-plan"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "client-api",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "glm-api",
+          "client-integration",
+          "product-contract",
+          "workspaces",
+          "glm-startup",
+          "glm-cutover",
+          "settings-authority"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "tomorrow-deployment",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "deployment",
+          "ascend-temporary-compute",
+          "operations",
+          "database",
+          "security",
+          "glm-startup",
+          "portal-plan"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "dgx-runtimes",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "dgx-qualification",
+          "lunaflux-qualification",
+          "deployment",
+          "implementation-status",
+          "glm-cutover",
+          "glm-startup",
+          "unified-model-services",
+          "artifact-materializer",
+          "managed-revision-tests",
+          "cache-retention-tests"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "daily-operations",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "operations-commerce-guide",
+          "operations",
+          "security"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "ui-end-to-end-sop",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "operations",
+          "deployment",
+          "workspaces",
+          "operations-commerce-guide"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "production-ui-validation",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "ui-production-validation",
+          "production-readiness",
+          "operations",
+          "deployment"
+        ],
+        "classification": "dated-historical-evidence"
+      },
+      {
+        "page_id": "observability-recovery",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "operations",
+          "recovery",
+          "database",
+          "implementation-status"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "debug-controller",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "operations",
+          "recovery",
+          "security",
+          "api-server",
+          "deployment",
+          "operations-commerce-guide"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "debug-node-runtime",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "operations",
+          "security",
+          "deployment",
+          "implementation-status",
+          "dgx-qualification",
+          "unified-model-services",
+          "model-service-readiness-tests"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "debug-access-database",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "workspaces",
+          "workspace-http",
+          "database",
+          "operations",
+          "product-contract",
+          "shared-session-tests",
+          "portal-plan"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "configuration",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "operations",
+          "database",
+          "deployment",
+          "settings-authority"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "error-reference",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "client-integration",
+          "workspace-http",
+          "api-server",
+          "management-plane",
+          "unified-model-services",
+          "settings-authority",
+          "contact-registration"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "future-expansion",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "future-expansion",
+          "product-contract",
+          "architecture",
+          "implementation-status",
+          "production-readiness",
+          "unified-model-services",
+          "glm-startup",
+          "content-audit"
+        ],
+        "classification": "dated-historical-evidence"
+      },
+      {
+        "page_id": "source-ledger",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "readme",
+          "product-contract",
+          "architecture",
+          "implementation-status",
+          "deployment",
+          "operations",
+          "recovery",
+          "security",
+          "management-plane",
+          "workspaces",
+          "client-integration",
+          "database",
+          "production-readiness",
+          "simulation",
+          "content-audit"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "choose-your-path",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "product-contract",
+          "workspaces",
+          "portal-plan",
+          "unified-model-services",
+          "public-native-video"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "comfyui-first-image",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "product-contract",
+          "personal-video-workflow",
+          "public-native-video"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "comfyui-next-steps",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "product-contract",
+          "personal-video-workflow",
+          "public-native-video",
+          "exclusive-node-leases",
+          "security"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "planned-interactive-access",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "product-contract",
+          "security",
+          "exclusive-node-leases",
+          "workspaces"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "planned-app-catalog",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "product-contract",
+          "portal-plan",
+          "portal-applications",
+          "workspaces"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "planned-workload-exposure",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "product-contract",
+          "security",
+          "deployment",
+          "public-native-video",
+          "unified-model-services"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "planned-elastic-batch",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "future-expansion",
+          "product-contract",
+          "implementation-status",
+          "settings-authority"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "planned-storage-registry",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "product-contract",
+          "deployment",
+          "shared-workspace-storage",
+          "workspace-storage-authority",
+          "personal-video-workflow",
+          "artifact-materializer",
+          "cache-retention-tests"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "planned-commerce-identity",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "product-contract",
+          "operations-commerce-guide",
+          "platform-identity",
+          "contact-registration",
+          "portal-plan"
+        ],
+        "classification": "current-source-review"
+      },
+      {
+        "page_id": "planned-chat-playground",
+        "locales": [
+          "en",
+          "zh-CN"
+        ],
+        "source_ids": [
+          "future-expansion",
+          "workspaces",
+          "client-integration"
+        ],
+        "classification": "current-source-review"
+      }
+    ],
+    "recipe_check": {
+      "shell_blocks": 15,
+      "syntax": "passed-bash-n",
+      "execution": "not-performed-by-syntax-check",
+      "prerequisites": "See the audit report recipe execution boundary."
+    },
+    "curriculum_source_id": "ai-foundations",
+    "scope": "The original content-audit report records the 41 platform pages. AI_FOUNDATIONS records the 19-page educational expansion; the combined roster below covers 60 bilingual pages.",
+    "lecture": {
+      "source_id": "integrated-authoring",
+      "minutes": 120,
+      "content_slides": 46,
+      "break_minutes": 10,
+      "questions_minutes": 5,
+      "curriculum": {
+        "primary_sections": 47,
+        "source_points": 186,
+        "primary_minutes": 78,
+        "support_minutes": 27,
+        "content_slides": 46
+      },
+      "audience_trial": "not-performed"
+    },
+    "speaking_script": {
+      "source_id": "speaker-authoring",
+      "pages": 48,
+      "language": "zh-CN",
+      "content_pages": 46,
+      "complete_animation_step_coverage": 149,
+      "audience_trial": "not-performed"
+    }
+  }
 }

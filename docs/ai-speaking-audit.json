@@ -1,0 +1,489 @@
+{
+  "pages": 48,
+  "content_pages": 46,
+  "animation_steps": 149,
+  "spoken_characters": 15084,
+  "rate_assumption": "220 Chinese characters per minute; actions, observation and questions have separate classroom budgets; this is an estimate, not an audience trial.",
+  "pages_detail": [
+    {
+      "id": "text-in-text-out",
+      "page": 1,
+      "minutes": 2,
+      "steps": 3,
+      "spoken_characters": 311,
+      "estimated_speech_seconds": 84.81818181818181,
+      "speech_and_transition_budget": 90,
+      "over_budget": false
+    },
+    {
+      "id": "model-application-compute",
+      "page": 2,
+      "minutes": 2,
+      "steps": 3,
+      "spoken_characters": 305,
+      "estimated_speech_seconds": 83.18181818181819,
+      "speech_and_transition_budget": 90,
+      "over_budget": false
+    },
+    {
+      "id": "token-pieces",
+      "page": 3,
+      "minutes": 2,
+      "steps": 4,
+      "spoken_characters": 330,
+      "estimated_speech_seconds": 90,
+      "speech_and_transition_budget": 90,
+      "over_budget": false
+    },
+    {
+      "id": "autoregressive-feedback",
+      "page": 4,
+      "minutes": 3,
+      "steps": 4,
+      "spoken_characters": 424,
+      "estimated_speech_seconds": 115.63636363636364,
+      "speech_and_transition_budget": 125,
+      "over_budget": false
+    },
+    {
+      "id": "attention-context",
+      "page": 5,
+      "minutes": 3,
+      "steps": 3,
+      "spoken_characters": 390,
+      "estimated_speech_seconds": 106.36363636363636,
+      "speech_and_transition_budget": 125,
+      "over_budget": false
+    },
+    {
+      "id": "diffusion-steps",
+      "page": 6,
+      "minutes": 2,
+      "steps": 4,
+      "spoken_characters": 311,
+      "estimated_speech_seconds": 84.81818181818181,
+      "speech_and_transition_budget": 90,
+      "over_budget": false
+    },
+    {
+      "id": "creative-workflow",
+      "page": 7,
+      "minutes": 2,
+      "steps": 4,
+      "spoken_characters": 312,
+      "estimated_speech_seconds": 85.0909090909091,
+      "speech_and_transition_budget": 90,
+      "over_budget": false
+    },
+    {
+      "id": "article-prompt-template",
+      "page": 8,
+      "minutes": 3,
+      "steps": 3,
+      "spoken_characters": 342,
+      "estimated_speech_seconds": 93.27272727272727,
+      "speech_and_transition_budget": 125,
+      "over_budget": false
+    },
+    {
+      "id": "context-packet",
+      "page": 9,
+      "minutes": 3,
+      "steps": 4,
+      "spoken_characters": 382,
+      "estimated_speech_seconds": 104.18181818181819,
+      "speech_and_transition_budget": 125,
+      "over_budget": false
+    },
+    {
+      "id": "rag-retrieval",
+      "page": 10,
+      "minutes": 2,
+      "steps": 4,
+      "spoken_characters": 315,
+      "estimated_speech_seconds": 85.9090909090909,
+      "speech_and_transition_budget": 90,
+      "over_budget": false
+    },
+    {
+      "id": "tool-roundtrip",
+      "page": 11,
+      "minutes": 4,
+      "steps": 4,
+      "spoken_characters": 544,
+      "estimated_speech_seconds": 148.36363636363637,
+      "speech_and_transition_budget": 165,
+      "over_budget": false
+    },
+    {
+      "id": "harness-structure",
+      "page": 12,
+      "minutes": 3,
+      "steps": 4,
+      "spoken_characters": 432,
+      "estimated_speech_seconds": 117.81818181818181,
+      "speech_and_transition_budget": 125,
+      "over_budget": false
+    },
+    {
+      "id": "agent-loop",
+      "page": 13,
+      "minutes": 5,
+      "steps": 4,
+      "spoken_characters": 594,
+      "estimated_speech_seconds": 162,
+      "speech_and_transition_budget": 215,
+      "over_budget": false
+    },
+    {
+      "id": "three-improvement-loops",
+      "page": 14,
+      "minutes": 3,
+      "steps": 3,
+      "spoken_characters": 418,
+      "estimated_speech_seconds": 114,
+      "speech_and_transition_budget": 125,
+      "over_budget": false
+    },
+    {
+      "id": "rules-and-learning",
+      "page": 15,
+      "minutes": 3,
+      "steps": 3,
+      "spoken_characters": 400,
+      "estimated_speech_seconds": 109.0909090909091,
+      "speech_and_transition_budget": 125,
+      "over_budget": false
+    },
+    {
+      "id": "neural-computation",
+      "page": 16,
+      "minutes": 3,
+      "steps": 3,
+      "spoken_characters": 410,
+      "estimated_speech_seconds": 111.81818181818181,
+      "speech_and_transition_budget": 125,
+      "over_budget": false
+    },
+    {
+      "id": "multi-agent-handoffs",
+      "page": 17,
+      "minutes": 3,
+      "steps": 3,
+      "spoken_characters": 404,
+      "estimated_speech_seconds": 110.18181818181819,
+      "speech_and_transition_budget": 125,
+      "over_budget": false
+    },
+    {
+      "id": "parallel-time",
+      "page": 18,
+      "minutes": 2,
+      "steps": 2,
+      "spoken_characters": 282,
+      "estimated_speech_seconds": 76.9090909090909,
+      "speech_and_transition_budget": 90,
+      "over_budget": false
+    },
+    {
+      "id": "class-break",
+      "page": 19,
+      "minutes": 10,
+      "steps": 0,
+      "spoken_characters": 114,
+      "estimated_speech_seconds": 31.09090909090909,
+      "speech_and_transition_budget": 0,
+      "over_budget": false
+    },
+    {
+      "id": "training-corpus",
+      "page": 20,
+      "minutes": 2,
+      "steps": 2,
+      "spoken_characters": 299,
+      "estimated_speech_seconds": 81.54545454545455,
+      "speech_and_transition_budget": 90,
+      "over_budget": false
+    },
+    {
+      "id": "training-stages",
+      "page": 21,
+      "minutes": 3,
+      "steps": 3,
+      "spoken_characters": 383,
+      "estimated_speech_seconds": 104.45454545454545,
+      "speech_and_transition_budget": 125,
+      "over_budget": false
+    },
+    {
+      "id": "training-vs-inference",
+      "page": 22,
+      "minutes": 1,
+      "steps": 2,
+      "spoken_characters": 135,
+      "estimated_speech_seconds": 36.81818181818182,
+      "speech_and_transition_budget": 40,
+      "over_budget": false
+    },
+    {
+      "id": "held-out-evaluation",
+      "page": 23,
+      "minutes": 2,
+      "steps": 3,
+      "spoken_characters": 312,
+      "estimated_speech_seconds": 85.0909090909091,
+      "speech_and_transition_budget": 90,
+      "over_budget": false
+    },
+    {
+      "id": "target-and-loss",
+      "page": 24,
+      "minutes": 3,
+      "steps": 3,
+      "spoken_characters": 409,
+      "estimated_speech_seconds": 111.54545454545455,
+      "speech_and_transition_budget": 125,
+      "over_budget": false
+    },
+    {
+      "id": "learning-signals",
+      "page": 25,
+      "minutes": 3,
+      "steps": 2,
+      "spoken_characters": 401,
+      "estimated_speech_seconds": 109.36363636363636,
+      "speech_and_transition_budget": 125,
+      "over_budget": false
+    },
+    {
+      "id": "reward-and-advantage",
+      "page": 26,
+      "minutes": 3,
+      "steps": 4,
+      "spoken_characters": 423,
+      "estimated_speech_seconds": 115.36363636363636,
+      "speech_and_transition_budget": 125,
+      "over_budget": false
+    },
+    {
+      "id": "training-budget",
+      "page": 27,
+      "minutes": 3,
+      "steps": 3,
+      "spoken_characters": 392,
+      "estimated_speech_seconds": 106.9090909090909,
+      "speech_and_transition_budget": 125,
+      "over_budget": false
+    },
+    {
+      "id": "test-time-compute",
+      "page": 28,
+      "minutes": 1,
+      "steps": 2,
+      "spoken_characters": 137,
+      "estimated_speech_seconds": 37.36363636363636,
+      "speech_and_transition_budget": 40,
+      "over_budget": false
+    },
+    {
+      "id": "model-weight-size",
+      "page": 29,
+      "minutes": 2,
+      "steps": 3,
+      "spoken_characters": 309,
+      "estimated_speech_seconds": 84.27272727272727,
+      "speech_and_transition_budget": 90,
+      "over_budget": false
+    },
+    {
+      "id": "gpu-compute-data",
+      "page": 30,
+      "minutes": 2,
+      "steps": 3,
+      "spoken_characters": 303,
+      "estimated_speech_seconds": 82.63636363636363,
+      "speech_and_transition_budget": 90,
+      "over_budget": false
+    },
+    {
+      "id": "weight-quantization",
+      "page": 31,
+      "minutes": 2,
+      "steps": 3,
+      "spoken_characters": 317,
+      "estimated_speech_seconds": 86.45454545454545,
+      "speech_and_transition_budget": 90,
+      "over_budget": false
+    },
+    {
+      "id": "gpu-interconnect",
+      "page": 32,
+      "minutes": 2,
+      "steps": 3,
+      "spoken_characters": 295,
+      "estimated_speech_seconds": 80.45454545454545,
+      "speech_and_transition_budget": 90,
+      "over_budget": false
+    },
+    {
+      "id": "cluster-engine-path",
+      "page": 33,
+      "minutes": 3,
+      "steps": 4,
+      "spoken_characters": 434,
+      "estimated_speech_seconds": 118.36363636363636,
+      "speech_and_transition_budget": 125,
+      "over_budget": false
+    },
+    {
+      "id": "latency-timeline",
+      "page": 34,
+      "minutes": 2,
+      "steps": 4,
+      "spoken_characters": 319,
+      "estimated_speech_seconds": 87,
+      "speech_and_transition_budget": 90,
+      "over_budget": false
+    },
+    {
+      "id": "aggregate-throughput-batching",
+      "page": 35,
+      "minutes": 2,
+      "steps": 3,
+      "spoken_characters": 326,
+      "estimated_speech_seconds": 88.90909090909092,
+      "speech_and_transition_budget": 90,
+      "over_budget": false
+    },
+    {
+      "id": "factory-input-output",
+      "page": 36,
+      "minutes": 2,
+      "steps": 4,
+      "spoken_characters": 304,
+      "estimated_speech_seconds": 82.9090909090909,
+      "speech_and_transition_budget": 90,
+      "over_budget": false
+    },
+    {
+      "id": "model-task-fit",
+      "page": 37,
+      "minutes": 2,
+      "steps": 3,
+      "spoken_characters": 309,
+      "estimated_speech_seconds": 84.27272727272727,
+      "speech_and_transition_budget": 90,
+      "over_budget": false
+    },
+    {
+      "id": "expert-routing",
+      "page": 38,
+      "minutes": 3,
+      "steps": 4,
+      "spoken_characters": 404,
+      "estimated_speech_seconds": 110.18181818181819,
+      "speech_and_transition_budget": 125,
+      "over_budget": false
+    },
+    {
+      "id": "model-modalities",
+      "page": 39,
+      "minutes": 1,
+      "steps": 3,
+      "spoken_characters": 125,
+      "estimated_speech_seconds": 34.09090909090909,
+      "speech_and_transition_budget": 40,
+      "over_budget": false
+    },
+    {
+      "id": "harness-model-pair",
+      "page": 40,
+      "minutes": 2,
+      "steps": 3,
+      "spoken_characters": 307,
+      "estimated_speech_seconds": 83.72727272727273,
+      "speech_and_transition_budget": 90,
+      "over_budget": false
+    },
+    {
+      "id": "harness-responsibilities",
+      "page": 41,
+      "minutes": 1,
+      "steps": 4,
+      "spoken_characters": 124,
+      "estimated_speech_seconds": 33.81818181818181,
+      "speech_and_transition_budget": 40,
+      "over_budget": false
+    },
+    {
+      "id": "pair-comparison",
+      "page": 42,
+      "minutes": 1,
+      "steps": 3,
+      "spoken_characters": 123,
+      "estimated_speech_seconds": 33.54545454545455,
+      "speech_and_transition_budget": 40,
+      "over_budget": false
+    },
+    {
+      "id": "coding-example",
+      "page": 43,
+      "minutes": 2,
+      "steps": 2,
+      "spoken_characters": 323,
+      "estimated_speech_seconds": 88.0909090909091,
+      "speech_and_transition_budget": 90,
+      "over_budget": false
+    },
+    {
+      "id": "protein-structure",
+      "page": 44,
+      "minutes": 2,
+      "steps": 3,
+      "spoken_characters": 297,
+      "estimated_speech_seconds": 81,
+      "speech_and_transition_budget": 90,
+      "over_budget": false
+    },
+    {
+      "id": "meeting-workflow",
+      "page": 45,
+      "minutes": 1,
+      "steps": 4,
+      "spoken_characters": 125,
+      "estimated_speech_seconds": 34.09090909090909,
+      "speech_and_transition_budget": 40,
+      "over_budget": false
+    },
+    {
+      "id": "industry-value-map",
+      "page": 46,
+      "minutes": 1,
+      "steps": 4,
+      "spoken_characters": 145,
+      "estimated_speech_seconds": 39.54545454545455,
+      "speech_and_transition_budget": 40,
+      "over_budget": false
+    },
+    {
+      "id": "platform-location",
+      "page": 47,
+      "minutes": 1,
+      "steps": 3,
+      "spoken_characters": 143,
+      "estimated_speech_seconds": 39,
+      "speech_and_transition_budget": 40,
+      "over_budget": false
+    },
+    {
+      "id": "class-questions",
+      "page": 48,
+      "minutes": 5,
+      "steps": 0,
+      "spoken_characters": 141,
+      "estimated_speech_seconds": 38.45454545454545,
+      "speech_and_transition_budget": 0,
+      "over_budget": false
+    }
+  ]
+}
