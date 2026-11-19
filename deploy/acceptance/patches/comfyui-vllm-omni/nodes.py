@@ -20,6 +20,12 @@ from .utils.validators import (
 
 logger = get_logger(__name__)
 
+# Register within the existing, authenticated ComfyUI workspace. The public
+# demo runs the identical adapter against a different PVC.
+from .utils.video_transport import install_recovery_routes
+from server import PromptServer
+install_recovery_routes(PromptServer.instance)
+
 
 class _VLLMOmniGenerateBase:
     """Base class for vLLM-Omni generation nodes with shared functionality."""
