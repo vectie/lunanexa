@@ -2231,3 +2231,156 @@ verification; no shared browser or other development server was changed.
   sampled trace at `lunachip/artifacts/prx100-layer-20261018/work/formal-run-a2/output/result/engine_0/trace.vcd`.
   This proves partial duplication, not that every guest result is backed up.
   Current offline-gate recipes still reference the local Docker context.
+
+## 2026-11-25 — Repair build-cleanup starvation and missed script caches
+
+Manual follow-up authorized by the user's request to actually remove unused
+MoonSuite/LunaNexa builds. Daily cleanup was incorrectly classifying the
+long-running `moon run .../p1s-ftp-tunnel-proxy.mbtx` wrapper as compilation.
+Its direct moonrun child had already been serving for hours. The detector now
+uses PID/PPID relationships: only a `moon run` wrapper with a direct moonrun
+child is exempt. Real moonc/clang/build tools and not-yet-running script
+wrappers still defer cache deletion. Active runtime cache paths remain fenced
+by current process arguments/open-file checks; the printer proxy stayed at
+PIDs90985/90988. Short actual servo-probe builds caused some safe deferrals;
+no robot/proxy processes were stopped to clean up.
+
+Extended the existing helper's scan to conventional targets in Moon/Luna
+temporary compile copies, MoonSuite tools, and nested diagnostic `.mbtx`
+build caches in output/outputs/benchmarks. Nested script caches require their
+matching source to remain present. Primary Workspace native builds, models,
+results, receipts, live references, tracked files and all builds changed in
+24h remain protected. Temporary compile copies' native targets are secondary
+outputs, not primary installed/runtime builds. Installed-pack retention is
+unchanged: current plus two complete rollbacks; available older payloads had
+already been pruned. No broad removal of product data or release bundles.
+
+Used only `maintain-local-builds.mbtx` for real deletion. Multiple passes safely
+deferred when actual compilation started, then resumed on subsequent runs.
+Measured available space rose from364688KiB to7493724KiB (net~6.80GiB), about
+7.15GiB remaining. Successful removals still return exit1 because free space
+is below the existing20GiB alert threshold; this is not a compiler failure.
+Evidence manifests in `~/Library/Logs/MoonSuite/build-retention/`:
+`20261124T171145Z-clean.json`, `20261124T171456Z-clean.json`,
+`20261124T171804Z-clean.json`, `20261124T171926Z-clean.json`,
+`20261124T172252Z-clean.json` (UTC filenames; Nov25 China date).
+
+Validation: complete maintenance self-tests passed (overlap lock, retention,
+provenance/pointer changes, symlink/repeat removal, running-wrapper vs real
+compiler regression); changed standalone scripts passed native deny-warn
+checks and format, plus diff whitespace checks. No product package interface
+or deployment changed. `scripts/report-build-space.mbtx` is a read-only size
+and manifest summary helper. No remote cluster, .191, VM, model or user-data
+cleanup. Largest remaining MoonSuite allocations include financial objects
+and query-service objects; these are not old installed build versions and
+were retained.
+Final report `20261124T172350Z-report.json` found zero eligible candidates:
+112 caches retained as recent and3 retained as running. Printer proxy PIDs
+unchanged; final free7491940KiB (~7.14GiB). Daily maintenance uses the corrected
+helper automatically; schedule and deletion protections unchanged.
+
+## 2026-11-25 — Second disk audit: historical targets and scratch builds
+
+User asked for a deeper unused-build cleanup after only7.1GiB remained.
+Found historical --target-dir outputs under Documents/Codex/Oct17 push and
+Oct6 integration, MoonFort Nov6/7 scratch copies, nested UI build targets and
+Homebrew download archives. Extended discovery using compiler .moon_db
+markers plus standard backend target names; preserved surrounding sources,
+receipts, approvals, reports, SDKs, .git and installed release payloads.
+Inherited Git worktree checks protect tracked files inside nested targets.
+
+Ordinary `clean` still defers during real builds. Added manual
+`maintain-local-builds.mbtx clean-archives`: a fixed-root, backend-only
+operation that rechecks whole-root process/open-file references and24h age
+before deleting. This allowed removal of independent old targets while main
+workspace builds continued. Both modes share the OS maintenance mutex.
+Native .exe runtime children now distinguish long-running `moon run` services
+(e.g. neck_camera) from compilation, as moonrun children already do. Read-only
+`report` can inventory during compilation. Extra-artifact cleanup reuses this
+detector and retains installed Homebrew kegs; it removed24 old download files.
+
+LunaChip requires special care: scripts/_build contained copied dependency
+source and formatting snapshots, not just generated files. Audited all file
+types and only manually removed standard generated script backend targets
+whose original script remains present. Kept format/.mooncakes/metadata and
+the generated-test cache needing review. Source inventories before/after:
+34590 .mbt,186 .mbtx,2739 .md files. Primary LunaChip _build remained
+1323256KiB exactly; sealed evidence/artifacts untouched. This root is excluded
+from automatic `clean`; no LunaChip build, check, test or simulation was run
+locally. No VM or .191 operation occurred.
+
+Removed13570876KiB allocated across six successful passes (~12.94GiB).
+Measured free space rose7491036→18080532KiB (~7.14→17.24GiB), net10.10GiB.
+Do not equate summed du allocations with physical recovery under APFS and
+concurrent writes. Final report20261124T175745Z-report.json: zero candidates,
+127 recent and3 running caches retained. Normal maintenance still exits1
+solely because free space is below20GiB. Runtime apps retain PIDs3884/3888
+and16094/53676; their supported HTTP pages return200. Printer proxy and
+camera processes also retained their PIDs. Current+two rollback releases,
+models and user data remain. Schedule unchanged.
+
+Important remaining protected allocations include54.6GiB financial/runtime
+state,32.6GiB LunaChip artifacts,29.9GiB Codex state/tools,15.8GiB Ollama
+models and13.8GiB workspace backups. Even .cache/moonfish-linux-build/src
+contains~747MiB of book data, so never delete that cache wholesale.
+Canonical details/manifests/checks:
+`output/build-cleanup-20261125/second-pass.json`.
+Scoped native deny-warn checks, formatting, diff whitespace and maintenance
+self-tests passed. No product package interface or deployment changed.
+
+## 2026-11-25 — Persistent MoonFish/hardware storage audit (manual migration)
+
+User explicitly authorized auditing MoonFish exports/query stores and hardware
+experiment archives, compacting duplicates/rebuildables, and retaining durable
+records on NAS. This is separate from daily build retention; do not expand that
+automation into deleting application state. Codex history, model weights, live
+services, current/two rollback payloads, the build VM and .191 are out of scope.
+
+Initial SHA256 inventory:281936 files, including17545 home-suite exports,
+15759 desktop-profile exports,10970 query objects,64 snapshots,10813 research
+dataset artifacts and226784 hardware files. Same-content groups total20076370052
+extra logical bytes; this is not a claim of physical recovery under APFS.
+Both real export profiles still register their saved files. These are durable
+research outputs, not disposable temporary build files. Query captures retain
+historical source evidence and cannot safely be recreated from today's upstream.
+
+Existing `/Volumes/wework` and `/Volumes/wework-1` mounts are deliberately
+read-only. Reused the existing authenticated SMB session to mount the same
+DataManager@192.168.0.52/wework share writable at
+`/Users/kq/.moonsuite/nas-archive`, leaving service mounts unchanged. Manual
+mount helper:`scripts/mount-persistent-nas.mbtx`; it does not print credentials.
+Archive root:`/Volumes/wework/moonsuite-persistent/mac-kq/20261125/`.
+Keep NAS mounts out of local disk totals (use `du -x` when surveying a parent).
+
+Important archive pitfall:macOS/libarchive tar handling consumed existing
+AppleDouble `._*` files during packing/restoring despite copyfile/mac-metadata
+flags. Complete extracted-directory comparisons caught this before any affected
+source removal. Tested an actual163-byte sidecar:InfoZIP zip/unzip preserves it
+exactly; use that round-trip for subsequent archives. Sealed source directories
+are readonly, so after full verification only the redundant local directories
+need owner-write added for unlinking. Original modes remain in archive; additional
+recursive Mac xattr hex and permission/flag listings are retained on NAS.
+
+Hardware archives are preserved whole, including unsuccessful proofs and
+regenerable material embedded in sealed evidence. Each NAS archive is extracted
+locally and compared completely with `diff -qr`, SHA256 hashed, checked against
+unchanged source metadata/live references, and receipted before local removal.
+The first verified archive uses tar.gz; subsequent archives use ZIP. Recovery
+locations are recorded individually, not inferred from a common extension.
+Use each receipt's archive to restore its original directory when historical
+drivers require that path. Do not compile inside restored sealed archives.
+
+MoonFish export readers reject symbolic links and nlink>1 for some registered
+files. Keep those paths as independent files; identical old exports can share
+APFS extents through verified clones, not hardlinks. Immutable query object/
+snapshot files support normal filesystem reads, so old copies can be verified
+on NAS and replaced atomically with links into the normal read-only mount.
+Keep mutable metadata and seven days of hot files local. Complete export and
+research archives provide durable copies while active local working files stay
+compatible with current readers. New application output still needs a future
+explicit persistence pass; no new state-GC schedule or product deployment here.
+
+Evidence and in-progress/final receipts:
+`output/persistent-audit-20261125/`; checksum inventory/duplicate report also
+copied byte-for-byte to NAS. Service baseline captures three saved-query pages
+and both MoonDesk/Paiwork profiles with unchanged PIDs before migration.

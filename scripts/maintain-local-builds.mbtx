@@ -10,8 +10,8 @@ import {
 ///|
 async fn main {
   guard @env.args() is [_, mode] &&
-    ["report", "clean", "self-test"].contains(mode) else {
-    fail("report | clean | self-test")
+    ["report", "clean", "clean-archives", "self-test"].contains(mode) else {
+    fail("report | clean | clean-archives | self-test")
   }
   let repo = "/Users/kq/Workspace/lunanexa"
   let logs = "/Users/kq/Library/Logs/MoonSuite/build-retention"
@@ -44,7 +44,11 @@ async fn main {
     @shell.Cmd("/Users/kq/.moon/bin/moon", [
       "run",
       repo + "/scripts/" + script + ".mbtx",
-      mode,
+      if mode == "clean-archives" && script == "prune-obsolete-moonfish-builds" {
+        "report"
+      } else {
+        mode
+      },
     ]).run()
   }
   let disk = @shell.Cmd("df", ["-k", "/System/Volumes/Data"]).output()

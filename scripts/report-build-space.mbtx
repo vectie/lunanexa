@@ -1,0 +1,66 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/string",
+  "moonbitlang/core/json",
+}
+
+///|
+async fn main {
+  let args = @env.args()
+  if args is [_, file] && file.has_suffix(".json") {
+    guard @json.parse(@fs.read_file(file).text())
+      is { "records": Array(records), .. } else {
+      fail("No records")
+    }
+    let counts : Map[String, Int32] = Map([])
+    let rows : Array[(Int64, String)] = []
+    let mut total = 0L
+    for record in records {
+      if record is { "status": String(status), "path": String(path), .. } {
+        counts[status] = counts.get(status).unwrap_or(0) + 1
+        if status == "candidate" &&
+          record is { "allocated_kib": String(size), .. } {
+          let kib = @string.parse_int64(size)
+          total += kib
+          rows.push((kib, path))
+        }
+      }
+    }
+    for key, count in counts {
+      println("\{key}: \{count}")
+    }
+    println("Candidate KiB: \{total}")
+    rows.sort_by((a, b) => b.0.compare(a.0))
+    for i in 0..<rows.length().min(30) {
+      println("\{rows[i].0} KiB\t\{rows[i].1}")
+    }
+    return
+  }
+  let r = @shell.Cmd("du", ["-k", "-d", "1", ..args[1:]]).output()
+  let rows : Array[(Int64, String)] = []
+  for line in r.stdout().split("\n") {
+    let fields = line.split("\t").to_array()
+    if fields.length() == 2 {
+      rows.push(
+        (@string.parse_int64(fields[0].to_owned()), fields[1].to_owned()),
+      )
+    }
+  }
+  rows.sort_by((a, b) => b.0.compare(a.0))
+  for i in 0..<rows.length().min(35) {
+    println("\{rows[i].0} KiB\t\{rows[i].1}")
+  }
+  if r.exit_code() != 0 {
+    let errors = r.stderr().split("\n").to_array()
+    println(errors[:errors.length().min(5)].join("\n"))
+    if errors.length() > 5 {
+      println(
+        "Additional unreadable paths omitted; no permission changes attempted.",
+      )
+    }
+  }
+}

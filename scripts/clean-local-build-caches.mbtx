@@ -30,12 +30,75 @@ async fn directories(path : String) -> Array[String] {
 }
 
 ///|
+fn archive_roots() -> Array[String] {
+  [
+    "/Users/kq/Documents/Codex/2026-10-17/task/push", "/Users/kq/Documents/Codex/2026-10-06/task/integration",
+    "/Users/kq/Documents/Codex/2026-11-04/task/stage/moontown", "/Users/kq/mooncode-cost-20261106/fort/scratch",
+    "/Users/kq/mooncode-live3-20261106/fort/scratch", "/Users/kq/mooncode-live-peers-20261107/fort/scratch",
+    "/Users/kq/mooncode-live2-20261106/fort/scratch", "/Users/kq/Workspace/lunachip/scripts/_build",
+  ]
+}
+
+///|
+fn archive_build(path : String) -> Bool {
+  archive_roots().any(root => path.has_prefix(root + "/")) &&
+  !path.contains("/toolchains/") &&
+  !path.contains("/.mooncakes/")
+}
+
+///|
+fn archive_referenced(
+  path : String,
+  processes : String,
+  opened : String,
+) -> Bool {
+  for root in archive_roots() {
+    if path.has_prefix(root + "/") {
+      return processes.contains(root) || opened.contains(root)
+    }
+  }
+  true
+}
+
+///|
 fn compiling(processes : String) -> Bool {
-  processes
-  .split("\n")
-  .any(line => {
-    let text = line.trim().to_owned()
-    let name = text.split(" ").next().unwrap_or("").to_owned()
+  // `moon run` remains alive while its compiled script serves requests.
+  // Only exempt that wrapper once its direct runtime child exists. Actual
+  // compiler processes anywhere in the snapshot still exclude cleanup.
+  let rows = processes
+    .split("\n")
+    .filter(line => !line.trim().is_empty())
+    .map(line => {
+      line
+      .split(" ")
+      .filter(field => !field.is_empty())
+      .map(field => field.to_owned())
+      .to_array()
+    })
+    .to_array()
+  let runtime_parents : Set[String] = Set([])
+  for fields in rows {
+    if fields.length() >= 4 &&
+      (
+        fields[2] == "moonrun" ||
+        (
+          fields[2].has_suffix(".exe") &&
+          fields[3].has_suffix(".exe") &&
+          (
+            fields[3].contains("/native/debug/build/") ||
+            fields[3].contains("/native/release/build/")
+          )
+        )
+      ) {
+      runtime_parents.add(fields[1])
+    }
+  }
+  rows.any(fields => {
+    if fields.length() < 4 {
+      return true
+    }
+    let name = fields[2]
+    let text = fields[3:].join(" ")
     if name == "moon" &&
       (
         text.contains("clean-local-build-caches.mbtx") ||
@@ -44,38 +107,144 @@ fn compiling(processes : String) -> Bool {
       ) {
       return false
     }
-    [
-      "moon", "moonc", "clang", "clang++", "cc", "c++", "gcc", "g++", "ld", "ninja",
-      "make", "gmake", "cargo", "rustc", "cmake", "xcodebuild", "vivado", "yosys",
-      "nextpnr",
-    ].contains(name) ||
-    (
-      name == "node" &&
+    if name == "moon" &&
+      fields[3].split("/").last() == Some("moon") &&
+      fields.get(4) == Some("run") &&
+      runtime_parents.contains(fields[0]) {
+      return false
+    }
+    let blocked = [
+        "moon", "moonc", "clang", "clang++", "cc", "c++", "gcc", "g++", "ld", "ninja",
+        "make", "gmake", "cargo", "rustc", "cmake", "xcodebuild", "vivado", "yosys",
+        "nextpnr",
+      ].contains(name) ||
       (
-        text.contains("vite build") ||
-        text.contains("webpack") ||
-        text.contains("tsc")
+        name == "node" &&
+        (
+          text.contains("vite build") ||
+          text.contains("webpack") ||
+          text.contains("tsc")
+        )
       )
-    )
+    if blocked {
+      println(
+        "Build activity: PID=\{fields[0]} PPID=\{fields[1]} executable=\{name}",
+      )
+      if name == "moon" {
+        println("Moon action: \{fields[3:fields.length().min(6)].join(" ")}")
+      }
+    }
+    blocked
   })
 }
 
 ///|
 async fn main {
-  if @env.args() is [_, "self-test"] {
-    assert_true(compiling("moonc /some/project\nclang -c test.c"))
-    assert_true(compiling("moon test --target native"))
-    assert_true(
-      !compiling(
-        "moonclaw daemon\nmoondesk --port 4200\nmoon run scripts/clean-local-build-caches.mbtx clean",
-      ),
-    )
-    println("Compilation exclusion regression checks passed")
+  if @env.args() is [_, "diagnose"] {
+    let snapshot = output("ps", ["-ww", "-axo", "pid=,ppid=,ucomm=,args="])
+    println("compiling=\{compiling(snapshot)}")
+    for line in snapshot.split("\n") {
+      let fields = line
+        .split(" ")
+        .filter(v => !v.is_empty())
+        .map(v => v.to_owned())
+        .to_array()
+      if fields.length() > 0 && fields.length() < 4 {
+        println("short process row: \{fields.join(" ")}")
+      }
+      if fields.length() >= 4 &&
+        ["moon", "moonrun", "moonc", "clang", "ld", "make"].contains(fields[2]) {
+        println(
+          "PID=\{fields[0]} PPID=\{fields[1]} name=\{fields[2]} executable=\{fields[3]}",
+        )
+      }
+    }
     return
   }
-  guard @env.args() is [_, phase] && (phase == "report" || phase == "clean") else {
-    fail("report | clean")
+  if @env.args() is [_, "self-test"] {
+    assert_true(
+      archive_build(archive_roots()[0] + "/runners/check/script.mbtx"),
+    )
+    assert_true(!archive_build("/Users/kq/Workspace/lunanexa/_build"))
+    assert_true(!archive_build(archive_roots()[0] + "-other/native"))
+    assert_true(
+      !archive_build(archive_roots()[0] + "/toolchains/moon/lib/core/_build"),
+    )
+    assert_true(
+      compiling("10 1 moonc moonc /some/project\n11 1 clang clang -c test.c"),
+    )
+    assert_true(compiling("10 1 moon moon test --target native"))
+    assert_true(
+      !compiling(
+        "10 1 moonclaw moonclaw daemon\n11 1 moondesk moondesk --port 4200\n12 1 moon moon run scripts/clean-local-build-caches.mbtx clean",
+      ),
+    )
+    assert_true(
+      !compiling(
+        "20 1 moon moon run /tools/proxy.mbtx\n21 20 moonrun /bin/moonrun /tools/_build/proxy.wasm --",
+      ),
+    )
+    assert_true(compiling("20 1 moon moon run /tools/proxy.mbtx"))
+    assert_true(
+      !compiling(
+        "20 1 moon moon run cmd/neck_camera --target native\n21 20 neck_camera.exe /Users/kq/Workspace/moonrobo/_build/native/debug/build/vectie/moonrobo/cmd/neck_camera/neck_camera.exe",
+      ),
+    )
+    assert_true(
+      compiling(
+        "20 1 moon moon run cmd/neck_camera --target native\n21 20 clang clang -c camera.c",
+      ),
+    )
+    assert_true(
+      !compiling(
+        "20 1 moon /Users/kq/.moon/bin/moon run /tools/proxy.mbtx\n21 20 moonrun /bin/moonrun /tools/_build/proxy.wasm --",
+      ),
+    )
+    assert_true(
+      compiling(
+        "20 1 moon moon run /tools/proxy.mbtx\n21 20 moonrun /bin/moonrun /tools/_build/proxy.wasm --\n22 1 clang clang -c active.c",
+      ),
+    )
+    assert_true(
+      compiling(
+        "20 1 moon moon build\n21 20 moonrun /bin/moonrun unrelated.wasm",
+      ),
+    )
+    assert_true(
+      !archive_referenced(
+        archive_roots()[0] + "/runners/old/native/debug/build",
+        "moon build --target native /Users/kq/Workspace/moondesk",
+        "n/Users/kq/Workspace/moondesk",
+      ),
+    )
+    assert_true(
+      archive_referenced(
+        archive_roots()[0] + "/runners/old/native/debug/build",
+        "moon build --target-dir " + archive_roots()[0] + "/runners/current",
+        "",
+      ),
+    )
+    assert_true(
+      archive_referenced(
+        archive_roots()[0] + "/runners/old/native/debug/build",
+        "",
+        "fcwd\nn" + archive_roots()[0],
+      ),
+    )
+    assert_true(
+      archive_referenced("/Users/kq/Workspace/moondesk/_build", "", ""),
+    )
+    println(
+      "Compilation and isolated archive exclusion regression checks passed",
+    )
+    return
   }
+  guard @env.args() is [_, phase] &&
+    ["report", "clean", "clean-archives"].contains(phase) else {
+    fail("report | clean | clean-archives")
+  }
+  let deleting = phase != "report"
+  let isolated = phase == "clean-archives"
   let workspace = "/Users/kq/Workspace"
   let root = "/Users/kq/Library/Logs/MoonSuite/build-retention"
   if !@fs.exists(root) {
@@ -83,7 +252,8 @@ async fn main {
   }
   let stamp = output("date", ["-u", "+%Y%m%dT%H%M%SZ"]).trim().to_owned()
   let before = output("df", ["-k", "/System/Volumes/Data"])
-  if compiling(output("ps", ["-ww", "-axo", "ucomm=,args="])) {
+  if phase == "clean" &&
+    compiling(output("ps", ["-ww", "-axo", "pid=,ppid=,ucomm=,args="])) {
     println("Cache cleanup deferred: a compiler/build tool is running")
     return
   }
@@ -112,20 +282,132 @@ async fn main {
       }
     }
   }
-  for repo in repos {
-    let name = repo.split("/").to_array().last().unwrap().to_owned()
-    if (!name.has_prefix("moon") && !name.has_prefix("luna")) ||
-      name == "lunachip" ||
+  // Temporary compile/check copies were outside the old Workspace scan.
+  // Only conventional generated target directories below Moon/Luna copies
+  // are candidates; source, release bundles and experiment outputs stay put.
+  for
+    build in output("find", [
+      "/private/tmp", "-maxdepth", "3", "-type", "d", "-name", "_build", "-print",
+    ]).split("\n") {
+    let parts = build.split("/").to_array()
+    if parts.length() >= 5 &&
+      (parts[3].has_prefix("moon") || parts[3].has_prefix("luna")) &&
+      !parts[3].has_prefix("lunachip") {
+      let repo = build[:build.length() - 7].to_owned()
+      if !repos.contains(repo) {
+        repos.push(repo)
+      }
+    }
+  }
+  repos.push("/Users/kq/moonsuite/tools")
+  // Audited historical compile tasks use --target-dir, not always _build.
+  // The compiler database identifies the target root; keep its metadata and
+  // delete only generated backend targets, not the surrounding task archive.
+  let custom_builds : Set[String] = Set([])
+  for root in archive_roots() {
+    let chip_scripts = root == "/Users/kq/Workspace/lunachip/scripts/_build"
+    // The hardware workspace stays excluded from automatic clean. Only this
+    // explicitly audited manual operation may prune obsolete script targets.
+    if chip_scripts && phase == "clean" {
+      continue
+    }
+    if !@fs.exists(root) {
+      continue
+    }
+    for
+      marker in output("find", [
+        root, "-type", "f", "-name", ".moon_db", "-print",
+      ]).split("\n") {
+      if !marker.is_empty() {
+        let path = marker[:marker.length() - 9].to_owned()
+        if chip_scripts {
+          let leaf = path.split("/").last().unwrap().to_owned()
+          if !leaf.has_suffix(".mbtx") ||
+            leaf == "phase6-store-assertion-partition.mbtx" ||
+            !@fs.exists("/Users/kq/Workspace/lunachip/scripts/" + leaf) {
+            continue
+          }
+        }
+        if archive_build(path) &&
+          @fs.kind(path, follow_symlink=false) is Directory {
+          custom_builds.add(path)
+          if !repos.contains(path) {
+            repos.push(path)
+          }
+        }
+      }
+    }
+  }
+  let nested_ui : Set[String] = Set([])
+  for repo in repos.copy() {
+    if repo.has_prefix("/private/tmp/") ||
+      custom_builds.contains(repo) ||
       !@fs.exists(repo + "/.git") {
       continue
     }
+    for suffix in ["/ui", "/src/ui"] {
+      let root = repo + suffix
+      if !@fs.exists(root) {
+        continue
+      }
+      for
+        build in output("find", [
+          root, "-maxdepth", "4", "-type", "d", "-name", "_build", "-prune", "-print",
+        ]).split("\n") {
+        if !build.is_empty() && !build.contains("/.mooncakes/") {
+          let parent = build[:build.length() - 7].to_owned()
+          if @fs.exists(parent + "/moon.mod") {
+            nested_ui.add(parent)
+            if !repos.contains(parent) {
+              repos.push(parent)
+            }
+          }
+        }
+      }
+    }
+  }
+  for repo in repos {
+    let name = repo.split("/").to_array().last().unwrap().to_owned()
+    let temporary = repo.has_prefix("/private/tmp/")
+    let tools = repo == "/Users/kq/moonsuite/tools"
+    let custom = custom_builds.contains(repo)
+    if isolated && !custom {
+      continue
+    }
+    let inherited_git = if custom {
+      @shell.Cmd("git", ["-C", repo, "rev-parse", "--show-toplevel"])
+      .output()
+      .exit_code() ==
+      0
+    } else {
+      false
+    }
+    let git_repo = @fs.exists(repo + "/.git") ||
+      nested_ui.contains(repo) ||
+      inherited_git
+    if !temporary &&
+      !tools &&
+      !custom &&
+      !nested_ui.contains(repo) &&
+      (
+        (!name.has_prefix("moon") && !name.has_prefix("luna")) ||
+        name == "lunachip" ||
+        !git_repo
+      ) {
+      continue
+    }
     let candidates : Array[String] = []
-    for path in directories(repo + "/_build") {
+    for path in directories(if custom { repo } else { repo + "/_build" }) {
       let leaf = path.split("/").to_array().last().unwrap().to_owned()
       if leaf == "native" {
         // Keep primary CLI/shared-library build outputs, including cold launches.
         for level in directories(path) {
-          for kind in ["test", "check"] {
+          for
+            kind in (if temporary || custom {
+              ["test", "check", "build"]
+            } else {
+              ["test", "check"]
+            }) {
             if @fs.exists(level + "/" + kind) {
               candidates.push(level + "/" + kind)
             }
@@ -133,7 +415,8 @@ async fn main {
         }
         continue
       }
-      if leaf == "js" ||
+      if leaf.has_suffix(".mbtx") ||
+        leaf == "js" ||
         leaf == "wasm" ||
         leaf == "wasm-gc" ||
         leaf == "browser-compiled" ||
@@ -146,6 +429,32 @@ async fn main {
     }
     for path in directories(repo + "/scripts/_build") {
       candidates.push(path)
+    }
+    // Diagnostic scripts can be compiled beside retained experiment evidence.
+    // Require the matching source and remove only its generated .mbtx cache,
+    // never the surrounding results or model files.
+    if !temporary && !tools && !custom && !nested_ui.contains(repo) {
+      for folder in ["output", "outputs", "benchmarks"] {
+        let root = repo + "/" + folder
+        if !@fs.exists(root) {
+          continue
+        }
+        for
+          build in output("find", [
+            root, "-maxdepth", "5", "-type", "d", "-name", "_build", "-prune", "-print",
+          ]).split("\n") {
+          if build.is_empty() {
+            continue
+          }
+          let parent = build[:build.length() - 7].to_owned()
+          for path in directories(build.to_owned()) {
+            let leaf = path.split("/").last().unwrap().to_owned()
+            if leaf.has_suffix(".mbtx") && @fs.exists(parent + "/" + leaf) {
+              candidates.push(path)
+            }
+          }
+        }
+      }
     }
     // Local deployment staging keeps additional generated browser bundles.
     // Preserve the staging receipts, sources and OCI evidence beside them.
@@ -165,15 +474,25 @@ async fn main {
         continue
       }
       let relative = path[repo.length() + 1:].to_owned()
-      let tracked = @shell.Cmd("git", ["-C", repo, "ls-files", "--", relative]).output()
-      guard tracked.exit_code() == 0 else {
-        fail("Cannot check tracked build contents")
-      }
-      if !tracked.stdout().trim().is_empty() {
-        records.push({ "path": path, "status": "kept-tracked" })
-        continue
+      if git_repo {
+        let tracked = @shell.Cmd("git", ["-C", repo, "ls-files", "--", relative]).output()
+        guard tracked.exit_code() == 0 else {
+          fail("Cannot check tracked build contents")
+        }
+        if !tracked.stdout().trim().is_empty() {
+          records.push({ "path": path, "status": "kept-tracked" })
+          continue
+        }
       }
       let processes = output("ps", ["-axo", "args="])
+      if isolated &&
+        (
+          !archive_build(path) ||
+          archive_referenced(path, processes, opened.stdout())
+        ) {
+        records.push({ "path": path, "status": "kept-archive-referenced" })
+        continue
+      }
       if processes.contains(path) || opened.stdout().contains(path) {
         records.push({ "path": path, "status": "kept-running" })
         continue
@@ -189,15 +508,27 @@ async fn main {
         .unwrap()
         .to_owned()
       let kib = @string.parse_int64(size.trim().to_owned())
-      if phase == "clean" {
-        if compiling(output("ps", ["-ww", "-axo", "ucomm=,args="])) {
+      if deleting {
+        if !isolated &&
+          compiling(output("ps", ["-ww", "-axo", "pid=,ppid=,ucomm=,args="])) {
           println("Cache cleanup deferred: compilation started")
           break
         }
         let live = output("lsof", ["-nP", "-Fpn"])
-        if live.contains(path) ||
-          output("ps", ["-ww", "-axo", "args="]).contains(path) {
+        let current = output("ps", ["-ww", "-axo", "args="])
+        if isolated && archive_referenced(path, current, live) {
+          records.push({ "path": path, "status": "kept-archive-referenced" })
+          continue
+        }
+        if live.contains(path) || current.contains(path) {
           records.push({ "path": path, "status": "kept-running" })
+          continue
+        }
+        if isolated &&
+          !output("find", [path, "-mmin", "-1440", "-print", "-quit"])
+          .trim()
+          .is_empty() {
+          records.push({ "path": path, "status": "kept-recent" })
           continue
         }
         let pending = path + ".cleanup-" + stamp
@@ -211,7 +542,7 @@ async fn main {
       records.push({
         "path": path,
         "allocated_kib": kib,
-        "status": if phase == "clean" {
+        "status": if deleting {
           "removed-rebuildable"
         } else {
           "candidate"

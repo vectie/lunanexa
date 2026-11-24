@@ -17,20 +17,18 @@ async fn output(program : String, args : Array[String]) -> String {
 
 ///|
 async fn assert_idle() -> Unit {
-  let processes = output("ps", ["-ww", "-axo", "ucomm=,args="])
-  for line in processes.split("\n") {
-    let value = line.trim().to_owned()
-    let name = value.split(" ").next().unwrap_or("").to_owned()
-    if name == "moon" && value.contains("clean-extra-build-artifacts.mbtx") {
-      continue
-    }
-    guard ![
-      "moon", "moonc", "clang", "clang++", "cc", "c++", "gcc", "g++", "ld", "ninja",
-      "make", "gmake", "cargo", "rustc", "cmake", "xcodebuild", "vivado", "yosys",
-      "nextpnr", "brew",
-    ].contains(name) else {
-      fail("Build/package tool is active; no extra cleanup while it runs")
-    }
+  let activity = output("/Users/kq/.moon/bin/moon", [
+    "run", "/Users/kq/Workspace/lunanexa/scripts/clean-local-build-caches.mbtx",
+    "diagnose",
+  ])
+  guard activity.contains("compiling=false\n") else {
+    println(activity)
+    fail("Build tool is active; extra cleanup deferred")
+  }
+  if output("ps", ["-axo", "ucomm="])
+    .split("\n")
+    .any(line => line.trim() == "brew") {
+    fail("Package tool is active; extra cleanup deferred")
   }
 }
 
@@ -49,7 +47,9 @@ async fn main {
   defer lock.close()
   guard lock.try_lock(Exclusive) else { fail("Another cleanup is running") }
   defer lock.unlock()
-  assert_idle()
+  if phase == "clean" {
+    assert_idle()
+  }
   let roots = [("brew-download", "/Users/kq/Library/Caches/Homebrew/downloads")]
   let raw = output("find", [
     "/private/tmp", "-mindepth", "1", "-maxdepth", "1", "-type", "d", "-name", "pblaze*-verilator*",
@@ -68,7 +68,9 @@ async fn main {
   let mut total = 0L
   let stamp = output("date", ["-u", "+%Y%m%dT%H%M%SZ"]).trim().to_owned()
   for (kind, root) in roots {
-    assert_idle()
+    if phase == "clean" {
+      assert_idle()
+    }
     let live = output("lsof", ["-nP", "-Fpn"])
     let files = output("find", [
       root, "-maxdepth", "1", "-type", "f", "-mmin", "+1440", "-print",
