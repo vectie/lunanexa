@@ -1,0 +1,96 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/json",
+  "moonbitlang/core/string",
+}
+
+///|
+async fn main {
+  let root = "/Users/kq/Workspace/lunanexa/output/persistent-audit-20261125"
+  guard @json.parse(@fs.read_file(root + "/inventory.json").text())
+    is Array(rows) else {
+    fail("Missing inventory")
+  }
+  let totals : Map[String, Int64] = Map([])
+  let counts : Map[String, Int32] = Map([])
+  let suffixes : Map[String, Int64] = Map([])
+  for row in rows {
+    guard row is { "path": String(path), "size": String(size), .. } else {
+      fail("Bad inventory")
+    }
+    let key = if path.contains("/lunachip/artifacts/") {
+      "hardware"
+    } else if path.contains("/moonfish-query/") {
+      "query"
+    } else if path.contains("/nas-tools/") {
+      "research-datasets"
+    } else if path.contains("Application Support") {
+      "desktop-exports"
+    } else {
+      "suite-exports"
+    }
+    let bytes = @string.parse_int64(size)
+    totals[key] = totals.get(key).unwrap_or(0L) + bytes
+    counts[key] = counts.get(key).unwrap_or(0) + 1
+    if key == "hardware" {
+      let suffix = path.split(".").last().unwrap_or("").to_owned()
+      suffixes[suffix] = suffixes.get(suffix).unwrap_or(0L) + bytes
+    }
+  }
+  println(({ "bytes": Json(totals), "files": Json(counts) } : Json).stringify())
+  let sorted = suffixes.to_array()
+  sorted.sort_by((a, b) => b.1.compare(a.1))
+  for item in sorted[:sorted.length().min(20)] {
+    println("Hardware extension \{item.0}: \{item.1}")
+  }
+  if @fs.exists(root + "/duplicates.json") {
+    guard @json.parse(@fs.read_file(root + "/duplicates.json").text())
+      is {
+        "groups": Array(groups),
+        "redundant_logical_bytes": String(total),
+        ..
+      } else {
+      fail("Bad duplicates")
+    }
+    let sizes : Array[(Int64, Json)] = []
+    for group in groups {
+      if group is { "extra_bytes": String(size), .. } {
+        sizes.push((@string.parse_int64(size), group))
+      }
+    }
+    sizes.sort_by((a, b) => b.0.compare(a.0))
+    println("Duplicate groups \{groups.length()}, extra logical bytes \{total}")
+    for item in sizes[:sizes.length().min(8)] {
+      if item.1 is { "sha256": String(hash), "paths": Array(paths), .. } {
+        println(
+          (
+            {
+              "sha256": hash,
+              "extra_bytes": Json(item.0),
+              "copies": paths.length(),
+              "examples": paths[:paths.length().min(2)].to_owned(),
+            } : Json).stringify(),
+        )
+      }
+    }
+  }
+  let target = "/Users/kq/.moonsuite/nas-archive/moonsuite-persistent/mac-kq"
+  @fs.mkdir(target, recursive=true, allow_exist=true, permission=0o700)
+  @fs.write_file(
+    target + "/.write-probe-20261125",
+    "NAS persistence probe",
+    permission=0o600,
+  )
+  guard @fs.read_file(target + "/.write-probe-20261125").text() ==
+    "NAS persistence probe" else {
+    fail("NAS readback failed")
+  }
+  @fs.remove(target + "/.write-probe-20261125")
+  println("NAS write/read/remove verified: " + target)
+  let result = @shell.Cmd("df", ["-k", "/System/Volumes/Data", target]).output()
+  result.check()
+  println(result.stdout())
+}

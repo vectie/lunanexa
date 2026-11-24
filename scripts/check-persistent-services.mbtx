@@ -1,0 +1,176 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/core/string",
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, stage] && ["before", "after"].contains(stage) else {
+    fail("before | after")
+  }
+  let root = "/Users/kq/Workspace/lunanexa/output/persistent-audit-20261125"
+  @fs.mkdir(
+    root + "/" + stage,
+    recursive=true,
+    allow_exist=true,
+    permission=0o700,
+  )
+  guard @json.parse(@fs.read_file(root + "/inventory.json").text())
+    is Array(rows) else {
+    fail("No inventory")
+  }
+  let snapshots : Array[String] = []
+  for row in rows {
+    if row is { "path": String(path), .. } &&
+      path.contains("/moonfish-query/snapshots/") &&
+      snapshots.length() < 3 {
+      snapshots.push(
+        path
+        .split("/")
+        .last()
+        .unwrap()
+        .strip_suffix(".json")
+        .unwrap()
+        .to_owned(),
+      )
+    }
+  }
+  let results : Array[Json] = []
+  for snapshot in snapshots {
+    let body : Json = { "snapshot_id": snapshot, "page_size": 5, "offset": 0 }
+    let destination = root + "/" + stage + "/snapshot-" + snapshot + ".json"
+    let result = @shell.Cmd("curl", [
+      "-fsS",
+      "--max-time",
+      "90",
+      "-H",
+      "Content-Type: application/json",
+      "--data-binary",
+      body.stringify(),
+      "-o",
+      destination,
+      "-w",
+      "%{http_code} %{time_starttransfer} %{time_total}",
+      "http://127.0.0.1:4326/v1/query/result",
+    ]).output()
+    result.check()
+    if stage == "after" {
+      @shell.Cmd("cmp", [
+        "-s",
+        root + "/before/snapshot-" + snapshot + ".json",
+        destination,
+      ]).run()
+    }
+    results.push({
+      "snapshot": snapshot,
+      "http_ttft_total": result.stdout(),
+      "unchanged_bytes": stage == "after",
+    })
+  }
+  for
+    (port, path) in [
+      (4199, "/"),
+      (4200, "/"),
+      (4318, "/apps/moonfish/paiwork/"),
+      (4319, "/apps/moonfish/paiwork/"),
+      (4326, "/health"),
+    ] {
+    let result = @shell.Cmd("curl", [
+      "-fsS",
+      "--max-time",
+      "15",
+      "-o",
+      "/dev/null",
+      "-w",
+      "%{http_code} %{time_total}",
+      "http://127.0.0.1:\{port}" + path,
+    ]).output()
+    result.check()
+    results.push({ "port": port, "response": result.stdout() })
+  }
+  if stage == "after" {
+    guard @json.parse(
+        @fs.read_file(root + "/moonfish-export-actions.json").text(),
+      )
+      is Array(actions) else {
+      fail("Missing export compaction receipts")
+    }
+    let checked : Set[Int32] = Set([])
+    for action in actions {
+      guard action
+        is {
+          "path": String(path),
+          "sha256": String(hash),
+          "size": String(size),
+          ..
+        } else {
+        continue
+      }
+      let port = if path.has_prefix("/Users/kq/moonsuite/") {
+        4318
+      } else if path.contains(
+          "Application Support/app.vectie.moondesk.lepusa.live/",
+        ) {
+        4319
+      } else {
+        continue
+      }
+      if checked.contains(port) ||
+        @string.parse_int64(size) > 8388608L ||
+        @string.parse_int64(size) < 1024L {
+        continue
+      }
+      let id = path.split("/").last().unwrap().to_owned()
+      let destination = root + "/after/download-\{port}.bin"
+      let response = @shell.Cmd("curl", [
+        "-fsS",
+        "--max-time",
+        "30",
+        "-o",
+        destination,
+        "-w",
+        "%{http_code} %{time_total}",
+        "http://127.0.0.1:\{port}/apps/moonfish/paiwork/api/v1/files/" + id,
+      ]).output()
+      response.check()
+      let digest = @shell.Cmd("shasum", ["-a", "256", destination]).output()
+      digest.check()
+      guard digest.stdout().has_prefix(hash + " ") else {
+        fail("Downloaded compacted export changed")
+      }
+      let links = @shell.Cmd("stat", ["-f", "%l", path]).output()
+      links.check()
+      guard links.stdout().trim() == "1" &&
+        @fs.kind(path, follow_symlink=false) is Regular else {
+        fail("Export reader inode semantics changed")
+      }
+      results.push({
+        "export_port": port,
+        "download": response.stdout(),
+        "sha256_unchanged": true,
+        "independent_regular_inode": true,
+      })
+      checked.add(port)
+    }
+    guard checked.length() == 2 else {
+      fail("Both export profiles need download acceptance")
+    }
+  }
+  let processes = @shell.Cmd("ps", [
+    "-p", "3884,3888,16094,53676,3887,3895,3899,90985,90988", "-o", "pid=,comm=",
+  ]).output()
+  processes.check()
+  @fs.write_file(
+    root + "/" + stage + "/services.json",
+    ({ "checks": results, "processes": processes.stdout() } : Json).stringify(
+      indent=2,
+    ),
+    permission=0o600,
+  )
+  println(Json(results).stringify())
+}

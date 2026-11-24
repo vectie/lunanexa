@@ -1,0 +1,417 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/json",
+  "moonbitlang/core/string",
+  "moonbitlang/core/env",
+}
+
+///|
+async fn output(program : String, args : Array[String]) -> String {
+  let r = @shell.Cmd(program, args).output()
+  r.check()
+  r.stdout()
+}
+
+///|
+async fn remove_restore(path : String) -> Unit {
+  @shell.Cmd("find", [path, "-type", "d", "-exec", "chmod", "u+w", "{}", "+"]).run()
+  @fs.rmdir(path, recursive=true)
+}
+
+///|
+async fn metadata(path : String) -> String {
+  let attributes = output("xattr", ["-lx", path])
+  let acl = output("ls", ["-lde", path]).split("\n").to_array()
+  output("stat", ["-f", "%p:%u:%g:%f", path]) + attributes + acl[1:].join("\n")
+}
+
+///|
+async fn archive(
+  path : String,
+  name : String,
+  write : String,
+  evidence : String,
+) -> Unit {
+  let temp = @fs.tmpdir(prefix="moonfish-archive-verify-")
+  defer remove_restore(temp)
+  let parent = path.split("/").to_array()
+  let leaf = parent.last().unwrap().to_owned()
+  let directory = parent[:parent.length() - 1].join("/")
+  let filename = write + "/" + name + ".zip"
+  if !@fs.exists(write + "/" + name + ".xattrs.txt") {
+    @shell.Cmd(
+      "xattr",
+      ["-lr", "-x", path],
+      stdout=ToFile(write + "/" + name + ".xattrs.txt"),
+    ).run()
+    @shell.Cmd(
+      "ls",
+      ["-leOR", path],
+      stdout=ToFile(write + "/" + name + ".permissions.txt"),
+    ).run()
+  }
+  if @fs.exists(filename) {
+    guard @json.parse(@fs.read_file(evidence + "/" + name + ".json").text())
+      is { "sha256": String(expected), "source": String(original), .. } &&
+      original == path else {
+      fail("Existing archive lacks matching verified receipt")
+    }
+    let actual = output("shasum", ["-a", "256", filename])
+      .split(" ")
+      .next()
+      .unwrap()
+      .to_owned()
+    guard actual == expected else { fail("Existing archive checksum changed") }
+    println("Reusing verified archive without overwriting history: " + name)
+    return
+  }
+  println("Preserving complete NAS archive: " + name)
+  @shell.Cmd(
+    "/usr/bin/zip",
+    ["-qry", "-1", filename + ".partial.zip", leaf],
+    cwd=directory,
+  ).run()
+  @shell.Cmd("/usr/bin/unzip", ["-q", filename + ".partial.zip", "-d", temp]).run()
+  @shell.Cmd("diff", ["-qr", path, temp + "/" + leaf]).run()
+  let digest = output("shasum", ["-a", "256", filename + ".partial.zip"])
+    .split(" ")
+    .next()
+    .unwrap()
+    .to_owned()
+  @fs.rename(filename + ".partial.zip", filename, replace=true)
+  let record : Json = {
+    "source": path,
+    "archive": filename,
+    "sha256": digest,
+    "comparison": "Complete extracted directory diff -qr exit 0",
+    "local_policy": "Keep registered export working files; APFS clone compaction only",
+  }
+  @fs.write_file(
+    evidence + "/" + name + ".json",
+    record.stringify(),
+    permission=0o600,
+  )
+  @fs.write_file(
+    write + "/" + name + ".json",
+    record.stringify(),
+    permission=0o600,
+  )
+}
+
+///|
+async fn main {
+  let resume_query = @env.args().contains("--query-only")
+  let evidence = "/Users/kq/Workspace/lunanexa/output/persistent-audit-20261125"
+  let write = "/Users/kq/.moonsuite/nas-archive/moonsuite-persistent/mac-kq/20261125/moonfish"
+  let read = "/Volumes/wework/moonsuite-persistent/mac-kq/20261125/moonfish"
+  guard output("mount", ["-t", "smbfs"]).contains(
+    "//DataManager@192.168.0.52/wework on /Users/kq/.moonsuite/nas-archive ",
+  ) else {
+    fail("Writable NAS mount absent")
+  }
+  let lock = @fs.open(
+    "/Users/kq/Library/Logs/MoonSuite/build-retention/maintenance.lock",
+    mode=ReadWrite,
+    create_mode=OpenOrCreate,
+    permission=0o600,
+  )
+  defer lock.close()
+  guard lock.try_lock(Exclusive) else { fail("Another maintenance is running") }
+  defer lock.unlock()
+  @fs.mkdir(write, recursive=true, allow_exist=true, permission=0o700)
+  guard @json.parse(@fs.read_file(evidence + "/inventory.json").text())
+    is Array(rows) else {
+    fail("No checksum inventory")
+  }
+  let exports : Array[(String, String)] = [
+    (
+      "suite-exports", "/Users/kq/moonsuite/.moonsuite/products/moonfish/paiwork",
+    ),
+    (
+      "desktop-exports", "/Users/kq/Library/Application Support/app.vectie.moondesk.lepusa.live/workspace/.moonsuite/products/moonfish/paiwork",
+    ),
+    (
+      "development-exports", "/Users/kq/Workspace/moonfish/.moonsuite/products/moonfish/paiwork",
+    ),
+  ]
+  let canonical : Map[String, String] = Map([])
+  let actions : Array[Json] = if resume_query {
+    guard @json.parse(
+        @fs.read_file(evidence + "/moonfish-export-actions.json").text(),
+      )
+      is Array(saved) else {
+      fail("No completed export checkpoint")
+    }
+    for
+      name in [
+        "suite-exports", "desktop-exports", "development-exports", "research-datasets",
+      ] {
+      guard @fs.exists(write + "/" + name + ".zip") &&
+        @fs.exists(evidence + "/" + name + ".json") else {
+        fail("Missing completed archive checkpoint")
+      }
+    }
+    saved
+  } else {
+    []
+  }
+  let now = @string.parse_int64(output("date", ["+%s"]).trim())
+  let duplicate_candidates : Map[String, Int32] = Map([])
+  for row in rows {
+    if row
+      is {
+        "path": String(path),
+        "sha256": String(hash),
+        "modified": String(modified),
+        ..
+      } &&
+      path.contains("/paiwork/exports/") &&
+      @string.parse_int64(modified) <= now - 604800L {
+      duplicate_candidates[hash] = duplicate_candidates.get(hash).unwrap_or(0) +
+        1
+    }
+  }
+  if !resume_query {
+    for (name, root) in exports {
+      if !@fs.exists(root + "/exports") {
+        continue
+      }
+      archive(root + "/exports", name, write, evidence)
+      let state = root + "/state.json"
+      if @fs.exists(state) {
+        // Current mutable state remains local; this is an additional recovery copy.
+        @shell.Cmd("cp", ["-p", state, write + "/" + name + "-state.json"]).run()
+      }
+      for row in rows {
+        guard row
+          is {
+            "path": String(path),
+            "sha256": String(hash),
+            "size": String(size),
+            "modified": String(modified),
+            ..
+          } &&
+          path.has_prefix(root + "/exports/") else {
+          continue
+        }
+        guard hash.length() == 64 else { fail("Unfinished checksum inventory") }
+        if @string.parse_int64(modified) > now - 604800L ||
+          !(@fs.kind(path, follow_symlink=false) is Regular) {
+          continue
+        }
+        if duplicate_candidates.get(hash).unwrap_or(0) < 2 {
+          continue
+        }
+        let signature = metadata(path)
+        let identity = hash + "\n" + signature
+        if canonical.get(identity) is Some(keeper) {
+          if output("stat", ["-f", "%i", path]) ==
+            output("stat", ["-f", "%i", keeper]) {
+            continue
+          }
+          let version = output("stat", ["-f", "%m:%c:%z:%i", path])
+          let digest = output("shasum", ["-a", "256", path])
+            .split(" ")
+            .next()
+            .unwrap()
+            .to_owned()
+          guard digest == hash else { continue }
+          let temporary = path + ".apfs-compact-20261125"
+          let cloned = @shell.Cmd("cp", ["-cp", keeper, temporary]).status()
+          if cloned != 0 {
+            if @fs.exists(temporary) {
+              @fs.remove(temporary)
+            }
+            continue
+          }
+          @shell.Cmd("touch", ["-r", path, temporary]).run()
+          if metadata(temporary) != signature {
+            @fs.remove(temporary)
+            continue
+          }
+          guard @shell.Cmd("cmp", ["-s", path, temporary]).status() == 0 &&
+            version == output("stat", ["-f", "%m:%c:%z:%i", path]) else {
+            fail("Export changed during clone compaction")
+          }
+          guard output("stat", ["-f", "%l", temporary]).trim() == "1" else {
+            fail("Clone must retain independent inode")
+          }
+          @fs.rename(temporary, path, replace=true)
+          actions.push({
+            "path": path,
+            "action": "APFS clone; independent inode, original content and timestamp",
+            "sha256": hash,
+            "size": size,
+            "canonical": keeper,
+            "nas_archive": read + "/" + name + ".zip",
+          })
+        } else {
+          canonical[identity] = path
+        }
+      }
+      @fs.write_file(
+        evidence + "/moonfish-export-actions.json",
+        Json(actions).stringify(),
+        permission=0o600,
+      )
+      println("Exports compacted so far: \{actions.length()}")
+    }
+    archive(
+      "/Users/kq/moonsuite/.moonsuite/products/moonfish/nas-tools/artifacts", "research-datasets",
+      write, evidence,
+    )
+  }
+  let query = "/Users/kq/moonsuite/.moonsuite/services/moonfish-query"
+  let metadata : Array[String] = []
+  for
+    name in [
+      "cache", "changes", "dependencies", "invalidations", "nas-partitions", "outbox",
+      "provider-revision.json", "queries", "query-changes", "query-dependencies",
+      "reverse-dependencies", "subscriptions",
+    ] {
+    if @fs.exists(query + "/" + name) {
+      metadata.push(name)
+    }
+  }
+  if !@fs.exists(write + "/query-metadata-recovery.zip") {
+    @shell.Cmd(
+      "/usr/bin/zip",
+      ["-qry", "-1", write + "/query-metadata-recovery.zip", ..metadata],
+      cwd=query,
+    ).run()
+  }
+  @shell.Cmd("/usr/bin/unzip", ["-tqq", write + "/query-metadata-recovery.zip"]).run()
+  for leaf in ["objects", "snapshots"] {
+    let source = query + "/" + leaf
+    let destination = write + "/query/" + leaf
+    @fs.mkdir(destination, recursive=true, allow_exist=true, permission=0o700)
+    println("Copying immutable query " + leaf + " to NAS")
+    @shell.Cmd("rsync", [
+      "-rLt",
+      "--ignore-existing",
+      source + "/",
+      destination + "/",
+    ]).run()
+    // Check complete names/types/sizes without rereading payloads. The following
+    // SHA256 pass verifies every inventoried NAS file once against the audit.
+    let comparison = output("rsync", [
+      "-nrL",
+      "--size-only",
+      "--delete",
+      "--itemize-changes",
+      source + "/",
+      destination + "/",
+    ])
+    @fs.write_file(
+      evidence + "/query-" + leaf + "-comparison.txt",
+      comparison,
+      permission=0o600,
+    )
+    guard comparison.trim().is_empty() else {
+      fail("Query changed or NAS copy differs; keep local data")
+    }
+  }
+  let expected : Map[String, String] = Map([])
+  let targets : Array[String] = []
+  for row in rows {
+    if row is { "path": String(path), "sha256": String(hash), .. } &&
+      (
+        path.has_prefix(query + "/objects/") ||
+        path.has_prefix(query + "/snapshots/")
+      ) {
+      let target = read + "/query" + path[query.length():].to_owned()
+      expected[target] = hash
+      targets.push(target)
+    }
+  }
+  for offset = 0; offset < targets.length(); offset = offset + 128 {
+    let code = @shell.Cmd(
+      "shasum",
+      ["-a", "256", ..targets[offset:offset + 128]],
+    ).each_line(line => {
+      guard line.length() >= 67 else { fail("Invalid NAS digest response") }
+      let target = line[66:].to_owned()
+      guard expected.get(target) is Some(hash) && line[:64] == hash else {
+        fail("NAS SHA256 differs from audited source: " + target)
+      }
+    })
+    guard code == 0 else { fail("NAS checksum scan failed") }
+    if offset % 2048 == 0 {
+      println(
+        "Verified NAS query SHA256 \{offset+targets[offset:offset+128].length()}/\{targets.length()}",
+      )
+    }
+  }
+  println(
+    "NAS SHA256 matches for all \{targets.length()} inventoried query files",
+  )
+  let migrated : Array[Json] = []
+  for row in rows {
+    guard row
+      is {
+        "path": String(path),
+        "size": String(size),
+        "modified": String(modified),
+        "sha256": String(hash),
+        "identity": String(identity),
+        ..
+      } &&
+      (
+        path.has_prefix(query + "/objects/") ||
+        path.has_prefix(query + "/snapshots/")
+      ) else {
+      continue
+    }
+    if @string.parse_int64(modified) > now - 604800L ||
+      !(@fs.kind(path, follow_symlink=false) is Regular) {
+      continue
+    }
+    if @fs.file_size(path) != @string.parse_int64(size) ||
+      @fs.mtime(path).0 != @string.parse_int64(modified) ||
+      @fs.ctime(path).0 !=
+      @string.parse_int64(identity.split("\t").to_array()[2]) {
+      continue
+    }
+    let target = read + "/query" + path[query.length():].to_owned()
+    // NAS SHA256 matches the original audit, and source size/mtime/ctime still
+    // match that audit. Names and sizes were compared without a second data pass.
+    // Cold objects/snapshots are immutable. Replace each path atomically, so
+    // requests and existing open handles never encounter a missing file.
+    let temporary = path + ".nas-link-20261125"
+    @fs.symlink(target~, temporary)
+    @fs.rename(temporary, path, replace=true)
+    migrated.push({
+      "source": path,
+      "nas": target,
+      "size": size,
+      "sha256": hash,
+      "action": "cold immutable data on NAS; original path retained atomically",
+    })
+    if migrated.length() % 256 == 0 {
+      @fs.write_file(
+        evidence + "/moonfish-query-migrations.json",
+        Json(migrated).stringify(),
+        permission=0o600,
+      )
+    }
+  }
+  @fs.write_file(
+    evidence + "/moonfish-query-migrations.json",
+    Json(migrated).stringify(),
+    permission=0o600,
+  )
+  @shell.Cmd("cp", [
+    evidence + "/moonfish-query-migrations.json",
+    write + "/query-migrations.json",
+  ]).run()
+  @shell.Cmd("cp", [
+    evidence + "/moonfish-export-actions.json",
+    write + "/export-actions.json",
+  ]).run()
+  println(
+    "Preserved complete exports/research data, compacted \{actions.length()} duplicate exports; migrated \{migrated.length()} cold query paths",
+  )
+}

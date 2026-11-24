@@ -1,0 +1,220 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/core/string",
+}
+
+///|
+async fn output(program : String, args : Array[String]) -> String {
+  let result = @shell.Cmd(program, args).output()
+  result.check()
+  result.stdout()
+}
+
+///|
+async fn referenced(path : String) -> Bool {
+  let mut busy = false
+  let code = @shell.Cmd("ps", ["-ww", "-axo", "args="]).each_line(line => {
+    if line.contains(path) {
+      busy = true
+    }
+  })
+  guard code == 0 else { fail("Cannot inspect processes") }
+  let result = @shell.Cmd("lsof", ["-nP", "+D", path, "-Fn"]).output()
+  guard result.exit_code() == 0 || result.exit_code() == 1 else {
+    fail("Cannot inspect archive handles")
+  }
+  busy || result.stdout().contains("\nn" + path)
+}
+
+///|
+async fn inventory(path : String) -> String {
+  let lines : Array[String] = []
+  let code = @shell.Cmd("find", [
+    path, "-exec", "stat", "-f", "%m\t%c\t%z\t%p\t%N", "{}", "+",
+  ]).each_line(line => lines.push(line))
+  guard code == 0 else { fail("Cannot inventory archive") }
+  lines.sort()
+  lines.join("\n")
+}
+
+///|
+async fn remove_verified_copy(path : String) -> Unit {
+  // Sealed source modes are retained in the NAS tar. Local directories alone
+  // need owner-write permission to unlink the verified redundant copy.
+  @shell.Cmd("find", [path, "-type", "d", "-exec", "chmod", "u+w", "{}", "+"]).run()
+  @fs.rmdir(path, recursive=true)
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, mode] && ["report", "clean"].contains(mode) else {
+    fail("report | clean")
+  }
+  let root = "/Users/kq/Workspace/lunachip/artifacts"
+  let evidence = "/Users/kq/Workspace/lunanexa/output/persistent-audit-20261125"
+  let write = "/Users/kq/.moonsuite/nas-archive/moonsuite-persistent/mac-kq/20261125/lunachip"
+  let read = "/Volumes/wework/moonsuite-persistent/mac-kq/20261125/lunachip"
+  let mounts = output("mount", ["-t", "smbfs"])
+  guard mounts.contains(
+    "//DataManager@192.168.0.52/wework on /Users/kq/.moonsuite/nas-archive ",
+  ) else {
+    fail("Expected NAS mount absent")
+  }
+  @fs.mkdir(write, recursive=true, allow_exist=true, permission=0o700)
+  let lock = @fs.open(
+    "/Users/kq/Library/Logs/MoonSuite/build-retention/maintenance.lock",
+    mode=ReadWrite,
+    create_mode=OpenOrCreate,
+    permission=0o600,
+  )
+  defer lock.close()
+  guard lock.try_lock(Exclusive) else { fail("Another maintenance is running") }
+  defer lock.unlock()
+  let now = @string.parse_int64(output("date", ["+%s"]).trim())
+  let rows : Array[(Int64, String)] = []
+  let sizes = output("du", ["-k", "-d", "1", root])
+  for line in sizes.split("\n") {
+    let fields = line.split("\t").to_array()
+    if fields.length() == 2 && fields[1] != root {
+      rows.push((@string.parse_int64(fields[0]), fields[1].to_owned()))
+    }
+  }
+  rows.sort_by((a, b) => b.0.compare(a.0))
+  let tracked = output("git", [
+    "-C", "/Users/kq/Workspace/lunachip", "ls-files", "--", "artifacts",
+  ])
+  let mut count = 0
+  for (kib, path) in rows {
+    guard path.has_prefix(root + "/") &&
+      @fs.kind(path, follow_symlink=false) is Directory else {
+      continue
+    }
+    let name = path[root.length() + 1:].to_owned()
+    if tracked.contains("artifacts/" + name + "/") {
+      println("Kept tracked " + name)
+      continue
+    }
+    let before = inventory(path)
+    let mut recent = false
+    for line in before.split("\n") {
+      let modified = @string.parse_int64(line.split("\t").next().unwrap())
+      if modified > now - 86400L {
+        recent = true
+      }
+    }
+    if recent || referenced(path) {
+      println("Kept recent/running " + name)
+      continue
+    }
+    if mode == "report" {
+      println("Candidate \{kib} KiB " + name)
+      continue
+    }
+    let archive = write + "/" + name + ".zip"
+    let complete = read + "/" + name + ".zip"
+    let receipt = evidence + "/hardware-" + name + ".json"
+    println("Archiving \{kib} KiB " + name)
+    let resumed = @fs.exists(receipt) && @fs.exists(archive)
+    @shell.Cmd(
+      "xattr",
+      ["-lr", "-x", path],
+      stdout=ToFile(write + "/" + name + ".xattrs.txt"),
+    ).run()
+    @shell.Cmd(
+      "ls",
+      ["-leOR", path],
+      stdout=ToFile(write + "/" + name + ".permissions.txt"),
+    ).run()
+    if !resumed {
+      let packed = @shell.Cmd(
+        "/usr/bin/zip",
+        ["-qry", "-1", archive + ".partial.zip", name],
+        cwd=root,
+      ).output(max_output_bytes=32768)
+      guard packed.exit_code() == 0 else {
+        fail("Packing failed: " + packed.stderr())
+      }
+    }
+    let verification_archive = if resumed {
+      archive
+    } else {
+      archive + ".partial.zip"
+    }
+    let temporary = @fs.tmpdir(prefix="moon-evidence-verify-")
+    defer remove_verified_copy(temporary)
+    let unpacked = @shell.Cmd("/usr/bin/unzip", [
+      "-q", verification_archive, "-d", temporary,
+    ]).output(max_output_bytes=32768)
+    guard unpacked.exit_code() == 0 else {
+      fail("Restore failed: " + unpacked.stderr())
+    }
+    // Full byte-for-byte directory comparison, not just names or archive CRCs.
+    let compared = @shell.Cmd("diff", ["-qr", path, temporary + "/" + name]).output(
+      max_output_bytes=32768,
+    )
+    guard compared.exit_code() == 0 else {
+      fail(
+        "Directory comparison failed: " + compared.stdout() + compared.stderr(),
+      )
+    }
+    guard compared.stdout().is_empty() else {
+      fail("Archive comparison differs: " + name)
+    }
+    guard before == inventory(path) && !referenced(path) else {
+      fail("Archive changed or became active: " + name)
+    }
+    let digest = output("shasum", ["-a", "256", verification_archive])
+      .split(" ")
+      .next()
+      .unwrap()
+      .to_owned()
+    if !resumed {
+      @fs.rename(archive + ".partial.zip", archive, replace=true)
+    }
+    guard @fs.exists(complete) else {
+      fail("Archive not accessible via normal read-only NAS mount")
+    }
+    let record : Json = {
+      "source": path,
+      "archive": complete,
+      "sha256": digest,
+      "allocated_kib": Json(kib),
+      "comparison": "Complete InfoZIP extraction followed by diff -qr; exit 0; source metadata unchanged; no live references",
+      "restore_parent": root,
+      "status": "verified-before-local-removal",
+    }
+    @fs.write_file(receipt, record.stringify(), permission=0o600)
+    @fs.write_file(
+      write + "/" + name + ".json",
+      record.stringify(),
+      permission=0o600,
+    )
+    // Archive contents remain intact. Only the verified redundant local copy goes.
+    guard before == inventory(path) && !referenced(path) else {
+      fail("Archive changed before removal")
+    }
+    remove_verified_copy(path)
+    @fs.write_file(
+      evidence + "/hardware-removals.jsonl",
+      record.stringify() + "\n",
+      append=true,
+      create_mode=OpenOrCreate,
+      permission=0o600,
+    )
+    @fs.write_file(
+      write + "/migration-map.jsonl",
+      record.stringify() + "\n",
+      append=true,
+      create_mode=OpenOrCreate,
+      permission=0o600,
+    )
+    count += 1
+    println("Archived and removed local copy \{count}: " + name)
+  }
+  println("Completed hardware archives: \{count}")
+}

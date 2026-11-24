@@ -1,0 +1,14 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/shell",
+}
+
+///|
+async fn main {
+  let root = "/Users/kq/Workspace/lunachip/artifacts"
+  let destination = "/Users/kq/.moonsuite/nas-archive/moonsuite-persistent/mac-kq/20261125/lunachip"
+  let attrs = @shell.Cmd("xattr",["-lr","-x",root],stdout=ToFile(destination+"/remaining-source-xattrs.txt"),stderr=ToFile(destination+"/metadata-capture-errors.txt")).status()
+  let modes = @shell.Cmd("ls",["-leOR",root],stdout=ToFile(destination+"/remaining-source-permissions.txt"),stderr=AppendToFile(destination+"/metadata-capture-errors.txt")).status()
+  println("Additional Mac metadata capture: xattr exit \{attrs}; permissions exit \{modes}")
+}

@@ -1,0 +1,53 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/env",
+}
+
+///|
+async fn main {
+  let args = @env.args()
+  guard args.length() >= 2 else { fail("root [--targets]") }
+  let root = args[1]
+  let counts : Map[String, Int32] = Map([])
+  let suspect : Array[String] = []
+  let mut suspect_count = 0
+  let code = @shell.Cmd("find", [root, "-type", "f", "-print"]).each_line(path => {
+    if path.is_empty() {
+      return
+    }
+    if args.contains("--targets") {
+      let parts = path[root.length() + 1:].split("/").to_array()
+      if parts.length() < 3 ||
+        !parts[0].has_suffix(".mbtx") ||
+        !["native", "js", "wasm", "wasm-gc"].contains(parts[1].to_owned()) {
+        return
+      }
+    }
+    let leaf = path.split("/").last().unwrap().to_owned()
+    let suffix = leaf.split(".").last().unwrap().to_owned()
+    counts[suffix] = counts.get(suffix).unwrap_or(0) + 1
+    if [
+        "sv", "v", "vhd", "vcd", "fst", "sby", "onnx", "pt", "safetensors", "mbt",
+        "mbtx", "log", "txt", "csv", "tsv", "bin",
+      ].contains(suffix) ||
+      (
+        suffix == "json" &&
+        !["index.json", "packages.json", "all_pkgs.json"].contains(leaf)
+      ) {
+      suspect_count += 1
+      if !args.contains("--summary") && suspect.length() < 45 {
+        suspect.push(path)
+      }
+    }
+  })
+  guard code == 0 else { fail("find failed") }
+  for key, count in counts {
+    println("\{key}: \{count}")
+  }
+  println("Files needing review: \{suspect_count}")
+  for i in 0..<suspect.length().min(45) {
+    println(suspect[i])
+  }
+}

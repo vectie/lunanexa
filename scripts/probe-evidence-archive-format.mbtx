@@ -1,0 +1,48 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+}
+
+///|
+async fn main {
+  let temp = @fs.tmpdir(prefix="moon-archive-format-")
+  defer @fs.rmdir(temp,recursive=true)
+  @fs.mkdir(temp+"/source/address",recursive=true)
+  @shell.Cmd("/usr/bin/unzip",["-p","/Volumes/wework/moonsuite-persistent/mac-kq/20261125/lunachip/prx100-layer-stripe-20261020.zip","prx100-layer-stripe-20261020/work/native-proof/input/._address"],stdout=ToFile(temp+"/source/._address")).run()
+  @fs.write_file(temp+"/source/address/test.txt","Preserve ordinary data too")
+  @fs.symlink(target="address/test.txt",temp+"/source/reference")
+  let listing = @shell.Cmd("ls",["-la",temp+"/source"]).output()
+  println(listing.stdout())
+  for format in ["pax","gnutar","cpio","zip"] {
+    @fs.mkdir(temp+"/"+format)
+    let packed = @shell.Cmd("/usr/bin/env",["COPYFILE_DISABLE=1","/opt/homebrew/opt/libarchive/bin/bsdtar","--no-mac-metadata","--format="+format,"-cf",temp+"/"+format+".archive","-C",temp,"source"]).output()
+    if packed.exit_code()!=0 { println(format+" pack error "+packed.stderr()); continue }
+    let contents = @shell.Cmd("/opt/homebrew/opt/libarchive/bin/bsdtar",["-tf",temp+"/"+format+".archive"]).output()
+    println(format+" entries "+contents.stdout())
+    let unpacked = @shell.Cmd("/usr/bin/env",["COPYFILE_DISABLE=1","/opt/homebrew/opt/libarchive/bin/bsdtar","--no-mac-metadata","--options","!mac-ext","-xf",temp+"/"+format+".archive","-C",temp+"/"+format]).output()
+    let compared = @shell.Cmd("diff",["-qr",temp+"/source",temp+"/"+format+"/source"]).output()
+    println("\{format} unpack \{unpacked.exit_code()} compare \{compared.exit_code()} "+compared.stdout()+unpacked.stderr())
+  }
+  @fs.mkdir(temp+"/infozip")
+  @shell.Cmd("/usr/bin/zip",["-qry",temp+"/infozip.zip","source"],cwd=temp).run()
+  @shell.Cmd("/usr/bin/unzip",["-q",temp+"/infozip.zip","-d",temp+"/infozip"]).run()
+  let comparison = @shell.Cmd("diff",["-qr",temp+"/source",temp+"/infozip/source"]).output()
+  println("InfoZIP comparison \{comparison.exit_code()} "+comparison.stdout()+comparison.stderr())
+  guard comparison.exit_code()==0 else { fail("InfoZIP does not preserve complete fixture") }
+  @shell.Cmd("cp",["-cp",temp+"/source/address/test.txt",temp+"/cow-copy"]).run()
+  @fs.write_file(temp+"/cow-copy","Independent clone change")
+  guard @fs.read_file(temp+"/source/address/test.txt").text()=="Preserve ordinary data too" else { fail("Clone altered original") }
+  let links = @shell.Cmd("stat",["-f","%l",temp+"/cow-copy"]).output()
+  links.check()
+  guard links.stdout().trim()=="1" else { fail("Clone is not an independent inode") }
+  println("APFS clone content isolation and independent inode verified")
+  let export_file = "/Users/kq/moonsuite/.moonsuite/products/moonfish/paiwork/exports/0001762e-a124-4980-b09e-c261ac30ecaa"
+  @shell.Cmd("cp",["-cp",export_file,temp+"/actual-export-clone"]).run()
+  let source_attrs = @shell.Cmd("xattr",["-lx",export_file]).output()
+  let clone_attrs = @shell.Cmd("xattr",["-lx",temp+"/actual-export-clone"]).output()
+  source_attrs.check()
+  clone_attrs.check()
+  println("Actual exported-file xattrs preserved by clone: \{source_attrs.stdout()==clone_attrs.stdout()}")
+}

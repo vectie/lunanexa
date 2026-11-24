@@ -1,0 +1,122 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/json",
+  "moonbitlang/core/string",
+}
+
+///|
+struct Entry {
+  path : String
+  size : Int64
+  modified : Int64
+  identity : String
+  mut sha256 : String
+} derive(ToJson)
+
+///|
+async fn main {
+  let roots = [
+    "/Users/kq/moonsuite/.moonsuite/products/moonfish/paiwork/exports", "/Users/kq/moonsuite/.moonsuite/services/moonfish-query/objects",
+    "/Users/kq/moonsuite/.moonsuite/services/moonfish-query/snapshots", "/Users/kq/moonsuite/.moonsuite/products/moonfish/nas-tools/artifacts",
+    "/Users/kq/Workspace/lunachip/artifacts", "/Users/kq/.moonsuite/products/moonfish/paiwork/exports",
+    "/Users/kq/Workspace/moonfish/.moonsuite/products/moonfish/paiwork/exports",
+    "/Users/kq/Library/Application Support/app.vectie.moondesk.lepusa.live/workspace/.moonsuite/products/moonfish/paiwork/exports",
+  ]
+  let directory = "/Users/kq/Workspace/lunanexa/output/persistent-audit-20261125"
+  @fs.mkdir(directory, recursive=true, allow_exist=true, permission=0o700)
+  let entries : Array[Entry] = []
+  for root in roots {
+    if !@fs.exists(root) {
+      continue
+    }
+    let mut bytes = 0L
+    let start = entries.length()
+    let code = @shell.Cmd("find", [
+      root, "-type", "f", "-exec", "stat", "-f", "%z\t%m\t%c\t%i\t%l\t%N", "{}",
+      "+",
+    ]).each_line(line => {
+      let parts = line.split("\t").to_array()
+      guard parts.length() == 6 else {
+        fail("Unexpected filename/stat: " + line)
+      }
+      let size = @string.parse_int64(parts[0])
+      bytes += size
+      entries.push({
+        path: parts[5].to_owned(),
+        size,
+        modified: @string.parse_int64(parts[1]),
+        identity: parts[:5].join("\t"),
+        sha256: "",
+      })
+    })
+    guard code == 0 else { fail("Inventory failed: " + root) }
+    println("\{entries.length() - start} files, \{bytes} bytes: \{root}")
+  }
+  @fs.write_file(
+    directory + "/inventory.json",
+    Json(entries).stringify(),
+    permission=0o600,
+  )
+  let lookup : Map[String, Int32] = Map([])
+  for i, entry in entries {
+    lookup[entry.path] = i
+  }
+  for offset = 0; offset < entries.length(); offset = offset + 128 {
+    let chunk = entries[offset:offset + 128]
+    let paths = chunk.map(entry => entry.path)
+    let code = @shell.Cmd("shasum", ["-a", "256", ..paths]).each_line(line => {
+      guard line.length() >= 67 else { fail("Invalid digest") }
+      let path = line[66:].to_owned()
+      guard lookup.get(path) is Some(index) else { fail("Unknown digest path") }
+      entries[index].sha256 = line[:64].to_owned()
+    })
+    guard code == 0 else { fail("Hashing failed") }
+    if offset % 8192 == 0 {
+      println("Hashed \{offset + chunk.length()}/\{entries.length()}")
+    }
+  }
+  let groups : Map[String, Array[Int32]] = Map([])
+  for i, entry in entries {
+    let key = entry.sha256 + ":" + entry.size.to_string()
+    if groups.get(key) is Some(values) {
+      values.push(i)
+    } else {
+      groups[key] = [i]
+    }
+  }
+  let duplicates : Array[Json] = []
+  let mut redundant = 0L
+  for _, indexes in groups {
+    if indexes.length() < 2 {
+      continue
+    }
+    let extra = entries[indexes[0]].size * (indexes.length() - 1).to_int64()
+    redundant += extra
+    duplicates.push({
+      "sha256": entries[indexes[0]].sha256,
+      "extra_bytes": Json(extra),
+      "paths": Json(indexes.map(index => entries[index].path)),
+    })
+  }
+  @fs.write_file(
+    directory + "/inventory.json",
+    Json(entries).stringify(),
+    permission=0o600,
+  )
+  @fs.write_file(
+    directory + "/duplicates.json",
+    (
+      {
+        "groups": duplicates,
+        "redundant_logical_bytes": Json(redundant),
+        "note": "Identical bytes only; references and APFS sharing require separate checks before removal.",
+      } : Json).stringify(),
+    permission=0o600,
+  )
+  println(
+    "Duplicate groups: \{duplicates.length()}; redundant logical bytes: \{redundant}",
+  )
+}

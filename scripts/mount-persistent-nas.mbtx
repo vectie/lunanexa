@@ -1,0 +1,30 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+}
+
+///|
+async fn main {
+  let target = "/Users/kq/.moonsuite/nas-archive"
+  @fs.mkdir(target, recursive=true, allow_exist=true, permission=0o700)
+  let mounted = @shell.Cmd("mount", ["-t", "smbfs"]).output()
+  mounted.check()
+  if !mounted.stdout().contains(" on " + target + " ") {
+    @shell.Cmd("/sbin/mount", [
+      "-t", "smbfs", "-o", "nobrowse,nosuid,nodev,soft,nopassprompt", "//DataManager@192.168.0.52/wework",
+      target,
+    ]).run()
+  }
+  let probe = target + "/.archive-write-probe-20261125"
+  @fs.write_file(probe, "write/read verification", permission=0o600)
+  guard @fs.read_file(probe).text() == "write/read verification" else {
+    fail("NAS write/read mismatch")
+  }
+  @fs.remove(probe)
+  println(
+    "Verified separate writable archive mount; existing dataset mounts unchanged: " +
+    target,
+  )
+}

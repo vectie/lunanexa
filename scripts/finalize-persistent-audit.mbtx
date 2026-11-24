@@ -1,0 +1,211 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/json",
+  "moonbitlang/core/string",
+}
+
+///|
+async fn output(program : String, args : Array[String]) -> String {
+  let r = @shell.Cmd(program, args).output()
+  r.check()
+  r.stdout()
+}
+
+///|
+async fn main {
+  let evidence = "/Users/kq/Workspace/lunanexa/output/persistent-audit-20261125"
+  let write = "/Users/kq/.moonsuite/nas-archive/moonsuite-persistent/mac-kq/20261125"
+  let read = "/Volumes/wework/moonsuite-persistent/mac-kq/20261125"
+  let lock = @fs.open(
+    "/Users/kq/Library/Logs/MoonSuite/build-retention/maintenance.lock",
+    mode=ReadWrite,
+    create_mode=OpenOrCreate,
+    permission=0o600,
+  )
+  defer lock.close()
+  guard lock.try_lock(Exclusive) else { fail("A migration is still running") }
+  defer lock.unlock()
+  guard @fs.exists(evidence + "/after/services.json") &&
+    @fs.exists(evidence + "/moonfish-query-migrations.json") else {
+    fail("Complete service acceptance and MoonFish migration first")
+  }
+  let working_root = "/Users/kq/Workspace/lunachip/artifacts"
+  let remaining_files = @fs.readdir(working_root)
+  if !remaining_files.is_empty() {
+    let backup = write + "/lunachip/original-top-level-receipts.zip"
+    @shell.Cmd(
+      "/usr/bin/zip",
+      ["-qry", "-1", backup, "artifacts"],
+      cwd="/Users/kq/Workspace/lunachip",
+    ).run()
+    let temp = @fs.tmpdir(prefix="moon-final-receipt-check-")
+    defer @fs.rmdir(temp, recursive=true)
+    @shell.Cmd("/usr/bin/unzip", ["-q", backup, "-d", temp]).run()
+    @shell.Cmd("diff", ["-qr", working_root, temp + "/artifacts"]).run()
+    let receipt_hash = output("shasum", ["-a", "256", backup])
+      .split(" ")
+      .next()
+      .unwrap()
+      .to_owned()
+    @fs.write_file(
+      evidence + "/hardware-original-receipts.json",
+      (
+        {
+          "archive": read + "/lunachip/original-top-level-receipts.zip",
+          "sha256": receipt_hash,
+          "policy": "Keep original small transport packages, receipts, checksums and scripts in place; durable NAS copy verified completely.",
+        } : Json).stringify(),
+      permission=0o600,
+    )
+  }
+  let hardware : Array[Json] = []
+  let archives : Array[String] = []
+  let expected : Map[String, String] = Map([])
+  let names = @fs.readdir(evidence)
+  names.sort()
+  let mut removed_kib = 0L
+  for name in names {
+    if name.has_prefix("hardware-") &&
+      name.has_suffix(".json") &&
+      name != "hardware-manifest.json" &&
+      name != "hardware-original-receipts.json" {
+      let record = @json.parse(@fs.read_file(evidence + "/" + name).text())
+      guard record
+        is {
+          "source": String(source),
+          "archive": String(archive),
+          "sha256": String(hash),
+          "allocated_kib": String(kib),
+          ..
+        } else {
+        fail("Bad hardware receipt")
+      }
+      let removed = !@fs.exists(source)
+      if removed {
+        removed_kib += @string.parse_int64(kib)
+      }
+      hardware.push({ "receipt": record, "local_copy_removed": removed })
+      archives.push(archive)
+      expected[archive] = hash
+    }
+  }
+  for offset = 0; offset < archives.length(); offset = offset + 128 {
+    let code = @shell.Cmd(
+      "shasum",
+      ["-a", "256", ..archives[offset:offset + 128]],
+    ).each_line(line => {
+      guard line.length() >= 67 &&
+        expected.get(line[66:].to_owned()) is Some(hash) &&
+        hash == line[:64].to_owned() else {
+        fail("Archive final checksum mismatch")
+      }
+    })
+    guard code == 0 else { fail("Archive checksum verification failed") }
+  }
+  let map = hardware
+    .map(row => {
+      guard row is { "receipt": record, .. } else { abort("Bad record") }
+      record.stringify()
+    })
+    .join("\n") +
+    "\n"
+  // Rebuild aggregate logs from individual durable receipts. append=true alone
+  // defaults to truncation in this fs API; callers must use OpenOrCreate too.
+  @fs.write_file(evidence + "/hardware-removals.jsonl", map, permission=0o600)
+  @fs.write_file(write + "/lunachip/migration-map.jsonl", map, permission=0o600)
+  let recovery : Json = {
+    "archives": hardware,
+    "nas_root": read + "/lunachip",
+    "source_sha256_inventory": read + "/inventory.json",
+  }
+  @fs.write_file(
+    evidence + "/hardware-manifest.json",
+    recovery.stringify(),
+    permission=0o600,
+  )
+  @fs.write_file(
+    write + "/lunachip/manifest.json",
+    recovery.stringify(),
+    permission=0o600,
+  )
+  @fs.write_file(
+    "/Users/kq/Workspace/lunachip/docs/evidence/storage-migration-20261125.json",
+    recovery.stringify(indent=2),
+    permission=0o600,
+  )
+  guard @json.parse(
+      @fs.read_file(evidence + "/moonfish-query-migrations.json").text(),
+    )
+    is Array(query) else {
+    fail("Bad query record")
+  }
+  guard @json.parse(
+      @fs.read_file(evidence + "/moonfish-export-actions.json").text(),
+    )
+    is Array(exports) else {
+    fail("Bad export record")
+  }
+  let mut query_bytes = 0L
+  let mut clone_bytes = 0L
+  for row in query {
+    if row is { "size": String(size), .. } {
+      query_bytes += @string.parse_int64(size)
+    }
+  }
+  for row in exports {
+    if row is { "size": String(size), .. } {
+      clone_bytes += @string.parse_int64(size)
+    }
+  }
+  let disk = output("df", ["-k", "/System/Volumes/Data"])
+  let fields = disk.split("\n").to_array()[1]
+    .split(" ")
+    .filter(v => !v.is_empty())
+    .to_array()
+  let free = @string.parse_int64(fields[3])
+  let remaining = @fs.readdir("/Users/kq/Workspace/lunachip/artifacts")
+  let summary : Json = {
+    "hardware_archives_verified": hardware.length(),
+    "hardware_local_allocated_kib_removed": Json(removed_kib),
+    "remaining_hardware_entries": remaining,
+    "cold_query_files_moved_to_nas": query.length(),
+    "cold_query_logical_bytes": Json(query_bytes),
+    "registered_exports_compacted_with_apfs_clones": exports.length(),
+    "clone_logical_bytes": Json(clone_bytes),
+    "duplicate_groups": 15715,
+    "duplicate_extra_logical_bytes": "20076370052",
+    "available_kib": Json(free),
+    "available_gib": free.to_double() / 1048576.0,
+    "nas_root": read,
+    "persistent_data": "Saved exports, query/source snapshots and experiment evidence. Preserved on NAS. Mutable working state and seven days of hot query data stay local; registered exports keep independent local working files.",
+    "protected": "No Codex history/tools, model weights, installed current/two rollback versions, running services, VM, .191 or cluster resources were removed or reconfigured.",
+    "acceptance": @json.parse(
+      @fs.read_file(evidence + "/after/services.json").text(),
+    ),
+    "note": "Allocated/logical removal totals differ from net physical recovery under APFS, sparse files and concurrent builds. New application output needs a future explicit persistence pass; daily build-only retention is unchanged.",
+  }
+  @fs.write_file(
+    evidence + "/summary.json",
+    summary.stringify(indent=2),
+    permission=0o600,
+  )
+  @fs.write_file(
+    write + "/summary.json",
+    summary.stringify(indent=2),
+    permission=0o600,
+  )
+  @fs.write_file(
+    write + "/README.txt",
+    "Manual persistent-data migration, 2026-11-25.\n\nHardware: lunachip/manifest.json records exact original paths, archives and SHA256. Restore ZIP archives with /usr/bin/unzip into a chosen parent; the first feedback archive is tar.gz and uses tar -xpf. Every archive was fully extracted and compared before local removal. Mac metadata hex and permission/flag listings are retained separately. Do not compile inside restored sealed evidence.\n\nMoonFish: complete exports and research artifacts are ZIP archives, with state recovery copies. Registered export paths still work locally; old identical files share APFS extents, not inodes. query/objects and query/snapshots are ordinary NAS files, SHA256 verified against inventory.json. Old local query paths are atomic links through /Volumes/wework. Mutable metadata and the recent working set remain local. query-metadata-recovery.zip is an additional recovery capture of mutable metadata, not a stopped-service transactional backup.\n\nNew output requires a future explicit persistence pass. No new state-deletion automation. Models, Codex history, running services, build VM, .191 and cluster were untouched.\n",
+    permission=0o600,
+  )
+  let failed = write + "/lunachip/prx100-layer-stripe-20261020.tar.gz.partial"
+  if @fs.exists(failed) &&
+    @fs.exists(read + "/lunachip/prx100-layer-stripe-20261020.zip") {
+    @fs.remove(failed)
+  }
+  println(summary.stringify(indent=2))
+}
