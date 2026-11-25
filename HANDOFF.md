@@ -1,5 +1,18 @@
 # Product simplification — 2026-11-04
 
+## 2026-11-25 · Latest stable MoonBit SDK and GLM tool-call qualification
+
+- Updated the Mac SDK (`~/.moon`) and the management build SDK (`~/.moon-new`) to official stable `moon 0.1.20261119` / `moonc v0.10.22+124d61d05`; retained the previous SDKs and independent rollback copies. Mac binary checksums and the Linux SDK archive checksum were verified against the official manifests. Management SDK now points to `/home/HwHiAiUser/glm-tools-20261125/toolchain`; GPU nodes, the build VM and `.191` were not changed.
+- Keep upstream `#derive` syntax: the previous Mac compiler did not support it. Latest `moon fmt` migrates suffix derives and a file argument can format its whole containing package. Use an isolated staging tree for release normalization rather than mechanically rewriting unrelated working changes. New `.mbtx` scripts should fence imports in `----` frontmatter.
+- Strengthened tool regressions for developer messages, assistant tool-call history with null content, tool-result IDs and text arrays, `parallel_tool_calls: false`, split streamed argument fragments, and explicit empty answers. Focused native API/runtime suites pass **292/292 on both macOS and Linux**.
+- Scoped `moon info api runtimes --target native` passes on Linux. Generated interface differences reflect the latest SDK's `#derive`, canonical `Int32` / qualified JSON names, and `FromJson` decoding context; no new application API was introduced by the transport patch. Generated metadata is retained in the isolated release tree rather than replacing unrelated workspace interfaces.
+- The full native workspace gates were run with the latest compiler but are not clean: pinned Rabbita 0.14.0 calls the now-unpromoted `to_repr` trait method; native CLI fixture builds also fail `--deny-warn` on existing numeric-conversion/radix deprecations and unused JSON imports. Diagnostics are retained privately under `output/glm-tools-release-20261125/` and the matching management release directory. Do not describe this as a full native-suite pass.
+- Before deployment, the real user API key successfully authenticated but a GLM tool-bearing request returned HTTP 502 `RuntimeUnavailable`, reproducing the adapter failure. The key is never committed or included in reports. The clean release source is commit `a6d7d1c3ec071ab6cd558a0f9b5a6ede5be36800` plus the two focused regression-test files; existing unrelated local cleanup/recovery work remains outside that source bundle.
+- Direct authenticated native GLM acceptance passed before controller publication: non-streamed `multiply(17,23)` tool call, matching tool-result history returning `391`, and streamed function-name/argument fragments all returned HTTP 200 (0.929s / 0.539s / 0.841s). This isolates the live public-API 502 to the platform adapter rather than absent model tool support.
+- Published the reviewed native controller through a guarded change of only the `native-glm-control` hostPath from `/home/HwHiAiUser/portal-acceptance-control-r2-20261109/control` to `/home/HwHiAiUser/glm-tools-20261125/control`. New executable SHA-256: `430595755aa92e62422f01664ae070aee5291cc902e71f72a41df0dc7a7512d8`. Previous directory and companion binaries remain intact. Rollout completed; pod `lunanexa-control-665669664c-5jhkn` is 10/10 Ready. Its first startup hit `DatabaseError.ConnectionUnavailable`; Kubernetes retried once, then readiness and all acceptance calls passed without further restarts.
+- Real public `/user/v1/chat/completions` acceptance using the existing scoped user key passed: tool call HTTP 200 / 1.737s, matching tool-result follow-up HTTP 200 / 1.149s, streamed argument fragments and `[DONE]` HTTP 200 / 1.810s, ordinary text HTTP 200 / 1.814s, and a deliberately one-token answer HTTP 200 / 0.711s with `finish_reason: length` and **empty visible content**, not serialized internal metadata. Temporary local credential material was removed after acceptance.
+- Final comparison verified all other deployment specs unchanged, both GLM rank units still active with the same PIDs/start timestamps, and every other previously running pod retaining its UID, readiness and restart counts. No inference settings, context, model, concurrency limits, permissions, GPU services, `.191` or build VM were changed. The tools fix resolves tool-bearing API failures; it is not a decoding-speed optimization.
+
 ## 2026-11-25 · OpenAI `tools` support in `text_chat` transport & empty `output_text` fix
 
 - Updated `runtimes/text_chat.mbt` so routes using `text_chat_completions: true` (such as `glm-5.3.flash`) forward OpenAI `tools`, `tool_choice`, `parallel_tool_calls`, `role: "tool"` messages, and `assistant.tool_calls` instead of raising `UnsupportedCapability` (which `api/server.mbt` flattened into `502 RuntimeUnavailable`), and decode both non-streaming `message.tool_calls` and streaming `delta.tool_calls` into the existing runtime `function_call` / `tool_call_delta` contract.
@@ -2378,15 +2391,100 @@ drivers require that path. Do not compile inside restored sealed archives.
 
 MoonFish export readers reject symbolic links and nlink>1 for some registered
 files. Keep those paths as independent files; identical old exports can share
-APFS extents through verified clones, not hardlinks. Immutable query object/
-snapshot files support normal filesystem reads, so old copies can be verified
-on NAS and replaced atomically with links into the normal read-only mount.
-Keep mutable metadata and seven days of hot files local. Complete export and
-research archives provide durable copies while active local working files stay
-compatible with current readers. New application output still needs a future
-explicit persistence pass; no new state-GC schedule or product deployment here.
+APFS extents through verified clones, not hardlinks. Complete export/research
+archives provide durable NAS copies while active local working files retain
+normal reader semantics. 17980 registered export files were compacted this way.
+
+The completed query strategy does NOT introduce live NAS aliases. Slow SMB
+plaintext transfer was stopped before its replacement phase. Instead complete
+raw, normalized and snapshot ZIPs were written directly to NAS, fully extracted
+locally and byte-compared. A conservative reference graph roots all metadata,
+all materialized snapshots and all three Paiwork profiles, then follows object
+references transitively. Of10970 content-addressed object IDs,3934 were rooted
+and7036 unreferenced (19969969656 logical bytes); there were no exact duplicate
+query payloads. `scripts/audit-query-references.mbtx --clean` additionally keeps
+recent/changed files, guards reference-root versions throughout cleanup, verifies
+the NAS archive checksums, and records archive member recovery paths before each
+local unlink. All referenced objects and all64 materialized snapshots remain
+local; unique historical bytes remain in verified NAS archives. Do not rerun
+the earlier plaintext-copy/alias branch of the migration worker as this task's
+final policy. Final counts and retained exceptions are in summary.json.
+
+New application output still needs a future explicit persistence pass; no new
+state-GC schedule, automatic output redirection or product deployment here.
+
+Operational pitfall: async fs.write_file(append=true) still defaults to truncating
+create mode. Use create_mode=OpenOrCreate for JSONL append. Individual hardware
+receipts were complete; finalization rebuilds aggregate indexes from them rather
+than trusting the early truncated aggregate. Archive verification is already
+recorded before each removal; finalization reconciles those durable receipts
+without needlessly rereading all sealed archives again.
 
 Evidence and in-progress/final receipts:
 `output/persistent-audit-20261125/`; checksum inventory/duplicate report also
 copied byte-for-byte to NAS. Service baseline captures three saved-query pages
 and both MoonDesk/Paiwork profiles with unchanged PIDs before migration.
+
+Completed pass:288 hardware directory archives verified before local removal
+(33917668KiB allocated locally);166 small top-level receipt/transport/script
+files retained in place and backed up separately. Query cleanup removed5566
+unreferenced cold objects (14790082424 logical bytes), retained1470 recent or
+changed unreferenced objects and3934 referenced objects. All64 snapshots remain
+local. 17980 export clones account for2309204928 logical duplicate bytes while
+retaining independent nlink1 inodes. Net free space is about59.4GiB (consult the
+final summary for the exact sample; concurrent builds can change it).
+
+Acceptance:three persisted query-result pages are byte-identical to the baseline,
+both profile download APIs return the original SHA256, all five app/service URLs
+return HTTP200, and original service PIDs remain alive. A cache-only public query
+also reads its expected normalized object with a true cache hit in15ms, with no
+upstream acquisition. Protected main LunaChip `_build` remains1323256KiB and
+Ollama models16600544KiB. Full audit/acceptance evidence is copied to the NAS
+archive's `audit-evidence/`; `lunachip/manifest.json` and
+`docs/evidence/storage-migration-20261125.json` provide recovery mappings.
+
+NAS enumeration pitfall:the async fs host returned EOVERFLOW (`Result too large`)
+for the abandoned SMB plaintext staging directory. Use macOS find for bounded
+namespace validation there. The complete verified query ZIPs are authoritative;
+the partial plaintext transfer was never activated as a service mount.
+Final sealing removed that task-owned partial transfer after namespace/size
+validation. Cache-only acceptance and complete recovery/audit manifests are
+mirrored on NAS and their summary/manifest copies compare equal. The temporary
+writable archive mount was unmounted after completion; the existing readonly
+`/Volumes/wework` mounts remain available. Remount through the dedicated helper
+for a future explicitly authorized persistence pass.
+
+## GLM pair recovery — 2026-11-25
+
+User requested restoring the existing GLM service on .178/.179 and one actual
+inference. The normal management SSH alias's old32122 jump closes connections;
+the existing HwHiAiUser@106.39.18.146:32123 route works. Do not reopen public SSH
+mappings or weaken host-key checks to work around this. Both original TensorFold
+user units were loaded/inactive, not missing.
+
+Root cause of blocked UI startup: the Kubernetes API's live endpoint is now
+192.168.2.173:6443, but lunanexa-reservation-host-api-egress still allowed only
+the old192.168.2.175:6443 after service NAT. Model-pool reads timed out; existing
+zero-replica Qwen bindings stayed Unknown, correctly retaining capacity and
+blocking the GLM pair. Do not bypass ownership or force those records to Stopped.
+Correct the controller's API connectivity first. A guarded JSON patch replaced
+only that endpoint /32; TCP6443, the API service-IP rule, selectors and all other
+fields are unchanged. Reconciliation then observed Qwen on177 Running and the
+zero-replica legacy bindings Stopped, without scaling/restarting them or the
+controller. Model-pool GET recovered from a12-second diagnostic timeout to488ms.
+
+The first UI Start was rejected before the fix; the second, after ownership
+reconciliation, was accepted through the same service-company-text lifecycle.
+Head start20:18:59 CST, serving20:20:21, runtime-reported load81.9s. Both original
+rank units are active. Model discovery confirms524288 context tokens and aliases
+glm-5.3 / glm-5.3.flash. No model files, precision, context, reserve or runtime
+arguments were changed; no new concurrency limit, key, grant or model deployment.
+
+One authenticated native-runtime request returned HTTP200 in1.145666s with
+finish_reason=stop and {"product":391,"status":"GLM_OK"} for17×23. This proves
+real pair inference; it does not claim personal-portal/API-key end-to-end or long
+context/performance acceptance. Private before/after policy, controller metadata,
+model discovery and response evidence are in output/glm-recovery-20261125/.
+scripts/inspect-glm-recovery.mbtx supports bounded read-only inspection,
+--metadata-only, the scoped --repair-api-egress and --infer. It never prints
+existing operator/backend credentials. No .176/.177 workload, VM or .191 change.

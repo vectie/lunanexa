@@ -8,8 +8,8 @@ import {
 }
 
 ///|
-async fn output(program : String,args : Array[String]) -> String {
-  let r = @shell.Cmd(program,args).output()
+async fn output(program : String, args : Array[String]) -> String {
+  let r = @shell.Cmd(program, args).output()
   r.check()
   r.stdout()
 }
@@ -20,37 +20,91 @@ async fn main {
   let write = "/Users/kq/.moonsuite/nas-archive/moonsuite-persistent/mac-kq/20261125/moonfish"
   let read = "/Volumes/wework/moonsuite-persistent/mac-kq/20261125/moonfish"
   let evidence = "/Users/kq/Workspace/lunanexa/output/persistent-audit-20261125"
-  guard output("mount",["-t","smbfs"]).contains("//DataManager@192.168.0.52/wework on /Users/kq/.moonsuite/nas-archive ") else {fail("Writable NAS mount absent")}
-  let lock = @fs.open("/Users/kq/Library/Logs/MoonSuite/build-retention/maintenance.lock",mode=ReadWrite,create_mode=OpenOrCreate,permission=0o600)
+  guard output("mount", ["-t", "smbfs"]).contains(
+    "//DataManager@192.168.0.52/wework on /Users/kq/.moonsuite/nas-archive ",
+  ) else {
+    fail("Writable NAS mount absent")
+  }
+  let lock = @fs.open(
+    "/Users/kq/Library/Logs/MoonSuite/build-retention/maintenance.lock",
+    mode=ReadWrite,
+    create_mode=OpenOrCreate,
+    permission=0o600,
+  )
   defer lock.close()
-  guard lock.try_lock(Exclusive) else {fail("Another maintenance is running")}
+  guard lock.try_lock(Exclusive) else { fail("Another maintenance is running") }
   defer lock.unlock()
   let staging = @fs.tmpdir(prefix="moon-query-archive-stage-")
-  defer @fs.rmdir(staging,recursive=true)
-  @fs.symlink(target=source,staging+"/query")
-  for (name,relative) in [("normalized","objects/normalized"),("raw","objects/raw"),("snapshots","snapshots")] {
-    let archive = write+"/query-"+name+".zip"
-    let receipt = evidence+"/query-archive-"+name+".json"
-    if @fs.exists(archive) && @fs.exists(receipt) {println("Kept verified query archive "+name);continue}
-    let disk = output("df",["-k","/System/Volumes/Data"]).split("\n").to_array()[1].split(" ").filter(v=>!v.is_empty()).to_array()
-    let size = @string.parse_int64(output("du",["-k","-s",source+"/"+relative]).split("\t").next().unwrap())
-    guard @string.parse_int64(disk[3])>size+20971520L else {fail("Insufficient temporary verification headroom; source retained")}
-    let prefix = "query/"+relative
-    println("Packing NAS query archive "+name)
-    @shell.Cmd("/usr/bin/zip",["-qry","-1",archive+".partial.zip",prefix],cwd=staging).run()
-    let listed = @shell.Cmd("/usr/bin/unzip",["-Z","-1",archive+".partial.zip"]).each_line(line=>{
-      guard line.has_prefix(prefix+"/") && !line.contains("/../") else {fail("Unexpected archive namespace")}
+  defer @fs.rmdir(staging, recursive=true)
+  @fs.symlink(target=source, staging + "/query")
+  for
+    (name, relative) in [
+      ("normalized", "objects/normalized"),
+      ("raw", "objects/raw"),
+      ("snapshots", "snapshots"),
+    ] {
+    let archive = write + "/query-" + name + ".zip"
+    let receipt = evidence + "/query-archive-" + name + ".json"
+    if @fs.exists(archive) && @fs.exists(receipt) {
+      println("Kept verified query archive " + name)
+      continue
+    }
+    let disk = output("df", ["-k", "/System/Volumes/Data"])
+      .split("\n")
+      .to_array()[1]
+      .split(" ")
+      .filter(v => !v.is_empty())
+      .to_array()
+    let size = @string.parse_int64(
+      output("du", ["-k", "-s", source + "/" + relative])
+      .split("\t")
+      .next()
+      .unwrap(),
+    )
+    guard @string.parse_int64(disk[3]) > size + 20971520L else {
+      fail("Insufficient temporary verification headroom; source retained")
+    }
+    let prefix = "query/" + relative
+    println("Packing NAS query archive " + name)
+    @shell.Cmd(
+      "/usr/bin/zip",
+      ["-qry", "-1", archive + ".partial.zip", prefix],
+      cwd=staging,
+    ).run()
+    let listed = @shell.Cmd("/usr/bin/unzip", [
+      "-Z",
+      "-1",
+      archive + ".partial.zip",
+    ]).each_line(line => {
+      guard line.has_prefix(prefix + "/") && !line.contains("/../") else {
+        fail("Unexpected archive namespace")
+      }
     })
-    guard listed==0 else {fail("Cannot inspect query archive")}
+    guard listed == 0 else { fail("Cannot inspect query archive") }
     let restore = @fs.tmpdir(prefix="moon-query-archive-verify-")
-    defer @fs.rmdir(restore,recursive=true)
-    @shell.Cmd("/usr/bin/unzip",["-q",archive+".partial.zip","-d",restore]).run()
-    @shell.Cmd("diff",["-qr",source+"/"+relative,restore+"/"+prefix]).run()
-    let digest = output("shasum",["-a","256",archive+".partial.zip"]).split(" ").next().unwrap().to_owned()
-    @fs.rename(archive+".partial.zip",archive,replace=true)
-    let record : Json = {"source":source+"/"+relative,"archive":read+"/query-"+name+".zip","sha256":digest,"members_prefix":prefix,"verification":"NAS archive fully extracted locally and compared byte-for-byte with source; compressed archive SHA256 recorded. No source files removed.","nas_extraction":"Pending NAS file-manager extraction into the moonfish folder"}
-    @fs.write_file(receipt,record.stringify(),permission=0o600)
-    @fs.write_file(write+"/query-"+name+".json",record.stringify(),permission=0o600)
-    println("Verified complete NAS query archive "+name)
+    defer @fs.rmdir(restore, recursive=true)
+    @shell.Cmd("/usr/bin/unzip", ["-q", archive + ".partial.zip", "-d", restore]).run()
+    @shell.Cmd("diff", ["-qr", source + "/" + relative, restore + "/" + prefix]).run()
+    let digest = output("shasum", ["-a", "256", archive + ".partial.zip"])
+      .split(" ")
+      .next()
+      .unwrap()
+      .to_owned()
+    @fs.rename(archive + ".partial.zip", archive, replace=true)
+    let record : Json = {
+      "source": source + "/" + relative,
+      "archive": read + "/query-" + name + ".zip",
+      "sha256": digest,
+      "members_prefix": prefix,
+      "verification": "NAS archive fully extracted locally and compared byte-for-byte with source; compressed archive SHA256 recorded. No source files removed.",
+      "nas_extraction": "Pending NAS file-manager extraction into the moonfish folder",
+    }
+    @fs.write_file(receipt, record.stringify(), permission=0o600)
+    @fs.write_file(
+      write + "/query-" + name + ".json",
+      record.stringify(),
+      permission=0o600,
+    )
+    println("Verified complete NAS query archive " + name)
   }
 }

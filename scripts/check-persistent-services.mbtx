@@ -41,6 +41,35 @@ async fn main {
     }
   }
   let results : Array[Json] = []
+  if stage == "after" {
+    let known : Map[String, Bool] = Map([])
+    for row in rows {
+      if row is { "path": String(path), .. } {
+        known[path] = true
+      }
+    }
+    let mut remaining = 0
+    let query = "/Users/kq/moonsuite/.moonsuite/services/moonfish-query"
+    for kind in ["raw", "normalized"] {
+      for name in @fs.readdir(query + "/objects/" + kind) {
+        let path = query + "/objects/" + kind + "/" + name
+        guard known.contains(path) else {
+          fail(
+            "New object was outside reference inventory; reconcile before finalization",
+          )
+        }
+        guard @fs.kind(path, follow_symlink=false) is Regular else {
+          fail("Unexpected query alias")
+        }
+        remaining += 1
+      }
+    }
+    results.push({
+      "remaining_regular_query_objects": remaining,
+      "uninventoried_query_objects": 0,
+      "nas_aliases": 0,
+    })
+  }
   for snapshot in snapshots {
     let body : Json = { "snapshot_id": snapshot, "page_size": 5, "offset": 0 }
     let destination = root + "/" + stage + "/snapshot-" + snapshot + ".json"

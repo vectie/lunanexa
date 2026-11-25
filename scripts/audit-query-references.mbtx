@@ -1,0 +1,322 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/json",
+  "moonbitlang/core/string",
+  "moonbitlang/core/env",
+}
+
+///|
+async fn output(program : String, args : Array[String]) -> String {
+  let r = @shell.Cmd(program, args).output()
+  r.check()
+  r.stdout()
+}
+
+///|
+async fn versions(roots : Array[String]) -> String {
+  let lines : Array[String] = []
+  let code = @shell.Cmd(
+    "find",
+    [
+      ..roots, "-type", "f", "-exec", "stat", "-f", "%N\t%m\t%c\t%z\t%i", "{}", "+",
+    ],
+  ).each_line(line => lines.push(line))
+  guard code == 0 else { fail("Cannot capture reference-root versions") }
+  lines.sort()
+  lines.join("\n")
+}
+
+///|
+async fn main {
+  let evidence = "/Users/kq/Workspace/lunanexa/output/persistent-audit-20261125"
+  let root = "/Users/kq/moonsuite/.moonsuite/services/moonfish-query"
+  let clean = @env.args().contains("--clean")
+  let lock = @fs.open(
+    "/Users/kq/Library/Logs/MoonSuite/build-retention/maintenance.lock",
+    mode=ReadWrite,
+    create_mode=OpenOrCreate,
+    permission=0o600,
+  )
+  defer lock.close()
+  guard lock.try_lock(Exclusive) else { fail("Another maintenance is running") }
+  defer lock.unlock()
+  guard @json.parse(@fs.read_file(evidence + "/inventory.json").text())
+    is Array(rows) else {
+    fail("No inventory")
+  }
+  let objects : Map[String, Array[Json]] = Map([])
+  let hashes : Map[String, Int64] = Map([])
+  let mut duplicate_bytes = 0L
+  for row in rows {
+    if row
+      is {
+        "path": String(path),
+        "sha256": String(hash),
+        "size": String(size),
+        ..
+      } &&
+      path.has_prefix(root + "/objects/") {
+      let name = path.split("/").last().unwrap().to_owned()
+      guard name.has_suffix(".json") && name.length() == 69 else {
+        fail("Unexpected object name")
+      }
+      let id = name[:64].to_owned()
+      let list = objects.get(id).unwrap_or([])
+      list.push(row)
+      objects[id] = list
+      if hashes.contains(hash) {
+        duplicate_bytes += @string.parse_int64(size)
+      } else {
+        hashes[hash] = @string.parse_int64(size)
+      }
+    }
+  }
+  let patterns = evidence + "/query-object-ids.txt"
+  @fs.write_file(
+    patterns,
+    objects.keys().to_array().join("\n") + "\n",
+    permission=0o600,
+  )
+  let roots : Array[String] = []
+  let metadata : Array[String] = []
+  for name in @fs.readdir(root) {
+    if name != "objects" {
+      metadata.push(root + "/" + name)
+    }
+  }
+  roots.append(metadata)
+  for
+    path in [
+      "/Users/kq/moonsuite/.moonsuite/products/moonfish/paiwork", "/Users/kq/Library/Application Support/app.vectie.moondesk.lepusa.live/workspace/.moonsuite/products/moonfish/paiwork",
+      "/Users/kq/Workspace/moonfish/.moonsuite/products/moonfish/paiwork",
+    ] {
+    if @fs.exists(path) {
+      roots.push(path)
+    }
+  }
+  let initial_versions = versions(roots)
+  let live : Map[String, Bool] = Map([])
+  let code = @shell.Cmd(
+    "rg",
+    [
+      "-a", "-uuu", "-o", "-F", "--no-filename", "--no-line-number", "-f", patterns,
+      ..roots,
+    ],
+  ).each_line(line => if objects.contains(line) { live[line] = true })
+  guard code == 0 || code == 1 else { fail("Reference scan incomplete") }
+  let scanned : Map[String, Bool] = Map([])
+  for ;; {
+    let pending : Array[String] = []
+    for id, _ in live {
+      if !scanned.contains(id) {
+        for row in objects[id] {
+          if row is { "path": String(path), .. } {
+            pending.push(path)
+          }
+        }
+        scanned[id] = true
+      }
+    }
+    if pending.is_empty() {
+      break
+    }
+    for offset = 0; offset < pending.length(); offset = offset + 128 {
+      let code = @shell.Cmd(
+        "rg",
+        [
+          "-a",
+          "-o",
+          "-F",
+          "--no-filename",
+          "--no-line-number",
+          "-f",
+          patterns,
+          ..pending[offset:offset + 128],
+        ],
+      ).each_line(line => if objects.contains(line) { live[line] = true })
+      guard code == 0 || code == 1 else {
+        fail("Transitive reference scan incomplete")
+      }
+    }
+  }
+  let unreferenced : Array[Json] = []
+  let mut unused_bytes = 0L
+  for id, list in objects {
+    if !live.contains(id) {
+      for row in list {
+        unreferenced.push(row)
+        if row is { "size": String(size), .. } {
+          unused_bytes += @string.parse_int64(size)
+        }
+      }
+    }
+  }
+  let report : Json = {
+    "object_ids": objects.length(),
+    "referenced_ids": live.length(),
+    "root_paths": roots,
+    "unreferenced_files": unreferenced,
+    "unreferenced_logical_bytes": Json(unused_bytes),
+    "duplicate_query_logical_bytes": Json(duplicate_bytes),
+    "policy": "Read-only conservative graph audit. All saved query snapshots, all metadata and all three Paiwork profiles are roots. No local objects removed by this script.",
+  }
+  @fs.write_file(
+    evidence + "/query-reference-audit.json",
+    report.stringify(),
+    permission=0o600,
+  )
+  println(
+    (
+      {
+        "object_ids": objects.length(),
+        "referenced_ids": live.length(),
+        "unreferenced_files": unreferenced.length(),
+        "unreferenced_logical_bytes": Json(unused_bytes),
+        "duplicate_query_logical_bytes": Json(duplicate_bytes),
+      } : Json).stringify(),
+  )
+  if !clean {
+    return
+  }
+  guard versions(roots) == initial_versions else {
+    fail("References changed during audit; no removal started")
+  }
+  let archives : Map[String, Json] = Map([])
+  for kind in ["raw", "normalized"] {
+    let receipt = @json.parse(
+      @fs.read_file(evidence + "/query-archive-" + kind + ".json").text(),
+    )
+    guard receipt
+      is {
+        "source": String(source),
+        "archive": String(path),
+        "sha256": String(hash),
+        ..
+      } &&
+      source == root + "/objects/" + kind else {
+      fail("No full verified NAS archive")
+    }
+    guard output("shasum", ["-a", "256", path]).has_prefix(hash + " ") else {
+      fail("NAS archive checksum mismatch")
+    }
+    archives[kind] = receipt
+  }
+  guard @json.parse(
+      output("curl", [
+        "-fsS", "--max-time", "15", "http://127.0.0.1:4326/health",
+      ]),
+    )
+    is { "refreshing": Array(active), .. } &&
+    active.is_empty() else {
+    fail("Query refresh in progress; retain local objects")
+  }
+  let now = @string.parse_int64(output("date", ["+%s"]).trim())
+  let removed : Array[Json] = []
+  let skipped : Array[String] = []
+  let mut bytes = 0L
+  let mut checked = 0
+  for row in unreferenced {
+    guard row
+      is {
+        "path": String(path),
+        "size": String(size),
+        "modified": String(modified),
+        "identity": String(identity),
+        "sha256": String(hash),
+        ..
+      } else {
+      fail("Bad inventory object")
+    }
+    if @string.parse_int64(modified) > now - 604800L {
+      skipped.push(path)
+      continue
+    }
+    let kind = if path.has_prefix(root + "/objects/raw/") {
+      "raw"
+    } else if path.has_prefix(root + "/objects/normalized/") {
+      "normalized"
+    } else {
+      fail("Out of scope candidate")
+    }
+    guard path.split("/").last().unwrap() == hash + ".json" else {
+      fail("Content-address mismatch")
+    }
+    if checked % 256 == 0 {
+      guard versions(roots) == initial_versions else {
+        fail(
+          "Reference roots changed; prior removals remain archived and receipted",
+        )
+      }
+      println("Reference roots unchanged; checked \{checked} candidates")
+    }
+    checked += 1
+    if !(@fs.kind(path, follow_symlink=false) is Regular) ||
+      output("stat", ["-f", "%z\t%m\t%c\t%i\t%l", path]).trim() != identity ||
+      !output("shasum", ["-a", "256", path]).has_prefix(hash + " ") {
+      skipped.push(path)
+      continue
+    }
+    let record : Json = {
+      "path": path,
+      "size": size,
+      "sha256": hash,
+      "action": "unreferenced-cold-local-copy-removed",
+      "archive": archives[kind],
+      "member": "query/objects/" + kind + "/" + hash + ".json",
+    }
+    // Persist the recovery mapping before unlinking; each member was restored and
+    // byte-compared when the complete NAS archive was created.
+    @fs.write_file(
+      evidence + "/query-removals-intent.jsonl",
+      record.stringify() + "\n",
+      append=true,
+      create_mode=OpenOrCreate,
+      permission=0o600,
+    )
+    @fs.remove(path)
+    removed.push(record)
+    bytes += @string.parse_int64(size)
+    if removed.length() % 256 == 0 {
+      @fs.write_file(
+        evidence + "/moonfish-query-cleanup.json",
+        Json(removed).stringify(),
+        permission=0o600,
+      )
+    }
+  }
+  guard versions(roots) == initial_versions else {
+    fail(
+      "Reference roots changed after cleanup; reconcile with NAS recovery map",
+    )
+  }
+  @fs.write_file(
+    evidence + "/moonfish-query-cleanup.json",
+    Json(removed).stringify(),
+    permission=0o600,
+  )
+  @fs.write_file(
+    evidence + "/query-cleanup-summary.json",
+    (
+      {
+        "removed": removed.length(),
+        "bytes": Json(bytes),
+        "retained_changed_or_hot": skipped,
+        "referenced_object_ids_kept": live.length(),
+        "snapshots": "All 64 materialized snapshots retained locally; full verified NAS snapshot archive also exists",
+      } : Json).stringify(),
+    permission=0o600,
+  )
+  let nas = "/Users/kq/.moonsuite/nas-archive/moonsuite-persistent/mac-kq/20261125/moonfish"
+  for
+    name in [
+      "moonfish-query-cleanup.json", "query-cleanup-summary.json", "query-reference-audit.json",
+    ] {
+    @shell.Cmd("cp", ["-p", evidence + "/" + name, nas + "/" + name]).run()
+  }
+  println(
+    "Removed only \{removed.length()} cold unreferenced local objects (\{bytes} bytes); complete historical bytes preserved on NAS",
+  )
+}

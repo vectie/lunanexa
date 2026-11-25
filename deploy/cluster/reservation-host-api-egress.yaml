@@ -22,6 +22,9 @@ spec:
           port: 443
     # k3s service NAT can apply policy after rewriting to the control-plane
     # endpoint; permit only that endpoint, not the management subnet.
+    # Render the example /32 below from the live Kubernetes API endpoint.
+    # Recheck it after changing the management node's address; a stale IP
+    # prevents runtime observation and can retain stopped capacity as Unknown.
     - to:
         - ipBlock:
             cidr: 192.0.2.175/32

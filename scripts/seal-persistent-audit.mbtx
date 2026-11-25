@@ -1,0 +1,224 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/json",
+  "moonbitlang/core/string",
+}
+
+///|
+async fn output(program : String, args : Array[String]) -> String {
+  let r = @shell.Cmd(program, args).output()
+  r.check()
+  r.stdout()
+}
+
+///|
+async fn main {
+  let evidence = "/Users/kq/Workspace/lunanexa/output/persistent-audit-20261125"
+  let nas = "/Users/kq/.moonsuite/nas-archive/moonsuite-persistent/mac-kq/20261125"
+  let root = "/Users/kq/moonsuite/.moonsuite/services/moonfish-query"
+  let lock = @fs.open(
+    "/Users/kq/Library/Logs/MoonSuite/build-retention/maintenance.lock",
+    mode=ReadWrite,
+    create_mode=OpenOrCreate,
+    permission=0o600,
+  )
+  defer lock.close()
+  guard lock.try_lock(Exclusive) else { fail("Finalization still running") }
+  defer lock.unlock()
+  guard @fs.exists(nas + "/audit-evidence/summary.json") else {
+    fail("Complete NAS finalization first")
+  }
+  let mutable_summary = @json.parse(
+    @fs.read_file(evidence + "/summary.json").text(),
+  )
+  guard mutable_summary is Object(summary) else { fail("No summary") }
+  for kind in ["raw", "normalized", "snapshots"] {
+    let file = "query-archive-" + kind + ".json"
+    guard @json.parse(@fs.read_file(evidence + "/" + file).text())
+      is Object(fields) else {
+      fail("Missing query archive receipt")
+    }
+    fields["nas_extraction"] = Json(
+      "Not required: active working files remain local; these complete verified ZIPs are durable recovery archives, not a live query mount.",
+    )
+    @fs.write_file(
+      evidence + "/" + file,
+      Json(fields).stringify(),
+      permission=0o600,
+    )
+    @fs.write_file(
+      nas + "/moonfish/query-" + kind + ".json",
+      Json(fields).stringify(),
+      permission=0o600,
+    )
+  }
+  // Probe the materialized normalized-object read path without acquiring or
+  // refreshing any data. Saved-result checks are recorded separately.
+  let mut probed = false
+  if @fs.exists(evidence + "/after/cache-only.json") {
+    summary["cache_only_acceptance"] = @json.parse(
+      @fs.read_file(evidence + "/after/cache-only.json").text(),
+    )
+    probed = true
+  }
+  for name in @fs.readdir(root + "/cache") {
+    if probed {
+      break
+    }
+    if !name.has_suffix(".json") {
+      continue
+    }
+    let index = @json.parse(@fs.read_file(root + "/cache/" + name).text())
+    guard index
+      is {
+        "identity": Object(identity),
+        "latest": { "source_snapshot_id": String(id), .. },
+        ..
+      } &&
+      identity.get("provider") == Some(Json("public")) else {
+      continue
+    }
+    let source = root + "/objects/normalized/" + id + ".json"
+    if !@fs.exists(source) || @fs.file_size(source) > 1048576L {
+      continue
+    }
+    let body = Map::from_array(identity.to_array())
+    body["freshness"] = Json("cache_only")
+    let response = evidence + "/after/cache-only-response.json"
+    let timing = output("curl", [
+      "-fsS",
+      "--max-time",
+      "30",
+      "-H",
+      "Content-Type: application/json",
+      "--data-binary",
+      Json(body).stringify(),
+      "-o",
+      response,
+      "-w",
+      "%{http_code} %{time_total}",
+      "http://127.0.0.1:4326/v1/cache/query",
+    ])
+    guard @json.parse(@fs.read_file(response).text())
+      is {
+        "query_cache": { "hit": true, "source_snapshot_id": String(actual), .. },
+        ..
+      } &&
+      actual == id else {
+      fail("Cache-only object read failed")
+    }
+    let record : Json = {
+      "normalized_object": id,
+      "cache_hit": true,
+      "upstream_acquisition": false,
+      "http_total": timing,
+    }
+    @fs.write_file(
+      evidence + "/after/cache-only.json",
+      record.stringify(),
+      permission=0o600,
+    )
+    summary["cache_only_acceptance"] = record
+    probed = true
+    break
+  }
+  guard probed else {
+    fail("No small public cache entry available for acceptance")
+  }
+  // This is exclusively the abandoned plaintext rsync staging tree created by
+  // this task. Full verified ZIPs supersede it; no service path targets it.
+  let staging = nas + "/moonfish/query"
+  if @fs.exists(staging) {
+    for kind in ["raw", "normalized"] {
+      for name in @fs.readdir(root + "/objects/" + kind) {
+        guard @fs.kind(
+            root + "/objects/" + kind + "/" + name,
+            follow_symlink=false,
+          )
+          is Regular else {
+          fail("Unexpected live NAS dependency")
+        }
+      }
+    }
+    guard @json.parse(@fs.read_file(evidence + "/inventory.json").text())
+      is Array(rows) else {
+      fail("No inventory")
+    }
+    let expected : Map[String, Int64] = Map([])
+    for row in rows {
+      if row is { "path": String(path), "size": String(size), .. } &&
+        path.has_prefix(root + "/") {
+        expected[staging + path[root.length():].to_owned()] = @string.parse_int64(
+          size,
+        )
+      }
+    }
+    let files : Array[String] = []
+    // The async host's readdir returns EOVERFLOW on this SMB directory.
+    // Use macOS find for enumeration, with the same bounded namespace checks.
+    let code = @shell.Cmd("/usr/bin/find", [staging, "-print"]).each_line(path => {
+      match @fs.kind(path, follow_symlink=false) {
+        Directory => {
+          guard [
+            staging,
+            staging + "/objects",
+            staging + "/objects/raw",
+            staging + "/objects/normalized",
+            staging + "/snapshots",
+          ].contains(path) else {
+            fail("Unexpected staging namespace; retain it")
+          }
+        }
+        Regular => {
+          guard expected.get(path) is Some(size) && @fs.file_size(path) == size else {
+            fail("Unexpected staging payload; retain it")
+          }
+          files.push(path)
+        }
+        _ => fail("Unexpected staging file type; retain it")
+      }
+    })
+    guard code == 0 else { fail("Staging enumeration failed; retain it") }
+    @fs.write_file(
+      evidence + "/nas-staging-cleanup.json",
+      (
+        {
+          "path": staging,
+          "files": files,
+          "reason": "Our abandoned incomplete rsync transfer, superseded by the complete byte-verified query ZIPs. No live symlinks introduced.",
+        } : Json).stringify(),
+      permission=0o600,
+    )
+    println(
+      "Removing our abandoned NAS plaintext staging copy; verified ZIPs remain",
+    )
+    @shell.Cmd("/bin/rm", ["-r", staging]).run()
+    summary["abandoned_nas_staging_files_removed"] = Json(files.length())
+  }
+  let fields = output("df", ["-k", "/System/Volumes/Data"])
+    .split("\n")
+    .to_array()[1]
+    .split(" ")
+    .filter(v => !v.is_empty())
+    .to_array()
+  let free = @string.parse_int64(fields[3])
+  summary["available_kib"] = Json(free)
+  summary["available_gib"] = Json(free.to_double() / 1048576.0)
+  @fs.write_file(
+    evidence + "/summary.json",
+    Json(summary).stringify(indent=2),
+    permission=0o600,
+  )
+  @fs.write_file(
+    nas + "/summary.json",
+    Json(summary).stringify(indent=2),
+    permission=0o600,
+  )
+  @shell.Cmd("rsync", ["-rt", evidence + "/", nas + "/audit-evidence/"]).run()
+  println(
+    "Sealed audit; NAS archive references and cache-only reads verified. Free GiB: \{free.to_double()/1048576.0}",
+  )
+}

@@ -1,0 +1,377 @@
+///|
+import {
+  "moonbitlang/async@0.22.4",
+  "moonbitlang/async@0.22.4/fs",
+  "moonbitlang/async@0.22.4/shell",
+  "moonbitlang/core/json",
+  "moonbitlang/core/env",
+}
+
+///|
+async fn remote(args : Array[String], input~ : String = "") -> String {
+  let r = @shell.Cmd(
+    "ssh",
+    [
+      "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-p", "32123", "HwHiAiUser@106.39.18.146",
+      ..args,
+    ],
+    stdin=Text(input),
+  ).output()
+  r.check()
+  r.stdout()
+}
+
+///|
+async fn kube(args : Array[String]) -> Json {
+  @json.parse(
+    remote(
+      [
+        "kubectl", "--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management",
+        "-n", "lunanexa", ..args,
+      ],
+    ),
+  )
+}
+
+///|
+async fn decode(encoded : String) -> String {
+  let r = @shell.Cmd("openssl", ["base64", "-d", "-A"], stdin=Text(encoded)).output()
+  r.check()
+  r.stdout().trim().to_owned()
+}
+
+///|
+async fn main {
+  let evidence = "/Users/kq/Workspace/lunanexa/output/glm-recovery-20261125"
+  @fs.mkdir(evidence, recursive=true, allow_exist=true, permission=0o700)
+  if @env.args().contains("--infer") {
+    let secret = remote([
+        "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "wlc003s@192.168.2.178",
+        "cat", "/home/wlc003s/.local/share/lunanexa/glm53-lunaflux-ed6be466/backend.credential",
+      ])
+      .trim()
+      .to_owned()
+    guard secret.length() >= 32 && secret.all(c => c >= '!' && c <= '~') else {
+      fail("Existing backend credential unavailable")
+    }
+    let body : Json = {
+      "model": "glm-5.3.flash",
+      "messages": [
+        {
+          "role": "user",
+          "content": "请计算17×23，并只输出一个JSON对象：product为计算结果，status为字符串GLM_OK。不要输出解释。",
+        },
+      ],
+      "max_tokens": 256,
+      "temperature": 0,
+      "reasoning_effort": "low",
+      "stream": false,
+    }
+    for
+      (name, path, request) in [
+        ("models", "/v1/models", None),
+        ("inference", "/v1/chat/completions", Some(body)),
+      ] {
+      let config = "silent\nshow-error\nnoproxy = \"*\"\nmax-time = 90\nurl = \"http://192.168.2.178:18889" +
+        path +
+        "\"\nheader = \"Authorization: Bearer " +
+        secret +
+        "\"\nheader = \"Content-Type: application/json\"\nwrite-out = \"\\n%{http_code} %{time_total}\"\n" +
+        (match request {
+          None => ""
+          Some(value) =>
+            "data = \"" +
+            value
+            .stringify()
+            .replace_all(old="\\", new="\\\\")
+            .replace_all(old="\"", new="\\\"") +
+            "\"\n"
+        })
+      let result = remote(["curl", "--config", "-"], input=config)
+      @fs.write_file(
+        evidence + "/verified-" + name + ".txt",
+        result,
+        permission=0o600,
+      )
+      let lines = result.split("\n").to_array()
+      let timing = lines.last().unwrap().to_owned()
+      guard timing.has_prefix("200 ") else {
+        fail("Backend request did not return HTTP 200")
+      }
+      let data = @json.parse(lines[:lines.length() - 1].join("\n"))
+      if name == "inference" {
+        guard data
+          is {
+            "choices": [
+              {
+                "message": { "content": String(answer), .. },
+                "finish_reason": "stop",
+                ..
+              },
+            ],
+            ..
+          } &&
+          answer.contains("391") &&
+          answer.contains("GLM_OK") else {
+          fail("Inference did not finish with the expected answer")
+        }
+        let record : Json = {
+          "scope": "authenticated native GLM runtime; not a claim of personal-portal API-key acceptance",
+          "model": "glm-5.3.flash",
+          "answer": answer,
+          "finish_reason": "stop",
+          "http_total": timing,
+          "expected_product": 391,
+          "passed": true,
+        }
+        @fs.write_file(
+          evidence + "/inference-result.json",
+          record.stringify(indent=2),
+          permission=0o600,
+        )
+        println(record.stringify())
+      } else {
+        println("Model discovery: " + timing)
+      }
+    }
+    return
+  }
+  if @env.args().contains("--repair-api-egress") {
+    let endpoint = @json.parse(
+      remote([
+        "kubectl", "--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management",
+        "-n", "default", "get", "endpoints", "kubernetes", "-o", "json",
+      ]),
+    )
+    guard endpoint
+      is {
+        "subsets": [
+          {
+            "addresses": [{ "ip": "192.168.2.173", .. }],
+            "ports": [{ "port": 6443, .. }],
+            ..
+          },
+        ],
+        ..
+      } else {
+      fail("Current API endpoint differs from the inspected repair scope")
+    }
+    let name = "lunanexa-reservation-host-api-egress"
+    let before = kube(["get", "networkpolicy", name, "-o", "json"])
+    guard before
+      is {
+        "metadata": {
+          "uid": String(uid),
+          "resourceVersion": String(version),
+          ..
+        },
+        "spec": spec,
+        ..
+      } &&
+      spec
+      is {
+        "egress": [
+          _,
+          {
+            "to": [{ "ipBlock": { "cidr": String(cidr), .. }, .. }],
+            "ports": [{ "port": 6443, "protocol": "TCP", .. }],
+            ..
+          },
+        ],
+        "podSelector": { "matchLabels": { "app": "lunanexa-control", .. }, .. },
+        ..
+      } else {
+      fail("Unexpected API policy structure")
+    }
+    if cidr == "192.168.2.173/32" {
+      println("API endpoint policy already correct")
+      return
+    }
+    guard cidr == "192.168.2.175/32" else {
+      fail("Unexpected old API endpoint; no policy mutation")
+    }
+    let backup = evidence + "/api-egress.before.json"
+    if !@fs.exists(backup) {
+      @fs.write_file(backup, before.stringify(indent=2), permission=0o600)
+    }
+    let patch : Json = [
+      { "op": "test", "path": "/metadata/uid", "value": uid },
+      { "op": "test", "path": "/metadata/resourceVersion", "value": version },
+      {
+        "op": "test",
+        "path": "/spec/egress/1/to/0/ipBlock/cidr",
+        "value": cidr,
+      },
+      {
+        "op": "replace",
+        "path": "/spec/egress/1/to/0/ipBlock/cidr",
+        "value": "192.168.2.173/32",
+      },
+    ]
+    let after = @json.parse(
+      remote(
+        [
+          "kubectl", "--kubeconfig", "/home/HwHiAiUser/.kube/lunanexa-management",
+          "-n", "lunanexa", "patch", "networkpolicy", name, "--type=json", "--patch-file=/dev/stdin",
+          "-o", "json",
+        ],
+        input=patch.stringify(),
+      ),
+    )
+    guard after is { "spec": actual, .. } &&
+      actual.stringify() ==
+      spec
+      .stringify()
+      .replace_all(old="192.168.2.175/32", new="192.168.2.173/32") else {
+      fail(
+        "Policy postcondition differs from the single intended endpoint replacement",
+      )
+    }
+    @fs.write_file(
+      evidence + "/api-egress.after.json",
+      after.stringify(indent=2),
+      permission=0o600,
+    )
+    println(
+      "Repaired only controller API endpoint CIDR: .175 -> .173, TCP 6443; all other policy fields retained",
+    )
+    return
+  }
+  let deployed = kube(["get", "deployment", "lunanexa-control", "-o", "json"])
+  @fs.write_file(
+    evidence + "/controller-deployment.before.json",
+    deployed.stringify(),
+    permission=0o600,
+  )
+  if deployed
+    is {
+      "spec": {
+        "template": { "spec": { "containers": Array(containers), .. }, .. },
+        ..
+      },
+      ..
+    } {
+    for container in containers {
+      if container is { "name": "control", "env": Array(values), .. } {
+        for value in values {
+          if value is { "name": String(name), "value": String(value), .. } &&
+            [
+              "LUNANEXA_RUNTIME_CONTROLS_JSON", "LUNANEXA_MODEL_POOL_KUBERNETES_ORIGIN",
+            ].contains(name) {
+            println(name + "=" + value)
+          }
+          if value
+            is {
+              "name": String(variable),
+              "valueFrom": {
+                "configMapKeyRef": {
+                  "name": String(config),
+                  "key": String(key),
+                  ..
+                },
+                ..
+              },
+              ..
+            } &&
+            (
+              variable == "LUNANEXA_RUNTIME_CONTROLS_JSON" ||
+              (
+                variable.contains("MODEL_POOL") &&
+                (variable.contains("ORIGIN") || variable.has_suffix("_FILE"))
+              )
+            ) {
+            if kube(["get", "configmap", config, "-o", "json"])
+              is { "data": Object(data), .. } &&
+              data.get(key) is Some(value) {
+              println(variable + "=" + value.stringify())
+            }
+          }
+        }
+      }
+      if container is { "name": "control", "envFrom": Array(refs), .. } {
+        for entry in refs {
+          if entry is { "configMapRef": { "name": String(name), .. }, .. } {
+            if kube(["get", "configmap", name, "-o", "json"])
+              is { "data": Object(data), .. } {
+              for key, value in data {
+                if key == "LUNANEXA_RUNTIME_CONTROLS_JSON" ||
+                  (
+                    key.contains("MODEL_POOL") &&
+                    (key.contains("ORIGIN") || key.has_suffix("_FILE"))
+                  ) {
+                  println(key + "=" + value.stringify())
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  if @env.args().contains("--metadata-only") {
+    return
+  }
+  let credentials = kube([
+    "get", "secret", "lunanexa-control-credentials", "-o", "json",
+  ])
+  let token = if credentials
+    is { "data": { "operator-tokens": String(encoded), .. }, .. } {
+    let entries = decode(encoded)
+    let pair = entries.split(",").next().unwrap().to_owned()
+    guard pair.find("=") is Some(position) else {
+      fail("Invalid existing operator credential reference")
+    }
+    pair[position + 1:].to_owned()
+  } else if credentials
+    is { "data": { "operator-token": String(encoded), .. }, .. } {
+    decode(encoded)
+  } else {
+    fail("Existing operator credentials unavailable")
+  }
+  guard kube(["get", "service", "lunanexa-control", "-o", "json"])
+    is { "spec": { "clusterIP": String(ip), .. }, .. } else {
+    fail("Controller service unavailable")
+  }
+  for
+    (name, path) in [
+      ("services", "/v1/model-services"),
+      ("assignments", "/v1/assignments"),
+      ("bindings", "/v1/runtime-bindings"),
+      ("model-pool", "/v1/model-pool"),
+    ] {
+    let config = "silent\nshow-error\nnoproxy = \"*\"\nmax-time = 12\nurl = \"http://" +
+      ip +
+      ":8080" +
+      path +
+      "\"\nheader = \"Authorization: Bearer " +
+      token +
+      "\"\nwrite-out = \"\\n%{http_code} %{time_total}\"\n"
+    println("Observing " + path)
+    let r = @shell.Cmd(
+      "ssh",
+      [
+        "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-p", "32123", "HwHiAiUser@106.39.18.146",
+        "curl", "--config", "-",
+      ],
+      stdin=Text(config),
+    ).output()
+    @fs.write_file(evidence + "/" + name + ".txt", r.stdout(), permission=0o600)
+    let lines = r.stdout().split("\n").to_array()
+    println(
+      name +
+      ": " +
+      lines.last().unwrap_or("").to_owned() +
+      "; exit=\{r.exit_code()}",
+    )
+    if r.exit_code() == 0 && name == "services" {
+      let parsed = @json.parse(lines[:lines.length() - 1].join("\n"))
+      if parsed is Array(rows) {
+        for row in rows {
+          if row.stringify().contains("service-company-text") {
+            println(row.stringify())
+          }
+        }
+      }
+    }
+  }
+}

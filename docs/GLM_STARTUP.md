@@ -1,5 +1,25 @@
 # GLM startup verification
 
+## Recovery — 2026-11-25
+
+The existing .178/.179 TensorFold pair was restored through the management UI.
+The first Start was blocked because old zero-replica Kubernetes bindings were
+observed as Unknown. The controller's API egress policy still named the previous
+management address .175, while the live Kubernetes API endpoint was .173:6443.
+Updating that single endpoint /32 restored observation and normal ownership
+admission; no resource record was forced clear and no controller restart was
+needed. Reapply/render this policy from the current API endpoint after future
+management-address changes.
+
+The second UI Start loaded the original 512K configuration successfully. The
+runtime reported 81.9 seconds to load; model discovery advertises 524,288 tokens
+for both aliases. One authenticated native-runtime request returned HTTP200 in
+1.146 seconds, with a normal stop and the correct result:
+`{"product":391,"status":"GLM_OK"}` for 17×23. This is a small functional
+inference check, not a throughput, full-context or personal API-key acceptance
+claim. Private evidence: `output/glm-recovery-20261125/`. Model files, runtime
+parameters and the other two Spark workloads were preserved.
+
 ## Active 512K configuration — 2026-11-08
 
 At the user's request, both existing TensorFold rank units now use

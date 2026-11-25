@@ -1,4 +1,11 @@
 ///|
+test "OpenAI preserves an explicit empty model answer and its finish reason" {
+  let output : Json = { "output_text": "", "finish_reason": "length" }
+  assert_eq(openai_chat_message_from_runtime(Some(output)), ("", []))
+  assert_eq(compatible_finish_reason(Some(output), false), "length")
+}
+
+///|
 test "bearer credential mutation fuzz rejects controls and ambiguous syntax" {
   assert_eq(
     bearer_secret({ "Authorization": "Bearer token._~-safe" }),

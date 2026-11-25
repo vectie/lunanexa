@@ -113,6 +113,26 @@ async test "text Chat transport forwards OpenAI tools and tool call responses" {
         guard value is Object(fields) else { fail("request object") }
         assert_true(fields.contains("tools"))
         assert_eq(fields.get("tool_choice"), Some(Json::string("auto")))
+        assert_eq(fields.get("parallel_tool_calls"), Some(false))
+        assert_eq(
+          fields.get("messages"),
+          Some([
+            { "role": "developer", "content": "Use the supplied tools." },
+            { "role": "user", "content": "check" },
+            {
+              "role": "assistant",
+              "content": null,
+              "tool_calls": [
+                {
+                  "id": "call_0",
+                  "type": "function",
+                  "function": { "name": "ping", "arguments": "{}" },
+                },
+              ],
+            },
+            { "role": "tool", "tool_call_id": "call_0", "content": "pong ✓" },
+          ]),
+        )
         let streaming = fields.get("stream") is Some(True)
         connection.send_response(200, "OK", extra_headers={
           "Content-Type": if streaming {
@@ -121,13 +141,60 @@ async test "text Chat transport forwards OpenAI tools and tool call responses" {
             "application/json"
           },
         })
-        connection.write_string(
-          if streaming {
-            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"finish\",\"arguments\":\"{\\\"ok\\\":true}\"}}]}}]}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":6}}\n\ndata: [DONE]\n\n"
-          } else {
-            "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"finish\",\"arguments\":\"{\\\"ok\\\":true}\"}}]},\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":6}}"
-          },
-        )
+        if streaming {
+          let events : Array[Json] = [
+            {
+              "choices": [
+                {
+                  "delta": {
+                    "tool_calls": [
+                      {
+                        "index": 0,
+                        "id": "call_1",
+                        "type": "function",
+                        "function": { "name": "finish", "arguments": "" },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+            {
+              "choices": [
+                {
+                  "delta": {
+                    "tool_calls": [
+                      { "index": 0, "function": { "arguments": "{\"ok\":" } },
+                    ],
+                  },
+                },
+              ],
+            },
+            {
+              "choices": [
+                {
+                  "delta": {
+                    "tool_calls": [
+                      { "index": 0, "function": { "arguments": "true}" } },
+                    ],
+                  },
+                },
+              ],
+            },
+            {
+              "choices": [{ "delta": {}, "finish_reason": "tool_calls" }],
+              "usage": { "prompt_tokens": 12, "completion_tokens": 6 },
+            },
+          ]
+          for event in events {
+            connection.write_string("data: \{event.stringify()}\n\n")
+          }
+          connection.write_string("data: [DONE]\n\n")
+        } else {
+          connection.write_string(
+            "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"finish\",\"arguments\":\"{\\\"ok\\\":true}\"}}]},\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":6}}",
+          )
+        }
         connection.end_response()
       })
     })
@@ -145,6 +212,10 @@ async test "text Chat transport forwards OpenAI tools and tool call responses" {
       ..remote_request(),
       payload: {
         "messages": [
+          {
+            "role": "developer",
+            "content": [{ "type": "text", "text": "Use the supplied tools." }],
+          },
           { "role": "user", "content": "check" },
           {
             "role": "assistant",
@@ -157,18 +228,20 @@ async test "text Chat transport forwards OpenAI tools and tool call responses" {
               },
             ],
           },
-          { "role": "tool", "tool_call_id": "call_0", "content": "pong" },
+          {
+            "role": "tool",
+            "tool_call_id": "call_0",
+            "content": [{ "type": "text", "text": "pong ✓" }],
+          },
         ],
         "tools": [
           {
             "type": "function",
-            "function": {
-              "name": "finish",
-              "parameters": { "type": "object" },
-            },
+            "function": { "name": "finish", "parameters": { "type": "object" } },
           },
         ],
         "tool_choice": "auto",
+        "parallel_tool_calls": false,
       },
     }
     let result = runtime.invoke(request)
@@ -196,8 +269,17 @@ async test "text Chat transport forwards OpenAI tools and tool call responses" {
           "index": 0,
           "id": "call_1",
           "type": "function",
-          "function": { "name": "finish", "arguments": "{\"ok\":true}" },
+          "function": { "name": "finish", "arguments": "" },
         },
+      },
+      {
+        "tool_call_delta": {
+          "index": 0,
+          "function": { "arguments": "{\"ok\":" },
+        },
+      },
+      {
+        "tool_call_delta": { "index": 0, "function": { "arguments": "true}" } },
       },
     ])
     server.close()
