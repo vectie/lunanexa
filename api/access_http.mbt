@@ -9,6 +9,7 @@ fn openai_compatibility_path(path : String) -> Bool {
 }
 
 ///|
+#derive(FromJson)
 priv struct OpenAiChatRequest {
   model : String
   messages : Array[Json]
@@ -20,7 +21,7 @@ priv struct OpenAiChatRequest {
   temperature : Double?
   top_p : Double?
   runtime_prefix_cache : Bool?
-} derive(FromJson)
+}
 
 ///|
 fn decode_openai_chat(body : String) -> OpenAiChatRequest? {
@@ -752,10 +753,10 @@ fn compatible_finish_reason(output : Json?, tools : Bool) -> String {
           "length"
           | "content_filter"
           | "stop"
-          | "tool_calls" as reason
+          | "tool_calls" as reason,
         ),
         ..
-      }
+      },
     ) => reason
     _ => if tools { "tool_calls" } else { "stop" }
   }
@@ -790,7 +791,7 @@ fn openai_chat_message_from_runtime(output : Json?) -> (String, Array[Json]) {
     return (content, tool_calls)
   }
   guard fields.get("output") is Some(Array(items)) else {
-    if content == "" {
+    if content == "" && !(fields.get("output_text") is Some(String(_))) {
       content = value.stringify()
     }
     return (content, tool_calls)

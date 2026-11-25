@@ -79,8 +79,17 @@ async test "text Chat transport preserves conversation budget usage JSON and SSE
     ])
     assert_eq((result.input_units, result.output_units), (9, 2))
     let unsupported : Array[Json] = [
-      { "messages": [{ "role": "tool", "content": "x", "tool_call_id": "a" }] },
-      { "prompt": "x", "tools": [] },
+      { "messages": [{ "role": "unknown_role", "content": "x" }] },
+      {
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              { "type": "image_url", "image_url": { "url": "https://x" } },
+            ],
+          },
+        ],
+      },
     ]
     for payload in unsupported {
       try runtime.invoke({ ..request, payload, }) catch {
@@ -90,6 +99,107 @@ async test "text Chat transport preserves conversation budget usage JSON and SSE
         _ => fail("unsupported input silently accepted")
       }
     }
+    server.close()
+  })
+}
+
+///|
+async test "text Chat transport forwards OpenAI tools and tool call responses" {
+  let server = @http.Server(@socket.Addr::parse("127.0.0.1:0"))
+  @async.with_task_group(group => {
+    group.spawn_bg(no_wait=true, allow_failure=true, () => {
+      server.run_forever((_request, body, connection) => {
+        let value = @json.parse(body.read_all().text())
+        guard value is Object(fields) else { fail("request object") }
+        assert_true(fields.contains("tools"))
+        assert_eq(fields.get("tool_choice"), Some(Json::string("auto")))
+        let streaming = fields.get("stream") is Some(True)
+        connection.send_response(200, "OK", extra_headers={
+          "Content-Type": if streaming {
+            "text/event-stream"
+          } else {
+            "application/json"
+          },
+        })
+        connection.write_string(
+          if streaming {
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"finish\",\"arguments\":\"{\\\"ok\\\":true}\"}}]}}]}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":6}}\n\ndata: [DONE]\n\n"
+          } else {
+            "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"finish\",\"arguments\":\"{\\\"ok\\\":true}\"}}]},\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":6}}"
+          },
+        )
+        connection.end_response()
+      })
+    })
+    let runtime = @runtimes.OpenAiTextRuntime::native(
+        "http://\{server.addr}/v1/chat/completions",
+        "test-backend",
+        "native-v1",
+        "1".repeat(40),
+        "sha256:" + "a".repeat(64),
+        allow_http_loopback=true,
+      )
+      .with_text_chat_completions()
+      .with_served_model_name("glm-5.3")
+    let request = {
+      ..remote_request(),
+      payload: {
+        "messages": [
+          { "role": "user", "content": "check" },
+          {
+            "role": "assistant",
+            "content": null,
+            "tool_calls": [
+              {
+                "id": "call_0",
+                "type": "function",
+                "function": { "name": "ping", "arguments": "{}" },
+              },
+            ],
+          },
+          { "role": "tool", "tool_call_id": "call_0", "content": "pong" },
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "finish",
+              "parameters": { "type": "object" },
+            },
+          },
+        ],
+        "tool_choice": "auto",
+      },
+    }
+    let result = runtime.invoke(request)
+    assert_eq(result.output, {
+      "output_text": "",
+      "finish_reason": "tool_calls",
+      "output": [
+        {
+          "type": "function_call",
+          "call_id": "call_1",
+          "name": "finish",
+          "arguments": "{\"ok\":true}",
+        },
+      ],
+    })
+    let chunks = []
+    let streamed = runtime.invoke_stream(request, chunk => chunks.push(chunk))
+    assert_eq(streamed.output, {
+      "output_text": "",
+      "finish_reason": "tool_calls",
+    })
+    assert_eq(chunks, [
+      {
+        "tool_call_delta": {
+          "index": 0,
+          "id": "call_1",
+          "type": "function",
+          "function": { "name": "finish", "arguments": "{\"ok\":true}" },
+        },
+      },
+    ])
     server.close()
   })
 }

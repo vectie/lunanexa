@@ -32,31 +32,59 @@ fn chat_content(value : Json) -> Json raise RemoteRuntimeError {
 }
 
 ///|
+fn chat_message_from_item(item : Json) -> Json raise RemoteRuntimeError {
+  guard item is Object(fields) && fields.get("role") is Some(String(role)) else {
+    raise UnsupportedCapability
+  }
+  if role == "tool" {
+    guard fields.get("tool_call_id") is Some(String(call_id)) &&
+      call_id != "" &&
+      fields.get("content") is Some(content) else {
+      raise UnsupportedCapability
+    }
+    return {
+      "role": "tool",
+      "tool_call_id": call_id,
+      "content": chat_content(content),
+    }
+  }
+  guard ["system", "developer", "user", "assistant"].contains(role) else {
+    raise UnsupportedCapability
+  }
+  let out : Map[String, Json] = { "role": Json::string(role) }
+  let has_tool_calls = match fields.get("tool_calls") {
+    Some(Array(calls)) if role == "assistant" && !calls.is_empty() => {
+      out["tool_calls"] = Json::array(calls)
+      true
+    }
+    None | Some(Null) => false
+    _ => raise UnsupportedCapability
+  }
+  match fields.get("content") {
+    None | Some(Null) if role == "assistant" && has_tool_calls =>
+      out["content"] = Json::null()
+    Some(content) => out["content"] = chat_content(content)
+    _ => raise UnsupportedCapability
+  }
+  Json::object(out)
+}
+
+///|
 fn text_chat_request(
   request : @contracts.WorkloadEnvelope,
   served : String?,
   streaming : Bool,
 ) -> Json raise RemoteRuntimeError {
   guard request.capability == TextGenerate else { raise UnsupportedCapability }
-  if request.payload is Object(fields) {
-    for key in ["tools", "tool_choice", "parallel_tool_calls"] {
-      if fields.contains(key) {
-        raise UnsupportedCapability
+  let messages : Array[Json] = match request.payload {
+    { "messages": Array(items), .. } =>
+      items.map(item => chat_message_from_item(item))
+    _ =>
+      match responses_input(request.payload) {
+        String(text) => [{ "role": "user", "content": text }]
+        Array(items) => items.map(item => chat_message_from_item(item))
+        _ => raise UnsupportedCapability
       }
-    }
-  }
-  let input = responses_input(request.payload)
-  let messages : Array[Json] = match input {
-    String(text) => [{ "role": "user", "content": text }]
-    Array(items) =>
-      items.map(item => {
-        guard item is { "role": String(role), "content": content, .. } &&
-          ["system", "user", "assistant"].contains(role) else {
-          raise UnsupportedCapability
-        }
-        { "role": Json::string(role), "content": chat_content(content) }
-      })
-    _ => raise UnsupportedCapability
   }
   let fields : Map[String, Json] = {
     "model": Json::string(served.unwrap_or(request.model_selector)),
@@ -68,7 +96,10 @@ fn text_chat_request(
   }
   if request.payload is Object(payload) {
     for
-      key in ["temperature", "top_p", "top_k", "seed", "stop", "stop_token_ids"] {
+      key in [
+        "tools", "tool_choice", "parallel_tool_calls", "temperature", "top_p", "top_k",
+        "seed", "stop", "stop_token_ids",
+      ] {
       if payload.get(key) is Some(value) {
         fields[key] = value
       }
@@ -118,10 +149,55 @@ fn chat_finish_reason(value : Json) -> String? {
 }
 
 ///|
-fn chat_output(text : String, finish : String?) -> Json {
+fn chat_tool_calls(value : Json) -> Array[Json] {
+  let calls : Array[Json] = []
+  match value {
+    {
+      "choices": Array(
+        [{ "message": { "tool_calls": Array(raw_calls), .. }, .. }],
+      ),
+      ..
+    } =>
+      for call in raw_calls {
+        if call
+          is {
+            "function": { "name": String(name), "arguments": arguments, .. },
+            ..
+          } &&
+          name != "" {
+          let call_id = match call {
+            { "id": String(id), .. } if id != "" => id
+            _ => "call-lunanexa-\{calls.length()}"
+          }
+          let args_str = match arguments {
+            String(s) => s
+            other => other.stringify()
+          }
+          calls.push({
+            "type": "function_call",
+            "call_id": call_id,
+            "name": name,
+            "arguments": args_str,
+          })
+        }
+      }
+    _ => ()
+  }
+  calls
+}
+
+///|
+fn chat_output(
+  text : String,
+  finish : String?,
+  tool_calls~ : Array[Json] = [],
+) -> Json {
   let fields : Map[String, Json] = { "output_text": Json::string(text) }
   if finish is Some(reason) {
     fields["finish_reason"] = Json::string(reason)
+  }
+  if !tool_calls.is_empty() {
+    fields["output"] = Json::array(tool_calls)
   }
   Json::object(fields)
 }
@@ -175,12 +251,15 @@ async fn OpenAiTextRuntime::invoke_text_chat(
   let value = @json.parse(text) catch {
     _ => raise InvalidUpstreamResponse("invalid chat JSON")
   }
-  guard chat_text(value, false) is Some(output) else {
-    raise InvalidUpstreamResponse("chat answer absent")
+  let tool_calls = chat_tool_calls(value)
+  let output = match chat_text(value, false) {
+    Some(text) => text
+    None if !tool_calls.is_empty() => ""
+    None => raise InvalidUpstreamResponse("chat answer absent")
   }
   let (input_units, output_units) = chat_usage(value)
   {
-    output: chat_output(output, chat_finish_reason(value)),
+    output: chat_output(output, chat_finish_reason(value), tool_calls~),
     artifact_digest: self.artifact_digest,
     runtime_version: self.runtime_version,
     input_units,
@@ -276,7 +355,7 @@ async fn OpenAiTextRuntime::invoke_text_chat_stream(
     if event
       is {
         "choices": Array(
-          [{ "delta": { "reasoning_content": String(text), .. }, .. }]
+          [{ "delta": { "reasoning_content": String(text), .. }, .. }],
         ),
         ..
       } &&
@@ -286,6 +365,20 @@ async fn OpenAiTextRuntime::invoke_text_chat_stream(
         raise InvalidUpstreamResponse("chat stream too large")
       }
       on_chunk({ "reasoning_delta": text })
+    }
+    if event
+      is {
+        "choices": Array([{ "delta": { "tool_calls": Array(deltas), .. }, .. }]),
+        ..
+      } {
+      for delta in deltas {
+        let serialized = delta.stringify()
+        total += serialized.length()
+        guard total <= self.maximum_response_bytes else {
+          raise InvalidUpstreamResponse("chat stream too large")
+        }
+        on_chunk({ "tool_call_delta": delta })
+      }
     }
   }
   guard done else {

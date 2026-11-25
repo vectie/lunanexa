@@ -1,5 +1,11 @@
 # Product simplification — 2026-11-04
 
+## 2026-11-25 · OpenAI `tools` support in `text_chat` transport & empty `output_text` fix
+
+- Updated `runtimes/text_chat.mbt` so routes using `text_chat_completions: true` (such as `glm-5.3.flash`) forward OpenAI `tools`, `tool_choice`, `parallel_tool_calls`, `role: "tool"` messages, and `assistant.tool_calls` instead of raising `UnsupportedCapability` (which `api/server.mbt` flattened into `502 RuntimeUnavailable`), and decode both non-streaming `message.tool_calls` and streaming `delta.tool_calls` into the existing runtime `function_call` / `tool_call_delta` contract.
+- Fixed `openai_chat_message_from_runtime` in `api/access_http.mbt` so an empty `output_text: ""` (e.g. `finish_reason: "length"`) returns `""` instead of stringifying the raw internal `{ "output_text": "", "finish_reason": ... }` object as assistant prose.
+- Validation: `moon test --target native -p vectie/lunanexa/runtimes -p vectie/lunanexa/api` — **291/291 passed** (including new `text Chat transport forwards OpenAI tools and tool call responses` test). Live `suanli.kechuangfuwu.com:8443` requires redeploying the updated controller image to pick up this fix.
+
 ## 2026-11-09 · Alternative registration contact and acquisition
 
 - The unified gateway accepts exactly one email or mainland China phone. Phone usernames normalize to +86, have no fabricated email, and retain phone_number_verified=false. Minimum password length is six with no character classes; provider hashing, lockout and five-password history remain enabled.
