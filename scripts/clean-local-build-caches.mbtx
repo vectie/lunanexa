@@ -1,4 +1,4 @@
-///|
+----
 import {
   "moonbitlang/async@0.22.4",
   "moonbitlang/async@0.22.4/fs",
@@ -7,6 +7,7 @@ import {
   "moonbitlang/core/json",
   "moonbitlang/core/string",
 }
+----
 
 ///|
 async fn output(program : String, args : Array[String]) -> String {
@@ -90,7 +91,7 @@ fn compiling(processes : String) -> Bool {
           )
         )
       ) {
-      runtime_parents.add(fields[1])
+      runtime_parents.insert(fields[1])
     }
   }
   rows.any(fields => {
@@ -330,7 +331,7 @@ async fn main {
         }
         if archive_build(path) &&
           @fs.kind(path, follow_symlink=false) is Directory {
-          custom_builds.add(path)
+          custom_builds.insert(path)
           if !repos.contains(path) {
             repos.push(path)
           }
@@ -357,7 +358,7 @@ async fn main {
         if !build.is_empty() && !build.contains("/.mooncakes/") {
           let parent = build[:build.length() - 7].to_owned()
           if @fs.exists(parent + "/moon.mod") {
-            nested_ui.add(parent)
+            nested_ui.insert(parent)
             if !repos.contains(parent) {
               repos.push(parent)
             }
